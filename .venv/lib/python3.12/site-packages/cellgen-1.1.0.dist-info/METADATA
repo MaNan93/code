@@ -1,0 +1,6 @@
+Metadata-Version: 2.4
+Name: cellgen
+Version: 1.1.0
+Summary: RAM cell size generator from CSV specifications
+Requires-Python: >=3.6.8
+Dynamic: requires-python

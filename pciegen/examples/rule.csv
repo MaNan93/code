@@ -1,0 +1,7 @@
+name , pin, port
+A    , A1  , A1
+B    , -  , -
+C    , C1  , -
+D    , '0  , nc
+E    , nc  , nc
+F    , F1  , nc

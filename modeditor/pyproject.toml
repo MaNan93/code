@@ -1,0 +1,21 @@
+[project]
+name = "modeditor"
+version = "0.1.0"
+description = "Parse and edit Verilog/SystemVerilog module ports, wires, and instances"
+requires-python = ">=3.8"
+dependencies = ["pyslang>=11.0.0"]
+
+[project.scripts]
+modeditor = "modeditor.cli:main"
+
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["modeditor*"]
+exclude = ["modeditor.tests*"]

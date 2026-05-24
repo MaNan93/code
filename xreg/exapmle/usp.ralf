@@ -1,0 +1,29 @@
+block A {
+    endian little;
+    bytes 5;
+    register B @'h0 {
+        field c (vendor_id) @0 {
+            bits 16;
+            access ro;
+            reset 16'h16c3;
+        }
+        field d (device_id) @16 {
+            bits 8;
+            access ro;
+            reset 16'h16c3;
+        attributes { NO_REG_BIT_BASH_TEST 1}    
+            voilatile 1；
+        }
+        field Reserved_24_25 (device_id) @24 {
+            bits 2;
+            access ro;
+        attributes { NO_REG_TESTS 1}
+        }        
+    }
+}
+
+system E {
+    bytes 4;
+    block A (E.F.G.H) @'h0;
+    block B @'h40;
+}

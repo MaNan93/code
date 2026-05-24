@@ -1,0 +1,2 @@
+[console_scripts]
+smics28-mem-gen = smics28_mem_gen.main:main

@@ -1,0 +1,12 @@
+LICENSE
+MANIFEST.in
+README.md
+pyproject.toml
+setup.py
+src/ef/__init__.py
+src/ef/main.py
+src/ef_filelist.egg-info/PKG-INFO
+src/ef_filelist.egg-info/SOURCES.txt
+src/ef_filelist.egg-info/dependency_links.txt
+src/ef_filelist.egg-info/entry_points.txt
+src/ef_filelist.egg-info/top_level.txt

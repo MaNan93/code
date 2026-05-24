@@ -1,0 +1,6 @@
+Metadata-Version: 2.4
+Name: getaxiinfo
+Version: 0.2.0
+Summary: Extract selected SystemVerilog/Verilog define macro values
+Author: local-user
+Requires-Python: >=3.6.8

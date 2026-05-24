@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "getaxiinfo"
+version = "0.2.0"
+description = "Extract selected SystemVerilog/Verilog define macro values"
+requires-python = ">=3.6.8"
+authors = [
+  { name = "local-user" }
+]
+
+[project.scripts]
+getaxiinfo = "getaxiinfo.main:getaxiinfo_cli"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]

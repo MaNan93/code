@@ -1,0 +1,2 @@
+[console_scripts]
+getaxiinfo = getaxiinfo:getaxiinfo_cli

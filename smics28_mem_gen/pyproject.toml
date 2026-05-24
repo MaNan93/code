@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "smics28-mem-gen"
+version = "0.2.0"
+description = "Parallel MEM_COMPILER runner for .spec files"
+requires-python = ">=3.6.8"
+authors = [
+  { name = "local-user" }
+]
+
+[project.scripts]
+smics28-mem-gen = "smics28_mem_gen.main:main"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]

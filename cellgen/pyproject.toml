@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "cellgen"
+version = "1.1.0"
+description = "RAM cell size generator from CSV specifications"
+requires-python = ">=3.6.8"
+dependencies = []
+
+[project.scripts]
+cellgen = "cellgen.main:main"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]

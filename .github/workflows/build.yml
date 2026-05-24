@@ -1,0 +1,53 @@
+name: Build pysvinst Wheel
+
+on:
+  workflow_dispatch:  # 手动触发
+  push:
+    tags: ["v*"]      # 推送 tag 时触发
+
+jobs:
+  build-wheel:
+    name: Build wheel for linux-x86_64 (glibc2.28)
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install maturin
+        run: pip install maturin
+
+      - name: Build manylinux2014 wheel
+        run: |
+          maturin build \
+            --release \
+            --out dist/ \
+            --manylinux 2014 \
+            --interpreter python3.11
+
+      - name: Upload wheel artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: pysvinst-manylinux2014-x86_64
+          path: dist/*.whl
+          retention-days: 90
+
+      - name: Download artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: pysvinst-manylinux2014-x86_64
+          path: dist/
+
+      - name: Show built wheel
+        run: |
+          ls -lh dist/
+          echo ""
+          echo "=== Wheel 文件 ==="
+          ls -la dist/*.whl

@@ -1,0 +1,2 @@
+[console_scripts]
+runall = runall:main

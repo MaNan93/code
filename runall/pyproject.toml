@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "runall"
+version = "0.2.0"
+description = "Open xfce4-terminal tabs for subdirectories with Makefile and run make targets"
+requires-python = ">=3.6.8"
+authors = [
+  { name = "local-user" }
+]
+
+[project.scripts]
+runall = "runall.main:main"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]

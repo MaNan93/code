@@ -1,0 +1,6 @@
+Metadata-Version: 2.4
+Name: smics28-mem-gen
+Version: 0.2.0
+Summary: Parallel MEM_COMPILER runner for .spec files
+Author: local-user
+Requires-Python: >=3.6.8

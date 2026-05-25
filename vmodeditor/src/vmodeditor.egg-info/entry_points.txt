@@ -1,0 +1,2 @@
+[console_scripts]
+vmodeditor = vmodeditor.cli:main

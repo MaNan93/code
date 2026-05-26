@@ -8,27 +8,157 @@ CLI interface compatible with modeditor.
 import argparse
 import sys
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import Any
 
-from vmodeditor.utils import (
+from .vutils import (
+    COMMON_TYPES,
     ModuleEditor,
-    VeribleParser,
-    cmd_add_inst_port,
-    cmd_add_port,
-    cmd_add_wire,
-    cmd_gen_inst,
-    parse_add_inst_port_spec,
-    parse_add_port_spec,
-    parse_add_wire_spec,
-    parse_rm_inst_port_spec,
+    gen_inst,
+    looks_like_name,
+    looks_like_width_or_dimension,
+    normalize_dimension,
+    normalize_width,
+    split_csv,
 )
+from .vparser import VeribleParser
+
+
+# ---------------------------------------------------------------------------
+# Exit codes
+# ---------------------------------------------------------------------------
+
+class ExitCode:
+    """Named exit codes for CLI operations.
+
+    Follows UNIX convention: 0 = success, non-zero = failure.
+    """
+    OK = 0
+    ERR_FILE_NOT_FOUND = 1
+    ERR_PARSE_FAIL = 2
+    ERR_EDIT_FAIL = 3
+    ERR_GEN_INST_FAIL = 4
+
+
+# ---------------------------------------------------------------------------
+# CLI Argument Parsers
+# ---------------------------------------------------------------------------
+
+def _infer_signal_parts(
+    rest: list[str], *, default_type: str = "wire", has_direction: bool = False
+) -> dict[str, str]:
+    """Infer type, width, name, dimension from token list after direction removal.
+
+    Args:
+        rest: Remaining tokens after stripping the leading direction (for ports)
+              or the raw token list (for wires).
+        default_type: Default signal type when none is specified.
+        has_direction: Whether *rest* already had a direction prefix stripped off.
+
+    Returns:
+        Dict with keys: type, width, name, dimension
+    """
+    typ = width = name = dimension = ""
+    n = len(rest)
+
+    if n == 0:
+        pass  # all empty — caller should validate name
+    elif n == 1:
+        name = rest[0]
+    elif n == 2:
+        if looks_like_width_or_dimension(rest[0]) and looks_like_name(rest[1]):
+            # Check if rest[0] is actually "TYPE WIDTH" combined (e.g. "logic [7:0]")
+            # rather than a bare width like "[7:0]"
+            sub_parts = rest[0].split(None, 1)
+            if (len(sub_parts) == 2
+                    and sub_parts[0] in COMMON_TYPES
+                    and looks_like_width_or_dimension(sub_parts[1])):
+                typ, width, name = sub_parts[0], sub_parts[1], rest[1]
+            else:
+                width, name = rest[0], rest[1]
+        else:
+            typ, name = rest[0], rest[1]
+    elif n == 3:
+        if (rest[0] in COMMON_TYPES
+                and looks_like_width_or_dimension(rest[1])
+                and looks_like_name(rest[2])):
+            typ, width, name = rest[0], rest[1], rest[2]
+        elif looks_like_width_or_dimension(rest[0]) and looks_like_name(rest[1]):
+            width, name = rest[0], rest[1]
+            dimension = rest[2]
+        else:
+            typ, width, name = rest[0], rest[1], rest[2]
+    else:  # n >= 4
+        if (rest[0] in COMMON_TYPES
+                and looks_like_width_or_dimension(rest[1])
+                and looks_like_name(rest[2])):
+            typ, width, name = rest[0], rest[1], rest[2]
+            dimension = ",".join(rest[3:]).strip()
+        elif looks_like_width_or_dimension(rest[0]) and looks_like_name(rest[1]):
+            width, name = rest[0], rest[1]
+            dimension = ",".join(rest[2:]).strip()
+        else:
+            typ, width, name = rest[0], rest[1], rest[2]
+            dimension = ",".join(rest[3:]).strip()
+
+    return {
+        "type": typ.strip() or default_type,
+        "width": normalize_width(width),
+        "name": name.strip(),
+        "dimension": normalize_dimension(dimension),
+    }
+
+
+def parse_add_port_spec(port_csv: str) -> dict[str, str]:
+    """Parse --add-port CSV string into port info dict."""
+    parts = split_csv(port_csv)
+    if len(parts) < 2:
+        raise ValueError("--add-port needs at least 'direction, name'")
+    direction = parts[0].strip().lower()
+    if direction not in {"input", "output", "inout", "ref"}:
+        raise ValueError("--add-port direction must be input/output/inout/ref")
+
+    info = _infer_signal_parts(parts[1:], default_type="logic")
+    if not info["name"]:
+        raise ValueError("--add-port name is required")
+    info["direction"] = direction
+    return info
+
+
+def parse_add_wire_spec(wire_csv: str) -> dict[str, str]:
+    """Parse --add-wire CSV string into wire info dict.
+
+    Supports both comma-separated (``\"wire, [31:0], addr\"``) and
+    space-separated (``\"wire [31:0] addr\"``) formats.
+    """
+    parts = split_csv(wire_csv)
+    if len(parts) == 0:
+        raise ValueError("--add-wire needs at least a signal name")
+    # If split_csv returned a single token that contains spaces, the user
+    # likely used space-separated format (e.g. "wire [31:0] addr") rather
+    # than CSV.  Split it further so _infer_signal_parts can classify each
+    # field correctly.
+    if len(parts) == 1 and " " in parts[0]:
+        parts = parts[0].split()
+    return _infer_signal_parts(parts, default_type="wire")
+
+
+def parse_add_inst_port_spec(csv_str: str) -> dict[str, str]:
+    """Parse --add-inst-port CSV string."""
+    parts = split_csv(csv_str)
+    if len(parts) < 2:
+        raise ValueError("--add-inst-port needs 'instname, port[, wire]'")
+    return {
+        "instname": parts[0].strip(),
+        "port": parts[1].strip(),
+        "wire": parts[2].strip() if len(parts) >= 3 else "",
+    }
 
 
 # ---------------------------------------------------------------------------
 # Output Helpers
 # ---------------------------------------------------------------------------
 
-def print_port_list(module_info: Dict, direction: str = "all") -> None:
+def print_port_list(module_info: dict, direction: str = "all") -> None:
     """Print port list, optionally filtered by direction."""
     ports = module_info.get("ports", [])
     entries = []
@@ -48,21 +178,11 @@ def print_port_list(module_info: Dict, direction: str = "all") -> None:
         print(f"{signal:<{col_w}}, {dir_}")
 
 
-def print_instance_list(module_info: Dict) -> None:
-    """Print instances in the module: 'inst_name (type)'."""
-    instances = module_info.get("instances", [])
-    if not instances:
-        return
-    col_w = max(len(i["name"]) for i in instances)
-    for inst in instances:
-        print(f"{inst['name']:<{col_w}}  ({inst['type']})")
-
-
 def print_instance_tree(
     module_name: str,
-    module_index: Dict[str, Dict[str, Any]],
+    module_index: dict[str, dict[str, Any]],
     prefix: str,
-    seen: Set[str],
+    seen: set[str],
 ) -> None:
     row = module_index.get(module_name)
     if row is None:
@@ -80,13 +200,13 @@ def print_instance_tree(
         seen.remove(inst["type"])
 
 
-def print_hierarchy(all_modules: List[Dict]) -> None:
+def print_hierarchy(all_modules: list[dict]) -> None:
     """Print hierarchy for all modules."""
     if not all_modules:
         print("No module declaration found.")
         return
 
-    module_index: Dict[str, Dict[str, Any]] = {}
+    module_index: dict[str, dict[str, Any]] = {}
     for mod in all_modules:
         module_index[mod["name"]] = mod
 
@@ -102,56 +222,40 @@ def print_hierarchy(all_modules: List[Dict]) -> None:
 # ---------------------------------------------------------------------------
 
 def apply_edit_actions(source_text: str, args: argparse.Namespace,
-                       vparser: VeribleParser) -> Tuple[str, bool]:
+                       vparser: VeribleParser) -> tuple[str, bool]:
     """Apply all edit flags to source text. Returns (new_text, changed)."""
     original = source_text
 
-    # Obtain module bounds from the already-parsed vparser (no extra verible
-    # invocation).  We then work on the isolated module slice so that byte
-    # offsets are consistent even when multiple edit flags are given at once.
-    module_info = vparser.get_module(args.module_name)
-    mod_start: int = module_info["mod_start"]
-    mod_end: int = module_info["mod_end"]
-    module_text = source_text[mod_start:mod_end]
+    # Determine module name (needed for all edit operations)
+    module_name = args.module_name
+    if not module_name:
+        mods = vparser.get_modules()
+        if len(mods) == 1:
+            module_name = mods[0]["name"]
+        else:
+            names = ", ".join(m["name"] for m in mods)
+            raise ValueError(
+                f"file contains multiple modules ({names}); "
+                f"please specify --module"
+            )
 
-    # Rebase offsets to be module-relative (module_text starts at byte 0)
-    mi = {**module_info}
-    for key in ("open_idx", "close_idx", "semi_idx"):
-        if mi.get(key, -1) >= 0:
-            mi[key] -= mod_start
-    mi["mod_start"] = 0
-    mi["mod_end"] = mod_end - mod_start
+    ed = ModuleEditor(source_text, module_name)
 
-    # Stage-1: add operations (fixed insertion semantics) using the module
-    # snapshot from first parse. This avoids repeated reparses for add-only
-    # command paths.
     if args.add_port:
         spec = parse_add_port_spec(args.add_port)
-        module_text = cmd_add_port(module_text, mi, spec)
+        ed.add_port({spec["name"]: spec})
     if args.add_wire:
         spec = parse_add_wire_spec(args.add_wire)
-        module_text = cmd_add_wire(module_text, mi, spec)
+        ed.add_wire({spec["name"]: spec})
     if args.add_inst_port:
         spec = parse_add_inst_port_spec(args.add_inst_port)
-        module_text = cmd_add_inst_port(
-            module_text, f"{spec['instname']},{spec['port']},{spec['wire']}"
-        )
+        ed.add_inst_port({
+            spec["instname"]: {
+                spec["port"]: {"wire": spec["wire"]},
+            },
+        })
 
-    # Stage-2: rm operations (need dynamic search). Use ModuleEditor only
-    # when remove actions are requested.
-    has_rm_action = any([args.rm_port, args.rm_wire, args.rm_inst_port])
-    if has_rm_action:
-        editor = ModuleEditor(module_text)
-        if args.rm_port:
-            editor.rm_port(args.rm_port)
-        if args.rm_wire:
-            editor.rm_wire(args.rm_wire)
-        if args.rm_inst_port:
-            spec = parse_rm_inst_port_spec(args.rm_inst_port)
-            editor.rm_inst_port(instname=spec["instname"], name=spec["port"])
-        module_text = editor.module_text
-
-    new_source = source_text[:mod_start] + module_text + source_text[mod_end:]
+    new_source = ed.module_text
     return new_source, new_source != original
 
 
@@ -159,28 +263,24 @@ def apply_edit_actions(source_text: str, args: argparse.Namespace,
 # CLI
 # ---------------------------------------------------------------------------
 
-CLI_USAGE = (
-    "%(prog)s [-h] [--list-port [all|input|output|inout|ref]] [--list-inst] [--hier] "
-    "[--inst-module] [--inst-name INST_NAME] [--inst-no-param] "
-    "[--add-port ADD_PORT] [--add-wire ADD_WIRE] [--add-inst-port ADD_INST_PORT] "
-    "[--rm-port RM_PORT] [--rm-wire RM_WIRE] [--rm-inst-port RM_INST_PORT] "
-    "[--module MODULE_NAME] [--inplace | --output OUTPUT_FILE] sv_file"
-)
 
 
-def _preprocess_argv(argv: List[str]) -> List[str]:
-    """Fix argparse nargs='?' issue: --list-port <file> should be --list-port all <file>.
+def _preprocess_argv(argv: list[str]) -> list[str]:
+    """Fix argparse nargs='?' issue and add convenience aliases.
 
-    When --list-port (nargs='?') is followed by a value that is not a valid
-    filter choice, argparse still tries to consume it. This preprocess inserts
-    'all' between --list-port and the next argument in that case.
+    - --list-port <file> → --list-port all <file>  (nargs='?' workaround)
+    - --h → --help  (convenience alias)
     """
     _LIST_PORT_CHOICES = {"all", "input", "output", "inout", "ref"}
-    result: List[str] = []
+    result: list[str] = []
     i = 0
     while i < len(argv):
         a = argv[i]
-        result.append(a)
+        # --h → --help
+        if a == "--h":
+            result.append("--help")
+        else:
+            result.append(a)
         if a == "--list-port":
             if i + 1 < len(argv) and argv[i + 1] not in _LIST_PORT_CHOICES:
                 result.append("all")
@@ -191,7 +291,6 @@ def _preprocess_argv(argv: List[str]) -> List[str]:
 def build_arg_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Parse / edit Verilog module ports with verible-verilog-syntax",
-        usage=CLI_USAGE,
     )
     parser.add_argument("sv_file", type=Path, help="Path to .v/.sv file")
 
@@ -204,8 +303,6 @@ def build_arg_parser() -> argparse.ArgumentParser:
         metavar="FILTER",
         help="Filter ports by direction: all, input, output, inout, ref (default: all)",
     )
-    parser.add_argument("--list-inst", action="store_true", dest="list_inst",
-                        help="List all module instances: 'inst_name (type)'")
     parser.add_argument("--hier", "--hierarchy", action="store_true", dest="hierarchy",
                         help="Print module hierarchy")
     parser.add_argument("--module", dest="module_name",
@@ -228,13 +325,6 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--add-inst-port", dest="add_inst_port",
                         help="Add instance port: 'instname, port, wire'")
 
-    parser.add_argument("--rm-port", dest="rm_port",
-                        help="Remove port from module header by name")
-    parser.add_argument("--rm-wire", dest="rm_wire",
-                        help="Remove wire definition by name")
-    parser.add_argument("--rm-inst-port", dest="rm_inst_port",
-                        help="Remove instance port: 'instname, name'")
-
     out_group = parser.add_mutually_exclusive_group()
     out_group.add_argument("--inplace", action="store_true", dest="inplace",
                            help="Write edits back to input file")
@@ -250,20 +340,19 @@ def main() -> int:
 
     if not args.sv_file.exists():
         print(f"Error: file not found: {args.sv_file}")
-        return 1
+        return ExitCode.ERR_FILE_NOT_FOUND
 
     has_edit_action = any((
         args.add_port, args.add_wire, args.add_inst_port,
-        args.rm_port, args.rm_wire, args.rm_inst_port,
     ))
 
     try:
         vparser = VeribleParser(str(args.sv_file))
     except Exception as exc:
         print(f"Parse failed: {exc}")
-        return 2
+        return ExitCode.ERR_PARSE_FAIL
 
-    def get_module_info() -> Dict[str, Any]:
+    def get_module_info() -> dict[str, Any]:
         return vparser.get_module(args.module_name or None)
 
     if has_edit_action:
@@ -273,28 +362,28 @@ def main() -> int:
             new_text, changed = apply_edit_actions(source_text, args, vparser)
         except Exception as exc:
             print(f"Edit failed: {exc}")
-            return 3
+            return ExitCode.ERR_EDIT_FAIL
 
         if args.inplace:
             args.sv_file.write_bytes(new_text.encode("utf-8"))
             print("Edit applied in-place.")
-            return 0
+            return ExitCode.OK
 
         if args.output_file:
             args.output_file.write_bytes(new_text.encode("utf-8"))
             print(f"Edited file written to: {args.output_file}")
-            return 0
+            return ExitCode.OK
 
         if changed:
             print(new_text)
         else:
             print("No changes needed.")
-        return 0
+        return ExitCode.OK
 
     if args.inst_module:
         try:
             module_info = get_module_info()
-            snippet = cmd_gen_inst(
+            snippet = gen_inst(
                 module_info,
                 include_params=not args.inst_no_param,
                 instance_name=args.inst_name,
@@ -302,8 +391,8 @@ def main() -> int:
             print(snippet)
         except Exception as exc:
             print(f"Error generating instantiation: {exc}")
-            return 4
-        return 0
+            return ExitCode.ERR_GEN_INST_FAIL
+        return ExitCode.OK
 
     if args.hierarchy:
         try:
@@ -314,34 +403,25 @@ def main() -> int:
                 all_mods = vparser.get_modules()
         except ValueError as e:
             print(f"Error: {e}")
-            return 2
+            return ExitCode.ERR_PARSE_FAIL
         except Exception as exc:
             print(f"Parse failed: {exc}")
-            return 2
+            return ExitCode.ERR_PARSE_FAIL
         print_hierarchy(all_mods)
-        return 0
-
-    if args.list_inst:
-        try:
-            module_info = get_module_info()
-        except Exception as exc:
-            print(f"Parse failed: {exc}")
-            return 2
-        print_instance_list(module_info)
-        return 0
+        return ExitCode.OK
 
     if args.list_port is None:
         parser.print_help()
-        return 0
+        return ExitCode.OK
 
     try:
         module_info = get_module_info()
     except Exception as exc:
         print(f"Parse failed: {exc}")
-        return 2
+        return ExitCode.ERR_PARSE_FAIL
 
     print_port_list(module_info, args.list_port)
-    return 0
+    return ExitCode.OK
 
 
 if __name__ == "__main__":

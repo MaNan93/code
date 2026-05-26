@@ -451,7 +451,7 @@ def parse_module_ports(module_text: str, ports_block: str, body_text: str, is_an
 # ---------------------------------------------------------------------------
 
 def _param_names_from_node(module: Any) -> List[str]:
-    """Extract non-localparam parameter names from a module CST node."""
+    """Extract parameter names (including localparam) from a module CST node."""
     header = getattr(module, "header", None)
     params_node = getattr(header, "parameters", None) if header else None
     if params_node is None:
@@ -461,8 +461,6 @@ def _param_names_from_node(module: Any) -> List[str]:
     seen: Set[str] = set()
     for item in params_node.declarations:
         if not isinstance(item, pyslang.syntax.ParameterDeclarationSyntax):
-            continue
-        if item.keyword.kind == pyslang.parsing.TokenKind.LocalParamKeyword:
             continue
         for d in item.declarators:
             if not isinstance(d, pyslang.syntax.DeclaratorSyntax):
@@ -533,19 +531,21 @@ def _ast_info_from_tree(tree: Any, source_text: str, module_name: str) -> Option
             ports.append({"name": p.name, "direction": dir_str,
                           "type": base_type, "width": width})
 
-        # 参数（非 localparam）
-        param_names = [
-            param.name for param in body.parameters
-            if not getattr(param, "isLocalParam", False)
-        ]
+        # 参数（含 localparam）
+        param_names = [param.name for param in body.parameters]
 
         # 实例（nextSibling 链，UninstantiatedDefSymbol = 后续未实例化的子模块引用）
-        instances: List[Dict[str, str]] = []
+        instances: List[Dict[str, Any]] = []
         if body.portList:
             n = body.portList[0]
             while n is not None:
                 if type(n).__name__ == "UninstantiatedDefSymbol":
-                    instances.append({"name": n.name, "type": n.definitionName})
+                    inst_offset = getattr(n, 'location', None)
+                    instances.append({
+                        "name": n.name,
+                        "type": n.definitionName,
+                        "offset": inst_offset.offset if inst_offset is not None else -1,
+                    })
                 n = n.nextSibling
 
         return {"ports": ports, "param_names": param_names, "instances": instances}
@@ -772,21 +772,23 @@ class ModuleEditor:
         return [m for m in members if isinstance(m, pyslang.syntax.ModuleDeclarationSyntax)]
 
     @staticmethod
-    def _extract_module_instances(module: Any) -> List[Dict[str, str]]:
-        """从模块 CST 节点收集所有实例化（HierarchyInstantiationSyntax），返回 [{name, type}] 列表。"""
+    def _extract_module_instances(module: Any, mod_start: int = 0) -> List[Dict[str, Any]]:
+        """从模块 CST 节点收集所有实例化（HierarchyInstantiationSyntax），返回 [{name, type, offset}] 列表。"""
         members = getattr(module, "members", None)
         if members is None:
             return []
-        instances: List[Dict[str, str]] = []
+        instances: List[Dict[str, Any]] = []
         for member in members:
             if not isinstance(member, pyslang.syntax.HierarchyInstantiationSyntax):
                 continue
             inst_type = member.type.value
+            inst_range = getattr(member, "sourceRange", None)
+            inst_offset = (inst_range.start.offset - mod_start) if inst_range is not None else -1
             for inst in member.instances:
                 decl = getattr(inst, "decl", None)
                 inst_name = decl.name.value if decl is not None else ""
                 if inst_name and inst_type:
-                    instances.append({"name": inst_name, "type": inst_type})
+                    instances.append({"name": inst_name, "type": inst_type, "offset": inst_offset})
         return instances
 
     @staticmethod
@@ -794,10 +796,12 @@ class ModuleEditor:
         """构建模块完整信息字典，包含语义内容和编辑偏移量。
 
         返回：{module, line, ports, instances, module_text, param_names,
-              mod_start, mod_end, open_idx, close_idx, semicolon_idx, ports_text, body_text}
+              mod_start, mod_end, open_idx, close_idx, semicolon_idx,
+              port_insert_idx, decl_insert_idx, is_ansi}
 
-        双层策略：优先 AST 语义层（方向/类型/参数/实例）；若 AST 无法定位模块，
-        回退到 CST 文本层（regex 解析）。端口宽度含宏时 AST 自动从源文本提取原始括号。
+        - port_insert_idx: 端口列表中插入新端口的偏移（module_text 内，即 close_idx 位置）
+        - decl_insert_idx: body 中声明信号的插入偏移（module_text 内，最后一个声明行之后）
+        - instances 每项含 {name, type, offset}，offset 为 module_text 内的起始偏移
         """
         header = getattr(module, "header", None)
         name = (header.name.value if header is not None else None) or "<unknown>"
@@ -814,7 +818,6 @@ class ModuleEditor:
 
         ports_node = getattr(header, "ports", None) if header else None
         open_idx = close_idx = semicolon_idx = -1
-        ports_text = body_text = ""
         is_ansi = False
         if ports_node is not None:
             ports_range = getattr(ports_node, "sourceRange", None)
@@ -824,22 +827,40 @@ class ModuleEditor:
                 is_ansi = isinstance(ports_node, pyslang.syntax.AnsiPortListSyntax)
         if close_idx > 0:
             semicolon_idx = module_text.find(";", close_idx)
-            if semicolon_idx >= 0:
-                ports_text = module_text[open_idx + 1:close_idx]
-                body_text = module_text[semicolon_idx + 1:]
 
         # --- 双层策略：优先 AST 语义层，回退 CST 文本层 ---
         ast_info = _ast_info_from_tree(tree, source_text, name) if tree is not None else None
 
+        # 用于 CST fallback 的端口/body 文本
+        ports_text = module_text[open_idx + 1:close_idx] if close_idx > 0 else ""
+        body_text = module_text[semicolon_idx + 1:] if semicolon_idx >= 0 else ""
+
         if ast_info is not None:
             ports_result = ast_info["ports"]
             param_names_result: List[str] = ast_info["param_names"]
-            instances_result: List[Dict[str, str]] = ast_info["instances"]
+            instances_result: List[Dict[str, Any]] = ast_info["instances"]
+            # AST 层 offset 为源文件绝对偏移，转为 module_text 内相对偏移
+            if mod_start is not None:
+                for inst in instances_result:
+                    if inst.get("offset", -1) >= 0:
+                        inst["offset"] -= mod_start
         else:
             # CST fallback（tree 为 None 或 AST 找不到目标模块）
             ports_result = parse_module_ports(module_text, ports_text, body_text, is_ansi=is_ansi)
             param_names_result = _param_names_from_node(module)
-            instances_result = ModuleEditor._extract_module_instances(module)
+            instances_result = ModuleEditor._extract_module_instances(module, mod_start or 0)
+
+        # port_insert_idx: 在 close_idx 处（")" 之前）插入新端口
+        port_insert_idx = close_idx
+
+        # decl_insert_idx: body 中最后一个声明行之后的偏移
+        decl_insert_idx = semicolon_idx + 1 if semicolon_idx >= 0 else -1
+        if semicolon_idx >= 0:
+            body = module_text[semicolon_idx + 1:]
+            matches = list(_ANY_DECL_LINE_RE.finditer(body))
+            if matches:
+                last_decl = matches[-1]
+                decl_insert_idx = semicolon_idx + 1 + last_decl.end()
 
         return {
             "module": name,
@@ -853,8 +874,8 @@ class ModuleEditor:
             "open_idx": open_idx,
             "close_idx": close_idx,
             "semicolon_idx": semicolon_idx,
-            "ports_text": ports_text,
-            "body_text": body_text,
+            "port_insert_idx": port_insert_idx,
+            "decl_insert_idx": decl_insert_idx,
             "is_ansi": is_ansi,
         }
 
@@ -1051,13 +1072,22 @@ class ModuleEditor:
 
     @property
     def ports_text(self) -> str:
-        """端口文本"""
-        return self._get_cached_analysis().get("ports_text", "")
+        """端口文本（动态从 module_text 提取）"""
+        parts = self._get_cached_analysis()
+        open_idx = parts.get("open_idx", -1)
+        close_idx = parts.get("close_idx", -1)
+        if open_idx >= 0 and close_idx > open_idx:
+            return self._module_text[open_idx + 1:close_idx]
+        return ""
 
     @property
     def body_text(self) -> str:
-        """body 文本"""
-        return self._get_cached_analysis().get("body_text", "")
+        """body 文本（动态从 module_text 提取）"""
+        parts = self._get_cached_analysis()
+        semicolon_idx = parts.get("semicolon_idx", -1)
+        if semicolon_idx >= 0:
+            return self._module_text[semicolon_idx + 1:]
+        return ""
 
     @property
     def is_ansi(self) -> bool:
@@ -1100,7 +1130,7 @@ class ModuleEditor:
                 "dimension": normalize_dimension(dimension),
             }
 
-            ports_text = initial_parts["ports_text"]
+            ports_text = self.ports_text
             port_name = info["name"]
             
             ports_text_clean = strip_comments(ports_text)
@@ -1113,8 +1143,8 @@ class ModuleEditor:
             return self
 
         # 处理端口列表的修改
-        indent = detect_indent(initial_parts["ports_text"])
-        current_ports_text = initial_parts["ports_text"]
+        indent = detect_indent(self.ports_text)
+        current_ports_text = self.ports_text
         
         for info in ports_to_add:
             if is_ansi:
@@ -1125,13 +1155,14 @@ class ModuleEditor:
             current_ports_text = new_ports_text
 
         # 更新模块文本中的端口部分
-        self._module_text = self._module_text.replace(initial_parts["ports_text"], current_ports_text, 1)
+        old_ports_text = self.ports_text
+        self._module_text = self._module_text.replace(old_ports_text, current_ports_text, 1)
 
         # 如果是非 ANSI 模式，还需要在模块体中添加端口声明
         if not is_ansi:
             # 重新获取分析结果，因为端口列表已被修改
-            parts_after_update = self._get_cached_analysis()
-            body_text = parts_after_update["body_text"]
+            self._invalidate_cache()
+            body_text = self.body_text
             
             # 为所有新端口生成声明（在非 ANSI 模式下，模块体中应使用带方向的声明）
             decl_texts: List[str] = []
@@ -1178,7 +1209,7 @@ class ModuleEditor:
         
         # 获取模块结构信息
         parts = self._get_cached_analysis()
-        ports_text = parts["ports_text"]
+        ports_text = self.ports_text
         is_ansi = parts.get("is_ansi", True)
 
         if is_ansi:
@@ -1313,7 +1344,7 @@ class ModuleEditor:
             raise ValueError("name is required")
         
         parts = self._get_cached_analysis()
-        body = parts["body_text"]
+        body = self.body_text
         body_spans = get_line_spans(body)
         body_base = parts["semicolon_idx"] + 1
 

@@ -14,8 +14,8 @@ from typing import Callable, Dict, List, Optional, Set, Tuple
 
 from ramgen import ramgen
 import sys as _sys, pathlib as _pathlib
-_sys.path.insert(0, str(_pathlib.Path(__file__).parent.parent / "vmodeditor" / "src"))
-from vmodeditor.utils import ModuleEditor, VeribleParser
+_sys.path.insert(0, str(_pathlib.Path(__file__).parent.parent / "vutils" / "src"))
+from vutils.vutils import ModuleEditor, VeribleParser
 del _sys, _pathlib
 ENCODING = "utf-8"
 
@@ -82,34 +82,14 @@ def _pick_target_module(modules: List[Dict[str, object]], path: Path,
     return modules[0]
 
 
-def _build_editor_from_module(source_text: str, module_info: Dict[str, object]) -> Tuple[ModuleEditor, Dict[str, int]]:
-    """Create a ModuleEditor with a pre-populated cache from module_info."""
-    mod_start = int(module_info["mod_start"])
-    mod_end = int(module_info["mod_end"])
-    module_text = source_text[mod_start:mod_end]
-
-    cached = dict(module_info)
-    for key in ("open_idx", "close_idx", "semi_idx"):
-        if cached.get(key, -1) >= 0:
-            cached[key] -= mod_start
-    cached["mod_start"] = 0
-    cached["mod_end"] = mod_end - mod_start
-
-    editor: ModuleEditor = object.__new__(ModuleEditor)
-    editor._module_text = module_text
-    editor._cached_parts = cached
-    editor._cache_valid = True
-    return editor, {"mod_start": mod_start, "mod_end": mod_end}
-
-
-def _load_editor(path: Path, inst_name: Optional[str] = None) -> Tuple[str, Dict[str, int], ModuleEditor]:
-    """Parse *path* once, resolve the target module, and return an editor."""
+def _load_editor(path: Path, inst_name: Optional[str] = None) -> ModuleEditor:
+    """Create a ModuleEditor for the module that owns *inst_name*."""
     vparser = VeribleParser(str(path))
     module_info = _pick_target_module(vparser.get_modules(), path, inst_name=inst_name)
     if not module_info:
         raise ValueError(f"No editable module found in {path}")
-    editor, offset_info = _build_editor_from_module(vparser.source, module_info)
-    return vparser.source, offset_info, editor
+    module_name = str(module_info["name"])
+    return ModuleEditor.from_file(path, module_name=module_name)
 
 
 def _append_to_file(
@@ -118,7 +98,7 @@ def _append_to_file(
     pins: Optional[List[Tuple[str, str]]] = None,
     inst_name: Optional[str] = None,
 ) -> bool:
-    """使用 ModuleEditor 批量添加端口和实例端口连接，避免重复解析。
+    """使用 ModuleEditor 批量添加端口和实例端口连接。
 
     Args:
         path: 文件路径
@@ -130,34 +110,31 @@ def _append_to_file(
         如果文件被修改则返回 True，否则返回 False
     """
     try:
-        original_text, offset_info, editor = _load_editor(path, inst_name=inst_name)
+        editor = _load_editor(path, inst_name=inst_name)
     except Exception:
         return False
 
+    original_text = path.read_text(encoding=ENCODING)
+
     # Add ports
     if signals:
-        port_dict = {}
-        for signal in signals:
-            port_dict[signal.get("name", "")] = {
-                "direction": signal.get("direction", ""),
-                "type": signal.get("type", ""),
-                "width": signal.get("width", ""),
-                "dimension": signal.get("dimension", "")
+        port_dict = {
+            s["name"]: {
+                "direction": s.get("direction", ""),
+                "type": s.get("type", ""),
+                "width": s.get("width", ""),
+                "dimension": s.get("dimension", ""),
             }
-        if port_dict:
-            editor.add_port(port_dict)
+            for s in signals
+        }
+        editor.add_port(port_dict)
 
     # Add instance-port connections
     if pins and inst_name:
-        inst_port_dict = {
-            inst_name: {}
-        }
-        for port, wire in pins:
-            inst_port_dict[inst_name][port] = {"wire": wire}
-        if inst_port_dict:
-            editor.add_inst_port(inst_port_dict)
+        inst_port_dict = {inst_name: {port: {"wire": wire} for port, wire in pins}}
+        editor.add_inst_port(inst_port_dict)
 
-    updated_text = ModuleEditor.replace_module_text(original_text, offset_info, editor.module_text)
+    updated_text = editor.module_text
     if updated_text != original_text:
         path.write_text(updated_text, encoding=ENCODING)
         return True
@@ -261,26 +238,31 @@ def rewrite_cdm_pl_reg_file(rtl_dir: Path) -> Optional[Path]:
     if not cdm_pl_reg_file.is_file():
         return None
 
+    # Pre-apply regex replacements to the file text
+    text = cdm_pl_reg_file.read_text(encoding=ENCODING)
+    text = re.sub(
+        r"\(write_pulse.*?pl_reg_16\[7\];", "sys_fast_link_mode;", text
+    )
+    text = re.sub(
+        r"\(phy_type.*?pl_reg_18\[5:0\];", "sys_link_capable;", text
+    )
+    cdm_pl_reg_file.write_text(text, encoding=ENCODING)
+
+    # Add CDM ports via ModuleEditor
     try:
-        original_text, offset_info, editor = _load_editor(cdm_pl_reg_file)
+        editor = _load_editor(cdm_pl_reg_file)
     except Exception:
         return cdm_pl_reg_file
 
-    editor._module_text = re.sub(
-        r"\(write_pulse.*?pl_reg_16\[7\];", "sys_fast_link_mode;", editor.module_text
-    )
-    editor._module_text = re.sub(
-        r"\(phy_type.*?pl_reg_18\[5:0\];", "sys_link_capable;", editor.module_text
-    )
     editor.add_port({
-        "sys_fast_link_mode": {"direction": "input", "type": "", "width": "", "dimension": ""},
-        "sys_link_capable": {"direction": "input", "type": "", "width": "[5:0]", "dimension": ""},
+        "sys_fast_link_mode": {"direction": "input"},
+        "sys_link_capable": {"direction": "input", "width": "[5:0]"},
     })
 
-    updated_text = ModuleEditor.replace_module_text(original_text, offset_info, editor.module_text)
-    if updated_text != original_text:
+    updated_text = editor.module_text
+    if updated_text != text:
         cdm_pl_reg_file.write_text(updated_text, encoding=ENCODING)
-    
+
     return cdm_pl_reg_file
 
 

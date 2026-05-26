@@ -1,12 +1,12 @@
 [project]
-name = "vmodeditor"
+name = "vutils"
 version = "0.1.0"
 description = "Parse and edit Verilog/SystemVerilog module ports, wires, and instances using verible-verilog-syntax"
 requires-python = ">=3.8"
 dependencies = []
 
 [project.scripts]
-vmodeditor = "vmodeditor.cli:main"
+vutils = "vutils.vcli:main"
 
 [build-system]
 requires = ["setuptools>=61.0", "wheel"]
@@ -17,5 +17,5 @@ package-dir = {"" = "src"}
 
 [tool.setuptools.packages.find]
 where = ["src"]
-include = ["vmodeditor*"]
-exclude = ["vmodeditor.tests*"]
+include = ["vutils*"]
+exclude = ["vutils.tests*"]

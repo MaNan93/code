@@ -1,9 +1,0 @@
-pyproject.toml
-setup.py
-src/cellgen/__init__.py
-src/cellgen/main.py
-src/cellgen.egg-info/PKG-INFO
-src/cellgen.egg-info/SOURCES.txt
-src/cellgen.egg-info/dependency_links.txt
-src/cellgen.egg-info/entry_points.txt
-src/cellgen.egg-info/top_level.txt

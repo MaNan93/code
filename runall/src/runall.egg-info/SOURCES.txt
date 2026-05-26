@@ -1,9 +1,0 @@
-pyproject.toml
-setup.py
-src/runall/__init__.py
-src/runall/main.py
-src/runall.egg-info/PKG-INFO
-src/runall.egg-info/SOURCES.txt
-src/runall.egg-info/dependency_links.txt
-src/runall.egg-info/entry_points.txt
-src/runall.egg-info/top_level.txt

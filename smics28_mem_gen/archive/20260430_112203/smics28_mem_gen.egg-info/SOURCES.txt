@@ -1,9 +1,0 @@
-README.md
-pyproject.toml
-setup.py
-smics28_mem_gen.py
-smics28_mem_gen.egg-info/PKG-INFO
-smics28_mem_gen.egg-info/SOURCES.txt
-smics28_mem_gen.egg-info/dependency_links.txt
-smics28_mem_gen.egg-info/entry_points.txt
-smics28_mem_gen.egg-info/top_level.txt

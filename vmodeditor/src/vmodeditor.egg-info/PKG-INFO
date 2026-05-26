@@ -1,5 +1,0 @@
-Metadata-Version: 2.4
-Name: vmodeditor
-Version: 0.1.0
-Summary: Parse and edit Verilog/SystemVerilog module ports, wires, and instances using verible-verilog-syntax
-Requires-Python: >=3.8

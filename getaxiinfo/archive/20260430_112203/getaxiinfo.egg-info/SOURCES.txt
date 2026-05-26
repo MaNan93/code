@@ -1,8 +1,0 @@
-getaxiinfo.py
-pyproject.toml
-setup.py
-getaxiinfo.egg-info/PKG-INFO
-getaxiinfo.egg-info/SOURCES.txt
-getaxiinfo.egg-info/dependency_links.txt
-getaxiinfo.egg-info/entry_points.txt
-getaxiinfo.egg-info/top_level.txt

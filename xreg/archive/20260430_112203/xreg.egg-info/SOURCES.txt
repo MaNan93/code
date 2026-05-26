@@ -1,9 +1,0 @@
-pyproject.toml
-setup.py
-xreg.py
-xreg.egg-info/PKG-INFO
-xreg.egg-info/SOURCES.txt
-xreg.egg-info/dependency_links.txt
-xreg.egg-info/entry_points.txt
-xreg.egg-info/requires.txt
-xreg.egg-info/top_level.txt

@@ -1,7 +1,0 @@
-Metadata-Version: 2.4
-Name: xreg
-Version: 0.2.0
-Summary: RALF register description to structured output converter
-Author: local-user
-Requires-Python: >=3.6.8
-Requires-Dist: xlwt

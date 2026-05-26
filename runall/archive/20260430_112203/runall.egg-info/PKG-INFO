@@ -1,6 +1,0 @@
-Metadata-Version: 2.4
-Name: runall
-Version: 0.1.0
-Summary: Open xfce4-terminal tabs for subdirectories with Makefile and run make targets
-Author: local-user
-Requires-Python: >=3.6.8

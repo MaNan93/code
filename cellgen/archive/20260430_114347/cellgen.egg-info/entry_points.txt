@@ -1,2 +1,0 @@
-[console_scripts]
-cellgen = cellgen:main

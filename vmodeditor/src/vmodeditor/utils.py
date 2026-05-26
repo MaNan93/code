@@ -5,18 +5,51 @@ code navigation and editing.
 """
 
 import json
+import os
 import re
 import shutil
 import subprocess
+import tempfile
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import Any, Dict, List, Optional, Set, Tuple, Union
 
 
 # ---------------------------------------------------------------------------
 # Verible executable
 # ---------------------------------------------------------------------------
 
-VERIBLE = shutil.which("verible-verilog-syntax") or r"C:\Users\man\Desktop\code\verible\verible-verilog-syntax.exe"
+def _find_verible_binary() -> str:
+    """Locate verible-verilog-syntax binary.
+
+    Search order:
+    1. VERIBLE_BIN environment variable (path to file or containing directory)
+    2. System PATH via shutil.which
+    3. A 'verible' directory found by walking up from this file (up to 6 levels)
+    """
+    name = "verible-verilog-syntax"
+    # 1. Environment variable override
+    if env := os.environ.get("VERIBLE_BIN", ""):
+        p = Path(env)
+        if p.is_file():
+            return str(p)
+        for ext in ("", ".exe"):
+            if (c := p / (name + ext)).is_file():
+                return str(c)
+    # 2. System PATH
+    if found := shutil.which(name):
+        return found
+    # 3. Walk up directory tree looking for a sibling 'verible' directory
+    here = Path(__file__).resolve().parent
+    for _ in range(6):
+        for ext in ("", ".exe"):
+            if (c := here / "verible" / (name + ext)).is_file():
+                return str(c)
+        here = here.parent
+    # Fallback: rely on PATH at subprocess call time
+    return name
+
+
+VERIBLE = _find_verible_binary()
 
 
 # ---------------------------------------------------------------------------
@@ -60,27 +93,25 @@ _KEYWORD_SET = frozenset({
     "specify", "endspecify", "generate", "endgenerate",
 })
 
-_KEYWORD_NAME_SET = frozenset({
-    "module", "endmodule", "begin", "end", "if", "else",
-    "for", "function", "endfunction", "task", "endtask",
-    "generate", "endgenerate", "case", "endcase", "default",
-})
-
 
 # ---------------------------------------------------------------------------
 # CST Traversal Utilities
 # ---------------------------------------------------------------------------
 
 def find_all(node: Any, tag: str) -> List[Dict]:
-    """Find all descendant nodes with given tag (recursive)."""
+    """Find all descendant nodes with given tag (iterative DFS, left-to-right)."""
     results: List[Dict] = []
-    if not isinstance(node, dict):
-        return results
-    if node.get("tag") == tag:
-        results.append(node)
-    for c in node.get("children", []):
-        if isinstance(c, dict):
-            results.extend(find_all(c, tag))
+    stack = [node]
+    while stack:
+        n = stack.pop()
+        if not isinstance(n, dict):
+            continue
+        if n.get("tag") == tag:
+            results.append(n)
+        # push children in reverse so the leftmost child is processed first
+        stack.extend(
+            c for c in reversed(n.get("children", [])) if isinstance(c, dict)
+        )
     return results
 
 
@@ -102,37 +133,42 @@ def find_children(node: Any, tag: str) -> List[Dict]:
 
 
 def find_descendant(node: Any, tag: str) -> Optional[Dict]:
-    """Find first descendant with given tag (recursive)."""
-    if not isinstance(node, dict):
-        return None
-    if node.get("tag") == tag:
-        return node
-    for c in node.get("children", []):
-        if isinstance(c, dict):
-            r = find_descendant(c, tag)
-            if r:
-                return r
+    """Find first descendant with given tag (iterative DFS, left-to-right)."""
+    stack = [node]
+    while stack:
+        n = stack.pop()
+        if not isinstance(n, dict):
+            continue
+        if n.get("tag") == tag:
+            return n
+        # push children in reverse so the leftmost child is processed first
+        stack.extend(
+            c for c in reversed(n.get("children", [])) if isinstance(c, dict)
+        )
     return None
 
 
 def get_node_range(node: Dict) -> Tuple[int, int]:
-    """Get (min_start, max_end) from all leaf nodes in subtree."""
+    """Get (min_start, max_end) from all leaf nodes in subtree (iterative)."""
     if not isinstance(node, dict):
         return (999999, -1)
     if "start" in node and "end" in node:
         return (node["start"], node["end"])
     starts: List[int] = []
     ends: List[int] = []
-    for c in node.get("children", []):
-        if isinstance(c, dict):
-            s, e = get_node_range(c)
-            if s < 999999:
-                starts.append(s)
-            if e > 0:
-                ends.append(e)
-        elif c is None:
-            pass
-    return (min(starts) if starts else 999999, max(ends) if ends else -1)
+    stack = [node]
+    while stack:
+        n = stack.pop()
+        if not isinstance(n, dict):
+            continue
+        if "start" in n and "end" in n:
+            starts.append(n["start"])
+            ends.append(n["end"])
+        else:
+            stack.extend(
+                c for c in reversed(n.get("children", [])) if isinstance(c, dict)
+            )
+    return (min(starts, default=999999), max(ends, default=-1))
 
 
 # ---------------------------------------------------------------------------
@@ -178,35 +214,26 @@ def split_csv(value: str) -> List[str]:
 
 def normalize_width(width: str) -> str:
     """Normalize width string to [msb:lsb] form."""
-    width = width.strip()
-    if not width:
-        return ""
-    if width.startswith("[") and width.endswith("]"):
-        return width
-    return f"[{width}]"
+    w = width.strip()
+    return "" if not w else w if w.startswith("[") else f"[{w}]"
 
 
 def normalize_dimension(dimension: str) -> str:
     """Normalize dimension string to [a:b][c:d] form."""
-    dimension = dimension.strip()
-    if not dimension:
+    d = dimension.strip()
+    if not d:
         return ""
-    bracket_groups = re.findall(r"\[\s*([^\]]+?)\s*\]", dimension)
-    if bracket_groups:
-        return "".join(f"[{grp.strip()}]" for grp in bracket_groups)
-    parts = [p.strip() for p in split_csv(dimension) if p.strip()]
-    if parts:
-        return "".join(f"[{p}]" for p in parts)
-    return f"[{dimension}]"
+    if groups := re.findall(r"\[\s*([^\]]+?)\s*\]", d):
+        return "".join(f"[{g.strip()}]" for g in groups)
+    parts = [p.strip() for p in split_csv(d) if p.strip()]
+    return "".join(f"[{p}]" for p in parts) if parts else f"[{d}]"
 
 
-def detect_indent(block_text: str, default: str = "    ") -> str:
-    """Detect indentation from text block."""
-    for ln in block_text.splitlines():
-        if not ln.strip():
-            continue
-        m = re.match(r"\s*", ln)
-        return m.group(0) if m.group(0) else default
+def detect_indent(text: str, default: str = "    ") -> str:
+    """Detect indentation from first non-empty line."""
+    for ln in text.splitlines():
+        if ln.strip():
+            return re.match(r"\s*", ln).group(0) or default
     return default
 
 
@@ -218,128 +245,73 @@ def detect_newline(text: str) -> str:
 
 
 def looks_like_width_or_dimension(token: str) -> bool:
-    token = token.strip()
-    if not token:
-        return False
-    if token.startswith("[") and token.endswith("]"):
-        return True
-    return ":" in token
+    t = token.strip()
+    return bool(t) and (t.startswith("[") or ":" in t)
 
 
 def looks_like_name(token: str) -> bool:
     return bool(re.match(r"^`?[A-Za-z_][A-Za-z0-9_$]*$", token.strip()))
 
 
+def _split_line_parts(line: str) -> Tuple[str, str, str, str]:
+    """Return (core, code_no_comment, comment, newline)."""
+    nl = "\r\n" if line.endswith("\r\n") else "\n" if line.endswith("\n") else ""
+    core = line[:len(line) - len(nl)]
+    i = core.find("//")
+    return (core, core[:i].rstrip(), core[i:], nl) if i >= 0 else (core, core.rstrip(), "", nl)
+
+
 def append_comma_to_port_line(line: str) -> str:
     """Append comma to code end, preserving inline comments and newline."""
-    newline = ""
-    if line.endswith("\r\n"):
-        newline = "\r\n"
-        core = line[:-2]
-    elif line.endswith("\n"):
-        newline = "\n"
-        core = line[:-1]
-    else:
-        core = line
-    comment_idx = core.find("//")
-    if comment_idx >= 0:
-        code_part = core[:comment_idx].rstrip()
-        comment_part = core[comment_idx:]
-    else:
-        code_part = core.rstrip()
-        comment_part = ""
-    if code_part.endswith(","):
+    core, code, comment, newline = _split_line_parts(line)
+    if code.endswith(","):
         return core + newline
-    updated = code_part + ","
-    if comment_part:
-        updated += " " + comment_part.lstrip()
-    return updated + newline
+    code += ","
+    if comment:
+        code += " " + comment.lstrip()
+    return code + newline
 
 
 def remove_trailing_comma_from_line(line: str) -> str:
     """Remove trailing comma from code end, preserving inline comments and newline."""
-    newline = ""
-    if line.endswith("\r\n"):
-        newline = "\r\n"
-        core = line[:-2]
-    elif line.endswith("\n"):
-        newline = "\n"
-        core = line[:-1]
-    else:
-        core = line
-    comment_idx = core.find("//")
-    if comment_idx >= 0:
-        code_part = core[:comment_idx].rstrip()
-        comment_part = core[comment_idx:]
-    else:
-        code_part = core.rstrip()
-        comment_part = ""
-    code_part = re.sub(r",\s*$", "", code_part)
-    updated = code_part
-    if comment_part:
-        updated += " " + comment_part.lstrip()
-    return updated + newline
+    _, code, comment, newline = _split_line_parts(line)
+    code = re.sub(r",\s*$", "", code)
+    if comment:
+        code += " " + comment.lstrip()
+    return code + newline
 
 
 def get_line_spans(block_text: str) -> List[Dict[str, Any]]:
-    """Split text into lines, each with start/end_no_eol/end_full/text/raw."""
-    lines = block_text.splitlines(keepends=True)
+    """Split text into lines with byte-offset metadata."""
     spans: List[Dict[str, Any]] = []
     offset = 0
-    for line in lines:
+    for line in block_text.splitlines(keepends=True):
         no_eol = line.rstrip("\r\n")
-        end_no_eol = offset + len(no_eol)
-        end_full = offset + len(line)
         spans.append({
             "start": offset,
-            "end_no_eol": end_no_eol,
-            "end_full": end_full,
+            "end_no_eol": offset + len(no_eol),
+            "end_full": offset + len(line),
             "text": no_eol,
-            "raw": line,
         })
-        offset = end_full
-    if not lines and block_text:
-        spans.append({
-            "start": 0,
-            "end_no_eol": len(block_text),
-            "end_full": len(block_text),
-            "text": block_text,
-            "raw": block_text,
-        })
+        offset += len(line)
     return spans
 
 
 def apply_text_edits(text: str, edits: List[Tuple[int, int, str]]) -> str:
-    """Apply (start, end, replacement) edits back-to-front."""
-    if not edits:
-        return text
-    for start, end, replacement in sorted(edits, key=lambda e: (e[0], e[1]), reverse=True):
-        text = text[:start] + replacement + text[end:]
+    """Apply (start, end, replacement) edits back-to-front (avoids offset drift)."""
+    for s, e, r in sorted(edits, reverse=True):
+        text = text[:s] + r + text[e:]
     return text
 
 
 def compose_port_decl(info: Dict[str, str]) -> str:
-    """Compose a port declaration string from info dict."""
-    parts = [info["direction"]]
-    if info.get("type"):
-        parts.append(info["type"])
-    if info.get("width"):
-        parts.append(info["width"])
-    parts.append(info["name"])
-    if info.get("dimension"):
-        parts.append(info["dimension"])
-    return " ".join(p for p in parts if p)
+    """'direction [type] [width] name [dim]'."""
+    return " ".join(p for p in [info["direction"], info.get("type",""), info.get("width",""), info["name"], info.get("dimension","")] if p)
 
 
 def compose_wire_decl(info: Dict[str, str]) -> str:
-    """Compose a wire/logic declaration string from info dict."""
-    parts = [info["type"]]
-    if info.get("width"):
-        parts.append(info["width"])
-    parts.append(info["name"])
-    if info.get("dimension"):
-        parts.append(info["dimension"])
-    return " ".join(p for p in parts if p)
+    """'type [width] name [dim]'."""
+    return " ".join(p for p in [info["type"], info.get("width",""), info["name"], info.get("dimension","")] if p)
 
 
 # ---------------------------------------------------------------------------
@@ -358,6 +330,7 @@ class VeribleParser:
         self.filepath = str(Path(filepath).resolve())
         self.source = Path(self.filepath).read_bytes().decode("utf-8")
         self._data: Optional[Dict] = None
+        self._modules: Optional[List[Dict[str, Any]]] = None
 
     @property
     def data(self) -> Dict:
@@ -367,7 +340,7 @@ class VeribleParser:
 
     def _parse(self) -> None:
         result = subprocess.run(
-            [VERIBLE, "--export_json", "--printtree", "--printtokens", self.filepath],
+            [VERIBLE, "--export_json", "--printtree", self.filepath],
             capture_output=True, text=True,
         )
         try:
@@ -400,8 +373,10 @@ class VeribleParser:
 
     def get_modules(self) -> List[Dict]:
         """Return list of module info dicts."""
+        if self._modules is not None:
+            return self._modules
         mods = find_all(self.tree, "kModuleDeclaration")
-        result = []
+        result: List[Dict[str, Any]] = []
         for m in mods:
             header = find_child(m, "kModuleHeader")
             if not header:
@@ -453,6 +428,7 @@ class VeribleParser:
                 "param_names": param_names,
                 "instances": instances,
             })
+        self._modules = result
         return result
 
     def _extract_ports(self, mod_node: Dict, is_ansi: bool) -> List[Dict[str, str]]:
@@ -503,39 +479,54 @@ class VeribleParser:
         width = ""
         name = ""
 
-        port_start, port_end = get_node_range(pd_node)
-        port_text = self.source[port_start:port_end]
-        port_text_clean = strip_comments(port_text)
-
-        # Direction
-        for d in ("input", "output", "inout", "ref"):
-            if re.search(rf"\b{d}\b", port_text_clean):
-                direction = d
+        # --- Direction: direct keyword child of kPortDeclaration ---
+        for c in pd_node.get("children", []):
+            if isinstance(c, dict) and c.get("tag") in ("input", "output", "inout", "ref"):
+                direction = c["tag"]
                 break
 
-        # Port name: the LAST SymbolIdentifier that is not a keyword or type.
-        all_ids = find_all(pd_node, "SymbolIdentifier")
-        candidate_ids = []
-        for leaf_id in all_ids:
-            text = self.get_text(leaf_id).strip()
-            if text in _KEYWORD_SET or text in _COMMON_TYPES:
-                ptype = text if text in _COMMON_TYPES and not ptype else ptype
+        # --- Type: keyword child of kPortDeclaration (wire/reg/…) OR
+        #     kDataTypePrimitive inside kDataType (logic/bit/…) ---
+        for c in pd_node.get("children", []):
+            if not isinstance(c, dict):
                 continue
-            candidate_ids.append(text)
+            tag = c.get("tag", "")
+            if tag in _COMMON_TYPES and tag not in ("input", "output", "inout", "ref"):
+                ptype = tag
+                break
+            if tag == "kDataType":
+                prim = find_descendant(c, "kDataTypePrimitive")
+                if prim:
+                    for gc in prim.get("children", []):
+                        if isinstance(gc, dict) and gc.get("tag") in _COMMON_TYPES:
+                            ptype = gc["tag"]
+                            break
+                break
 
+        # --- Port name: last SymbolIdentifier not in keyword/type sets ---
+        candidate_ids = []
+        for leaf_id in find_all(pd_node, "SymbolIdentifier"):
+            text = self.get_text(leaf_id).strip()
+            if text not in _KEYWORD_SET and text not in _COMMON_TYPES:
+                candidate_ids.append(text)
         if candidate_ids:
             name = candidate_ids[-1]
 
-        # Width: look for bracket group [...] or [expression]
-        brackets = find_all(pd_node, "kBracketGroup")
-        if not brackets:
+        # --- Width: source range of kPackedDimensions (precise CST path) ---
+        dt = find_child(pd_node, "kDataType")
+        if dt:
+            packed = find_child(dt, "kPackedDimensions")
+            if packed:
+                ps, pe = get_node_range(packed)
+                if ps < 999999 and pe > 0:
+                    width = self.source[ps:pe].strip()
+        # Fallback: simple regex on port text (handles edge cases)
+        if not width:
+            port_start, port_end = get_node_range(pd_node)
+            port_text_clean = strip_comments(self.source[port_start:port_end])
             bracket_matches = re.findall(r"\[[^\]]*\]", port_text_clean)
             if bracket_matches:
-                width = bracket_matches[-1].strip()
-        else:
-            for bg in brackets:
-                s, e = get_node_range(bg)
-                width = self.source[s:e].strip()
+                width = bracket_matches[0].strip()
 
         if not name:
             return None
@@ -543,13 +534,18 @@ class VeribleParser:
         return {"name": name, "direction": direction, "type": ptype, "width": width}
 
     def _fill_non_ansi_port(self, port: Dict[str, str], body_text: str) -> None:
-        """Fill direction/type/width for non-ANSI port from body declarations."""
+        """Fill direction/type/width for non-ANSI port from body declarations.
+
+        Handles both single-port and multi-port declarations:
+          input wire [7:0] address;          <- single
+          input wire [7:0] address, data_in; <- multi
+        """
         pname = re.escape(port["name"])
         m = re.search(
             rf"^\s*(input|output|inout|ref)"
             rf"(?:\s+(wire|reg|logic|bit|tri|integer|signed|unsigned))?"
             rf"(\s*\[[^\]]*\])?"
-            rf"\s+{pname}\b",
+            rf"[^;]*?\b{pname}\b",
             body_text, re.MULTILINE,
         )
         if m:
@@ -579,28 +575,37 @@ class VeribleParser:
         return params
 
     def _extract_instances(self, mod_node: Dict) -> List[Dict[str, str]]:
-        """Extract instances from module body via regex."""
-        mod_start, mod_end = get_node_range(mod_node)
-        module_text = self.source[mod_start:mod_end]
+        """Extract module instances from module body using CST traversal.
 
+        Uses kInstantiationBase nodes from the Verible CST.  A node is treated
+        as a module instantiation only when its kInstantiationType subtree
+        contains a kLocalRoot (i.e. a user-defined type name); nodes with
+        kDataTypePrimitive (reg/wire/logic/…) are variable declarations and
+        are skipped.
+        """
         instances: List[Dict[str, str]] = []
-        for m in re.finditer(
-            r"^\s*([A-Za-z_]\w*)\s+(?:#\s*\(.*?\)\s*)?([A-Za-z_]\w*)\s*\(",
-            module_text,
-            re.MULTILINE | re.DOTALL,
-        ):
-            inst_type = m.group(1)
-            inst_name = m.group(2)
+        for inst_base in find_all(mod_node, "kInstantiationBase"):
+            inst_type_node = find_child(inst_base, "kInstantiationType")
+            if not inst_type_node:
+                continue
+            # Module instantiation: kInstantiationType contains kLocalRoot
+            # Variable declaration: kInstantiationType contains kDataTypePrimitive
+            local_root = find_descendant(inst_type_node, "kLocalRoot")
+            if not local_root:
+                continue
+            type_id = find_descendant(local_root, "SymbolIdentifier")
+            if not type_id:
+                continue
+            inst_type = self.get_text(type_id)
             if inst_type in _KEYWORD_SET:
                 continue
-            if inst_name in _KEYWORD_NAME_SET:
-                continue
-            line_start = module_text.rfind("\n", 0, m.start()) + 1
-            line_prefix = module_text[line_start:m.start()].strip()
-            if re.match(r"^\s*(input|output|inout|ref)\b", line_prefix):
-                continue
-            instances.append({"name": inst_name, "type": inst_type})
-
+            # Each instantiated unit is a kGateInstance inside kGateInstanceRegisterVariableList
+            for gate_inst in find_all(inst_base, "kGateInstance"):
+                name_id = find_child(gate_inst, "SymbolIdentifier")
+                if name_id:
+                    inst_name = self.get_text(name_id)
+                    if inst_name and inst_name not in _KEYWORD_SET:
+                        instances.append({"name": inst_name, "type": inst_type})
         return instances
 
     def get_module(self, module_name: Optional[str] = None) -> Dict:
@@ -725,42 +730,29 @@ def parse_rm_inst_port_spec(csv_str: str) -> Dict[str, str]:
 # Edit Operations
 # ---------------------------------------------------------------------------
 
-def _find_matching_paren(text: str, open_idx: int) -> int:
-    """Find matching ')' from open_idx '(' position."""
-    stack: List[int] = []
-    for idx in range(open_idx, len(text)):
-        ch = text[idx]
-        if ch == "(":
-            stack.append(idx)
-        elif ch == ")":
-            if stack:
-                stack.pop()
-                if not stack:
-                    return idx
-    return -1
-
-
 def _find_instance_in_source(source: str, instname: str) -> Tuple[int, int]:
-    """Find instance connection bounds in source text. Returns (open_paren, close_paren)."""
-    inst_m = None
-    for m in re.finditer(rf"\b{re.escape(instname)}\b\s*\(", source):
-        line_start = source.rfind("\n", 0, m.start()) + 1
-        if re.match(r"^\s*//", source[line_start:m.start() + 1]):
-            continue
-        inst_m = m
-        break
+    """Return (open_paren, close_paren) of instname's port connection list."""
+    inst_m = next(
+        (m for m in re.finditer(rf"\b{re.escape(instname)}\b\s*\(", source)
+         if not re.match(r"^\s*//", source[source.rfind("\n", 0, m.start()) + 1 : m.start() + 1])),
+        None,
+    )
     if not inst_m:
         raise ValueError(f"Instance '{instname}' not found")
-    open_idx = source.find("(", inst_m.start())
-    close_idx = _find_matching_paren(source, open_idx)
-    if close_idx < 0:
-        raise ValueError("Instance connection list is unbalanced")
-    return open_idx, close_idx
+    o = source.index("(", inst_m.start())
+    depth = 0
+    for i in range(o, len(source)):
+        if source[i] == "(":   depth += 1
+        elif source[i] == ")":
+            depth -= 1
+            if not depth:
+                return o, i
+    raise ValueError("Instance connection list is unbalanced")
 
 
-def cmd_add_port(source: str, module_info: Dict, port_csv: str) -> str:
+def cmd_add_port(source: str, module_info: Dict, port_spec: Union[str, Dict[str, str]]) -> str:
     """Add port(s) to module. Returns modified source."""
-    info = parse_add_port_spec(port_csv)
+    info = parse_add_port_spec(port_spec) if isinstance(port_spec, str) else port_spec
     mi = module_info
     newline = detect_newline(source)
 
@@ -782,19 +774,15 @@ def cmd_add_port(source: str, module_info: Dict, port_csv: str) -> str:
 
     if is_ansi:
         port_decl = compose_port_decl(info)
-        port_spans = get_line_spans(ports_text)
-        item_idxs = [
-            i for i, row in enumerate(port_spans)
-            if (s := row["text"].strip())
-            and not s.startswith("//")
-            and not s.startswith("/*")
-            and not s.startswith("*")
-        ]
+        # Scan from the end to find the last non-comment content line.
+        last = next(
+            (row for row in reversed(get_line_spans(ports_text))
+             if (s := row["text"].strip()) and not s.startswith(("//", "/*", "*"))),
+            None,
+        )
         edits: List[Tuple[int, int, str]] = []
 
-        if item_idxs:
-            last_idx = item_idxs[-1]
-            last = port_spans[last_idx]
+        if last:
             abs_start = open_idx + 1 + last["start"]
             abs_end = open_idx + 1 + last["end_full"]
             last_text = source[abs_start:abs_end]
@@ -854,34 +842,34 @@ def cmd_rm_port(source: str, module_info: Dict, name: str) -> str:
     ports_text = source[open_idx + 1:close_idx]
 
     if is_ansi:
-        port_spans = get_line_spans(ports_text)
-        item_idxs = [
-            i for i, row in enumerate(port_spans)
-            if (s := row["text"].strip())
-            and not s.startswith("//")
-            and not s.startswith("/*")
-            and not s.startswith("*")
-        ]
-        target_idx = None
-        for i in item_idxs:
-            if re.search(rf"\b{re.escape(name)}\b", port_spans[i]["text"]):
-                target_idx = i
+        # Single forward pass: track prev content row and whether any content
+        # row exists after the target (has_next). No temporary index lists.
+        name_re = re.compile(rf"\b{re.escape(name)}\b")
+        target_row = prev_row = None
+        has_next = False
+        for row in get_line_spans(ports_text):
+            s = row["text"].strip()
+            if not s or s.startswith(("//", "/*", "*")):
+                continue
+            if target_row is None:
+                if name_re.search(row["text"]):
+                    target_row = row
+                else:
+                    prev_row = row
+            else:
+                has_next = True
                 break
-        if target_idx is None:
+
+        if target_row is None:
             return source
 
-        edits: List[Tuple[int, int, str]] = []
         base = open_idx + 1
-        target = port_spans[target_idx]
-        edits.append((base + target["start"], base + target["end_full"], ""))
+        edits: List[Tuple[int, int, str]] = []
+        edits.append((base + target_row["start"], base + target_row["end_full"], ""))
 
-        prev_items = [i for i in item_idxs if i < target_idx]
-        next_items = [i for i in item_idxs if i > target_idx]
-        if prev_items and not next_items:
-            prev_idx = prev_items[-1]
-            prev = port_spans[prev_idx]
-            prev_abs_start = base + prev["start"]
-            prev_abs_end = base + prev["end_no_eol"]
+        if prev_row and not has_next:
+            prev_abs_start = base + prev_row["start"]
+            prev_abs_end = base + prev_row["end_no_eol"]
             prev_text = source[prev_abs_start:prev_abs_end]
             updated_prev = remove_trailing_comma_from_line(prev_text)
             if updated_prev != prev_text:
@@ -923,9 +911,9 @@ def cmd_rm_port(source: str, module_info: Dict, name: str) -> str:
     return source
 
 
-def cmd_add_wire(source: str, module_info: Dict, wire_csv: str) -> str:
+def cmd_add_wire(source: str, module_info: Dict, wire_spec: Union[str, Dict[str, str]]) -> str:
     """Add wire/logic declaration to module body."""
-    info = parse_add_wire_spec(wire_csv)
+    info = parse_add_wire_spec(wire_spec) if isinstance(wire_spec, str) else wire_spec
     mi = module_info
     semi_idx = mi["semi_idx"]
     newline = detect_newline(source)
@@ -949,8 +937,7 @@ def cmd_add_wire(source: str, module_info: Dict, wire_csv: str) -> str:
     if matches:
         last_decl = matches[-1]
         abs_insert = body_start + last_decl.end()
-        line_indent_match = re.match(r"\s*", last_decl.group(0))
-        indent = line_indent_match.group(0) if line_indent_match and line_indent_match.group(0) else detect_indent(body_text)
+        indent = re.match(r"\s*", last_decl.group(0)).group(0) or detect_indent(body_text)
     else:
         abs_insert = body_start
         indent = detect_indent(body_text)
@@ -984,7 +971,7 @@ def cmd_rm_wire(source: str, module_info: Dict, name: str) -> str:
     return apply_text_edits(source, edits)
 
 
-def cmd_add_inst_port(source: str, module_info: Dict, inst_port_csv: str) -> str:
+def cmd_add_inst_port(source: str, inst_port_csv: str) -> str:
     """Add .port(wire) to instance connection list."""
     spec = parse_add_inst_port_spec(inst_port_csv)
     instname, port_name, wire = spec["instname"], spec["port"], spec["wire"]
@@ -1001,13 +988,16 @@ def cmd_add_inst_port(source: str, module_info: Dict, inst_port_csv: str) -> str
     indent = detect_indent(conn_block)
     edits: List[Tuple[int, int, str]] = []
 
+    # Consume the iterator to find the last .port( match; then compute line
+    # bounds only once for that final match instead of on every iteration.
+    last_m = None
+    for last_m in re.finditer(r"\.\s*[A-Za-z_][A-Za-z0-9_$]*\s*\(", conn_block):
+        pass
     last_span = None
-    for m in re.finditer(r"\.\s*[A-Za-z_][A-Za-z0-9_$]*\s*\(", conn_block):
-        line_start = conn_block.rfind("\n", 0, m.start()) + 1
-        line_end = conn_block.find("\n", m.start())
-        if line_end < 0:
-            line_end = len(conn_block)
-        last_span = (line_start, line_end)
+    if last_m:
+        ls = conn_block.rfind("\n", 0, last_m.start()) + 1
+        le = conn_block.find("\n", last_m.start())
+        last_span = (ls, le if le >= 0 else len(conn_block))
 
     if last_span:
         abs_start = open_idx + 1 + last_span[0]
@@ -1028,7 +1018,7 @@ def cmd_add_inst_port(source: str, module_info: Dict, inst_port_csv: str) -> str
     return apply_text_edits(source, edits)
 
 
-def cmd_rm_inst_port(source: str, module_info: Dict, inst_port_csv: str) -> str:
+def cmd_rm_inst_port(source: str, inst_port_csv: str) -> str:
     """Remove .port() from instance connection list."""
     spec = parse_rm_inst_port_spec(inst_port_csv)
     instname, port_name = spec["instname"], spec["port"]
@@ -1038,29 +1028,32 @@ def cmd_rm_inst_port(source: str, module_info: Dict, inst_port_csv: str) -> str:
     conn_block = source[open_idx + 1:close_idx]
     conn_spans = get_line_spans(conn_block)
 
-    item_idxs: List[int] = []
-    target_idx: Optional[int] = None
-    for i, row in enumerate(conn_spans):
-        if _PORT_CONN_LINE_RE.search(row["text"]):
-            item_idxs.append(i)
-            if re.search(rf"\.\s*{re.escape(port_name)}\s*\(", row["text"]):
-                target_idx = i
+    # Single forward pass: no temporary index lists needed.
+    port_re = re.compile(rf"\.\s*{re.escape(port_name)}\s*\(")
+    target_row = prev_row = None
+    has_next = False
+    for row in conn_spans:
+        if not _PORT_CONN_LINE_RE.search(row["text"]):
+            continue
+        if target_row is None:
+            if port_re.search(row["text"]):
+                target_row = row
+            else:
+                prev_row = row
+        else:
+            has_next = True
+            break
 
-    if target_idx is None:
+    if target_row is None:
         return source
 
-    edits: List[Tuple[int, int, str]] = []
     base = open_idx + 1
-    target = conn_spans[target_idx]
-    edits.append((base + target["start"], base + target["end_full"], ""))
+    edits: List[Tuple[int, int, str]] = []
+    edits.append((base + target_row["start"], base + target_row["end_full"], ""))
 
-    prev_items = [i for i in item_idxs if i < target_idx]
-    next_items = [i for i in item_idxs if i > target_idx]
-    if prev_items and not next_items:
-        prev_idx = prev_items[-1]
-        prev = conn_spans[prev_idx]
-        prev_abs_start = base + prev["start"]
-        prev_abs_end = base + prev["end_no_eol"]
+    if prev_row and not has_next:
+        prev_abs_start = base + prev_row["start"]
+        prev_abs_end = base + prev_row["end_no_eol"]
         prev_text = source[prev_abs_start:prev_abs_end]
         updated_prev = remove_trailing_comma_from_line(prev_text)
         if updated_prev != prev_text:
@@ -1138,3 +1131,380 @@ def cmd_gen_inst(module_info: Dict, include_params: bool = True,
 
     lines.append(");")
     return "\n".join(lines)
+
+
+# ---------------------------------------------------------------------------
+# ModuleEditor – OOP API compatible with modeditor.ModuleEditor
+# ---------------------------------------------------------------------------
+
+class ModuleEditor:
+    """Module editor using verible-verilog-syntax as parsing backend.
+
+    Drop-in replacement for ``modeditor.ModuleEditor`` without the pyslang
+    dependency.  Works on a single-module text slice so all byte offsets are
+    module-relative.
+
+    Basic usage::
+
+        editor = ModuleEditor.from_file("path/to/file.sv", module_name="foo")
+        editor.add_port({"clk": {"direction": "input", "type": "wire", "width": ""}})
+        print(editor.module_text)
+    """
+
+    def __init__(self, module_text: str) -> None:
+        """Initialise from raw module source text (single-module snippet)."""
+        self._module_text: str = module_text
+        self._cached_parts: Optional[Dict[str, Any]] = None
+        self._cache_valid: bool = False
+
+    # ------------------------------------------------------------------
+    # Internal helpers
+    # ------------------------------------------------------------------
+
+    def _analyze(self) -> None:
+        """Re-parse ``_module_text`` with verible via a temp file."""
+        fd, tmppath = tempfile.mkstemp(suffix=".sv")
+        try:
+            # Write raw bytes so Verible's byte offsets stay consistent.
+            with os.fdopen(fd, "wb") as fh:
+                fh.write(self._module_text.encode("utf-8", errors="ignore"))
+            vparser = VeribleParser(tmppath)
+            modules = vparser.get_modules()
+        finally:
+            try:
+                os.unlink(tmppath)
+            except OSError:
+                pass
+        if not modules:
+            raise ValueError("Module not found in provided text")
+        self._cached_parts = modules[0]
+        self._cache_valid = True
+
+    def _get_cached_analysis(self) -> Dict[str, Any]:
+        if not self._cache_valid or self._cached_parts is None:
+            self._analyze()
+        assert self._cached_parts is not None
+        return self._cached_parts
+
+    def _invalidate_cache(self) -> None:
+        self._cache_valid = False
+
+    @staticmethod
+    def _pick_module(modules: List[Dict[str, Any]], module_name: Optional[str] = None) -> Dict[str, Any]:
+        """Pick one module from *modules*, raising user-facing errors on ambiguity."""
+        if not modules:
+            raise ValueError("no module found in file")
+        if module_name is None:
+            if len(modules) > 1:
+                names_str = "\n  - ".join(m["name"] for m in modules)
+                raise ValueError(
+                    f"file contains multiple modules:\n  - {names_str}\n"
+                    "Please specify a module name with --module option."
+                )
+            return modules[0]
+        picked = next((m for m in modules if m["name"] == module_name), None)
+        if picked is None:
+            available = ", ".join(m["name"] for m in modules)
+            raise ValueError(
+                f"Module '{module_name}' not found. "
+                f"Available modules: {available}"
+            )
+        return picked
+
+    @staticmethod
+    def _rebase_module_info(module_info: Dict[str, Any]) -> Dict[str, Any]:
+        """Convert absolute module offsets to module-relative offsets."""
+        mod_start = module_info["mod_start"]
+        mod_end = module_info["mod_end"]
+        relative: Dict[str, Any] = dict(module_info)
+        for key in ("open_idx", "close_idx", "semi_idx"):
+            if relative.get(key, -1) >= 0:
+                relative[key] -= mod_start
+        relative["mod_start"] = 0
+        relative["mod_end"] = mod_end - mod_start
+        return relative
+
+    @classmethod
+    def _from_source_and_modules(
+        cls,
+        source_text: str,
+        modules: List[Dict[str, Any]],
+        module_name: Optional[str] = None,
+    ) -> "ModuleEditor":
+        """Create an editor from already-parsed source/modules."""
+        picked = cls._pick_module(modules, module_name)
+        mod_start = picked["mod_start"]
+        mod_end = picked["mod_end"]
+        instance = cls.__new__(cls)
+        instance._module_text = source_text[mod_start:mod_end]
+        instance._cached_parts = cls._rebase_module_info(picked)
+        instance._cache_valid = True
+        return instance
+
+    # ------------------------------------------------------------------
+    # Class methods
+    # ------------------------------------------------------------------
+
+    @classmethod
+    def from_file(
+        cls,
+        path: "Union[Path, str]",
+        module_name: Optional[str] = None,
+    ) -> "ModuleEditor":
+        """Create a ``ModuleEditor`` from a file path.
+
+        Args:
+            path: Path to the ``.v`` / ``.sv`` file.
+            module_name: Module to edit.  Required when the file contains more
+                than one module.
+
+        Returns:
+            A ``ModuleEditor`` instance whose ``_module_text`` is the extracted
+            module slice with module-relative byte offsets cached.
+        """
+        fpath = Path(path)
+        if not fpath.exists():
+            raise FileNotFoundError(f"file not found: {fpath}")
+        vparser = VeribleParser(str(fpath))
+        return cls._from_source_and_modules(vparser.source, vparser.get_modules(), module_name)
+
+    @classmethod
+    def extract_module_text(
+        cls,
+        source_text: str,
+        module_name: Optional[str] = None,
+    ) -> "Tuple[str, Dict[str, int]]":
+        """Extract a module's source slice from *source_text*.
+
+        Returns:
+            ``(module_text, offset_info)`` where ``offset_info`` contains the
+            absolute ``mod_start`` / ``mod_end`` byte positions needed by
+            :meth:`replace_module_text`.
+        """
+        fd, tmppath = tempfile.mkstemp(suffix=".sv")
+        try:
+            # Write raw bytes (preserve CRLF) so Verible byte offsets are valid.
+            with os.fdopen(fd, "wb") as fh:
+                fh.write(source_text.encode("utf-8", errors="ignore"))
+            vparser = VeribleParser(tmppath)
+            modules = vparser.get_modules()
+        finally:
+            try:
+                os.unlink(tmppath)
+            except OSError:
+                pass
+
+        picked = cls._pick_module(modules, module_name)
+        mod_start = picked["mod_start"]
+        mod_end = picked["mod_end"]
+        return source_text[mod_start:mod_end], {"mod_start": mod_start, "mod_end": mod_end}
+
+    @classmethod
+    def replace_module_text(
+        cls,
+        source_text: str,
+        offset_info: Dict[str, int],
+        new_module_text: str,
+    ) -> str:
+        """Substitute an edited module slice back into *source_text*."""
+        s = offset_info["mod_start"]
+        e = offset_info["mod_end"]
+        return source_text[:s] + new_module_text + source_text[e:]
+
+    @classmethod
+    def list_modules_in_file(cls, path: "Union[Path, str]") -> List[str]:
+        """Return the names of all modules declared in *path*."""
+        vparser = VeribleParser(str(path))
+        return [m["name"] for m in vparser.get_modules()]
+
+    # ------------------------------------------------------------------
+    # Properties
+    # ------------------------------------------------------------------
+
+    @property
+    def module_text(self) -> str:
+        """Current (possibly edited) module source."""
+        return self._module_text
+
+    @property
+    def module_name(self) -> str:
+        return self._get_cached_analysis()["name"]
+
+    @property
+    def ports(self) -> List[Dict[str, Any]]:
+        return self._get_cached_analysis().get("ports", [])
+
+    @property
+    def instances(self) -> List[Dict[str, Any]]:
+        return self._get_cached_analysis().get("instances", [])
+
+    @property
+    def param_names(self) -> List[str]:
+        return self._get_cached_analysis().get("param_names", [])
+
+    @property
+    def is_ansi(self) -> bool:
+        return self._get_cached_analysis().get("is_ansi", True)
+
+    @property
+    def ports_text(self) -> str:
+        parts = self._get_cached_analysis()
+        o = parts.get("open_idx", -1)
+        c = parts.get("close_idx", -1)
+        if o < 0 or c < 0:
+            return ""
+        return self._module_text[o + 1 : c]
+
+    @property
+    def body_text(self) -> str:
+        parts = self._get_cached_analysis()
+        s = parts.get("semi_idx", -1)
+        if s < 0:
+            return ""
+        return self._module_text[s + 1 :]
+
+    # ------------------------------------------------------------------
+    # Port editing
+    # ------------------------------------------------------------------
+
+    def add_port(
+        self, port_dict: Dict[str, Dict[str, str]]
+    ) -> "ModuleEditor":
+        """Add ports (idempotent).
+
+        Args:
+            port_dict: ``{port_name: {direction, type, width, dimension}}``
+        """
+        for name, attrs in port_dict.items():
+            name = name.strip()
+            direction = attrs.get("direction", "").strip().lower()
+            if not name:
+                raise ValueError("name is required")
+            if direction and direction not in {"input", "output", "inout", "ref"}:
+                raise ValueError("direction must be input/output/inout/ref")
+            info: Dict[str, str] = {
+                "direction": direction,
+                "type": attrs.get("type", "").strip(),
+                "width": normalize_width(attrs.get("width", "")),
+                "name": name,
+                "dimension": normalize_dimension(attrs.get("dimension", "")),
+            }
+            parts = self._get_cached_analysis()
+            self._module_text = cmd_add_port(self._module_text, parts, info)
+            self._invalidate_cache()
+        return self
+
+    def rm_port(self, name: str) -> "ModuleEditor":
+        """Remove a port by name (idempotent)."""
+        parts = self._get_cached_analysis()
+        self._module_text = cmd_rm_port(self._module_text, parts, name)
+        self._invalidate_cache()
+        return self
+
+    # ------------------------------------------------------------------
+    # Wire editing
+    # ------------------------------------------------------------------
+
+    def add_wire(
+        self, wire_dict: Dict[str, Dict[str, str]]
+    ) -> "ModuleEditor":
+        """Add wire/logic declarations (idempotent).
+
+        Args:
+            wire_dict: ``{signal_name: {type, width, dimension}}``
+        """
+        for name, attrs in wire_dict.items():
+            name = name.strip()
+            if not name:
+                raise ValueError("name is required")
+            info: Dict[str, str] = {
+                "type": attrs.get("type", "wire").strip() or "wire",
+                "width": normalize_width(attrs.get("width", "")),
+                "name": name,
+                "dimension": normalize_dimension(attrs.get("dimension", "")),
+            }
+            parts = self._get_cached_analysis()
+            self._module_text = cmd_add_wire(self._module_text, parts, info)
+            self._invalidate_cache()
+        return self
+
+    def rm_wire(self, name: str) -> "ModuleEditor":
+        """Remove a wire/logic declaration by name (idempotent)."""
+        parts = self._get_cached_analysis()
+        self._module_text = cmd_rm_wire(self._module_text, parts, name)
+        self._invalidate_cache()
+        return self
+
+    # ------------------------------------------------------------------
+    # Instance-port editing
+    # ------------------------------------------------------------------
+
+    def add_inst_port(
+        self, inst_port_dict: Dict[str, Dict[str, Dict[str, str]]]
+    ) -> "ModuleEditor":
+        """Add ``.port(wire)`` connections to instances (idempotent).
+
+        Args:
+            inst_port_dict:
+                ``{inst_name: {port_name: {"wire": signal_name}}}``
+        """
+        for instname, ports in inst_port_dict.items():
+            for port_name, wire_info in ports.items():
+                wire = wire_info.get("wire", "")
+                self._module_text = cmd_add_inst_port(
+                    self._module_text, f"{instname},{port_name},{wire}"
+                )
+                self._invalidate_cache()
+        return self
+
+    def rm_inst_port(self, *, instname: str, name: str) -> "ModuleEditor":
+        """Remove a ``.port()`` connection from an instance (idempotent)."""
+        self._module_text = cmd_rm_inst_port(self._module_text, f"{instname},{name}")
+        self._invalidate_cache()
+        return self
+
+    # ------------------------------------------------------------------
+    # Analysis / generation
+    # ------------------------------------------------------------------
+
+    def gen_inst(
+        self,
+        include_params: bool = True,
+        instance_name: Optional[str] = None,
+        port_map: Optional[Dict[str, str]] = None,
+        indent: str = "    ",
+    ) -> str:
+        """Generate an instantiation template string."""
+        parts = self._get_cached_analysis()
+        return cmd_gen_inst(
+            parts,
+            include_params=include_params,
+            instance_name=instance_name,
+            port_map=port_map,
+        )
+
+    def analyze(self) -> Dict[str, Any]:
+        """Return the full analysis dict for this module.
+
+        Keys include ``name`` (module name), ``ports``, ``instances``,
+        ``param_names``, ``is_ansi``, ``module_text``, ``ports_text``,
+        ``body_text``, and raw offset fields.
+        """
+        cached = dict(self._get_cached_analysis())
+        # Add convenience aliases matching modeditor's analyze() output
+        cached.setdefault("module_name", cached.get("name", ""))
+        cached["module_text"] = self._module_text
+        o = cached.get("open_idx", -1)
+        c = cached.get("close_idx", -1)
+        s = cached.get("semi_idx", -1)
+        cached["ports_text"] = self._module_text[o + 1 : c] if o >= 0 and c >= 0 else ""
+        cached["body_text"] = self._module_text[s + 1 :] if s >= 0 else ""
+        return cached
+
+    def get_hier(self) -> Dict[str, Any]:
+        """Return hierarchy info: ``{"module": name, "instances": [...]}``."""
+        cached = self._get_cached_analysis()
+        return {
+            "module": cached.get("name", ""),
+            "instances": cached.get("instances", []),
+        }

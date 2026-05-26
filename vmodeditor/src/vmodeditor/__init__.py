@@ -5,5 +5,6 @@ CLI interface compatible with modeditor.
 """
 
 from .cli import main
+from .utils import ModuleEditor
 
-__all__ = ["main"]
+__all__ = ["main", "ModuleEditor"]

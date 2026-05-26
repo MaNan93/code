@@ -11,14 +11,16 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Set, Tuple
 
 from vmodeditor.utils import (
+    ModuleEditor,
     VeribleParser,
     cmd_add_inst_port,
     cmd_add_port,
     cmd_add_wire,
     cmd_gen_inst,
-    cmd_rm_inst_port,
-    cmd_rm_port,
-    cmd_rm_wire,
+    parse_add_inst_port_spec,
+    parse_add_port_spec,
+    parse_add_wire_spec,
+    parse_rm_inst_port_spec,
 )
 
 
@@ -44,6 +46,16 @@ def print_port_list(module_info: Dict, direction: str = "all") -> None:
     col_w = max(len(s) for s, _ in entries)
     for signal, dir_ in entries:
         print(f"{signal:<{col_w}}, {dir_}")
+
+
+def print_instance_list(module_info: Dict) -> None:
+    """Print instances in the module: 'inst_name (type)'."""
+    instances = module_info.get("instances", [])
+    if not instances:
+        return
+    col_w = max(len(i["name"]) for i in instances)
+    for inst in instances:
+        print(f"{inst['name']:<{col_w}}  ({inst['type']})")
 
 
 def print_instance_tree(
@@ -93,22 +105,54 @@ def apply_edit_actions(source_text: str, args: argparse.Namespace,
                        vparser: VeribleParser) -> Tuple[str, bool]:
     """Apply all edit flags to source text. Returns (new_text, changed)."""
     original = source_text
+
+    # Obtain module bounds from the already-parsed vparser (no extra verible
+    # invocation).  We then work on the isolated module slice so that byte
+    # offsets are consistent even when multiple edit flags are given at once.
     module_info = vparser.get_module(args.module_name)
+    mod_start: int = module_info["mod_start"]
+    mod_end: int = module_info["mod_end"]
+    module_text = source_text[mod_start:mod_end]
 
+    # Rebase offsets to be module-relative (module_text starts at byte 0)
+    mi = {**module_info}
+    for key in ("open_idx", "close_idx", "semi_idx"):
+        if mi.get(key, -1) >= 0:
+            mi[key] -= mod_start
+    mi["mod_start"] = 0
+    mi["mod_end"] = mod_end - mod_start
+
+    # Stage-1: add operations (fixed insertion semantics) using the module
+    # snapshot from first parse. This avoids repeated reparses for add-only
+    # command paths.
     if args.add_port:
-        source_text = cmd_add_port(source_text, module_info, args.add_port)
+        spec = parse_add_port_spec(args.add_port)
+        module_text = cmd_add_port(module_text, mi, spec)
     if args.add_wire:
-        source_text = cmd_add_wire(source_text, module_info, args.add_wire)
+        spec = parse_add_wire_spec(args.add_wire)
+        module_text = cmd_add_wire(module_text, mi, spec)
     if args.add_inst_port:
-        source_text = cmd_add_inst_port(source_text, module_info, args.add_inst_port)
-    if args.rm_port:
-        source_text = cmd_rm_port(source_text, module_info, args.rm_port)
-    if args.rm_wire:
-        source_text = cmd_rm_wire(source_text, module_info, args.rm_wire)
-    if args.rm_inst_port:
-        source_text = cmd_rm_inst_port(source_text, module_info, args.rm_inst_port)
+        spec = parse_add_inst_port_spec(args.add_inst_port)
+        module_text = cmd_add_inst_port(
+            module_text, f"{spec['instname']},{spec['port']},{spec['wire']}"
+        )
 
-    return source_text, source_text != original
+    # Stage-2: rm operations (need dynamic search). Use ModuleEditor only
+    # when remove actions are requested.
+    has_rm_action = any([args.rm_port, args.rm_wire, args.rm_inst_port])
+    if has_rm_action:
+        editor = ModuleEditor(module_text)
+        if args.rm_port:
+            editor.rm_port(args.rm_port)
+        if args.rm_wire:
+            editor.rm_wire(args.rm_wire)
+        if args.rm_inst_port:
+            spec = parse_rm_inst_port_spec(args.rm_inst_port)
+            editor.rm_inst_port(instname=spec["instname"], name=spec["port"])
+        module_text = editor.module_text
+
+    new_source = source_text[:mod_start] + module_text + source_text[mod_end:]
+    return new_source, new_source != original
 
 
 # ---------------------------------------------------------------------------
@@ -116,7 +160,7 @@ def apply_edit_actions(source_text: str, args: argparse.Namespace,
 # ---------------------------------------------------------------------------
 
 CLI_USAGE = (
-    "%(prog)s [-h] [--list-port [all|input|output|inout|ref]] [--hier] "
+    "%(prog)s [-h] [--list-port [all|input|output|inout|ref]] [--list-inst] [--hier] "
     "[--inst-module] [--inst-name INST_NAME] [--inst-no-param] "
     "[--add-port ADD_PORT] [--add-wire ADD_WIRE] [--add-inst-port ADD_INST_PORT] "
     "[--rm-port RM_PORT] [--rm-wire RM_WIRE] [--rm-inst-port RM_INST_PORT] "
@@ -160,6 +204,8 @@ def build_arg_parser() -> argparse.ArgumentParser:
         metavar="FILTER",
         help="Filter ports by direction: all, input, output, inout, ref (default: all)",
     )
+    parser.add_argument("--list-inst", action="store_true", dest="list_inst",
+                        help="List all module instances: 'inst_name (type)'")
     parser.add_argument("--hier", "--hierarchy", action="store_true", dest="hierarchy",
                         help="Print module hierarchy")
     parser.add_argument("--module", dest="module_name",
@@ -206,10 +252,10 @@ def main() -> int:
         print(f"Error: file not found: {args.sv_file}")
         return 1
 
-    has_edit_action = any(
-        [args.add_port, args.add_wire, args.add_inst_port,
-         args.rm_port, args.rm_wire, args.rm_inst_port]
-    )
+    has_edit_action = any((
+        args.add_port, args.add_wire, args.add_inst_port,
+        args.rm_port, args.rm_wire, args.rm_inst_port,
+    ))
 
     try:
         vparser = VeribleParser(str(args.sv_file))
@@ -217,8 +263,12 @@ def main() -> int:
         print(f"Parse failed: {exc}")
         return 2
 
+    def get_module_info() -> Dict[str, Any]:
+        return vparser.get_module(args.module_name or None)
+
     if has_edit_action:
-        source_text = args.sv_file.read_bytes().decode("utf-8")
+        # Reuse already-loaded text from VeribleParser to avoid an extra file read.
+        source_text = vparser.source
         try:
             new_text, changed = apply_edit_actions(source_text, args, vparser)
         except Exception as exc:
@@ -243,7 +293,7 @@ def main() -> int:
 
     if args.inst_module:
         try:
-            module_info = vparser.get_module(args.module_name or None)
+            module_info = get_module_info()
             snippet = cmd_gen_inst(
                 module_info,
                 include_params=not args.inst_no_param,
@@ -271,12 +321,21 @@ def main() -> int:
         print_hierarchy(all_mods)
         return 0
 
+    if args.list_inst:
+        try:
+            module_info = get_module_info()
+        except Exception as exc:
+            print(f"Parse failed: {exc}")
+            return 2
+        print_instance_list(module_info)
+        return 0
+
     if args.list_port is None:
         parser.print_help()
         return 0
 
     try:
-        module_info = vparser.get_module(args.module_name or None)
+        module_info = get_module_info()
     except Exception as exc:
         print(f"Parse failed: {exc}")
         return 2

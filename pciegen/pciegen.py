@@ -15,7 +15,7 @@ from typing import Callable, Dict, List, Optional, Set, Tuple
 from ramgen import ramgen
 import sys as _sys, pathlib as _pathlib
 _sys.path.insert(0, str(_pathlib.Path(__file__).parent.parent / "vutils" / "src"))
-from vutils.vutils import ModuleEditor, VeribleParser
+from vutils.vedit import vedit
 del _sys, _pathlib
 ENCODING = "utf-8"
 
@@ -60,6 +60,10 @@ CDM_PINS = [
 ]
 
 
+def _warn(message: str) -> None:
+    print(f"warning: {message}", flush=True)
+
+
 def _pick_target_module(modules: List[Dict[str, object]], path: Path,
                         inst_name: Optional[str] = None) -> Optional[Dict[str, object]]:
     """Pick target module info, preferring the module that owns *inst_name*."""
@@ -82,14 +86,10 @@ def _pick_target_module(modules: List[Dict[str, object]], path: Path,
     return modules[0]
 
 
-def _load_editor(path: Path, inst_name: Optional[str] = None) -> ModuleEditor:
-    """Create a ModuleEditor for the module that owns *inst_name*."""
-    vparser = VeribleParser(str(path))
-    module_info = _pick_target_module(vparser.get_modules(), path, inst_name=inst_name)
-    if not module_info:
-        raise ValueError(f"No editable module found in {path}")
-    module_name = str(module_info["name"])
-    return ModuleEditor.from_file(path, module_name=module_name)
+def _load_editor(path: Path, inst_name: Optional[str] = None) -> vedit:
+    """Create a vedit editor for the module that owns *inst_name*."""
+    module_name = _resolve_target_module_name(path, inst_name=inst_name)
+    return vedit.from_file(path, module_name=module_name)
 
 
 def _append_to_file(
@@ -98,7 +98,7 @@ def _append_to_file(
     pins: Optional[List[Tuple[str, str]]] = None,
     inst_name: Optional[str] = None,
 ) -> bool:
-    """使用 ModuleEditor 批量添加端口和实例端口连接。
+    """使用 vedit 批量添加端口和实例端口连接。
 
     Args:
         path: 文件路径
@@ -111,7 +111,8 @@ def _append_to_file(
     """
     try:
         editor = _load_editor(path, inst_name=inst_name)
-    except Exception:
+    except Exception as exc:
+        _warn(f"skip editing {path}: {exc}")
         return False
 
     original_text = path.read_text(encoding=ENCODING)
@@ -241,14 +242,14 @@ def rewrite_cdm_pl_reg_file(rtl_dir: Path) -> Optional[Path]:
     # Pre-apply regex replacements to the file text
     text = cdm_pl_reg_file.read_text(encoding=ENCODING)
     text = re.sub(
-        r"\(write_pulse.*?pl_reg_16\[7\];", "sys_fast_link_mode;", text
+        r"\(write_pulse.*?pl_reg_16\[\s*7\s*\]\s*\)\s*;", "sys_fast_link_mode;", text, flags=re.DOTALL
     )
     text = re.sub(
-        r"\(phy_type.*?pl_reg_18\[5:0\];", "sys_link_capable;", text
+        r"\(phy_type.*?pl_reg_18\[\s*5\s*:\s*0\s*\]\s*\)\s*;", "sys_link_capable;", text, flags=re.DOTALL
     )
     cdm_pl_reg_file.write_text(text, encoding=ENCODING)
 
-    # Add CDM ports via ModuleEditor
+    # Add CDM ports via vedit
     try:
         editor = _load_editor(cdm_pl_reg_file)
     except Exception:
@@ -362,13 +363,14 @@ def find_module_prefix(rtl_dir: Path) -> str:
 
     for candidate_file in candidate_files:
         try:
-            editor = ModuleEditor.from_file(candidate_file)
+            editor = vedit.from_file(candidate_file)
             row = editor.get_hier()
             module_name = str(row.get("module", "")).strip()
             if DWC_PCIE_CTL_PATTERN in module_name:
                 raw_prefix = module_name.replace(DWC_PCIE_CTL_PATTERN, "", 1)
                 return raw_prefix.rstrip("_")
-        except Exception:
+        except Exception as exc:
+            _warn(f"skip parsing {candidate_file}: {exc}")
             continue
 
     raise FileNotFoundError(
@@ -398,14 +400,42 @@ def rewrite_pcie_iip_subsystem_file(rtl_dir: Path, module_prefix: str) -> Option
     return subsystem_file
 
 
+def _resolve_target_module_name(path: Path, inst_name: Optional[str] = None) -> str:
+    """Resolve target module name in a source file with deterministic fallback."""
+    available = [m.strip() for m in vedit.list_modules_in_file(path) if m.strip()]
+    if not available:
+        raise ValueError(f"No module found in {path}")
+
+    if inst_name:
+        for name in available:
+            try:
+                editor = vedit.from_file(path, module_name=name)
+            except Exception as exc:
+                _warn(f"skip module '{name}' in {path}: {exc}")
+                continue
+            instances = editor.instances or []
+            if any(str(inst.get("name", "")).strip() == inst_name for inst in instances):
+                return name
+
+    if len(available) == 1:
+        return available[0]
+
+    for name in available:
+        if name == path.stem:
+            return name
+
+    return available[0]
+
+
 def analyze_pcie_iip_subsystem_interface(rtl_dir: Path) -> Optional[dict]:
     """Return module name and ANSI port metadata for rtl/examples/pcie_iip_subsystem.sv."""
     subsystem_file = rtl_dir / EXAMPLES_DIR / PCIE_IIP_SUBSYSTEM_SV
     try:
         target_module_name = _resolve_target_module_name(subsystem_file)
-        editor = ModuleEditor.from_file(subsystem_file, module_name=target_module_name)
+        editor = vedit.from_file(subsystem_file, module_name=target_module_name)
         return {"module_name": editor.module_name, "ports": editor.ports, "style": "ansi"}
-    except Exception:
+    except Exception as exc:
+        _warn(f"failed to analyze subsystem interface ({subsystem_file}): {exc}")
         return None
 
 
@@ -485,7 +515,7 @@ def load_wrapper_rules(rule_path: Path) -> Dict[str, Dict[str, str]]:
         name = get_cell(row, "name")
         if not name:
             continue
-        rules[name] = {
+        rules[_normalize_signal_name(name)] = {
             "pin": get_cell(row, "pin"),
             "port": get_cell(row, "port"),
         }
@@ -519,17 +549,19 @@ def generate_pcie_ctrl_wrapper_file(rtl_dir: Path, module_prefix: str, rule_csv_
     # Step 2: merge widths from HTML (HTML width takes precedence)
     analyzed_ports = []
     for port in ports:
-        raw_name = port.get("name", "")
-        name = _normalize_signal_name(raw_name)
+        raw_name = str(port.get("name", "")).strip()
+        if not raw_name:
+            continue
+        name_key = _normalize_signal_name(raw_name)
         direction = port.get("direction", "")
         ansi_width = port.get("width", "")
-        if name in normalized_html_widths:
-            width = normalized_html_widths[name]
+        if name_key in normalized_html_widths:
+            width = normalized_html_widths[name_key]
         else:
             if report_path.is_file():
-                print(f"warning: port '{name}' not found in {REPORT_HTML}, keeping ANSI width '{ansi_width}'", flush=True)
+                print(f"warning: port '{raw_name}' not found in {REPORT_HTML}, keeping ANSI width '{ansi_width}'", flush=True)
             width = ansi_width
-        analyzed_ports.append({"name": name, "direction": direction, "width": width})
+        analyzed_ports.append({"name": raw_name, "name_key": name_key, "direction": direction, "width": width})
 
     # Step 3: apply rule.csv to determine wrapper ports and u_pcie_ctrl connections
     rule_path = rule_csv_path if rule_csv_path else (Path(__file__).resolve().parent / RULE_CSV)
@@ -537,7 +569,7 @@ def generate_pcie_ctrl_wrapper_file(rtl_dir: Path, module_prefix: str, rule_csv_
     if not rule_path.is_file():
         print(f"warning: {rule_path} not found, using default one-to-one wrapper mapping", flush=True)
 
-    analyzed_names = {port.get("name", "") for port in analyzed_ports}
+    analyzed_names = {port.get("name_key", "") for port in analyzed_ports}
     for rule_name in rules:
         if rule_name not in analyzed_names:
             print(f"warning: rule name '{rule_name}' not found in analyzed subsystem ports", flush=True)
@@ -556,11 +588,16 @@ def generate_pcie_ctrl_wrapper_file(rtl_dir: Path, module_prefix: str, rule_csv_
 
     for port in analyzed_ports:
         name = port.get("name", "")
+        name_key = port.get("name_key", "")
         direction = port.get("direction", "")
         width = port.get("width", "")
-        rule = rules.get(name, {})
-        pin_value = rule.get("pin", "").strip()
-        port_value = rule.get("port", "").strip()
+        rule = rules.get(name_key)
+        if rule is None:
+            pin_value = "-"
+            port_value = "-"
+        else:
+            pin_value = rule.get("pin", "").strip()
+            port_value = rule.get("port", "").strip()
 
         # Validation 1: pin must not be empty
         if not pin_value:

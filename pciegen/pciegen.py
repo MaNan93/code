@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import os
 import re
 import csv
 import shutil
@@ -18,6 +19,25 @@ _sys.path.insert(0, str(_pathlib.Path(__file__).parent.parent / "vutils" / "src"
 from vutils.vedit import vedit
 del _sys, _pathlib
 ENCODING = "utf-8"
+
+
+def _pciegen_config_dir() -> Optional[Path]:
+    """Return $PCIEGEN directory if set and exists, otherwise None."""
+    val = os.environ.get("PCIEGEN", "").strip()
+    if not val:
+        return None
+    d = Path(val).expanduser().resolve()
+    return d if d.is_dir() else None
+
+
+def _find_config_file(filename: str) -> Path:
+    """Look up *filename* under $PCIEGEN first, then fall back to script directory."""
+    cdir = _pciegen_config_dir()
+    if cdir is not None:
+        candidate = cdir / filename
+        if candidate.is_file():
+            return candidate
+    return (Path(__file__).resolve().parent / filename)
 
 
 # Directory names
@@ -57,6 +77,12 @@ CDM_SIGNALS = [
 CDM_PINS = [
     ("sys_fast_link_mode", "sys_fast_link_mode"),
     ("sys_link_capable", "sys_link_capable"),
+]
+
+DEBUG_SIGNALS = [
+    {"name": "ltssm_state", "direction": "output", "width": "[8:0]"},
+    {"name": "sys_debug", "direction": "output", "width": "[8:0]"},
+    {"name": "current_data_rate", "direction": "output", "width": "[2:0]"},
 ]
 
 
@@ -241,12 +267,8 @@ def rewrite_cdm_pl_reg_file(rtl_dir: Path) -> Optional[Path]:
 
     # Pre-apply regex replacements to the file text
     text = cdm_pl_reg_file.read_text(encoding=ENCODING)
-    text = re.sub(
-        r"\(write_pulse.*?pl_reg_16\[\s*7\s*\]\s*\)\s*;", "sys_fast_link_mode;", text, flags=re.DOTALL
-    )
-    text = re.sub(
-        r"\(phy_type.*?pl_reg_18\[\s*5\s*:\s*0\s*\]\s*\)\s*;", "sys_link_capable;", text, flags=re.DOTALL
-    )
+    text = re.sub(r"\(write_pulse.*?pl_reg_16\[7\];", "sys_fast_link_mode;", text)
+    text = re.sub(r"\(phy_type.*?pl_reg_18\[5:0\];", "sys_link_capable;", text)
     cdm_pl_reg_file.write_text(text, encoding=ENCODING)
 
     # Add CDM ports via vedit
@@ -304,11 +326,11 @@ def append_cdm_to_dwc_pcie_ctl_file(rtl_dir: Path) -> Optional[Path]:
 
 
 def append_cdm_to_subsystem_file(rtl_dir: Path) -> Optional[Path]:
-    """Append CDM ports and u_pcie_core pins to pcie_iip_subsystem.sv."""
+    """Append CDM/debug ports and u_pcie_core pins to pcie_iip_subsystem.sv."""
     subsystem_file = rtl_dir / EXAMPLES_DIR / PCIE_IIP_SUBSYSTEM_SV
     if not subsystem_file.is_file():
         return None
-    _append_to_file(subsystem_file, signals=CDM_SIGNALS, pins=CDM_PINS, inst_name="u_pcie_core")
+    _append_to_file(subsystem_file, signals=CDM_SIGNALS + DEBUG_SIGNALS, pins=CDM_PINS, inst_name="u_pcie_core")
     return subsystem_file
 
 
@@ -447,6 +469,7 @@ def delete_subsystem_param_lines(rtl_dir: Path) -> Optional[Path]:
     if not subsystem_file.is_file():
         return None
     patterns = [re.compile(rf"\b{re.escape(s)}\b") for s in _SUBSYSTEM_DELETED_SIGNALS]
+    patterns.append(re.compile(r"wire.*current_data_rate"))
     lines = subsystem_file.read_text(encoding=ENCODING).splitlines()
     kept = [l for l in lines if not any(p.search(l) for p in patterns)]
     if kept != lines:
@@ -564,7 +587,7 @@ def generate_pcie_ctrl_wrapper_file(rtl_dir: Path, module_prefix: str, rule_csv_
         analyzed_ports.append({"name": raw_name, "name_key": name_key, "direction": direction, "width": width})
 
     # Step 3: apply rule.csv to determine wrapper ports and u_pcie_ctrl connections
-    rule_path = rule_csv_path if rule_csv_path else (Path(__file__).resolve().parent / RULE_CSV)
+    rule_path = rule_csv_path if rule_csv_path else _find_config_file(RULE_CSV)
     rules = load_wrapper_rules(rule_path)
     if not rule_path.is_file():
         print(f"warning: {rule_path} not found, using default one-to-one wrapper mapping", flush=True)
@@ -747,7 +770,7 @@ def generate_pcie_ctrl_wrapper_file(rtl_dir: Path, module_prefix: str, rule_csv_
 
 
 def read_subsystem_append_block() -> Optional[str]:
-    append_file = Path(__file__).resolve().with_name(DBI_MAP_SV)
+    append_file = _find_config_file(DBI_MAP_SV)
     if not append_file.is_file():
         return None
     text = append_file.read_text(encoding=ENCODING).rstrip()
@@ -817,8 +840,12 @@ def delete_pcie_ram_signal_lines_from_subsystem_file(rtl_dir: Path, signal_names
     if not subsystem_file.is_file():
         return None
     patterns = [re.compile(rf"\b{re.escape(n)}\b") for n in signal_names]
+    _DECL_KW = re.compile(r"^\s*(?:wire|input|output|inout|logic|reg|tri|wand|wor)\b")
     lines = subsystem_file.read_text(encoding=ENCODING).splitlines()
-    kept = [l for l in lines if not any(p.search(l) for p in patterns)]
+    kept = [
+        l for l in lines
+        if not (_DECL_KW.match(l) and any(p.search(l) for p in patterns))
+    ]
     if kept != lines:
         subsystem_file.write_text("\n".join(kept) + "\n", encoding=ENCODING)
     return subsystem_file
@@ -923,7 +950,7 @@ def validate_required_inputs(project_root: Path, rule_path: Path) -> None:
 
 def resolve_rule_path(rule_csv_path: Optional[Path]) -> Path:
     """Resolve rule path from CLI argument or default script-local rule.csv."""
-    return rule_csv_path if rule_csv_path else (Path(__file__).resolve().parent / RULE_CSV)
+    return rule_csv_path if rule_csv_path else _find_config_file(RULE_CSV)
 
 
 def step_validate_inputs(project_root: Path, rule_path: Path) -> None:
@@ -1013,6 +1040,11 @@ def step_process_text_files(
 
     log_detail("append local dbi-map.sv text block after subsystem module port close")
     dbi_map_text = read_subsystem_append_block()
+    if dbi_map_text:
+        if module_prefix:
+            dbi_map_text = dbi_map_text.replace("PREFIX", module_prefix)
+        else:
+            dbi_map_text = dbi_map_text.replace("PREFIX_", "")
     appended_dbi_map_file = append_text_after_first_port_close(rtl_dir, dbi_map_text)
 
     log_detail("extract pcie_ram instance from rtl/examples/pcie_iip_device.sv and append into subsystem")

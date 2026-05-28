@@ -141,12 +141,12 @@ nnoremap <F3> :call ToggleLineComment()<CR>
 " nnoremap <F3> :call CommentLine()<CR>
 " nnoremap <F4> :call UncommentLine()<CR>
 
-" Visual mode mappings (comment/uncomment multiple lines)
-vnoremap <F3> :call VisualToggleLine()<CR>
+" Visual/Select mode mappings (comment/uncomment multiple lines)
+xmap <F3> :call VisualToggleLine()<CR>
 
 " Legacy visual mappings (kept for future use)
-" vnoremap <F3> :call VisualCommentLine()<CR>
-" vnoremap <F4> :call VisualUncommentLine()<CR>
+" xmap <F3> :call VisualCommentLine()<CR>
+" xmap <F4> :call VisualUncommentLine()<CR>
 
 " Comment selected lines in visual mode
 function! VisualCommentLine()
@@ -192,24 +192,41 @@ function! VisualUncommentLine()
 endfunction
 
 " Toggle comment on selected lines in visual mode
+" If any line is uncommented → comment all (skip already-commented)
+" Only if ALL lines are already commented → uncomment all
 function! VisualToggleLine()
     let comment = GetCommentSymbol()
     let start_line = line("'<")
     let end_line = line("'>")
 
+    " First pass: determine direction — all commented or not?
+    let all_commented = 1
+    for line_num in range(start_line, end_line)
+        let current_line = getline(line_num)
+        let content = substitute(current_line, '^\s*', '', '')
+        if !empty(content) && !IsLineCommented(current_line, comment)
+            let all_commented = 0
+            break
+        endif
+    endfor
+
+    " Second pass: apply uniformly
+    let comment_pattern = '^\(\s*\)' . escape(comment, '/') . '\s\?'
     for line_num in range(start_line, end_line)
         let current_line = getline(line_num)
         let content = substitute(current_line, '^\s*', '', '')
 
-        " Skip empty lines
         if empty(content)
             continue
         endif
 
-        if IsLineCommented(current_line, comment)
-            let comment_pattern = '^\(\s*\)' . escape(comment, '/') . '\s\?'
-            call setline(line_num, substitute(current_line, comment_pattern, '\1', ''))
+        if all_commented
+            " Uncomment all
+            if IsLineCommented(current_line, comment)
+                call setline(line_num, substitute(current_line, comment_pattern, '\1', ''))
+            endif
         else
+            " Comment all — always add comment prefix
             call setline(line_num, comment . ' ' . current_line)
         endif
     endfor

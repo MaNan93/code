@@ -7,7 +7,7 @@ BBM、同步器、时钟门控、one-hot mux 都是 script/common 下的手写�
 """
 
 import argparse
-import os
+import shutil
 import sys
 from pathlib import Path
 
@@ -734,11 +734,12 @@ def gen_top(cfg):
 
 # ---------------------------------------------------------------- filelist
 
-def gen_filelist(cfg, common_rel):
+def gen_filelist(cfg):
     """<集>/rtl/flist.f。路径相对 flist.f 自身所在目录解析。
 
-    common 是手写公共模块，固定在 script/common/ 下，多个配置集共用；
-    flist.f 里用相对路径指过去（由调用方按集的位置算好）。
+    common 模块在生成时从 script/common/ 复制到 <集>/rtl/common/，
+    所以 flist.f 里直接引用同层的 common/ 目录即可，
+    每个配置集完全自包含，不依赖 script/ 的原始位置。
     """
     common = ["sync2.sv", "sel_sync.sv", "clk_gate.sv", "onehot_mux.sv"]
     gen = [
@@ -754,46 +755,339 @@ def gen_filelist(cfg, common_rel):
     L = [BANNER,
          "// RTL filelist。package 必须排在使用它的模块之前。",
          "",
-         f"+incdir+{common_rel}",
+         "+incdir+common",
          "+incdir+src",
          ""]
     for f in common:
-        L.append(f"{common_rel}/{f}")
+        L.append(f"common/{f}")
     L.append("")
     for f in gen:
         L.append(f"src/{f}")
     return "\n".join(L) + "\n"
 
 
-def gen_sim_filelist(cfg, flist_rel):
-    """tb/sim.f。路径相对 sim.f 自身所在目录（tb/）解析。
+# ---------------------------------------------------------------- testbench
 
-    flist_rel 是从 tb/ 指向本次生成集 rtl/flist.f 的相对路径。
+def gen_tb(cfg):
+    """按本配置集生成自校验 testbench，输出到 <集>/tb/tb_pipe_lane_mapper.sv。
 
-    嵌套引用 flist.f 必须用 -F（而不是 -f）：Verilator 的 -f 把文件内的
-    相对路径当成相对「调用时的当前目录」解析，两层 -f 嵌套时内层路径会
-    按外层调用者的 cwd 解析，而不是按 flist.f 自己所在的 rtl/ 目录，从
-    不同目录调用就会找不到文件。-F 则是相对「该参数文件自身所在目录」
-    解析，嵌套后各自独立，才能保证从项目根目录或从 tb/ 下调用都一样能跑。
+    检查项：
+      1. 稳态数据路由与 lane_mapping.csv 完全一致
+      2. 未映射的 controller 端口读回 SAFE_P2M
+      3. group sel 向量永远 one-hot0（break-before-make）
+      4. BBM 交接窗口（sel 全 0）时 phy lane 呈现安全态
+      5. phy_rst_n 跟随当前 owner 的 ctrl_rst_n
     """
+    nm = len(cfg.modes)
+    LC, NC = cfg.lane_count, cfg.num_ctrl
+    ctrls = [cfg.controllers[c] for c in sorted(cfg.controllers)]
+    muxed = [g for g in cfg.groups if not g.is_direct]
+
+    # 每 lane 给不同时钟周期 + 错相位，覆盖异步 CDC。
+    # 周期范围 3..15ns；SETTLE 取最慢周期 * 20（>=3 级 sync + hold 余量）。
+    periods = [3 + (l % 7) * 2 for l in range(LC)]
+    settle = max(periods) * 20
+
     L = [BANNER,
-         "// 仿真 filelist：RTL + testbench。",
+         "`timescale 1ns/1ps",
+         "//=============================================================================",
+         "// tb_pipe_lane_mapper -- 自校验功能仿真，按本配置集的 lane_mapping.csv 驱动。",
+         "//",
+         "// 检查项：",
+         "//   1. 稳态数据路由与 lane_mapping.csv 完全一致",
+         "//   2. 未映射的 controller 端口读回 SAFE_P2M",
+         "//   3. group sel 向量永远 one-hot0（break-before-make）",
+         "//   4. BBM 交接窗口（sel 全 0）时 phy lane 呈现安全态（txelecidle=1）",
+         "//   5. phy_rst_n 跟随当前 owner 的 ctrl_rst_n",
+         "//=============================================================================",
+         "import pipe_pkg::*;",
          "",
-         f"-F {flist_rel}",
-         "",
-         "tb_pipe_lane_mapper.sv"]
+         "module tb_pipe_lane_mapper;",
+         ""]
+
+    L.append(f"    localparam int NUM_MODES  = {nm};")
+    L.append(f"    localparam int LANE_COUNT = {LC};")
+    L.append(f"    localparam int NUM_CTRL   = {NC};")
+    L.append("")
+
+    # ---- clocks
+    L.append("    //------------------------------------------------------------ clocks")
+    L.append("    // 每 lane 不同周期 + 错相位，覆盖异步 CDC。")
+    L.append(f"    localparam int unsigned PERIOD_NS [0:{LC-1}] = '{{")
+    for i, p in enumerate(periods):
+        L.append(f"        {p}{',' if i != LC-1 else ''}")
+    L.append("    };")
+    L.append("")
+    L.append("    logic [LANE_COUNT-1:0] phy_pclk_out;")
+    L.append("")
+    L.append("    for (genvar l = 0; l < LANE_COUNT; l++) begin : g_clk")
+    L.append("        initial begin")
+    L.append("            phy_pclk_out[l] = 1'b0;")
+    L.append("            #(l * 0.7);")
+    L.append("            forever #(PERIOD_NS[l] / 2.0) phy_pclk_out[l] = ~phy_pclk_out[l];")
+    L.append("        end")
+    L.append("    end")
+    L.append("")
+
+    # ---- DUT IO
+    L.append("    //------------------------------------------------------------ DUT IO")
+    L.append("    logic                       test_en = 1'b0;")
+    L.append("    logic [NUM_CTRL-1:0]        ctrl_rst_n = '0;")
+    L.append("    logic [$clog2(NUM_MODES)-1:0] mode = '0;")
+    L.append("")
+    L.append("    logic [NUM_CTRL-1:0]        ctrl_pclk;")
+    L.append("    logic [LANE_COUNT-1:0]      phy_pclk_in;")
+    L.append("    logic [LANE_COUNT-1:0]      phy_rst_n;")
+    L.append("")
+    L.append("    mac2phy_lane_t [LANE_COUNT-1:0] phy_mac2phy;")
+    L.append("    phy2mac_lane_t [LANE_COUNT-1:0] phy_phy2mac;")
+    L.append("")
+    for c in ctrls:
+        L.append(f"    mac2phy_lane_t [{c.max_width-1}:0] {c.lname}_mac2phy;")
+        L.append(f"    phy2mac_lane_t [{c.max_width-1}:0] {c.lname}_phy2mac;")
+    L.append("")
+
+    # ---- DUT instance
+    L.append("    pipe_lane_mapper_top #(")
+    L.append("        .NUM_MODES  (NUM_MODES),")
+    L.append("        .LANE_COUNT (LANE_COUNT),")
+    L.append("        .NUM_CTRL   (NUM_CTRL)")
+    L.append("    ) dut (")
+    L.append("        .phy_pclk_out   (phy_pclk_out),")
+    L.append("        .test_en        (test_en),")
+    L.append("        .ctrl_rst_n     (ctrl_rst_n),")
+    L.append("        .mode           (mode),")
+    L.append("        .ctrl_pclk      (ctrl_pclk),")
+    L.append("        .phy_pclk_in    (phy_pclk_in),")
+    L.append("        .phy_rst_n      (phy_rst_n),")
+    L.append("        .phy_mac2phy    (phy_mac2phy),")
+    L.append("        .phy_phy2mac    (phy_phy2mac),")
+    for c in ctrls:
+        L.append(f"        .{c.lname}_mac2phy ({c.lname}_mac2phy),")
+        L.append(f"        .{c.lname}_phy2mac ({c.lname}_phy2mac),")
+    L[-1] = L[-1].rstrip(",")
+    L.append("    );")
+    L.append("")
+
+    # ---- stimulus patterns
+    L.append("    //------------------------------------------------------------ stimulus patterns")
+    L.append("    function automatic mac2phy_lane_t make_m2p(input int cid, input int port);")
+    L.append("        mac2phy_lane_t v;")
+    L.append("        v = SAFE_M2P;")
+    L.append("        v.mac_phy_txdata      = {4'(cid), 20'h0, 8'(port)};")
+    L.append("        v.mac_phy_txdatak     = 4'(port);")
+    L.append("        v.mac_phy_txdatavalid = 1'b1;")
+    L.append("        v.mac_phy_txelecidle  = 1'b0;   // active -- SAFE would be 1")
+    L.append("        v.mac_phy_rxstandby   = 1'b0;   // active -- SAFE would be 1")
+    L.append("        return v;")
+    L.append("    endfunction")
+    L.append("")
+    L.append("    function automatic phy2mac_lane_t make_p2m(input int lane);")
+    L.append("        phy2mac_lane_t v;")
+    L.append("        v = SAFE_P2M;")
+    L.append("        v.phy_mac_rxdata      = {8'hA5, 16'h0, 8'(lane)};")
+    L.append("        v.phy_mac_rxdatak     = 4'(lane);")
+    L.append("        v.phy_mac_rxdatavalid = 1'b1;")
+    L.append("        v.phy_mac_rxelecidle      = 1'b0;  // active -- SAFE would be 1")
+    L.append("        v.phy_mac_rxstandbystatus = 1'b0;  // active -- SAFE would be 1")
+    L.append("        return v;")
+    L.append("    endfunction")
+    L.append("")
+    L.append("    always_comb begin")
+    for c in ctrls:
+        L.append(f"        for (int p = 0; p < {c.max_width}; p++) "
+                 f"{c.lname}_mac2phy[p] = make_m2p({c.id}, p);")
+    L.append(f"        for (int l = 0; l < LANE_COUNT; l++) phy_phy2mac[l] = make_p2m(l);")
+    L.append("    end")
+    L.append("")
+
+    # ---- expected mapping
+    L.append("    //------------------------------------------------------------ expected mapping (from lane_mapping.csv)")
+    L.append("    function automatic int owner_of(input int m, input int l);")
+    L.append("        case (m)")
+    for m in cfg.modes:
+        L.append(f"            {m}: case (l)")
+        for l in range(LC):
+            cid, _ = cfg.mapping[m][l]
+            L.append(f"                {l}: return {cid};")
+        L.append("                default: return -1;")
+        L.append("            endcase")
+    L.append("            default: return -1;")
+    L.append("        endcase")
+    L.append("    endfunction")
+    L.append("")
+    L.append("    function automatic int port_of(input int m, input int l);")
+    L.append("        case (m)")
+    for m in cfg.modes:
+        L.append(f"            {m}: case (l)")
+        for l in range(LC):
+            _, cl = cfg.mapping[m][l]
+            L.append(f"                {l}: return {cl};")
+        L.append("                default: return -1;")
+        L.append("            endcase")
+    L.append("            default: return -1;")
+    L.append("        endcase")
+    L.append("    endfunction")
+    L.append("")
+
+    # ---- BBM monitor
+    L.append("    //------------------------------------------------------------ BBM one-hot / safe-state monitor")
+    L.append("    int unsigned err_count = 0;")
+    L.append("")
+    L.append("    task automatic chk(input bit ok, input string msg);")
+    L.append("        if (!ok) begin")
+    L.append("            err_count++;")
+    L.append("            $error(\"%0t: %s\", $time, msg);")
+    L.append("        end")
+    L.append("    endtask")
+    L.append("")
+    if muxed:
+        for g in muxed:
+            lanes_str = ", ".join(str(l) for l in g.lanes)
+            L.append(f"    localparam int G{g.gid}_LANES[{len(g.lanes)}] = "
+                     f"'{{{lanes_str}}};")
+        L.append("")
+        L.append("    always @(dut.sel_tgt) begin")
+        for g in muxed:
+            L.append(f"        chk($onehot0(dut.sel_tgt.g{g.gid}), "
+                     f"\"sel_tgt.g{g.gid} not one-hot0 (>1 branch enabled)\");")
+        L.append("")
+        for g in muxed:
+            L.append(f"        if (dut.sel_tgt.g{g.gid} == '0)")
+            L.append(f"            foreach (G{g.gid}_LANES[i])")
+            L.append(f"                chk(phy_mac2phy[G{g.gid}_LANES[i]].mac_phy_txelecidle == 1'b1,")
+            L.append(f"                    $sformatf(\"G{g.gid} lane%0d: sel==0 but txelecidle!=1 "
+                     f"(safe state not shown in BBM gap)\", G{g.gid}_LANES[i]));")
+        L.append("    end")
+    else:
+        L.append("    // 本拓扑全部直连，无 BBM group，无 sel 监测项。")
+    L.append("")
+
+    # ---- check_mode
+    L.append("    //------------------------------------------------------------ steady-state data-routing check")
+    L.append("    task automatic check_mode(input int m);")
+    L.append("        mac2phy_lane_t exp_m2p;")
+    L.append("        phy2mac_lane_t exp_p2m;")
+    L.append("        int cid, port;")
+    L.append("")
+    L.append("        for (int l = 0; l < LANE_COUNT; l++) begin")
+    L.append("            cid  = owner_of(m, l);")
+    L.append("            port = port_of(m, l);")
+    L.append("            exp_m2p = make_m2p(cid, port);")
+    L.append("            chk(phy_mac2phy[l].mac_phy_txdata == exp_m2p.mac_phy_txdata &&")
+    L.append("                phy_mac2phy[l].mac_phy_txdatavalid == 1'b1 &&")
+    L.append("                phy_mac2phy[l].mac_phy_txelecidle == 1'b0,")
+    L.append("                $sformatf(\"mode%0d lane%0d: phy_mac2phy mismatch, expected ctrl%0d port%0d\",")
+    L.append("                          m, l, cid, port));")
+    L.append("")
+    L.append("            chk(phy_rst_n[l] == ctrl_rst_n[cid],")
+    L.append("                $sformatf(\"mode%0d lane%0d: phy_rst_n=%0b does not follow owner ctrl%0d\",")
+    L.append("                          m, l, phy_rst_n[l], cid));")
+    L.append("        end")
+    L.append("")
+    L.append("        for (int c = 0; c < NUM_CTRL; c++) begin")
+    L.append("            int max_w;")
+    L.append("            case (c)")
+    for c in ctrls:
+        L.append(f"                {c.id}: max_w = {c.max_width};")
+    L.append("                default: max_w = 0;")
+    L.append("            endcase")
+    L.append("            for (int p = 0; p < max_w; p++) begin")
+    L.append("                int src_lane;")
+    L.append("                phy2mac_lane_t got;")
+    L.append("                src_lane = -1;")
+    L.append("                for (int l = 0; l < LANE_COUNT; l++)")
+    L.append("                    if (owner_of(m, l) == c && port_of(m, l) == p) src_lane = l;")
+    L.append("")
+    L.append("                case (c)")
+    for c in ctrls:
+        L.append(f"                    {c.id}: got = {c.lname}_phy2mac[p];")
+    L.append("                endcase")
+    L.append("")
+    L.append("                if (src_lane == -1) begin")
+    L.append("                    chk(got == SAFE_P2M,")
+    L.append("                        $sformatf(\"mode%0d ctrl%0d[%0d]: unmapped but not SAFE_P2M\", m, c, p));")
+    L.append("                end else begin")
+    L.append("                    exp_p2m = make_p2m(src_lane);")
+    L.append("                    chk(got.phy_mac_rxdata == exp_p2m.phy_mac_rxdata &&")
+    L.append("                        got.phy_mac_rxdatavalid == 1'b1 && got.phy_mac_rxelecidle == 1'b0,")
+    L.append("                        $sformatf(\"mode%0d ctrl%0d[%0d]: expected lane%0d data\", m, c, p, src_lane));")
+    L.append("                end")
+    L.append("            end")
+    L.append("        end")
+    L.append("")
+    L.append("        $display(\"%0t: mode%0d checked (%0d cumulative errors)\", $time, m, err_count);")
+    L.append("    endtask")
+    L.append("")
+
+    # ---- sequencing
+    L.append("    //------------------------------------------------------------ sequencing")
+    L.append(f"    localparam realtime SETTLE = {settle};")
+    L.append("")
+    L.append("    initial begin")
+    L.append("        $dumpfile(\"waves.vcd\");")
+    L.append("        $dumpvars(0, tb_pipe_lane_mapper);")
+    L.append("")
+    L.append("        ctrl_rst_n = '0;")
+    L.append("        mode = '0;")
+    L.append("        #100;")
+    L.append("        ctrl_rst_n = '1;")
+    L.append("        #SETTLE;")
+    L.append("")
+    for i, m in enumerate(cfg.modes):
+        L.append(f"        check_mode({m});")
+        if i < len(cfg.modes) - 1:
+            L.append(f"        mode = {cfg.modes[i+1]}; #SETTLE;")
+    # 末 mode 之后再回切做非相邻跳变
+    if nm >= 2:
+        L.append("")
+        L.append(f"        // 非相邻跳变")
+        L.append(f"        mode = {cfg.modes[0]}; #SETTLE; check_mode({cfg.modes[0]});")
+        L.append(f"        mode = {cfg.modes[-1]}; #SETTLE; check_mode({cfg.modes[-1]});")
+    L.append("")
+
+    # ---- reset pulse checks (last mode)
+    last_m = cfg.modes[-1]
+    L.append(f"        // reset pulse checks in mode{last_m}")
+    L.append(f"        // pulse 每个 controller：owner lane 的 phy_rst_n 跟随拉低，"
+             f"非 owner lane 保持高。")
+    for c in ctrls:
+        L.append(f"        ctrl_rst_n[{c.id}] = 1'b0; #SETTLE;")
+        L.append(f"        for (int l = 0; l < LANE_COUNT; l++) begin")
+        L.append(f"            bit expect_low;")
+        L.append(f"            expect_low = (owner_of({last_m}, l) == {c.id});")
+        L.append(f"            chk(phy_rst_n[l] == (expect_low ? 1'b0 : 1'b1),")
+        L.append(f"                $sformatf(\"mode{last_m} lane%0d: ctrl_rst_n[{c.id}]=0 pulse, "
+                 f"expected phy_rst_n=%0b\", l, expect_low ? 1'b0 : 1'b1));")
+        L.append(f"        end")
+        L.append(f"        $display(\"%0t: ctrl_rst_n[{c.id}] pulse checked (%0d cumulative errors)\", "
+                 f"$time, err_count);")
+        L.append(f"        ctrl_rst_n[{c.id}] = 1'b1; #SETTLE;")
+        L.append(f"        check_mode({last_m});")
+    L.append("")
+    L.append("        if (err_count == 0) $display(\"TB_RESULT: PASS\");")
+    L.append("        else                 $display(\"TB_RESULT: FAIL (%0d errors)\", err_count);")
+    L.append("        $finish;")
+    L.append("    end")
+    L.append("")
+    L.append("    initial begin")
+    L.append("        #20000;")
+    L.append("        $error(\"TB_RESULT: FAIL (timeout, simulation did not finish)\");")
+    L.append("        $finish;")
+    L.append("    end")
+    L.append("")
+    L.append("endmodule")
     return "\n".join(L) + "\n"
 
 
 # ---------------------------------------------------------------- main
 
 def main():
-    ap = argparse.ArgumentParser(description="生成 PIPE lane mapper RTL")
+    ap = argparse.ArgumentParser(description="生成 PIPE lane mapper RTL + testbench")
     ap.add_argument("--config", default=None, metavar="SET",
                     help="配置集目录。CSV 依次在 <SET>/config/、<SET>/ 本身、"
-                         "内置 script/config/ 下查找；生成物固定输出到 "
-                         "<SET>/rtl/。默认为 <plm根>/config")
-    ap.add_argument("--tb-dir", default=str(PLM_ROOT / "tb"))
+                         "内置 script/config/ 下查找；RTL 固定输出到 <SET>/rtl/，"
+                         "testbench 固定输出到 <SET>/tb/。默认为 <plm根>/config")
     ap.add_argument("--sel-mode", choices=["sync", "comb"], default="sync",
                     help="group 的 sel_sync 模块用哪种 SYNC 参数：sync=SYNC=1"
                          "（默认，break-before-make + 两级同步器，跨时钟域安全）；"
@@ -806,16 +1100,20 @@ def main():
     cfg = load(csv_dir)
     src = out_rtl / "src"
     src.mkdir(parents=True, exist_ok=True)
-    tb_dir = Path(a.tb_dir)
+    common_dst = out_rtl / "common"
+    common_dst.mkdir(parents=True, exist_ok=True)
+    tb_dir = out_rtl.parent / "tb"
     tb_dir.mkdir(parents=True, exist_ok=True)
 
-    # flist.f 引用公共模块、sim.f 引用 flist.f，都用相对路径写死进文件，
-    # 生成时按集的实际位置算，保证从任意目录调用都成立。
-    common_rel = Path(os.path.relpath(COMMON_DIR, out_rtl)).as_posix()
-    flist_rel = Path(os.path.relpath(out_rtl / "flist.f", tb_dir)).as_posix()
+    # 把 script/common/ 下的手写公共模块复制到 <集>/rtl/common/，
+    # 让每个配置集自包含，flist.f 直接引用同层 common/ 即可。
+    for f in COMMON_DIR.iterdir():
+        if f.is_file():
+            shutil.copy2(f, common_dst / f.name)
 
     print(f"配置: {csv_dir}")
-    print(f"输出: {out_rtl}")
+    print(f"RTL : {out_rtl}")
+    print(f"TB  : {tb_dir}")
     files = {
         src / "pipe_pkg.sv": gen_pkg(cfg),
         src / "pipe_lane_decoder.sv": gen_decoder(cfg),
@@ -825,8 +1123,8 @@ def main():
         src / "pipe_lane_data_m2p.sv": gen_data_m2p(cfg),
         src / "pipe_lane_data_p2m.sv": gen_data_p2m(cfg),
         src / "pipe_lane_mapper_top.sv": gen_top(cfg),
-        out_rtl / "flist.f": gen_filelist(cfg, common_rel),
-        tb_dir / "sim.f": gen_sim_filelist(cfg, flist_rel),
+        out_rtl / "flist.f": gen_filelist(cfg),
+        tb_dir / "tb_pipe_lane_mapper.sv": gen_tb(cfg),
     }
     for p, c in files.items():
         p.write_text(c)

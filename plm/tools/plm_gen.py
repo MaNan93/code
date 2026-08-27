@@ -22,9 +22,8 @@ def gen_pkg(cfg):
     L = [BANNER, "package pipe_pkg;", ""]
 
     for d, tname in (("mac2phy", "mac2phy_lane_t"), ("phy2mac", "phy2mac_lane_t")):
-        sigs = [s for s in cfg.signals if s.direction == d and s.sel_src == "sel"]
+        sigs = [s for s in cfg.signals if s.direction == d]
         L.append(f"    // {d} 方向，走 BBM 的信号打包成一个类型；")
-        L.append(f"    // 走 sel_tgt 的信号（ResetN）单独走线，不在此列。")
         L.append("    typedef struct packed {")
         for s in sigs:
             w = "" if s.width == 1 else f"[{s.width-1}:0] "
@@ -35,13 +34,13 @@ def gen_pkg(cfg):
     # 安全态常量
     for d, tname, cname in (("mac2phy", "mac2phy_lane_t", "SAFE_M2P"),
                             ("phy2mac", "phy2mac_lane_t", "SAFE_P2M")):
-        sigs = [s for s in cfg.signals if s.direction == d and s.sel_src == "sel"]
+        sigs = [s for s in cfg.signals if s.direction == d]
         L.append(f"    // 无 owner 时（BBM 交接窗口）应呈现的值。")
         L.append(f"    // onehot_mux 用它做极性归一化，使 sel 全 0 时天然落到安全态。")
         L.append(f"    localparam {tname} {cname} = '{{")
         for i, s in enumerate(sigs):
             tail = "," if i != len(sigs) - 1 else ""
-            L.append(f"        {s.name}: {s.sv_literal(s.safe_level)}{tail}")
+            L.append(f"        {s.name}: {s.sv_literal(s.safe_state)}{tail}")
         L.append("    };")
         L.append("")
 
@@ -142,17 +141,36 @@ def gen_decoder(cfg):
 
 # ---------------------------------------------------------------- 时钟子模块
 
-def gen_clk_top(cfg):
-    """ctrl_pclk 生成 + group BBM + 反馈时钟。"""
+def gen_clk_top(cfg, sel_mode="sync"):
+    """ctrl_pclk 生成 + group sel_sync + 反馈时钟。
+
+    group 的 owner 选择统一走 sel_sync 模块（rtl/common/sel_sync.sv），
+    用它的 SYNC 参数在两种实现之间切换，Python 侧只改参数字面量，
+    不用再分两套不同的实例化代码：
+      sel_mode="sync" (默认) -- SYNC=1'b1，break-before-make + 两级同步器，
+                跨时钟域安全。
+      sel_mode="comb"        -- SYNC=1'b0，en 直接等于 tgt，纯组合直通。
+                只在所有候选 controller 确实共用同一个时钟域、mode 本身
+                在该域内无毛刺时才安全；否则可能瞬间多个分支同时为 1，
+                onehot_mux 会把两路数据相或。
+
+    controller 侧的 pclk 候选切换（下面的 u_pclk_sel_sync_c{cid}）始终
+    强制 SYNC=1'b1 —— 那是给时钟本身做无毛刺切换，不受 sel_mode 影响。
+    """
     nm = len(cfg.modes)
     LC, NC = cfg.lane_count, cfg.num_ctrl
-    cp, cc = cfg.ctrl_pclk_src(), cfg.ctrl_pclk_cands()
+    cc = cfg.ctrl_pclk_cands()
     muxed_c = [c for c in sorted(cfg.controllers) if len(cc[c]) > 1]
+    sync_lit = "1'b1" if sel_mode == "sync" else "1'b0"
 
     L = [BANNER, "//",
          "// PIPE lane mapper 时钟子模块。",
-         "// 包含：controller pclk 生成、group BBM、反馈时钟 mux。",
-         "// 数据 mux 在 pipe_lane_data_m2p / pipe_lane_data_p2m 中。",
+         "// 包含：controller pclk 生成、group sel_sync、反馈时钟 mux。",
+         f"// group 的 sel_sync 模式: {sel_mode}"
+         + (" (SYNC=1, 跨时钟域安全)" if sel_mode == "sync"
+            else " (SYNC=0, 组合直通，要求候选 controller 共用同一时钟域)"),
+         "// 反馈复位 mux 在 pipe_lane_rst_top，数据 mux 在",
+         "// pipe_lane_data_m2p / pipe_lane_data_p2m 中。",
          "import pipe_pkg::*;",
          "",
          f"module pipe_lane_clk_top #(",
@@ -167,21 +185,20 @@ def gen_clk_top(cfg):
          "    input  logic [$clog2(NUM_MODES)-1:0] mode,",
          ""]
 
-    # controller 侧 mac2phy 端口（只取 phy_rst_n）
-    for cid in sorted(cfg.controllers):
-        c = cfg.controllers[cid]
-        L.append(f"    // {c.name} x{c.max_width}")
-        L.append(f"    input  mac2phy_lane_t [{c.max_width-1}:0] {c.lname}_mac2phy,")
-    L[-1] = L[-1].rstrip(",")
-
-    L.append("");  L.append("    output logic [NUM_CTRL-1:0]   ctrl_pclk,")
+    # 每个 controller 一根复位，外部已同步。用作 pclk sel_sync 内部触发器
+    # 的复位。按当前 owner 反馈给 PHY 的 phy_rst_n 在 pipe_lane_rst_top
+    # 里生成，那边同样需要这根 ctrl_rst_n 和这里输出的 sel_tgt，是顶层
+    # 平级的另一个子模块，不在这里做。
+    L.append("    input  logic [NUM_CTRL-1:0]   ctrl_rst_n,")
+    L.append("")
+    L.append("    output logic [NUM_CTRL-1:0]   ctrl_pclk,")
     L.append("    output logic [LANE_COUNT-1:0] phy_pclk_in,")
-    L.append("    output lane_sel_t              sel,")
-    L.append("    output lane_sel_t              sel_tgt")
+    L.append("    output lane_sel_t              sel_tgt   // 各 group 当前实际生效的 owner 选择")
     L.append(");")
     L.append("")
 
     # 内部信号
+    L.append("    lane_sel_t dec_tgt;   // 译码器的原始目标，本模块内部用，不对外暴露")
     for c in muxed_c:
         L.append(f"    logic [{len(cc[c])-1}:0] pclk_tgt_c{c};")
     L.append("")
@@ -192,7 +209,7 @@ def gen_clk_top(cfg):
     L.append("        .NUM_CTRL  (NUM_CTRL)")
     L.append("    ) u_decoder (")
     L.append("        .mode     (mode),")
-    L.append("        .sel_tgt  (sel_tgt)" + ("," if muxed_c else ""))
+    L.append("        .sel_tgt  (dec_tgt)" + ("," if muxed_c else ""))
     for i, c in enumerate(muxed_c):
         tail = "," if i != len(muxed_c) - 1 else ""
         L.append(f"        .pclk_tgt_c{c} (pclk_tgt_c{c}){tail}")
@@ -218,15 +235,15 @@ def gen_clk_top(cfg):
             L.append(f"    logic [{n-1}:0] pen_c{cid};")
             L.append(f"    logic [{n-1}:0] pgated_c{cid};")
             L.append(f"    always_ff @(posedge phy_pclk_out[{cand[0]}] "
-                     f"or negedge {c.lname}_mac2phy[0].phy_rst_n)")
-            L.append(f"        if (!{c.lname}_mac2phy[0].phy_rst_n) pclk_tgt_hold_c{cid} <= "
+                     f"or negedge ctrl_rst_n[{cid}])")
+            L.append(f"        if (!ctrl_rst_n[{cid}]) pclk_tgt_hold_c{cid} <= "
                      f"{n}'b{1:0{n}b};")
             L.append(f"        else if (|pclk_tgt_c{cid}) pclk_tgt_hold_c{cid} <= "
                      f"pclk_tgt_c{cid};")
-            L.append(f"    bbm_sel_onehot #(.N({n})) u_pclk_bbm_c{cid} (")
+            L.append(f"    sel_sync #(.N({n}), .SYNC(1'b1)) u_pclk_sel_sync_c{cid} (")
             L.append(f"        .branch_clk   ({{"
                      + ", ".join(f"phy_pclk_out[{v}]" for v in reversed(cand)) + "}),")
-            L.append(f"        .branch_rst_n ({{{n}{{{c.lname}_mac2phy[0].phy_rst_n}}}}),")
+            L.append(f"        .branch_rst_n ({{{n}{{ctrl_rst_n[{cid}]}}}}),")
             L.append(f"        .tgt          (pclk_tgt_hold_c{cid}),")
             L.append(f"        .en           (pen_c{cid})")
             L.append(f"    );")
@@ -237,22 +254,22 @@ def gen_clk_top(cfg):
             L.append(f"    assign ctrl_pclk[{cid}] = |pgated_c{cid};")
         L.append("")
 
-    # group BBM
+    # group sel_sync
     L.append("    //------------------------------------------------------------")
-    L.append("    // 每个非直连 group 一个 BBM。")
+    L.append(f"    // 每个非直连 group 一个 sel_sync（SYNC={sync_lit}）。")
     L.append("    //------------------------------------------------------------")
     for g in cfg.groups:
         if g.is_direct:
             continue
         names = ", ".join(cfg.controllers[c].name for c in g.cands)
         L.append(f"    // G{g.gid} lane{g.lanes[0]}~{g.lanes[-1]}: {names}")
-        L.append(f"    bbm_sel_onehot #(.N({g.n})) u_bbm_g{g.gid} (")
+        L.append(f"    sel_sync #(.N({g.n}), .SYNC({sync_lit})) u_sel_sync_g{g.gid} (")
         L.append(f"        .branch_clk   ({{"
                  + ", ".join(f"ctrl_pclk[{c}]" for c in reversed(g.cands)) + "}),")
         L.append(f"        .branch_rst_n ({{"
-                 + ", ".join(f"{cfg.controllers[c].lname}_mac2phy[0].phy_rst_n" for c in reversed(g.cands)) + "}),")
-        L.append(f"        .tgt          (sel_tgt.g{g.gid}),")
-        L.append(f"        .en           (sel.g{g.gid})")
+                 + ", ".join(f"ctrl_rst_n[{c}]" for c in reversed(g.cands)) + "}),")
+        L.append(f"        .tgt          (dec_tgt.g{g.gid}),")
+        L.append(f"        .en           (sel_tgt.g{g.gid})")
         L.append(f"    );")
         L.append("")
 
@@ -271,15 +288,63 @@ def gen_clk_top(cfg):
             names = ", ".join(cfg.controllers[c].name for c in g.cands)
             L.append(f"    // G{g.gid} lane{g.lanes[0]}~{g.lanes[-1]}: {names}")
             L.append(f"    logic [{g.n-1}:0] pin_gated_g{g.gid};")
+            # 同组共享一组 clk_gate，只算一次 pclk_in_gN 中间信号。
+            # 每条 lane 从该中间信号赋值，而不是彼此引用 —— phy_pclk_in
+            # 是顶层输出，lane 之间互引会被判成输出端口自环（UNOPTFLAT）。
+            L.append(f"    logic pclk_in_g{g.gid};")
             for i, c in enumerate(g.cands):
                 L.append(f"    clk_gate u_pin_gate_g{g.gid}_b{i} ("
-                         f".clk_in(ctrl_pclk[{c}]), .en(sel.g{g.gid}[{i}]), "
+                         f".clk_in(ctrl_pclk[{c}]), .en(sel_tgt.g{g.gid}[{i}]), "
                          f".test_en(test_en), .clk_out(pin_gated_g{g.gid}[{i}]));")
-            for idx, l in enumerate(g.lanes):
-                if idx == 0:
-                    L.append(f"    assign phy_pclk_in[{l}] = |pin_gated_g{g.gid};")
-                else:
-                    L.append(f"    assign phy_pclk_in[{l}] = phy_pclk_in[{g.lanes[0]}];")
+            L.append(f"    assign pclk_in_g{g.gid} = |pin_gated_g{g.gid};")
+            for l in g.lanes:
+                L.append(f"    assign phy_pclk_in[{l}] = pclk_in_g{g.gid};")
+    L.append("")
+    L.append("endmodule")
+    return "\n".join(L) + "\n"
+
+
+# ---------------------------------------------------------------- 反馈复位子模块
+
+def gen_rst_top(cfg):
+    """每条 lane 的 phy_rst_n 接它当前 owner 的 ctrl_rst_n。"""
+    LC, NC = cfg.lane_count, cfg.num_ctrl
+
+    L = [BANNER, "//",
+         "// PIPE lane mapper 反馈复位子模块。",
+         "// 每条 lane 的 phy_rst_n 接它当前 owner 的 ctrl_rst_n。",
+         "// 复用 onehot_mux 的极性归一化：sel_tgt 全 0（交接窗口，",
+         "// 无 owner）时安全态是保持复位（0），而不是悬空或维持上一个 owner。",
+         "import pipe_pkg::*;",
+         "",
+         f"module pipe_lane_rst_top #(",
+         f"    parameter int LANE_COUNT = {LC},",
+         f"    parameter int NUM_CTRL   = {NC}",
+         ") (",
+         "    input  logic [NUM_CTRL-1:0]   ctrl_rst_n,",
+         "    input  lane_sel_t              sel_tgt,",
+         "    output logic [LANE_COUNT-1:0] phy_rst_n",
+         ");",
+         ""]
+
+    for g in cfg.groups:
+        if g.is_direct:
+            c = g.cands[0]
+            for l in g.lanes:
+                L.append(f"    assign phy_rst_n[{l}] = ctrl_rst_n[{c}];"
+                         f"  // G{g.gid} 直连 {cfg.controllers[c].name}")
+        else:
+            names = ", ".join(cfg.controllers[c].name for c in g.cands)
+            L.append(f"    // G{g.gid} lane{g.lanes[0]}~{g.lanes[-1]}: {names}")
+            L.append(f"    logic rst_n_g{g.gid};")
+            L.append(f"    onehot_mux #(.WIDTH(1), .N({g.n}), .SAFE(1'b0)) u_rst_g{g.gid} (")
+            L.append(f"        .sel  (sel_tgt.g{g.gid}),")
+            L.append(f"        .din  ({{"
+                     + ", ".join(f"ctrl_rst_n[{c}]" for c in reversed(g.cands)) + "}),")
+            L.append(f"        .dout (rst_n_g{g.gid})")
+            L.append(f"    );")
+            for l in g.lanes:
+                L.append(f"    assign phy_rst_n[{l}] = rst_n_g{g.gid};")
     L.append("")
     L.append("endmodule")
     return "\n".join(L) + "\n"
@@ -298,7 +363,7 @@ def gen_data_m2p(cfg):
          f"module pipe_lane_data_m2p #(",
          f"    parameter int LANE_COUNT = {LC}",
          ") (",
-         "    input  lane_sel_t              sel,",
+         "    input  lane_sel_t              sel_tgt,",
          "    output mac2phy_lane_t [LANE_COUNT-1:0] phy_mac2phy,"]
     for cid in sorted(cfg.controllers):
         c = cfg.controllers[cid]
@@ -322,7 +387,7 @@ def gen_data_m2p(cfg):
                     srcs.append(f"{cfg.controllers[c].lname}_mac2phy[{cl}]")
                 L.append(f"    onehot_mux #(.WIDTH($bits(mac2phy_lane_t)), "
                          f".N({g.n}), .SAFE(SAFE_M2P)) u_m2p_l{l} (")
-                L.append(f"        .sel  (sel.g{g.gid}),")
+                L.append(f"        .sel  (sel_tgt.g{g.gid}),")
                 L.append(f"        .din  ({{" + ", ".join(reversed(srcs)) + "}),")
                 L.append(f"        .dout (phy_mac2phy[{l}])")
                 L.append(f"    );")
@@ -338,13 +403,13 @@ def gen_data_p2m(cfg):
     LC = cfg.lane_count
     L = [BANNER, "//",
          "// PIPE lane mapper PHY->MAC 数据 mux（按 controller 端口汇聚）。",
-         "// sel 的互斥性由 BBM 保证。未被驱动的端口 tie 安全态。",
+         "// sel_tgt 的互斥性由 sel_sync 保证。未被驱动的端口 tie 安全态。",
          "import pipe_pkg::*;",
          "",
          f"module pipe_lane_data_p2m #(",
          f"    parameter int LANE_COUNT = {LC}",
          ") (",
-         "    input  lane_sel_t              sel,",
+         "    input  lane_sel_t              sel_tgt,",
          "    input  phy2mac_lane_t [LANE_COUNT-1:0] phy_phy2mac,"]
     for cid in sorted(cfg.controllers):
         c = cfg.controllers[cid]
@@ -385,7 +450,7 @@ def gen_data_p2m(cfg):
                     din.append("SAFE_P2M")
             L.append(f"    onehot_mux #(.WIDTH($bits(phy2mac_lane_t)), "
                      f".N({g.n}), .SAFE(SAFE_P2M)) u_p2m_{c.lname}_{cl} (")
-            L.append(f"        .sel  (sel.g{gid}),")
+            L.append(f"        .sel  (sel_tgt.g{gid}),")
             L.append(f"        .din  ({{" + ", ".join(reversed(din)) + "}),")
             L.append(f"        .dout ({c.lname}_phy2mac[{cl}])")
             L.append(f"    );")
@@ -400,7 +465,6 @@ def gen_data_p2m(cfg):
 def gen_top(cfg):
     nm = len(cfg.modes)
     LC, NC = cfg.lane_count, cfg.num_ctrl
-    tgt_sigs = [s for s in cfg.signals if s.sel_src == "sel_tgt"]
 
     L = [BANNER, "//"]
     L.append("// PIPE lane mapper 顶层。")
@@ -427,19 +491,16 @@ def gen_top(cfg):
     L.append("    input  logic [LANE_COUNT-1:0] phy_pclk_out,")
     L.append("    /* verilator lint_on UNUSEDSIGNAL */")
     L.append("    input  logic                  test_en,")
+    L.append("    input  logic [NUM_CTRL-1:0]   ctrl_rst_n,   // 每 controller 一根，外部已同步")
     L.append("    input  logic [$clog2(NUM_MODES)-1:0] mode,")
     L.append("")
     L.append("    output logic [NUM_CTRL-1:0]   ctrl_pclk,")
     L.append("    output logic [LANE_COUNT-1:0] phy_pclk_in,")
+    L.append("    output logic [LANE_COUNT-1:0] phy_rst_n,")
     L.append("")
     L.append("    // PHY 侧 PIPE 数据")
     L.append("    output mac2phy_lane_t [LANE_COUNT-1:0] phy_mac2phy,")
     L.append("    input  phy2mac_lane_t [LANE_COUNT-1:0] phy_phy2mac,")
-    for s in tgt_sigs:
-        io = "output" if s.is_m2p else "input "
-        w = "" if s.width == 1 else f"[{s.width-1}:0] "
-        L.append(f"    {io} logic {w}phy_{s.name} [0:LANE_COUNT-1],"
-                 f"  // 走 sel_tgt，不经 BBM")
     L.append("")
     L.append("    // Controller 侧，各自真实宽度")
     for cid in sorted(cfg.controllers):
@@ -447,22 +508,17 @@ def gen_top(cfg):
         L.append(f"    // {c.name} x{c.max_width}")
         L.append(f"    input  mac2phy_lane_t [{c.max_width-1}:0] {c.lname}_mac2phy,")
         L.append(f"    output phy2mac_lane_t [{c.max_width-1}:0] {c.lname}_phy2mac,")
-        for s in tgt_sigs:
-            io = "input " if s.is_m2p else "output"
-            w = "" if s.width == 1 else f"[{s.width-1}:0] "
-            L.append(f"    {io} logic {w}{c.lname}_{s.name} [0:{c.max_width-1}],")
     L[-1] = L[-1].rstrip(",")
     L.append(");")
     L.append("")
 
     # ---- 内部连线
-    L.append("    lane_sel_t sel;")
-    L.append("    lane_sel_t sel_tgt;")
+    L.append("    lane_sel_t sel_tgt;   // 各 group 当前实际生效的 owner 选择")
     L.append("")
 
     # ---- 时钟子模块
     L.append("    //------------------------------------------------------------")
-    L.append("    // 时钟子模块：ctrl_pclk 生成 + group BBM + 反馈时钟 mux")
+    L.append("    // 时钟子模块：ctrl_pclk 生成 + group sel_sync + 反馈时钟 mux")
     L.append("    //------------------------------------------------------------")
     L.append("    pipe_lane_clk_top #(")
     L.append("        .NUM_MODES  (NUM_MODES),")
@@ -472,13 +528,24 @@ def gen_top(cfg):
     L.append("        .phy_pclk_out (phy_pclk_out),")
     L.append("        .test_en      (test_en),")
     L.append("        .mode         (mode),")
-    for cid in sorted(cfg.controllers):
-        c = cfg.controllers[cid]
-        L.append(f"        .{c.lname}_mac2phy ({c.lname}_mac2phy),")
+    L.append("        .ctrl_rst_n   (ctrl_rst_n),")
     L.append("        .ctrl_pclk    (ctrl_pclk),")
     L.append("        .phy_pclk_in  (phy_pclk_in),")
-    L.append("        .sel          (sel),")
     L.append("        .sel_tgt      (sel_tgt)")
+    L.append("    );")
+    L.append("")
+
+    # ---- 反馈复位子模块
+    L.append("    //------------------------------------------------------------")
+    L.append("    // 反馈复位子模块：phy_rst_n 按当前 owner 选 ctrl_rst_n")
+    L.append("    //------------------------------------------------------------")
+    L.append("    pipe_lane_rst_top #(")
+    L.append("        .LANE_COUNT (LANE_COUNT),")
+    L.append("        .NUM_CTRL   (NUM_CTRL)")
+    L.append("    ) u_rst_top (")
+    L.append("        .ctrl_rst_n (ctrl_rst_n),")
+    L.append("        .sel_tgt    (sel_tgt),")
+    L.append("        .phy_rst_n  (phy_rst_n)")
     L.append("    );")
     L.append("")
 
@@ -489,7 +556,7 @@ def gen_top(cfg):
     L.append("    pipe_lane_data_m2p #(")
     L.append("        .LANE_COUNT (LANE_COUNT)")
     L.append("    ) u_data_m2p (")
-    L.append("        .sel          (sel),")
+    L.append("        .sel_tgt      (sel_tgt),")
     L.append("        .phy_mac2phy  (phy_mac2phy),")
     for cid in sorted(cfg.controllers):
         c = cfg.controllers[cid]
@@ -505,7 +572,7 @@ def gen_top(cfg):
     L.append("    pipe_lane_data_p2m #(")
     L.append("        .LANE_COUNT (LANE_COUNT)")
     L.append("    ) u_data_p2m (")
-    L.append("        .sel          (sel),")
+    L.append("        .sel_tgt      (sel_tgt),")
     L.append("        .phy_phy2mac  (phy_phy2mac),")
     for cid in sorted(cfg.controllers):
         c = cfg.controllers[cid]
@@ -514,51 +581,20 @@ def gen_top(cfg):
     L.append("    );")
     L.append("")
 
-    # ---- sel_tgt 直通信号
-    if tgt_sigs:
-        L.append("    //------------------------------------------------------------")
-        L.append("    // 走 sel_tgt 的信号：不经 BBM，直接按目标 owner 选。")
-        L.append("    //------------------------------------------------------------")
-        for s in tgt_sigs:
-            for g in cfg.groups:
-                for l in g.lanes:
-                    if g.is_direct:
-                        c = g.cands[0]
-                        cl = cfg.mapping[cfg.modes[0]][l][1]
-                        if s.is_m2p:
-                            L.append(f"    assign phy_{s.name}[{l}] = "
-                                     f"{cfg.controllers[c].lname}_{s.name}[{cl}];")
-                    else:
-                        if s.is_m2p:
-                            terms = []
-                            for i, c in enumerate(g.cands):
-                                m = next(mm for mm in cfg.modes if g.owners[mm] == c)
-                                cl = cfg.mapping[m][l][1]
-                                terms.append(
-                                    f"({cfg.controllers[c].lname}_{s.name}[{cl}] "
-                                    f"& {{{s.width}{{sel_tgt.g{g.gid}[{i}]}}}})")
-                            safe = s.sv_literal(s.safe_level)
-                            terms.append(
-                                f"({safe} & {{{s.width}{{~|sel_tgt.g{g.gid}}}}})")
-                            L.append(f"    assign phy_{s.name}[{l}] =")
-                            for k, t in enumerate(terms):
-                                sep = ";" if k == len(terms) - 1 else ""
-                                pre = "          " if k == 0 else "        | "
-                                L.append(f"    {pre}{t}{sep}")
-        L.append("")
-
     L.append("endmodule")
     return "\n".join(L) + "\n"
 
 
 # ---------------------------------------------------------------- filelist
 
-def gen_filelist(cfg, outdir, gendir):
-    common = ["sync2.sv", "bbm_sel_onehot.sv", "clk_gate.sv", "onehot_mux.sv"]
+def gen_filelist(cfg):
+    """rtl/flist.f。路径相对 flist.f 自身所在目录（rtl/）解析。"""
+    common = ["sync2.sv", "sel_sync.sv", "clk_gate.sv", "onehot_mux.sv"]
     gen = [
         "pipe_pkg.sv",
         "pipe_lane_decoder.sv",
         "pipe_lane_clk_top.sv",
+        "pipe_lane_rst_top.sv",
         "pipe_lane_data_m2p.sv",
         "pipe_lane_data_p2m.sv",
         "pipe_lane_mapper_top.sv",
@@ -566,24 +602,32 @@ def gen_filelist(cfg, outdir, gendir):
     L = ["// Auto-generated by tools/plm_gen.py -- DO NOT EDIT",
          "// RTL filelist。package 必须排在使用它的模块之前。",
          "",
-         "+incdir+${PLM_ROOT}/rtl/common",
-         "+incdir+${PLM_ROOT}/rtl/gen",
+         "+incdir+common",
+         "+incdir+src",
          ""]
     for f in common:
-        L.append(f"${{PLM_ROOT}}/rtl/common/{f}")
+        L.append(f"common/{f}")
     L.append("")
     for f in gen:
-        L.append(f"${{PLM_ROOT}}/{gendir}/{f}")
+        L.append(f"src/{f}")
     return "\n".join(L) + "\n"
 
 
-def gen_sim_filelist(cfg, gendir):
+def gen_sim_filelist(cfg):
+    """tb/sim.f。路径相对 sim.f 自身所在目录（tb/）解析。
+
+    嵌套引用 flist.f 必须用 -F（而不是 -f）：Verilator 的 -f 把文件内的
+    相对路径当成相对「调用时的当前目录」解析，两层 -f 嵌套时内层路径会
+    按外层调用者的 cwd 解析，而不是按 flist.f 自己所在的 rtl/ 目录，从
+    不同目录调用就会找不到文件。-F 则是相对「该参数文件自身所在目录」
+    解析，嵌套后各自独立，才能保证从项目根目录或从 tb/ 下调用都一样能跑。
+    """
     L = ["// Auto-generated by tools/plm_gen.py -- DO NOT EDIT",
          "// 仿真 filelist：RTL + testbench。",
          "",
-         "-f ${PLM_ROOT}/filelist/rtl.f",
+         "-F ../rtl/flist.f",
          "",
-         "${PLM_ROOT}/verify/tb_pipe_lane_mapper.sv"]
+         "tb_pipe_lane_mapper.sv"]
     return "\n".join(L) + "\n"
 
 
@@ -592,26 +636,33 @@ def gen_sim_filelist(cfg, gendir):
 def main():
     ap = argparse.ArgumentParser(description="生成 PIPE lane mapper RTL")
     ap.add_argument("--config", default="config")
-    ap.add_argument("--outdir", default="rtl/gen")
-    ap.add_argument("--filelist", default="filelist")
+    ap.add_argument("--rtl-root", default="rtl")
+    ap.add_argument("--tb-dir", default="tb")
+    ap.add_argument("--sel-mode", choices=["sync", "comb"], default="sync",
+                     help="group 的 sel_sync 模块用哪种 SYNC 参数：sync=SYNC=1"
+                          "（默认，break-before-make + 两级同步器，跨时钟域安全）；"
+                          "comb=SYNC=0（组合直通，仅当候选 controller 共用同一"
+                          "时钟域时安全）")
     ap.add_argument("--quiet", action="store_true")
     a = ap.parse_args()
 
     cfg = load(a.config)
-    out = Path(a.outdir)
-    out.mkdir(parents=True, exist_ok=True)
-    fl = Path(a.filelist)
-    fl.mkdir(parents=True, exist_ok=True)
+    rtl_root = Path(a.rtl_root)
+    src = rtl_root / "src"
+    src.mkdir(parents=True, exist_ok=True)
+    tb_dir = Path(a.tb_dir)
+    tb_dir.mkdir(parents=True, exist_ok=True)
 
     files = {
-        out / "pipe_pkg.sv": gen_pkg(cfg),
-        out / "pipe_lane_decoder.sv": gen_decoder(cfg),
-        out / "pipe_lane_clk_top.sv": gen_clk_top(cfg),
-        out / "pipe_lane_data_m2p.sv": gen_data_m2p(cfg),
-        out / "pipe_lane_data_p2m.sv": gen_data_p2m(cfg),
-        out / "pipe_lane_mapper_top.sv": gen_top(cfg),
-        fl / "rtl.f": gen_filelist(cfg, out, a.outdir),
-        fl / "sim.f": gen_sim_filelist(cfg, a.outdir),
+        src / "pipe_pkg.sv": gen_pkg(cfg),
+        src / "pipe_lane_decoder.sv": gen_decoder(cfg),
+        src / "pipe_lane_clk_top.sv": gen_clk_top(cfg, a.sel_mode),
+        src / "pipe_lane_rst_top.sv": gen_rst_top(cfg),
+        src / "pipe_lane_data_m2p.sv": gen_data_m2p(cfg),
+        src / "pipe_lane_data_p2m.sv": gen_data_p2m(cfg),
+        src / "pipe_lane_mapper_top.sv": gen_top(cfg),
+        rtl_root / "flist.f": gen_filelist(cfg),
+        tb_dir / "sim.f": gen_sim_filelist(cfg),
     }
     for p, c in files.items():
         p.write_text(c)

@@ -47,26 +47,22 @@ class Controller:
 
 
 class Signal:
-    """safe_level: 该信号「无 owner」时应呈现的值。
+    """safe_state: 该信号「无 owner」时应呈现的值。
 
     onehot_mux 用它做极性归一化（进门 ^SAFE、出门 ^SAFE），
-    使 sel 全 0 时输出天然落到安全态。填错等于在交接窗口里
-    向 PHY / controller 发一个有实意的假指令。
+    使 sel 全 0（交接窗口）时输出天然落到安全态。填错等于在交接窗口里
+    向 PHY / controller 发一个有实意的假指令（例如 txelecidle 该是 1）。
 
-    sel_src: sel      走 BBM 同步后的使能（绝大多数信号）
-             sel_tgt  走同步前的目标值，不经 BBM。
-                      ResetN 属于此类：它是 controller 给 PHY 的复位，
-                      若走 BBM，交接窗口 sel 全 0 会把它拉低，
-                      等于对 PHY 发一次假复位。
+    表里所有信号都走 BBM（同步后的 sel）。复位 phy_rst_n / ctrl_rst_n
+    是独立端口，不进本表。
     """
 
-    def __init__(self, name, direction, width, safe_level, sel_src):
+    def __init__(self, name, direction, width, safe_state):
         self.name = str(name).strip()
         self.direction = str(direction).strip()       # mac2phy | phy2mac
         self.width = int(str(width).strip())
-        sl = str(safe_level).strip()
-        self.safe_level = int(sl, 0) if sl else 0
-        self.sel_src = (str(sel_src).strip() if sel_src else "") or "sel"
+        ss = str(safe_state).strip()
+        self.safe_state = int(ss, 0) if ss else 0
 
     @property
     def is_m2p(self):
@@ -142,7 +138,7 @@ class Config:
         seen = set()
         for i, r in enumerate(_stripped(
                 csv.DictReader(open(path, newline=""))), start=2):
-            for col in ("signal_name", "direction", "base_width", "safe_level"):
+            for col in ("signal_name", "direction", "width", "safe_state"):
                 if col not in r or not (r[col] or "").strip():
                     raise SystemExit(f"{path} 第 {i} 行: 缺少 {col}")
             name = r["signal_name"]
@@ -154,22 +150,17 @@ class Config:
                 raise SystemExit(
                     f"{path} 第 {i} 行: direction='{d}' 非法，"
                     f"应为 mac2phy 或 phy2mac")
-            src = r.get("sel_src") or "sel"
-            if src not in ("sel", "sel_tgt"):
-                raise SystemExit(
-                    f"{path} 第 {i} 行: sel_src='{src}' 非法，"
-                    f"应为 sel 或 sel_tgt")
             try:
-                s = Signal(name, d, r["base_width"], r["safe_level"], src)
+                s = Signal(name, d, r["width"], r["safe_state"])
             except ValueError:
                 raise SystemExit(
-                    f"{path} 第 {i} 行: base_width / safe_level 不是合法整数")
+                    f"{path} 第 {i} 行: width / safe_state 不是合法整数")
             if s.width < 1:
-                raise SystemExit(f"{path} 第 {i} 行: base_width 必须 >= 1")
-            if s.safe_level >= (1 << s.width):
+                raise SystemExit(f"{path} 第 {i} 行: width 必须 >= 1")
+            if s.safe_state >= (1 << s.width):
                 raise SystemExit(
-                    f"{path} 第 {i} 行: 信号 {name} 的 safe_level="
-                    f"{s.safe_level} 超出 base_width={s.width} 的范围")
+                    f"{path} 第 {i} 行: 信号 {name} 的 safe_state="
+                    f"{s.safe_state} 超出 width={s.width} 的范围")
             out.append(s)
         if not out:
             raise SystemExit(f"{path}: 没有任何信号")
@@ -294,6 +285,18 @@ class Config:
         err = []
         cp = self.ctrl_pclk_src()
 
+        # mode 端口按 $clog2(NUM_MODES) 声明位宽，NUM_MODES 取的是 mode 个数。
+        # 若取值不是从 0 开始的连续整数，位宽会按「个数」而不是「最大值+1」
+        # 计算，某些 mode 值会落在端口位宽之外，对应的 case 分支永远选不到。
+        expect = set(range(len(self.modes)))
+        actual = set(self.modes)
+        if actual != expect:
+            err.append(
+                f"mode 取值必须是从 0 开始的连续整数，当前为 {sorted(actual)}。"
+                f"译码器的 mode 端口按 $clog2(mode 个数) 声明位宽，"
+                f"非连续或不从 0 开始会导致部分 mode 分支的值超出端口位宽，"
+                f"在硬件上永远无法选中。")
+
         for m in self.modes:
             seen = {}
             for l in range(self.lane_count):
@@ -332,14 +335,6 @@ class Config:
                     f"{nm}[{cl}] 的驱动源跨越多个 lane group: {detail}。\n"
                     f"    同一 controller 端口的所有驱动源必须来自同一个 group，"
                     f"否则汇聚 mux 的 sel 无法保证互斥。请调整 lane 分配。")
-
-        # ResetN 必须走 sel_tgt
-        for s in self.signals:
-            if s.name.lower() in ("resetn", "reset_n") and s.sel_src != "sel_tgt":
-                err.append(
-                    f"信号 {s.name} 是复位类信号，sel_src 应为 sel_tgt。"
-                    f"走 BBM 的话交接窗口 sel 全 0 会把它拉低，"
-                    f"等于对 PHY 发一次假复位。")
 
         for cid, per in cp.items():
             if all(v is None for v in per.values()):
@@ -391,12 +386,10 @@ class Config:
         L.append("")
         for s in self.signals:
             note = ""
-            if s.sel_src == "sel_tgt":
-                note = "  <- 走 sel_tgt，不经 BBM"
-            elif s.safe_level != 0:
+            if s.safe_state != 0:
                 note = "  <- 需要极性归一化"
             L.append(f"  {s.name:<14} {s.direction:<8} [{s.width:>2}] "
-                     f"safe={s.safe_level}{note}")
+                     f"safe={s.safe_state}{note}")
         L.append("")
 
         L.append("mode 转换影响（BBM 只会动到这些组）")

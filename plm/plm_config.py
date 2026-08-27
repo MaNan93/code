@@ -57,12 +57,15 @@ class Signal:
     是独立端口，不进本表。
     """
 
-    def __init__(self, name, direction, width, safe_state):
+    def __init__(self, name, direction, width, safe_state, tie_off):
         self.name = str(name).strip()
         self.direction = str(direction).strip()       # mac2phy | phy2mac
         self.width = int(str(width).strip())
         ss = str(safe_state).strip()
         self.safe_state = int(ss, 0) if ss else 0
+        self.tie_off = str(tie_off).strip().lower()
+        if self.tie_off not in ("0", "1", "lane0"):
+            raise ValueError(f"tie_off 只能为 '0', '1' 或 'lane0'，当前为 '{self.tie_off}'")
 
     @property
     def is_m2p(self):
@@ -138,7 +141,7 @@ class Config:
         seen = set()
         for i, r in enumerate(_stripped(
                 csv.DictReader(open(path, newline=""))), start=2):
-            for col in ("signal_name", "direction", "width", "safe_state"):
+            for col in ("signal_name", "direction", "width", "safe_state", "tie_off"):
                 if col not in r or not (r[col] or "").strip():
                     raise SystemExit(f"{path} 第 {i} 行: 缺少 {col}")
             name = r["signal_name"]
@@ -151,10 +154,10 @@ class Config:
                     f"{path} 第 {i} 行: direction='{d}' 非法，"
                     f"应为 mac2phy 或 phy2mac")
             try:
-                s = Signal(name, d, r["width"], r["safe_state"])
-            except ValueError:
+                s = Signal(name, d, r["width"], r["safe_state"], r["tie_off"])
+            except ValueError as e:
                 raise SystemExit(
-                    f"{path} 第 {i} 行: width / safe_state 不是合法整数")
+                    f"{path} 第 {i} 行: 信号属性校验失败，{e}")
             if s.width < 1:
                 raise SystemExit(f"{path} 第 {i} 行: width 必须 >= 1")
             if s.safe_state >= (1 << s.width):

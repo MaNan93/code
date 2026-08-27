@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "xreg"
-version = "0.2.0"
-description = "RALF register description to structured output converter"
+version = "0.3.0"
+description = "RALF register description to structured output converter with AXI4 testbench generation"
 requires-python = ">=3.6.8"
 authors = [
   { name = "local-user" }

@@ -5,6 +5,7 @@ import configparser
 import datetime
 import fnmatch
 import ftplib
+import glob
 import hashlib
 import os
 import re
@@ -46,6 +47,12 @@ class FizzApp:
         self.script_dir = os.getcwd()
         self.pref_path = os.path.join(os.path.expanduser("~"), ".fizz.ini")
 
+        # PostSim 分析
+        self.postsim_dir_var = tk.StringVar(value=os.getcwd())
+        self.postsim_pattern_var = tk.StringVar(value="*.log")
+        self.postsim_file_frames = []
+        self._postsim_search_id = None
+
         self._setup_style()
         self._setup_clipboard()
         self._build_menu()
@@ -53,6 +60,11 @@ class FizzApp:
         self._ensure_pref_file()
         self._load_config()
         self._set_defaults()
+
+        # PostSim 搜索绑定 + 初始搜索
+        self.postsim_dir_var.trace_add("write", self._postsim_debounce)
+        self.postsim_pattern_var.trace_add("write", self._postsim_debounce)
+        self.root.after(500, self._postsim_search)
 
     def _build_menu(self):
         menubar = tk.Menu(self.root)
@@ -592,6 +604,11 @@ class FizzApp:
         rlskit_tab = ttk.Frame(nb, padding=4)
         nb.add(rlskit_tab, text="RLskit")
         self._build_rlskit_tab(rlskit_tab)
+
+        # === 选项卡 5: 后仿分析 ===
+        postsim_tab = ttk.Frame(nb, padding=4)
+        nb.add(postsim_tab, text="后仿分析")
+        self._build_postsim_tab(postsim_tab)
 
         # -- 全局状态栏 --
         self.global_status_var = tk.StringVar(value="就绪")
@@ -1936,6 +1953,327 @@ class FizzApp:
 
         with open(self.pref_path, "w", encoding="utf-8") as f:
             cfg.write(f)
+
+    # ------------------------------------------------------------------
+    # PostSim 分析
+    # ------------------------------------------------------------------
+    def _build_postsim_tab(self, parent):
+        """构建后仿分析选项卡"""
+        # -- 目录选择 --
+        dir_frame = ttk.LabelFrame(parent, text="搜索目录", padding=6)
+        dir_frame.pack(fill=tk.X, pady=(0, 4))
+        ttk.Entry(dir_frame, textvariable=self.postsim_dir_var).pack(
+            side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 4))
+        ttk.Button(dir_frame, text="浏览...", width=7,
+                   command=self._postsim_browse_dir).pack(side=tk.LEFT)
+
+        # -- 搜索规则 --
+        pat_frame = ttk.LabelFrame(parent, text="搜索规则", padding=6)
+        pat_frame.pack(fill=tk.X, pady=(0, 4))
+        ttk.Entry(pat_frame, textvariable=self.postsim_pattern_var).pack(
+            side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 4))
+        ttk.Label(pat_frame, text="(*.log, test?.txt 等)").pack(side=tk.LEFT)
+
+        # -- 文件预览 --
+        preview_frame = ttk.LabelFrame(parent, text="匹配文件 (双击行分析)", padding=4)
+        preview_frame.pack(fill=tk.BOTH, expand=True)
+
+        self._postsim_canvas = tk.Canvas(preview_frame, highlightthickness=0, bg="#ffffff")
+        v_scroll = ttk.Scrollbar(preview_frame, orient=tk.VERTICAL,
+                                 command=self._postsim_canvas.yview)
+        self._postsim_scrollable = ttk.Frame(self._postsim_canvas)
+
+        self._postsim_canvas.bind("<MouseWheel>",
+            lambda e: self._postsim_canvas.yview_scroll(-int(e.delta / 120), "units"))
+        self._postsim_canvas.bind("<Button-4>",
+            lambda e: self._postsim_canvas.yview_scroll(-1, "units"))
+        self._postsim_canvas.bind("<Button-5>",
+            lambda e: self._postsim_canvas.yview_scroll(1, "units"))
+
+        self._postsim_scrollable.bind("<Configure>",
+            lambda e: self._postsim_canvas.configure(
+                scrollregion=self._postsim_canvas.bbox("all")))
+        self._postsim_canvas.create_window((0, 0), window=self._postsim_scrollable, anchor="nw")
+        self._postsim_canvas.configure(yscrollcommand=v_scroll.set)
+
+        self._postsim_canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        v_scroll.pack(side=tk.RIGHT, fill=tk.Y)
+
+        # -- 统计信息 --
+        self._postsim_stats_var = tk.StringVar(value="匹配文件数：0")
+        ttk.Label(parent, textvariable=self._postsim_stats_var,
+                  style="Status.TLabel").pack(anchor=tk.W, pady=(4, 0))
+
+    def _postsim_browse_dir(self):
+        path = filedialog.askdirectory(title="选择搜索目录")
+        if path:
+            self.postsim_dir_var.set(path)
+
+    def _postsim_debounce(self, *args):
+        if self._postsim_search_id:
+            self.root.after_cancel(self._postsim_search_id)
+        self._postsim_search_id = self.root.after(300, self._postsim_search)
+
+    def _postsim_search(self):
+        """递归搜索文件并实时预览"""
+        for f in self.postsim_file_frames:
+            f.destroy()
+        self.postsim_file_frames.clear()
+
+        dir_path = self.postsim_dir_var.get().strip()
+        pattern = self.postsim_pattern_var.get().strip()
+        if not dir_path or not os.path.isdir(dir_path):
+            self._postsim_stats_var.set("匹配文件数：0 (请选择有效目录)")
+            self.global_status_var.set("后仿: 目录无效")
+            return
+
+        try:
+            search_path = os.path.join(dir_path, "**", pattern)
+            matched = sorted(f for f in glob.iglob(search_path, recursive=True) if os.path.isfile(f))
+            for fp in matched:
+                rel = os.path.relpath(fp, dir_path)
+                row = ttk.Frame(self._postsim_scrollable)
+                row.pack(fill=tk.X, padx=3, pady=1)
+                lbl = ttk.Label(row, text=rel, anchor="w")
+                lbl.pack(side=tk.LEFT, fill=tk.X, expand=True)
+                lbl.bind("<Double-Button-1>", lambda e, p=fp: self._postsim_analyze(p))
+                ttk.Button(row, text="analyze", width=8,
+                           command=lambda p=fp: self._postsim_analyze(p)).pack(side=tk.RIGHT, padx=4)
+                self.postsim_file_frames.append(row)
+
+            self._postsim_stats_var.set(f"匹配文件数：{len(matched)}")
+            self.global_status_var.set(f"后仿: 找到 {len(matched)} 个文件")
+        except Exception as e:
+            self._postsim_stats_var.set(f"搜索出错: {e}")
+
+    def _postsim_analyze(self, file_path):
+        """分析单个文件中的 Timing violation"""
+        results = []
+        try:
+            if not os.path.isfile(file_path) or os.path.getsize(file_path) == 0:
+                messagebox.showwarning("提示", f"文件为空或不存在:\n{file_path}")
+                return
+
+            for enc in ("utf-8", "gbk", "latin-1"):
+                try:
+                    with open(file_path, "r", encoding=enc) as f:
+                        lines = f.readlines()
+                    break
+                except (UnicodeDecodeError, UnicodeError):
+                    continue
+            else:
+                messagebox.showerror("错误", f"无法识别文件编码:\n{file_path}")
+                return
+
+            i = 0
+            while i < len(lines):
+                line = lines[i].strip()
+                if "Timing violation" in line:
+                    path_m = re.search(r'["\']([^"\']+)["\']', line)
+                    path_val = path_m.group(1) if path_m else "未提取到"
+                    line_m = re.search(r'(\d+):', line)
+                    line_num = line_m.group(1) if line_m else ""
+                    inst_m = re.search(r'Timing violation in\s+(\w+(\.\w+)+)\b', line, re.IGNORECASE)
+                    inst = inst_m.group(1) if inst_m else "未提取到"
+                    info = lines[i + 1].strip() if i + 1 < len(lines) else "无后续内容"
+                    results.append({
+                        "instance": inst, "info": info,
+                        "path": path_val, "line_number": line_num
+                    })
+                    i += 1
+                i += 1
+        except Exception as e:
+            messagebox.showerror("分析失败", str(e))
+            return
+
+        self._postsim_show_results(file_path, results)
+
+    def _postsim_show_results(self, file_path, results):
+        """展示分析结果弹窗"""
+        win = tk.Toplevel(self.root)
+        win.title("Timing Violation 分析")
+        win.geometry("1050x550")
+        win.transient(self.root)
+        win.grab_set()
+
+        # 文件路径
+        ttk.Label(win, text=f"文件：{file_path}", wraplength=980).pack(
+            anchor="w", padx=15, pady=(10, 4))
+
+        # 标题行
+        hdr = ttk.Frame(win)
+        hdr.pack(fill=tk.X, padx=15, pady=4)
+        ttk.Label(hdr, text=f"匹配数：{len(results)}",
+                  font=("Segoe UI", 10, "bold")).pack(side=tk.LEFT)
+        show_more = tk.BooleanVar(value=False)
+        ttk.Checkbutton(hdr, text="show more", variable=show_more).pack(side=tk.RIGHT)
+
+        # 表格
+        columns = ["row_num", "instance", "info"]
+        tree = ttk.Treeview(win, columns=columns, show="headings",
+                            selectmode="extended", height=18)
+        tree.heading("row_num", text="No.")
+        tree.heading("instance", text="Instance")
+        tree.heading("info", text="Info")
+        tree.column("row_num", width=50, anchor="center")
+        tree.column("instance", width=230, anchor="w")
+        tree.column("info", width=580, anchor="w")
+
+        # waived 按钮需等 tree 创建后才能引用
+        ttk.Button(hdr, text="waived", width=8,
+                   command=self._postsim_make_waive_func(tree, results, win, show_more)
+                  ).pack(side=tk.LEFT, padx=(8, 0))
+
+        tree_scroll = ttk.Scrollbar(win, orient=tk.VERTICAL, command=tree.yview)
+        tree.configure(yscrollcommand=tree_scroll.set)
+        tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(15, 0), pady=4)
+        tree_scroll.pack(side=tk.RIGHT, fill=tk.Y, padx=(0, 15), pady=4)
+
+        # 悬停提示
+        tip_win = [None]
+        tip_id = [None]
+
+        def _kill_tip(_=None):
+            if tip_id[0]:
+                try: win.after_cancel(tip_id[0])
+                except: pass
+                tip_id[0] = None
+            if tip_win[0] and tip_win[0].winfo_exists():
+                try: tip_win[0].destroy()
+                except: pass
+                tip_win[0] = None
+
+        def _show_tip(event):
+            item = tree.identify_row(event.y)
+            col = tree.identify_column(event.x)
+            if not item or not col:
+                _kill_tip(); return
+            col_idx = int(col.replace("#", "")) - 1
+            vals = tree.item(item, "values")
+            if not vals or col_idx >= len(vals):
+                _kill_tip(); return
+            txt = vals[col_idx]
+            if not txt or txt in ("未提取到", "无后续内容", ""):
+                _kill_tip(); return
+            _kill_tip()
+            tw = tk.Toplevel(win)
+            tw.wm_overrideredirect(True)
+            tw.attributes("-topmost", True)
+            ttk.Label(tw, text=txt, wraplength=400, padding=5,
+                      background="#FFFFE0").pack()
+            tw.geometry(f"+{win.winfo_pointerx() + 10}+{win.winfo_pointery() + 10}")
+            tip_win[0] = tw
+
+        def _schedule_tip(event):
+            _kill_tip()
+            tip_id[0] = win.after(200, lambda: _show_tip(event))
+
+        tree.bind("<Motion>", _schedule_tip)
+        tree.bind("<Leave>", lambda e: _kill_tip())
+        tree.bind("<Button-1>", lambda e: _kill_tip())
+        tree.bind("<MouseWheel>", lambda e: _kill_tip())
+
+        # 双击复制
+        def _copy_cell(event):
+            _kill_tip()
+            item = tree.identify_row(event.y)
+            col = tree.identify_column(event.x)
+            if not item or not col: return
+            col_idx = int(col.replace("#", "")) - 1
+            vals = tree.item(item, "values")
+            if vals and col_idx < len(vals) and vals[col_idx]:
+                win.clipboard_clear()
+                win.clipboard_append(str(vals[col_idx]))
+
+        tree.bind("<Double-1>", _copy_cell)
+
+        def _toggle_columns():
+            _kill_tip()
+            if show_more.get():
+                tree["columns"] = ["row_num", "instance", "info", "path", "line_number"]
+                tree.heading("path", text="Path")
+                tree.heading("line_number", text="Line")
+                tree.column("path", width=230, anchor="w")
+                tree.column("line_number", width=90, anchor="center")
+            else:
+                tree["columns"] = ["row_num", "instance", "info"]
+                tree.column("instance", width=230, anchor="w")
+                tree.column("info", width=580, anchor="w")
+            _refresh()
+
+        show_more.trace_add("write", lambda *_: _toggle_columns())
+
+        def _refresh():
+            for item in tree.get_children():
+                tree.delete(item)
+            if not results:
+                if show_more.get():
+                    tree.insert("", tk.END, values=["-", "未找到 Timing violation", "", "", ""])
+                else:
+                    tree.insert("", tk.END, values=["-", "未找到 Timing violation", ""])
+            else:
+                for idx, r in enumerate(results):
+                    if show_more.get():
+                        tree.insert("", tk.END, values=[
+                            idx + 1, r["instance"], r["info"], r["path"], r["line_number"]
+                        ])
+                    else:
+                        tree.insert("", tk.END, values=[
+                            idx + 1, r["instance"], r["info"]
+                        ])
+
+        _refresh()
+
+    def _postsim_make_waive_func(self, tree, results, win, show_more):
+        def _waive():
+            sel = tree.selection()
+            if not sel:
+                messagebox.showinfo("提示", "请先选择需要移除的行")
+                return
+            instances = set()
+            for item in sel:
+                vals = tree.item(item, "values")
+                if vals and len(vals) > 1:
+                    instance = vals[1]
+                    if instance and instance not in ("-", "未找到 Timing violation"):
+                        instances.add(instance)
+            if not instances:
+                return
+            results[:] = [r for r in results if r["instance"] not in instances]
+            try:
+                with open("notimingcheck.lst", "a", encoding="utf-8") as f:
+                    for ins in instances:
+                        f.write(f"instance {{{ins}}} {{noTiming}}\n")
+                is_more = show_more.get()
+                for item in tree.get_children():
+                    tree.delete(item)
+                if not results:
+                    if is_more:
+                        tree.insert("", tk.END, values=["-", "未找到 Timing violation", "", "", ""])
+                    else:
+                        tree.insert("", tk.END, values=["-", "未找到 Timing violation", ""])
+                else:
+                    for idx, r in enumerate(results):
+                        if is_more:
+                            tree.insert("", tk.END, values=[
+                                idx + 1, r["instance"], r["info"], r["path"], r["line_number"]
+                            ])
+                        else:
+                            tree.insert("", tk.END, values=[
+                                idx + 1, r["instance"], r["info"]
+                            ])
+                # 更新标题匹配数
+                for w in win.winfo_children():
+                    if isinstance(w, ttk.Frame):
+                        for c in w.winfo_children():
+                            if isinstance(c, ttk.Label) and "匹配数" in (c.cget("text") or ""):
+                                c.configure(text=f"匹配数：{len(results)}")
+                                break
+                messagebox.showinfo("成功",
+                    f"已移除 {len(instances)} 个 instance，结果已写入 notimingcheck.lst")
+            except Exception as e:
+                messagebox.showerror("错误", f"写入文件失败:\n{e}")
+        return _waive
 
 def main():
     root = tk.Tk()

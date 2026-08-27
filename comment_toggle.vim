@@ -135,18 +135,12 @@ function! ToggleLineComment()
 endfunction
 
 " Key mappings
-nnoremap <F3> :call ToggleLineComment()<CR>
+nnoremap <F3> :call CommentLine()<CR>
+nnoremap <F4> :call UncommentLine()<CR>
 
-" Legacy mappings (kept for future use)
-" nnoremap <F3> :call CommentLine()<CR>
-" nnoremap <F4> :call UncommentLine()<CR>
-
-" Visual/Select mode mappings (comment/uncomment multiple lines)
-xmap <F3> :call VisualToggleLine()<CR>
-
-" Legacy visual mappings (kept for future use)
-" xmap <F3> :call VisualCommentLine()<CR>
-" xmap <F4> :call VisualUncommentLine()<CR>
+" Visual/Select mode mappings (vmap covers both visual and select mode, including mouse selection)
+vmap <F3> :call VisualCommentLine()<CR>
+vmap <F4> :call VisualUncommentLine()<CR>
 
 " Comment selected lines in visual mode
 function! VisualCommentLine()
@@ -168,7 +162,7 @@ function! VisualCommentLine()
         endif
         
         " Skip if already commented
-        if current_line !~ '^' . escape(comment, '/') . '\s'
+        if !IsLineCommented(current_line, comment)
             call setline(line_num, comment . ' ' . current_line)
         endif
     endfor
@@ -235,8 +229,8 @@ endfunction
 " ============================================================================
 " Usage:
 " - Source this file from your gvimrc:  source /path/to/comment_toggle.vim
-" - F3: toggle comment/uncomment for current line or visual selection
-" - Legacy F3/F4 mappings are kept as commented lines in this file
+" - F3: comment current line or visual/mouse selection
+" - F4: uncomment current line or visual/mouse selection
 " - Supported filetypes: python, vim, verilog, systemverilog, c, cpp,
 "                         javascript, typescript, java, rust, go, sh, bash,
 "                         ruby, perl, lua, sql, tcl, make, dosini, yaml,

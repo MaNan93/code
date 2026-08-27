@@ -348,6 +348,289 @@ _TABLE_HEADERS = [
 ]
 
 
+def _mask32(width: int, lsb: int) -> int:
+    if width <= 0 or lsb < 0 or lsb >= 32:
+        return 0
+    max_w = 32 - lsb
+    use_w = width if width <= max_w else max_w
+    return ((1 << use_w) - 1) << lsb
+
+
+def _access_flags(access: str) -> Tuple[bool, bool]:
+    text = access.strip().lower()
+    if not text:
+        return True, True
+    if text == "ro":
+        return True, False
+    if text == "wo":
+        return False, True
+    if text.startswith("rw"):
+        return True, True
+    if text.startswith("w"):
+        # Most write-modifier types (w1c/w0s/...) remain readable except pure "wo".
+        return True, True
+    if text.startswith("r"):
+        return True, False
+    return True, True
+
+
+def _collect_reg_specs(data: Dict[str, Any]) -> List[Dict[str, Any]]:
+    specs: List[Dict[str, Any]] = []
+
+    for block in data.get("blocks", []):
+        block_name = str(block.get("name", ""))
+        block_bases: List[int] = []
+        for system in data.get("systems", []):
+            for inst in system.get("block_instances", []):
+                if inst.get("block") == block_name:
+                    ov = (inst.get("offset") or {}).get("value")
+                    if isinstance(ov, int):
+                        block_bases.append(ov)
+
+        for reg in block.get("registers", []):
+            reg_name = str(reg.get("name", ""))
+            reg_off_v = (reg.get("offset") or {}).get("value")
+
+            reg_addrs: List[int] = []
+            if isinstance(reg_off_v, int) and block_bases:
+                reg_addrs = [base + reg_off_v for base in block_bases]
+            elif isinstance(reg_off_v, int):
+                reg_addrs = [reg_off_v]
+
+            for reg_addr in reg_addrs:
+                reset_value = 0
+                read_mask = 0
+                write_mask = 0
+
+                for field in reg.get("fields", []):
+                    lsb = (field.get("lsb") or {}).get("value")
+                    width = (field.get("bits") or {}).get("value")
+                    if not isinstance(lsb, int) or not isinstance(width, int):
+                        continue
+
+                    bit_mask = _mask32(width, lsb)
+                    if not bit_mask:
+                        continue
+
+                    reset_raw = (field.get("reset") or {}).get("value")
+                    reset_v = reset_raw if isinstance(reset_raw, int) else 0
+                    reset_shifted = (reset_v << lsb) & bit_mask
+                    reset_value |= reset_shifted
+
+                    readable, writable = _access_flags(str(field.get("access", "")))
+                    if readable:
+                        read_mask |= bit_mask
+                    if writable:
+                        write_mask |= bit_mask
+
+                specs.append({
+                    "name": reg_name,
+                    "addr": reg_addr,
+                    "reset": reset_value & 0xFFFF_FFFF,
+                    "read_mask": read_mask & 0xFFFF_FFFF,
+                    "write_mask": write_mask & 0xFFFF_FFFF,
+                })
+
+    specs.sort(key=lambda x: (int(x["addr"]), str(x["name"])))
+    return specs
+
+
+def render_axi4_tb(data: Dict[str, Any], module_name: str = "xreg_axi4_tb") -> str:
+    specs = _collect_reg_specs(data)
+    lines: List[str] = []
+    lines.append("`timescale 1ns/1ps")
+    lines.append("")
+    lines.append(f"module {module_name};")
+    lines.append("")
+    lines.append("  localparam int AXI_ADDR_W = 64;")
+    lines.append("  localparam int AXI_DATA_W = 32;")
+    lines.append("  localparam int NUM_REGS = %d;" % len(specs))
+    lines.append("")
+    lines.append("  logic aclk;")
+    lines.append("  logic aresetn;")
+    lines.append("")
+    lines.append("  logic [AXI_ADDR_W-1:0] s_axi_awaddr;")
+    lines.append("  logic [7:0]            s_axi_awlen;")
+    lines.append("  logic [2:0]            s_axi_awsize;")
+    lines.append("  logic [1:0]            s_axi_awburst;")
+    lines.append("  logic                  s_axi_awvalid;")
+    lines.append("  logic                  s_axi_awready;")
+    lines.append("  logic [AXI_DATA_W-1:0] s_axi_wdata;")
+    lines.append("  logic [AXI_DATA_W/8-1:0] s_axi_wstrb;")
+    lines.append("  logic                  s_axi_wlast;")
+    lines.append("  logic                  s_axi_wvalid;")
+    lines.append("  logic                  s_axi_wready;")
+    lines.append("  logic [1:0]            s_axi_bresp;")
+    lines.append("  logic                  s_axi_bvalid;")
+    lines.append("  logic                  s_axi_bready;")
+    lines.append("  logic [AXI_ADDR_W-1:0] s_axi_araddr;")
+    lines.append("  logic [7:0]            s_axi_arlen;")
+    lines.append("  logic [2:0]            s_axi_arsize;")
+    lines.append("  logic [1:0]            s_axi_arburst;")
+    lines.append("  logic                  s_axi_arvalid;")
+    lines.append("  logic                  s_axi_arready;")
+    lines.append("  logic [AXI_DATA_W-1:0] s_axi_rdata;")
+    lines.append("  logic [1:0]            s_axi_rresp;")
+    lines.append("  logic                  s_axi_rlast;")
+    lines.append("  logic                  s_axi_rvalid;")
+    lines.append("  logic                  s_axi_rready;")
+    lines.append("")
+    lines.append("  logic [AXI_ADDR_W-1:0] reg_addr      [NUM_REGS];")
+    lines.append("  logic [AXI_DATA_W-1:0] reg_reset_exp [NUM_REGS];")
+    lines.append("  logic [AXI_DATA_W-1:0] reg_read_mask [NUM_REGS];")
+    lines.append("  logic [AXI_DATA_W-1:0] reg_write_mask[NUM_REGS];")
+    lines.append("  string                 reg_name      [NUM_REGS];")
+    lines.append("")
+    lines.append("  // TODO: Replace with your DUT instance and connect AXI4 signals.")
+    lines.append("  // dut u_dut (")
+    lines.append("  //   .aclk(aclk),")
+    lines.append("  //   .aresetn(aresetn),")
+    lines.append("  //   ...")
+    lines.append("  // );")
+    lines.append("")
+    lines.append("  initial begin")
+    lines.append("    aclk = 1'b0;")
+    lines.append("    forever #5 aclk = ~aclk;")
+    lines.append("  end")
+    lines.append("")
+    lines.append("  task automatic axi_write(input logic [AXI_ADDR_W-1:0] addr,")
+    lines.append("                           input logic [AXI_DATA_W-1:0] data);")
+    lines.append("    begin")
+    lines.append("      s_axi_awaddr  <= addr;")
+    lines.append("      s_axi_awlen   <= 8'd0;")
+    lines.append("      s_axi_awsize  <= 3'd2;")
+    lines.append("      s_axi_awburst <= 2'b01;")
+    lines.append("      s_axi_awvalid <= 1'b1;")
+    lines.append("      s_axi_wdata   <= data;")
+    lines.append("      s_axi_wstrb   <= '1;")
+    lines.append("      s_axi_wlast   <= 1'b1;")
+    lines.append("      s_axi_wvalid  <= 1'b1;")
+    lines.append("      s_axi_bready  <= 1'b1;")
+    lines.append("")
+    lines.append("      wait (s_axi_awready);")
+    lines.append("      s_axi_awvalid <= 1'b0;")
+    lines.append("      wait (s_axi_wready);")
+    lines.append("      s_axi_wvalid  <= 1'b0;")
+    lines.append("      @(posedge aclk);")
+    lines.append("      wait (s_axi_bvalid);")
+    lines.append("      @(posedge aclk);")
+    lines.append("      s_axi_bready  <= 1'b0;")
+    lines.append("    end")
+    lines.append("  endtask")
+    lines.append("")
+    lines.append("  task automatic axi_read(input logic [AXI_ADDR_W-1:0] addr,")
+    lines.append("                          output logic [AXI_DATA_W-1:0] data);")
+    lines.append("    begin")
+    lines.append("      s_axi_araddr  <= addr;")
+    lines.append("      s_axi_arlen   <= 8'd0;")
+    lines.append("      s_axi_arsize  <= 3'd2;")
+    lines.append("      s_axi_arburst <= 2'b01;")
+    lines.append("      s_axi_arvalid <= 1'b1;")
+    lines.append("      s_axi_rready  <= 1'b1;")
+    lines.append("")
+    lines.append("      wait (s_axi_arready);")
+    lines.append("      @(posedge aclk);")
+    lines.append("      s_axi_arvalid <= 1'b0;")
+    lines.append("      wait (s_axi_rvalid && s_axi_rlast);")
+    lines.append("      data = s_axi_rdata;")
+    lines.append("      @(posedge aclk);")
+    lines.append("      s_axi_rready <= 1'b0;")
+    lines.append("    end")
+    lines.append("  endtask")
+    lines.append("")
+    lines.append("  task automatic check_reset_values;")
+    lines.append("    logic [AXI_DATA_W-1:0] rdata;")
+    lines.append("    logic [AXI_DATA_W-1:0] exp; ")
+    lines.append("    for (int i = 0; i < NUM_REGS; i++) begin")
+    lines.append("      if (reg_read_mask[i] == '0) begin")
+    lines.append("        continue;")
+    lines.append("      end")
+    lines.append("      axi_read(reg_addr[i], rdata);")
+    lines.append("      exp = reg_reset_exp[i] & reg_read_mask[i];")
+    lines.append("      if ((rdata & reg_read_mask[i]) !== exp) begin")
+    lines.append("        $error(\"RESET_MISMATCH %s addr=0x%016h exp=0x%08h got=0x%08h mask=0x%08h\",")
+    lines.append("               reg_name[i], reg_addr[i], exp, rdata & reg_read_mask[i], reg_read_mask[i]);")
+    lines.append("      end")
+    lines.append("    end")
+    lines.append("  endtask")
+    lines.append("")
+    lines.append("  task automatic check_rw_properties;")
+    lines.append("    logic [AXI_DATA_W-1:0] before_w;")
+    lines.append("    logic [AXI_DATA_W-1:0] after_w;")
+    lines.append("    logic [AXI_DATA_W-1:0] wr_pat;")
+    lines.append("    logic [AXI_DATA_W-1:0] wr_data;")
+    lines.append("    logic [AXI_DATA_W-1:0] exp;")
+    lines.append("    wr_pat = 32'hA5A5_5A5A;")
+    lines.append("    for (int i = 0; i < NUM_REGS; i++) begin")
+    lines.append("      if (reg_read_mask[i] != '0) begin")
+    lines.append("        axi_read(reg_addr[i], before_w);")
+    lines.append("      end else begin")
+    lines.append("        before_w = reg_reset_exp[i];")
+    lines.append("      end")
+    lines.append("      wr_data = (before_w & ~reg_write_mask[i]) | (wr_pat & reg_write_mask[i]);")
+    lines.append("      axi_write(reg_addr[i], wr_data);")
+    lines.append("")
+    lines.append("      if (reg_read_mask[i] != '0) begin")
+    lines.append("        axi_read(reg_addr[i], after_w);")
+    lines.append("        exp = (before_w & ~reg_write_mask[i]) | (wr_pat & reg_write_mask[i]);")
+    lines.append("        if ((after_w & reg_read_mask[i]) !== (exp & reg_read_mask[i])) begin")
+    lines.append("          $error(\"ACCESS_MISMATCH %s addr=0x%016h exp=0x%08h got=0x%08h wmask=0x%08h rmask=0x%08h\",")
+    lines.append("                 reg_name[i], reg_addr[i], exp & reg_read_mask[i],")
+    lines.append("                 after_w & reg_read_mask[i], reg_write_mask[i], reg_read_mask[i]);")
+    lines.append("        end")
+    lines.append("      end")
+    lines.append("    end")
+    lines.append("  endtask")
+    lines.append("")
+    lines.append("  initial begin")
+    lines.append("    s_axi_awaddr  = '0;")
+    lines.append("    s_axi_awlen   = '0;")
+    lines.append("    s_axi_awsize  = '0;")
+    lines.append("    s_axi_awburst = '0;")
+    lines.append("    s_axi_awvalid = 1'b0;")
+    lines.append("    s_axi_wdata   = '0;")
+    lines.append("    s_axi_wstrb   = '0;")
+    lines.append("    s_axi_wlast   = 1'b0;")
+    lines.append("    s_axi_wvalid  = 1'b0;")
+    lines.append("    s_axi_bready  = 1'b0;")
+    lines.append("    s_axi_araddr  = '0;")
+    lines.append("    s_axi_arlen   = '0;")
+    lines.append("    s_axi_arsize  = '0;")
+    lines.append("    s_axi_arburst = '0;")
+    lines.append("    s_axi_arvalid = 1'b0;")
+    lines.append("    s_axi_rready  = 1'b0;")
+    lines.append("")
+    lines.append("    aresetn = 1'b0;")
+    lines.append("    repeat (5) @(posedge aclk);")
+    lines.append("    aresetn = 1'b1;")
+    lines.append("    repeat (5) @(posedge aclk);")
+    lines.append("")
+
+    for i, spec in enumerate(specs):
+        lines.append(f"    reg_addr[{i}]       = 64'h{int(spec['addr']):016X};")
+        lines.append(f"    reg_reset_exp[{i}]  = 32'h{int(spec['reset']):08X};")
+        lines.append(f"    reg_read_mask[{i}]  = 32'h{int(spec['read_mask']):08X};")
+        lines.append(f"    reg_write_mask[{i}] = 32'h{int(spec['write_mask']):08X};")
+        reg_name = str(spec["name"]).replace('"', "")
+        lines.append(f"    reg_name[{i}]       = \"{reg_name}\";")
+
+    lines.append("")
+    lines.append("    check_reset_values();")
+    lines.append("    check_rw_properties();")
+    lines.append("    $display(\"AXI register reset/access checks completed.\");")
+    lines.append("    #100;")
+    lines.append("    $finish;")
+    lines.append("  end")
+    lines.append("")
+    lines.append("endmodule")
+    lines.append("")
+    return "\n".join(lines)
+
+
+def write_axi4_tb(data: Dict[str, Any], path: Path, module_name: str = "xreg_axi4_tb") -> None:
+    path.write_text(render_axi4_tb(data, module_name=module_name), encoding="utf-8")
+
+
 # ── JSON ──────────────────────────────────────────────────────────────────────
 
 def render_json(data: Dict[str, Any], indent: int = 2) -> str:
@@ -567,6 +850,10 @@ def main() -> int:
         help="Output register table XLS; omit FILE for <stem>.xls  [default]",
     )
     parser.add_argument(
+        "--tb", nargs="?", const="", metavar="FILE", dest="tb_out",
+        help="Output AXI4 (64b addr / 32b data) register-check testbench; omit FILE for <stem>_tb.sv",
+    )
+    parser.add_argument(
         "--indent", type=int, default=2, metavar="N",
         help="JSON indent spaces (default: 2)",
     )
@@ -575,7 +862,7 @@ def main() -> int:
     # If no output flag is given at all, default to excel.
     any_requested = any(
         v is not None for v in
-        [args.json_out, args.yaml_out, args.yaml_simple_out, args.csv_out, args.excel_out]
+        [args.json_out, args.yaml_out, args.yaml_simple_out, args.csv_out, args.excel_out, args.tb_out]
     )
     if not any_requested:
         args.excel_out = ""  # trigger default-path logic below
@@ -617,6 +904,10 @@ def main() -> int:
     if args.excel_out is not None:
         dest = Path(args.excel_out) if args.excel_out else _default_path(inp, ".xls")
         write_xls(rows, dest)
+
+    if args.tb_out is not None:
+        dest = Path(args.tb_out) if args.tb_out else _default_path(inp, "_tb.sv")
+        write_axi4_tb(data, dest)
 
     return 0
 

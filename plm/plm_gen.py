@@ -545,10 +545,33 @@ def gen_data_p2m(cfg):
     for cid in sorted(cfg.controllers):
         c = cfg.controllers[cid]
         L.append(f"    // {c.name} x{c.max_width}")
+        
+        # 计算该控制器的 Active 最低物理通道 (用于 unused 端口的安全对齐)
+        cands = cfg.ctrl_pclk_cands()[c.id]
+        base_lane = cands[0] if cands else 0
+        
+        # 动态解析 signals 的 tie_off 配置以构造 safe_p2m_align
+        p2m_signals = [s for s in cfg.signals if not s.is_m2p]
+        assign_parts = []
+        for s in p2m_signals:
+            if s.tie_off == "lane0":
+                assign_parts.append(f"{s.name}: phy_phy2mac[{base_lane}].{s.name}")
+            elif s.tie_off == "1":
+                assign_parts.append(f"{s.name}: {s.sv_literal((1 << s.width) - 1)}")
+        assign_parts.append("default: '0")
+        
+        L.append(f"    phy2mac_lane_t {c.lname}_safe_p2m_align;")
+        L.append(f"    assign {c.lname}_safe_p2m_align = '{{")
+        for part in assign_parts[:-1]:
+            L.append(f"        {part},")
+        L.append(f"        {assign_parts[-1]}")
+        L.append(f"    }};")
+        L.append("")
+
         for cl in range(c.max_width):
             srcs = sorted(port_src.get((cid, cl), set()))
             if not srcs:
-                L.append(f"    assign {c.lname}_phy2mac[{cl}] = SAFE_P2M;"
+                L.append(f"    assign {c.lname}_phy2mac[{cl}] = {c.lname}_safe_p2m_align;"
                          f"  // 所有 mode 下都未被驱动")
                 continue
             if len(srcs) == 1 and cfg.groups[srcs[0][1]].is_direct:
@@ -564,9 +587,9 @@ def gen_data_p2m(cfg):
                 if hit:
                     din.append(f"phy_phy2mac[{hit[0][0]}]")
                 else:
-                    din.append("SAFE_P2M")
+                    din.append(f"{c.lname}_safe_p2m_align")
             L.append(f"    onehot_mux #(.WIDTH($bits(phy2mac_lane_t)), "
-                     f".N({g.n}), .SAFE(SAFE_P2M)) u_p2m_{c.lname}_{cl} (")
+                     f".N({g.n}), .SAFE({c.lname}_safe_p2m_align)) u_p2m_{c.lname}_{cl} (")
             L.append(f"        .sel  (sel_tgt.g{gid}),")
             L.append(f"        .din  ({{" + ", ".join(reversed(din)) + "}),")
             L.append(f"        .dout ({c.lname}_phy2mac[{cl}])")
@@ -831,6 +854,7 @@ def gen_tb(cfg):
 
     # ---- DUT IO
     L.append("    //------------------------------------------------------------ DUT IO")
+    L.append("    logic [LANE_COUNT-1:0]      phy_phystatus_stim = '0;")
     L.append("    logic                       test_en = 1'b0;")
     L.append("    logic [NUM_CTRL-1:0]        ctrl_rst_n = '0;")
     L.append("    logic [$clog2(NUM_MODES)-1:0] mode = '0;")
@@ -897,7 +921,10 @@ def gen_tb(cfg):
     for c in ctrls:
         L.append(f"        for (int p = 0; p < {c.max_width}; p++) "
                  f"{c.lname}_mac2phy[p] = make_m2p({c.id}, p);")
-    L.append(f"        for (int l = 0; l < LANE_COUNT; l++) phy_phy2mac[l] = make_p2m(l);")
+    L.append(f"        for (int l = 0; l < LANE_COUNT; l++) begin")
+    L.append(f"            phy_phy2mac[l] = make_p2m(l);")
+    L.append(f"            phy_phy2mac[l].phy_mac_phystatus = phy_phystatus_stim[l];")
+    L.append(f"        end")
     L.append("    end")
     L.append("")
 
@@ -1005,8 +1032,36 @@ def gen_tb(cfg):
     L.append("                endcase")
     L.append("")
     L.append("                if (src_lane == -1) begin")
-    L.append("                    chk(got == SAFE_P2M,")
-    L.append("                        $sformatf(\"mode%0d ctrl%0d[%0d]: unmapped but not SAFE_P2M\", m, c, p));")
+    L.append("                    phy2mac_lane_t exp_tie;")
+    L.append("                    exp_tie = SAFE_P2M;")
+    L.append("                    int active_base;")
+    L.append("                    active_base = -1;")
+    L.append("                    for (int l = 0; l < LANE_COUNT; l++) begin")
+    L.append("                        if (owner_of(m, l) == c && active_base == -1) active_base = l;")
+    L.append("                    end")
+    
+    # 动态组装断言期望值 exp_tie
+    p2m_signals = [s for s in cfg.signals if not s.is_m2p]
+    L.append("                    if (active_base != -1) begin")
+    for s in p2m_signals:
+        if s.tie_off == "lane0":
+            L.append(f"                        exp_tie.{s.name} = phy_phy2mac[active_base].{s.name};")
+        elif s.tie_off == "1":
+            L.append(f"                        exp_tie.{s.name} = {s.sv_literal((1 << s.width) - 1)};")
+        elif s.tie_off == "0":
+            L.append(f"                        exp_tie.{s.name} = '0;")
+    L.append("                    end else begin")
+    for s in p2m_signals:
+        if s.tie_off == "lane0":
+            L.append(f"                        exp_tie.{s.name} = '0;")
+        elif s.tie_off == "1":
+            L.append(f"                        exp_tie.{s.name} = {s.sv_literal((1 << s.width) - 1)};")
+        elif s.tie_off == "0":
+            L.append(f"                        exp_tie.{s.name} = '0;")
+    L.append("                    end")
+    
+    L.append("                    chk(got == exp_tie,")
+    L.append("                        $sformatf(\"mode%0d ctrl%0d[%0d]: unmapped tie-off mismatch!\", m, c, p));")
     L.append("                end else begin")
     L.append("                    exp_p2m = make_p2m(src_lane);")
     L.append("                    chk(got.phy_mac_rxdata == exp_p2m.phy_mac_rxdata &&")
@@ -1025,8 +1080,13 @@ def gen_tb(cfg):
     L.append(f"    localparam realtime SETTLE = {settle};")
     L.append("")
     L.append("    initial begin")
+    L.append("`ifdef DUMP_FSDB")
+    L.append("        $fsdbDumpfile(\"waves.fsdb\");")
+    L.append("        $fsdbDumpvars(0, tb_pipe_lane_mapper, \"+all\");")
+    L.append("`else")
     L.append("        $dumpfile(\"waves.vcd\");")
     L.append("        $dumpvars(0, tb_pipe_lane_mapper);")
+    L.append("`endif")
     L.append("")
     L.append("        ctrl_rst_n = '0;")
     L.append("        mode = '0;")
@@ -1035,6 +1095,11 @@ def gen_tb(cfg):
     L.append("        #SETTLE;")
     L.append("")
     for i, m in enumerate(cfg.modes):
+        L.append(f"        check_mode({m});")
+        L.append(f"        // 产生物理通道 0 的 phystatus 翻转激励并动态校验其追随特性")
+        L.append(f"        phy_phystatus_stim[0] = 1'b1; #20;")
+        L.append(f"        check_mode({m});")
+        L.append(f"        phy_phystatus_stim[0] = 1'b0; #20;")
         L.append(f"        check_mode({m});")
         if i < len(cfg.modes) - 1:
             L.append(f"        mode = {cfg.modes[i+1]}; #SETTLE;")

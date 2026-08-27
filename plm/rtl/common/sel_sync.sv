@@ -35,37 +35,34 @@ module sel_sync #(
     output logic [N-1:0] en
 );
 
-    if (SYNC) begin : g_sync
+    genvar i;
 
-        for (genvar i = 0; i < N; i++) begin : g_branch
+    generate
+        if (SYNC) begin : g_sync
+            for (i = 0; i < N; i = i + 1) begin : g_branch
+                logic [N-1:0] self_mask;
+                logic         other_idle;
+                logic         tgt_r;   // register: tgt[i] into branch_clk[i]
+                logic         d_in;
 
-            logic [N-1:0] self_mask;
-            logic         other_idle;
-            logic         tgt_r;   // register: tgt[i] into branch_clk[i]
-            logic         d_in;
+                assign self_mask  = ~(N'(1) << i);
+                assign other_idle = ~|(en & self_mask);
+                assign d_in       = tgt_r & other_idle;
 
-            assign self_mask  = ~(N'(1) << i);
-            assign other_idle = ~|(en & self_mask);
-            assign d_in       = tgt_r & other_idle;
+                always_ff @(posedge branch_clk[i] or negedge branch_rst_n[i])
+                    if (!branch_rst_n[i]) tgt_r <= 1'b0;
+                    else                  tgt_r <= tgt[i];
 
-            always_ff @(posedge branch_clk[i] or negedge branch_rst_n[i])
-                if (!branch_rst_n[i]) tgt_r <= 1'b0;
-                else                  tgt_r <= tgt[i];
-
-            // two-stage synchronizer: d_in -> en[i]
-            sync2 #(.WIDTH(1)) u_sync_en (
-                .clk   (branch_clk  [i]),
-                .rst_n (branch_rst_n[i]),
-                .d     (d_in),
-                .q     (en[i])
-            );
-
+                // two-stage synchronizer: d_in -> en[i]
+                sync2 #(.WIDTH(1)) u_sync_en (
+                    .clk   (branch_clk  [i]),
+                    .rst_n (branch_rst_n[i]),
+                    .d     (d_in),
+                    .q     (en[i])
+                );
+            end
+        end else begin : g_comb
+            assign en = tgt;
         end
-
-    end else begin : g_comb
-
-        assign en = tgt;
-
-    end
-
+    endgenerate
 endmodule

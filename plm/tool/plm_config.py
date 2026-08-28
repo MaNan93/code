@@ -52,7 +52,7 @@ class Signal:
     """safe_state: the value this signal should present when it has "no
     owner".
 
-    onehot_mux uses it for polarity normalization (XOR with SAFE going in,
+    pipe_lane_data_mux uses it for polarity normalization (XOR with SAFE going in,
     XOR with SAFE coming out), so that when sel is all-zero (the handoff
     window) the output naturally lands on the safe state. Getting this
     wrong means sending PHY / the controller a meaningful-looking fake
@@ -117,7 +117,7 @@ class Signal:
         The RTL generator (gen_data_p2m) and the tb generator (gen_tb) each
         call this with a different base_lane_expr, but tie_off semantics
         should only be defined in this one place -- otherwise we risk the
-        same class of bug as the earlier onehot_mux SAFE-parameter issue,
+        same class of bug as the earlier pipe_lane_data_mux SAFE-parameter issue,
         where two separate checks quietly drifted apart.
         """
         if self.tie_off == "lane0":
@@ -559,7 +559,7 @@ class Config:
         L.append("")
 
         L.append("Signal safe states (value shown when sel is all-zero, "
-                  "implemented via onehot_mux polarity normalization)")
+                  "implemented via pipe_lane_data_mux polarity normalization)")
         L.append("")
         for s in self.signals:
             note = ""

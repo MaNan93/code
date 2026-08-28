@@ -47,7 +47,7 @@ package pipe_pkg;
     } phy2mac_lane_t;
 
     // Value to present when there's no owner (the BBM handoff window).
-    // onehot_mux uses this for polarity normalization, so sel==0 naturally lands on the safe state.
+    // pipe_lane_data_mux uses this for polarity normalization, so sel==0 naturally lands on the safe state.
     localparam mac2phy_lane_t SAFE_M2P = '{
         mac_phy_txdata: 32'd0,
         mac_phy_txdatak: 4'd0,
@@ -73,7 +73,7 @@ package pipe_pkg;
     };
 
     // Value to present when there's no owner (the BBM handoff window).
-    // onehot_mux uses this for polarity normalization, so sel==0 naturally lands on the safe state.
+    // pipe_lane_data_mux uses this for polarity normalization, so sel==0 naturally lands on the safe state.
     localparam phy2mac_lane_t SAFE_P2M = '{
         phy_mac_rxdata: 32'd0,
         phy_mac_rxdatak: 4'd0,

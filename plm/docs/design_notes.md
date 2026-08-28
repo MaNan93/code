@@ -130,7 +130,7 @@ pipe_lane_mapper_top
 ### 7.1 m2p 方向：`safe_state` 生效，`tie_off` 完全不读
 
 `pipe_pkg.sv` 里由所有 `mac_phy_*` 信号的 `safe_state` 拼出 `SAFE_M2P`，
-直接接到每个 m2p `onehot_mux` 的 `.safe()` 端口（`gen_data_m2p()`）。
+直接接到每个 m2p `pipe_lane_data_mux` 的 `.safe()` 端口（`gen_data_m2p()`）。
 `gen_data_m2p()` 里完全不会出现 `tie_off`——它只按 lane 遍历（每条 phy
 lane 在每个 mode 下都必须有 owner，见校验规则），不存在"controller 端口
 没有驱动源"这种情况，用不上 `tie_off` 这种"没人用"的语义。
@@ -141,9 +141,9 @@ lane 在每个 mode 下都必须有 owner，见校验规则），不存在"contr
 结构体，由 `tie_off`（通过 `Signal.tie_expr()`）逐字段算出来。这个结构体
 被用在**两个地方**：
 
-1. 真正存在的 `onehot_mux` 实例的 `.safe()` 端口（这个端口在某些 mode 下
+1. 真正存在的 `pipe_lane_data_mux` 实例的 `.safe()` 端口（这个端口在某些 mode 下
    确实会被映射到，BBM 交接窗口用它）；
-2. 端口从未被任何 lane 映射到时的直接 `assign`（不经过 `onehot_mux`，
+2. 端口从未被任何 lane 映射到时的直接 `assign`（不经过 `pipe_lane_data_mux`，
    见第 9.1 节 unused lane）。
 
 `SAFE_P2M`（由 `safe_state` 拼出来）在这两处都没有被引用，只在
@@ -155,12 +155,12 @@ lane 在每个 mode 下都必须有 owner，见校验规则），不存在"contr
 ### 7.3 `tie_off` 的两个角色，只有一个跟 `--sel-mode` 有关
 
 7.2 提到 `tie_off` 的两种用法里，第 2 种（端口从未被映射到，直接
-`assign`）是一条纯组合的硬 tie，不经过 `sel_tgt`/`onehot_mux`，不管
+`assign`）是一条纯组合的硬 tie，不经过 `sel_tgt`/`pipe_lane_data_mux`，不管
 `--sel-mode` 是 `sync` 还是 `comb` 都完全一样地生效——**这是 unused
 lane（见第 9 节）拿到正确安全值的唯一依据**。
 
-第 1 种用法（喂给真实 `onehot_mux` 的 `.safe()` 端口）不一样：
-`onehot_mux` 的极性归一化只在 `sel` 真的落到全 0 时才会呈现 `.safe()`
+第 1 种用法（喂给真实 `pipe_lane_data_mux` 的 `.safe()` 端口）不一样：
+`pipe_lane_data_mux` 的极性归一化只在 `sel` 真的落到全 0 时才会呈现 `.safe()`
 的值。而 `sel_sync`（`tool/common/sel_sync.sv`）的 `SYNC=0`（`comb` 模式）
 是 `en = tgt` 直接透传，没有寄存器、没有同步——前提是 `tgt` 在对应时钟域
 里本来就无毛刺。这个前提成立时，`sel_tgt` 从一个 one-hot 值直接切到另一
@@ -170,16 +170,16 @@ lane（见第 9 节）拿到正确安全值的唯一依据**。
 `.safe()`/`tie_off` 的取值才有意义、必须遵守（呼应第 8.2 节"真正需要切换
 的 group 走标准 BBM"那部分）。
 
-`safe_state` 同理：它唯一生效的地方（m2p 方向的 `onehot_mux.safe()`）
+`safe_state` 同理：它唯一生效的地方（m2p 方向的 `pipe_lane_data_mux.safe()`）
 也只在 `sync` 模式下才会被真正呈现，`comb` 模式下同样无意义。
 
 汇总：
 
 | | 生效方向 | 角色 | 是否跟 `--sel-mode` 有关 |
 |---|---|---|---|
-| `safe_state` | 仅 m2p（`SAFE_M2P`） | 喂给 `onehot_mux.safe()` | 有关——只有 `sync` 模式下才会被呈现；p2m 方向完全死代码 |
+| `safe_state` | 仅 m2p（`SAFE_M2P`） | 喂给 `pipe_lane_data_mux.safe()` | 有关——只有 `sync` 模式下才会被呈现；p2m 方向完全死代码 |
 | `tie_off` (a) | 仅 p2m | unused lane 的硬 tie，纯 `assign` | 无关——任何 `--sel-mode` 下都一样生效 |
-| `tie_off` (b) | 仅 p2m | 喂给 `onehot_mux.safe()`（端口有时会被映射到） | 有关——只有 `sync` 模式下才会被呈现 |
+| `tie_off` (b) | 仅 p2m | 喂给 `pipe_lane_data_mux.safe()`（端口有时会被映射到） | 有关——只有 `sync` 模式下才会被呈现 |
 
 `tie_off="lane0"` 使用的 `base_lane` 是编译期常量（取 `ctrl_pclk_cands()`
 排序后最小候选）；在当前"工作时钟固定"的约束下，每个 controller 的
@@ -225,7 +225,7 @@ pclk 候选数恒为 1，`base_lane` 天然稳定，此风险已随第 3 节的�
   切"而不用跟别的 group 互锁——这是"只扰动变化部分"的前提，不是靠额外仲裁
   逻辑堆出来的。
 - 真正需要切换的 group 走标准 BBM：`sel_tgt` 先归零（安全态）、旧 owner 断
-  开、新 owner 建立，期间 `onehot_mux` 保证呈现的是安全值（m2p 方向是
+  开、新 owner 建立，期间 `pipe_lane_data_mux` 保证呈现的是安全值（m2p 方向是
   `safe_state`，p2m 方向是 `tie_off`，见第 7 节），而不是悬空或两路相或——
   这个保证只在 `sync` 模式下成立，`comb` 模式下 `sel` 不会真的停在全 0，
   见第 7.3 节。

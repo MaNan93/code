@@ -4,7 +4,7 @@
 // The input port is named sel_tgt, but at the top level it's actually wired to
 // pipe_lane_sel_gen's dec_tgt (the decoder's raw output, not synchronized by sel_sync),
 // not sel_gen's final external sel_tgt -- reset follows mode directly, without waiting for sel_sync.
-// Reuses onehot_mux's polarity normalization: when sel_tgt is all-zero (the handoff window,
+// Reuses pipe_lane_data_mux's polarity normalization: when sel_tgt is all-zero (the handoff window,
 // no owner), the safe state is to hold reset (0), not float or hold the previous owner.
 import pipe_pkg::*;
 
@@ -21,7 +21,7 @@ module pipe_lane_rst_mux #(
     assign phy_rst_n[1] = ctrl_rst_n[0];  // G0 direct to PCIe_x4
     // G1 lane2~3: PCIe_x4, USB_x2
     logic rst_n_g1;
-    onehot_mux #(.WIDTH(1), .N(2)) u_rst_g1 (
+    pipe_lane_data_mux #(.WIDTH(1), .N(2)) u_rst_g1 (
         .sel  (sel_tgt.g1),
         .din  ({ctrl_rst_n[1], ctrl_rst_n[0]}),
         .safe (1'b0),

@@ -126,7 +126,7 @@ def gen_pkg(cfg):
                             ("phy2mac", "phy2mac_lane_t", "SAFE_P2M")):
         sigs = [s for s in cfg.signals if s.direction == d]
         L.append(f"    // Value to present when there's no owner (the BBM handoff window).")
-        L.append(f"    // onehot_mux uses this for polarity normalization, so sel==0 naturally lands on the safe state.")
+        L.append(f"    // pipe_lane_data_mux uses this for polarity normalization, so sel==0 naturally lands on the safe state.")
         L.append(f"    localparam {tname} {cname} = '{{")
         for i, s in enumerate(sigs):
             tail = "," if i != len(sigs) - 1 else ""
@@ -271,7 +271,7 @@ def gen_sel_gen(cfg, sel_mode="sync"):
                 controller genuinely shares the same clock domain and mode
                 itself is already glitch-free within that domain;
                 otherwise multiple branches could briefly be 1 at once,
-                and onehot_mux would OR the two data paths together.
+                and pipe_lane_data_mux would OR the two data paths together.
 
     This module needs ctrl_pclk as an input (sel_sync's branch_clk per
     group), and ctrl_pclk is pipe_lane_clk_mux's output -- so the two
@@ -502,7 +502,7 @@ def gen_rst_mux(cfg):
          "// The input port is named sel_tgt, but at the top level it's actually wired to",
          "// pipe_lane_sel_gen's dec_tgt (the decoder's raw output, not synchronized by sel_sync),",
          "// not sel_gen's final external sel_tgt -- reset follows mode directly, without waiting for sel_sync.",
-         "// Reuses onehot_mux's polarity normalization: when sel_tgt is all-zero (the handoff window,",
+         "// Reuses pipe_lane_data_mux's polarity normalization: when sel_tgt is all-zero (the handoff window,",
          "// no owner), the safe state is to hold reset (0), not float or hold the previous owner.",
          "import pipe_pkg::*;",
          "",
@@ -526,7 +526,7 @@ def gen_rst_mux(cfg):
             names = ", ".join(cfg.controllers[c].name for c in g.cands)
             L.append(f"    // G{g.gid} lane{g.lanes[0]}~{g.lanes[-1]}: {names}")
             L.append(f"    logic rst_n_g{g.gid};")
-            L.append(f"    onehot_mux #(.WIDTH(1), .N({g.n})) u_rst_g{g.gid} (")
+            L.append(f"    pipe_lane_data_mux #(.WIDTH(1), .N({g.n})) u_rst_g{g.gid} (")
             L.append(f"        .sel  (sel_tgt.g{g.gid}),")
             L.append(f"        .din  ({{"
                      + ", ".join(f"ctrl_rst_n[{c}]" for c in reversed(g.cands)) + "}),")
@@ -547,7 +547,7 @@ def gen_data_m2p(cfg):
     LC = cfg.lane_count
     L = ["//",
          "// PIPE lane mapper MAC->PHY data mux.",
-         "// onehot_mux performs polarity normalization internally; output is SAFE_M2P when sel is all-zero.",
+         "// pipe_lane_data_mux performs polarity normalization internally; output is SAFE_M2P when sel is all-zero.",
          "import pipe_pkg::*;",
          "",
          f"module pipe_lane_data_m2p #(",
@@ -575,7 +575,7 @@ def gen_data_m2p(cfg):
                     m = next(mm for mm in cfg.modes if g.owners[mm] == c)
                     cl = cfg.mapping[m][l][1]
                     srcs.append(f"{cfg.controllers[c].lname}_mac2phy[{cl}]")
-                L.append(f"    onehot_mux #(.WIDTH($bits(mac2phy_lane_t)), "
+                L.append(f"    pipe_lane_data_mux #(.WIDTH($bits(mac2phy_lane_t)), "
                          f".N({g.n})) u_m2p_l{l} (")
                 L.append(f"        .sel  (sel_tgt.g{g.gid}),")
                 L.append(f"        .din  ({{" + ", ".join(reversed(srcs)) + "}),")
@@ -672,7 +672,7 @@ def gen_data_p2m(cfg):
                     din.append(f"phy_phy2mac[{hit[0][0]}]")
                 else:
                     din.append(f"{c.lname}_safe_p2m_align")
-            L.append(f"    onehot_mux #(.WIDTH($bits(phy2mac_lane_t)), "
+            L.append(f"    pipe_lane_data_mux #(.WIDTH($bits(phy2mac_lane_t)), "
                      f".N({g.n})) u_p2m_{c.lname}_{cl} (")
             L.append(f"        .sel  (sel_tgt.g{gid}),")
             L.append(f"        .din  ({{" + ", ".join(reversed(din)) + "}),")
@@ -855,7 +855,7 @@ def gen_filelist(cfg):
     directory directly -- each config set is fully self-contained and
     doesn't depend on tool/'s original location.
     """
-    common = ["sync2.sv", "sel_sync.sv", "clk_gate.sv", "onehot_mux.sv"]
+    common = ["sync2.sv", "sel_sync.sv", "clk_gate.sv", "pipe_lane_data_mux.sv"]
     gen = [
         "pipe_pkg.sv",
         "pipe_lane_mode_dec.sv",
@@ -1272,6 +1272,12 @@ def main():
     src = out_rtl / "src"
     src.mkdir(parents=True, exist_ok=True)
     common_dst = out_rtl / "common"
+    # Wipe and recreate rather than just mkdir -- otherwise a file that gets
+    # renamed or removed from tool/common/ (e.g. onehot_mux.sv becoming
+    # pipe_lane_data_mux.sv) leaves a stale copy sitting in every config
+    # set's rtl/common/ forever, since copying only ever adds files.
+    if common_dst.exists():
+        shutil.rmtree(common_dst)
     common_dst.mkdir(parents=True, exist_ok=True)
     tb_dir = out_rtl.parent / "tb"
     tb_dir.mkdir(parents=True, exist_ok=True)

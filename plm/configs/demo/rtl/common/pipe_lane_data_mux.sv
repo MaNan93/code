@@ -1,5 +1,5 @@
 //=============================================================================
-// onehot_mux -- one-hot select + polarity normalization
+// pipe_lane_data_mux -- one-hot select + polarity normalization
 //
 // When sel is all-zero (the break-before-make handoff window, or this port
 // currently has no driving source), the output equals SAFE instead of
@@ -35,7 +35,7 @@
 // driving sources must all come from the same group, to guarantee sel's
 // mutual exclusivity.
 //=============================================================================
-module onehot_mux #(
+module pipe_lane_data_mux #(
     parameter int WIDTH = 1,
     parameter int N     = 2
 ) (

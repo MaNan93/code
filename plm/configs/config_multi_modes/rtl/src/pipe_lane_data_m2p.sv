@@ -1,6 +1,6 @@
 //
 // PIPE lane mapper MAC->PHY data mux.
-// onehot_mux performs polarity normalization internally; output is SAFE_M2P when sel is all-zero.
+// pipe_lane_data_mux performs polarity normalization internally; output is SAFE_M2P when sel is all-zero.
 import pipe_pkg::*;
 
 module pipe_lane_data_m2p #(
@@ -14,13 +14,13 @@ module pipe_lane_data_m2p #(
 
     assign phy_mac2phy[0] = pcie_x4_mac2phy[0];  // direct connection
     assign phy_mac2phy[1] = pcie_x4_mac2phy[1];  // direct connection
-    onehot_mux #(.WIDTH($bits(mac2phy_lane_t)), .N(2)) u_m2p_l2 (
+    pipe_lane_data_mux #(.WIDTH($bits(mac2phy_lane_t)), .N(2)) u_m2p_l2 (
         .sel  (sel_tgt.g1),
         .din  ({usb_x2_mac2phy[0], pcie_x4_mac2phy[2]}),
         .safe (SAFE_M2P),
         .dout (phy_mac2phy[2])
     );
-    onehot_mux #(.WIDTH($bits(mac2phy_lane_t)), .N(2)) u_m2p_l3 (
+    pipe_lane_data_mux #(.WIDTH($bits(mac2phy_lane_t)), .N(2)) u_m2p_l3 (
         .sel  (sel_tgt.g1),
         .din  ({usb_x2_mac2phy[1], pcie_x4_mac2phy[3]}),
         .safe (SAFE_M2P),

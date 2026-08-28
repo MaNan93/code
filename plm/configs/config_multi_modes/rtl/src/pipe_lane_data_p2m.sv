@@ -23,13 +23,13 @@ module pipe_lane_data_p2m #(
 
     assign pcie_x4_phy2mac[0] = phy_phy2mac[0];  // direct connection to lane0
     assign pcie_x4_phy2mac[1] = phy_phy2mac[1];  // direct connection to lane1
-    onehot_mux #(.WIDTH($bits(phy2mac_lane_t)), .N(2)) u_p2m_pcie_x4_2 (
+    pipe_lane_data_mux #(.WIDTH($bits(phy2mac_lane_t)), .N(2)) u_p2m_pcie_x4_2 (
         .sel  (sel_tgt.g1),
         .din  ({pcie_x4_safe_p2m_align, phy_phy2mac[2]}),
         .safe (pcie_x4_safe_p2m_align),
         .dout (pcie_x4_phy2mac[2])
     );
-    onehot_mux #(.WIDTH($bits(phy2mac_lane_t)), .N(2)) u_p2m_pcie_x4_3 (
+    pipe_lane_data_mux #(.WIDTH($bits(phy2mac_lane_t)), .N(2)) u_p2m_pcie_x4_3 (
         .sel  (sel_tgt.g1),
         .din  ({pcie_x4_safe_p2m_align, phy_phy2mac[3]}),
         .safe (pcie_x4_safe_p2m_align),
@@ -45,13 +45,13 @@ module pipe_lane_data_p2m #(
         default: '0
     };
 
-    onehot_mux #(.WIDTH($bits(phy2mac_lane_t)), .N(2)) u_p2m_usb_x2_0 (
+    pipe_lane_data_mux #(.WIDTH($bits(phy2mac_lane_t)), .N(2)) u_p2m_usb_x2_0 (
         .sel  (sel_tgt.g1),
         .din  ({phy_phy2mac[2], usb_x2_safe_p2m_align}),
         .safe (usb_x2_safe_p2m_align),
         .dout (usb_x2_phy2mac[0])
     );
-    onehot_mux #(.WIDTH($bits(phy2mac_lane_t)), .N(2)) u_p2m_usb_x2_1 (
+    pipe_lane_data_mux #(.WIDTH($bits(phy2mac_lane_t)), .N(2)) u_p2m_usb_x2_1 (
         .sel  (sel_tgt.g1),
         .din  ({phy_phy2mac[3], usb_x2_safe_p2m_align}),
         .safe (usb_x2_safe_p2m_align),

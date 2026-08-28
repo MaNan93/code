@@ -4,7 +4,7 @@
 // The input port is named sel_tgt, but at the top level it's actually wired to
 // pipe_lane_sel_gen's dec_tgt (the decoder's raw output, not synchronized by sel_sync),
 // not sel_gen's final external sel_tgt -- reset follows mode directly, without waiting for sel_sync.
-// Reuses onehot_mux's polarity normalization: when sel_tgt is all-zero (the handoff window,
+// Reuses pipe_lane_data_mux's polarity normalization: when sel_tgt is all-zero (the handoff window,
 // no owner), the safe state is to hold reset (0), not float or hold the previous owner.
 import pipe_pkg::*;
 
@@ -23,7 +23,7 @@ module pipe_lane_rst_mux #(
     assign phy_rst_n[3] = ctrl_rst_n[0];  // G0 direct to Ctrl0
     // G1 lane4~7: Ctrl0, Ctrl1
     logic rst_n_g1;
-    onehot_mux #(.WIDTH(1), .N(2)) u_rst_g1 (
+    pipe_lane_data_mux #(.WIDTH(1), .N(2)) u_rst_g1 (
         .sel  (sel_tgt.g1),
         .din  ({ctrl_rst_n[1], ctrl_rst_n[0]}),
         .safe (1'b0),
@@ -35,7 +35,7 @@ module pipe_lane_rst_mux #(
     assign phy_rst_n[7] = rst_n_g1;
     // G2 lane8~11: Ctrl0, Ctrl2
     logic rst_n_g2;
-    onehot_mux #(.WIDTH(1), .N(2)) u_rst_g2 (
+    pipe_lane_data_mux #(.WIDTH(1), .N(2)) u_rst_g2 (
         .sel  (sel_tgt.g2),
         .din  ({ctrl_rst_n[2], ctrl_rst_n[0]}),
         .safe (1'b0),
@@ -47,7 +47,7 @@ module pipe_lane_rst_mux #(
     assign phy_rst_n[11] = rst_n_g2;
     // G3 lane12~15: Ctrl0, Ctrl2, Ctrl3
     logic rst_n_g3;
-    onehot_mux #(.WIDTH(1), .N(3)) u_rst_g3 (
+    pipe_lane_data_mux #(.WIDTH(1), .N(3)) u_rst_g3 (
         .sel  (sel_tgt.g3),
         .din  ({ctrl_rst_n[3], ctrl_rst_n[2], ctrl_rst_n[0]}),
         .safe (1'b0),

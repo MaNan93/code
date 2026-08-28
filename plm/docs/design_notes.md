@@ -98,6 +98,8 @@ len(controllers) == lane_count // g_min     # 数量必须与理想值一致
 | controller 不能在所有 mode 下都没有 lane | 防止声明了但完全没用到的僵尸 controller |
 | controller 工作时钟候选数必须为 1 | 强制"工作时钟固定，只换宽度"（见第 3 节） |
 | controller 数量必须等于 `lane_count // g_min` | 数量与颗粒度对齐，避免僵尸 controller 或被迫破坏时钟固定约束（见第 4 节） |
+| `tie_off` 取静态值时必须与该信号的 `safe_state` 一致 | 两者本该表达同一个安全态，防止 CSV 改漏一处（见第 7 节） |
+| controller 的 `max_width` 不能超过 PHY 总 lane 数 | 超过总 lane 数的宽度在任何 mode 下都不可能被分满，声明了也用不到（见第 9 节） |
 
 ## 6. 模块层次一览
 
@@ -174,3 +176,56 @@ pipe_lane_mapper_top
 一句话：动态重分配用的就是"改 mode"这同一个操作，只是发生在有 link 已经跑
 起来的时候；静态配置是同一个操作只发生一次、发生在还没有 link 跑起来的时
 候。
+
+## 9. Unused lane vs Fake lane：两种"端口没数据"的场景
+
+一个 controller 端口没有真实数据，可能是两种完全不同的原因造成的——虽然
+两者最终都会落进同一条 tie-off 代码路径，但产生的原因、是否随配置变化，
+是两回事，容易混为一谈。
+
+### 9.1 Unused lane（未使用端口）：真实端口，只是没分到 lane
+
+一个 controller 在 `controllers.csv` 里声明的 `max_width` 是它的真实能力
+（比如 x4）。哪怕能力是 x4，某个 mode 下它可能只被分到 2 条 lane（相当于
+当 x2 用），端口 2、3 在这个 mode 下就是"未使用"；如果它在**所有** mode
+下都只用到 2 条，端口 2、3 就是永久未使用。
+
+这正是 `tie_off`/`safe_p2m_align` 机制本来就要解决的问题——
+`pipe_lane_data_p2m.sv` 里 `if not srcs: assign ... = safe_p2m_align`：
+不管是"这个 mode 没用到"还是"所有 mode 都没用到"，只要 `port_src` 里查
+不到这个 `(cid, cl)` 组合，就自动落到这条 tie-off 分支，按
+`pipe_signals.csv` 里配置的 `tie_off` 语义安全 tie 掉。m2p 方向不需要
+特殊处理——数据是 controller 自己驱动出来的，用不用得上是下游（PHY 侧）
+的事，跟本生成器无关。
+
+### 9.2 Fake lane（伪端口）：端口本身不对应任何真实硬件
+
+跟 unused lane 完全不同的另一件事：为了"连接方便"，本生成器把**同一个
+配置集里所有 controller 的端口数组，统一声明成这个配置集里最宽 controller
+的宽度**（`Config.decl_width = max(所有 controller 的 max_width)`），而
+不是各自声明成自己的真实宽度。
+
+例如 `config_multi_modes` 里 PCIe_x4（真实 x4）和 USB_x2（真实 x2）搭配：
+USB_x2 的端口数组也被声明成 x4（`usb_x2_mac2phy[3:0]` /
+`usb_x2_phy2mac[3:0]`），端口 2、3 是**假的**——`lane_mapping.csv` 永远
+不可能合法地把哪条 lane 分给 USB_x2 的端口 2 或 3（`validate()` 仍然按它
+自己真实的 `max_width=2` 校验合法性，见第 5 节表格），这两个端口自始至终
+不对应任何真实硬件，纯粹是为了让不同宽度的 controller 在顶层暴露出同样
+形状的总线，方便连接。
+
+Fake lane 恰好落进跟 unused lane 完全相同的 `if not srcs:` 分支——从生成
+器的角度看，"这个 mode 没分到"和"压根不可能分到"结果都是 `port_src` 查
+不到这个 `(cid, cl)`，走同一条 tie-off 逻辑，不需要额外代码。m2p 方向同
+样不处理：这几个输入端口直接空读（Verilator 会报 `UNUSEDSIGNAL`，属预期，
+不用管）。
+
+### 9.3 两者的本质区别
+
+| | Unused lane | Fake lane |
+|---|---|---|
+| 是否计入该 controller 的 `max_width` | 是，在真实能力范围内 | 否，超出真实能力，纯声明填充 |
+| 产生原因 | 某 controller 在某个（或所有）mode 下没分到那么多 lane | 同配置集里各 controller 宽度不一致，为统一声明宽度而补齐 |
+| p2m tie-off | `tie_off`/`safe_p2m_align`（已有机制） | 同一套机制，天然覆盖，无需额外代码 |
+| m2p | 不处理，controller 自己驱动，用不用是下游的事 | 不处理，输入端口空读 |
+| 随配置变化吗 | 会——换一套 `lane_mapping.csv` 分配方案，未使用的端口可能变多/变少 | 不会——只要 `controllers.csv` 里各 controller 的 `max_width` 不变，哪些端口是 fake 就不变 |
+| 依据 | `lane_mapping.csv` 的实际分配结果 | `Config.decl_width`（编译期从 `controllers.csv` 算出） |

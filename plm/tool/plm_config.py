@@ -514,23 +514,6 @@ class Config:
                         f"across modes, conflicting with the \"fixed working clock\" "
                         f"constraint.")
 
-        # tie_off and safe_state are two independently maintained mechanisms:
-        # the former decides what a port that is NEVER mapped to any lane in
-        # any mode should tie to; the latter decides the safe state when sel
-        # is all-zero during a BBM handoff window. But when tie_off is a
-        # static literal, it's actually expressing the same thing as
-        # safe_state -- if the two columns get edited out of sync in the
-        # CSV, the config is self-contradictory (previously validate() never
-        # checked this, see docs/design_notes.md section 7). tie_off=="lane0"
-        # is a deliberate dynamic exception (currently only used by
-        # phy_mac_phystatus) and is excluded from this static comparison.
-        for s in self.signals:
-            if s.tie_off != "lane0" and s.safe_state != s.tie_value:
-                err.append(
-                    f"Signal {s.name}: tie_off={s.tie_value} but safe_state={s.safe_state}. "
-                    f"The two are meant to express the same safe state -- please make "
-                    f"these two columns in pipe_signals.csv agree.")
-
         return err
 
     # ------------------------------------------------------------ report

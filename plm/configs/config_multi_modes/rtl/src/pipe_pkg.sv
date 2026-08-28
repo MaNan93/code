@@ -83,7 +83,7 @@ package pipe_pkg;
         phy_mac_rxvalid: 1'b0,
         phy_mac_rxstatus: 3'd0,
         phy_mac_rxelecidle: 1'b1,
-        phy_mac_rxstandbystatus: 1'b0,
+        phy_mac_rxstandbystatus: 1'b1,
         phy_mac_messagebus: 8'd80,
         phy_mac_phystatus: 1'b0,
         phy_mac_local_tx_coef_valid: 1'b0,

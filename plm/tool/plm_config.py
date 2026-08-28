@@ -167,6 +167,19 @@ class Config:
         self.num_ctrl = max(self.controllers) + 1
         self.groups = self._build_groups()
 
+        # Every controller's RTL port array is declared at this uniform
+        # width -- the widest controller's max_width -- for ease of
+        # connection (e.g. so a x2 and a x4 controller expose same-shaped
+        # buses). A narrower controller's ports at or beyond its own real
+        # max_width are "fake lanes": they can never be legally assigned a
+        # PHY lane (validate() still bounds lane_mapping.csv against each
+        # controller's own real max_width), they exist purely as
+        # declaration padding. p2m ties them off through the same
+        # tie_off/safe_p2m_align path as any other unmapped port; m2p is
+        # simply left unread on those extra bits.
+        self.decl_width = max((c.max_width for c in self.controllers.values()),
+                               default=0)
+
     # -- controllers.csv
     @staticmethod
     def _load_ctrl(path):
@@ -384,6 +397,20 @@ class Config:
                 f"values or a range not starting at 0 will leave some mode "
                 f"branches unreachable in hardware.")
 
+        # A controller's max_width can never actually be reached if it
+        # exceeds the total PHY lane count -- there simply aren't enough
+        # lanes in existence to assign it, in any mode, regardless of how
+        # lane_mapping.csv is filled in. This is a config authoring
+        # mistake, not something that should silently generate a
+        # controller whose declared capability is structurally impossible.
+        for cid, c in self.controllers.items():
+            if c.max_width > self.lane_count:
+                err.append(
+                    f"{c.name}: max_width={c.max_width} exceeds the total PHY "
+                    f"lane count ({self.lane_count}) declared in "
+                    f"lane_mapping.csv. No mode can ever assign it that many "
+                    f"lanes -- max_width can be at most {self.lane_count}.")
+
         for m in self.modes:
             seen = {}
             for l in range(self.lane_count):
@@ -542,7 +569,9 @@ class Config:
                 for m, v in cp[cid].items())
             cand = cc[cid]
             kind = "direct" if len(cand) == 1 else f"{len(cand)}-way clock mux"
-            L.append(f"  {c.name:<6} x{c.max_width:<3} {per}")
+            fake = (f"  (declared x{self.decl_width}, ports {c.max_width}..{self.decl_width-1} are fake lanes)"
+                    if self.decl_width > c.max_width else "")
+            L.append(f"  {c.name:<6} x{c.max_width:<3} {per}{fake}")
             L.append(f"           candidates {cand} -> {kind}")
         L.append("")
 

@@ -9,7 +9,7 @@ module pipe_lane_data_m2p #(
     input  lane_sel_t              sel_tgt,
     output mac2phy_lane_t [LANE_COUNT-1:0] phy_mac2phy,
     input  mac2phy_lane_t [3:0] pcie_x4_mac2phy,
-    input  mac2phy_lane_t [1:0] usb_x2_mac2phy
+    input  mac2phy_lane_t [3:0] usb_x2_mac2phy
 );
 
     assign phy_mac2phy[0] = pcie_x4_mac2phy[0];  // direct connection

@@ -36,19 +36,22 @@ module pipe_lane_mapper_top #(
     output mac2phy_lane_t [LANE_COUNT-1:0] phy_mac2phy,
     input  phy2mac_lane_t [LANE_COUNT-1:0] phy_phy2mac,
 
-    // Controller side, each at its real width
+    // Controller side. Every controller's ports are declared at a uniform
+    // width x16 (the widest controller in this config) for ease of
+    // connection; a controller whose real width is narrower has fake lanes
+    // at its high-numbered ports -- see each controller's comment below.
     // Ctrl0 x16
     input  mac2phy_lane_t [15:0] ctrl0_mac2phy,
     output phy2mac_lane_t [15:0] ctrl0_phy2mac,
-    // Ctrl1 x4
-    input  mac2phy_lane_t [3:0] ctrl1_mac2phy,
-    output phy2mac_lane_t [3:0] ctrl1_phy2mac,
-    // Ctrl2 x8
-    input  mac2phy_lane_t [7:0] ctrl2_mac2phy,
-    output phy2mac_lane_t [7:0] ctrl2_phy2mac,
-    // Ctrl3 x4
-    input  mac2phy_lane_t [3:0] ctrl3_mac2phy,
-    output phy2mac_lane_t [3:0] ctrl3_phy2mac
+    // Ctrl1 x4 (declared x16, ports 4..15 are fake lanes)
+    input  mac2phy_lane_t [15:0] ctrl1_mac2phy,
+    output phy2mac_lane_t [15:0] ctrl1_phy2mac,
+    // Ctrl2 x8 (declared x16, ports 8..15 are fake lanes)
+    input  mac2phy_lane_t [15:0] ctrl2_mac2phy,
+    output phy2mac_lane_t [15:0] ctrl2_phy2mac,
+    // Ctrl3 x4 (declared x16, ports 4..15 are fake lanes)
+    input  mac2phy_lane_t [15:0] ctrl3_mac2phy,
+    output phy2mac_lane_t [15:0] ctrl3_phy2mac
 );
 
     lane_sel_t sel_tgt;   // each group's currently effective owner selection (after sel_sync)

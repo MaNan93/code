@@ -51,8 +51,8 @@ module tb_pipe_lane_mapper;
 
     mac2phy_lane_t [3:0] pcie_x4_mac2phy;
     phy2mac_lane_t [3:0] pcie_x4_phy2mac;
-    mac2phy_lane_t [1:0] usb_x2_mac2phy;
-    phy2mac_lane_t [1:0] usb_x2_phy2mac;
+    mac2phy_lane_t [3:0] usb_x2_mac2phy;
+    phy2mac_lane_t [3:0] usb_x2_phy2mac;
 
     pipe_lane_mapper_top #(
         .NUM_MODES  (NUM_MODES),
@@ -99,7 +99,7 @@ module tb_pipe_lane_mapper;
 
     always_comb begin
         for (int p = 0; p < 4; p++) pcie_x4_mac2phy[p] = make_m2p(0, p);
-        for (int p = 0; p < 2; p++) usb_x2_mac2phy[p] = make_m2p(1, p);
+        for (int p = 0; p < 4; p++) usb_x2_mac2phy[p] = make_m2p(1, p);
         for (int l = 0; l < LANE_COUNT; l++) begin
             phy_phy2mac[l] = make_p2m(l);
             phy_phy2mac[l].phy_mac_phystatus = phy_phystatus_stim[l];
@@ -190,12 +190,7 @@ module tb_pipe_lane_mapper;
         end
 
         for (int c = 0; c < NUM_CTRL; c++) begin
-            int max_w;
-            case (c)
-                0: max_w = 4;
-                1: max_w = 2;
-                default: max_w = 0;
-            endcase
+            int max_w = 4;
             for (int p = 0; p < max_w; p++) begin
                 int src_lane;
                 phy2mac_lane_t got;

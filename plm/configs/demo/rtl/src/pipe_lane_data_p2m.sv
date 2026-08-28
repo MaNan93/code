@@ -9,9 +9,9 @@ module pipe_lane_data_p2m #(
     input  lane_sel_t              sel_tgt,
     input  phy2mac_lane_t [LANE_COUNT-1:0] phy_phy2mac,
     output phy2mac_lane_t [15:0] ctrl0_phy2mac,
-    output phy2mac_lane_t [3:0] ctrl1_phy2mac,
-    output phy2mac_lane_t [7:0] ctrl2_phy2mac,
-    output phy2mac_lane_t [3:0] ctrl3_phy2mac
+    output phy2mac_lane_t [15:0] ctrl1_phy2mac,
+    output phy2mac_lane_t [15:0] ctrl2_phy2mac,
+    output phy2mac_lane_t [15:0] ctrl3_phy2mac
 );
 
     // Ctrl0 x16
@@ -100,7 +100,7 @@ module pipe_lane_data_p2m #(
         .dout (ctrl0_phy2mac[15])
     );
 
-    // Ctrl1 x4
+    // Ctrl1 x4 (declared x16, ports 4..15 are fake lanes)
     phy2mac_lane_t ctrl1_safe_p2m_align;
     assign ctrl1_safe_p2m_align = '{
         phy_mac_rxelecidle: 1'b1,
@@ -133,8 +133,20 @@ module pipe_lane_data_p2m #(
         .safe (ctrl1_safe_p2m_align),
         .dout (ctrl1_phy2mac[3])
     );
+    assign ctrl1_phy2mac[4] = ctrl1_safe_p2m_align;  // fake lane, port padding only
+    assign ctrl1_phy2mac[5] = ctrl1_safe_p2m_align;  // fake lane, port padding only
+    assign ctrl1_phy2mac[6] = ctrl1_safe_p2m_align;  // fake lane, port padding only
+    assign ctrl1_phy2mac[7] = ctrl1_safe_p2m_align;  // fake lane, port padding only
+    assign ctrl1_phy2mac[8] = ctrl1_safe_p2m_align;  // fake lane, port padding only
+    assign ctrl1_phy2mac[9] = ctrl1_safe_p2m_align;  // fake lane, port padding only
+    assign ctrl1_phy2mac[10] = ctrl1_safe_p2m_align;  // fake lane, port padding only
+    assign ctrl1_phy2mac[11] = ctrl1_safe_p2m_align;  // fake lane, port padding only
+    assign ctrl1_phy2mac[12] = ctrl1_safe_p2m_align;  // fake lane, port padding only
+    assign ctrl1_phy2mac[13] = ctrl1_safe_p2m_align;  // fake lane, port padding only
+    assign ctrl1_phy2mac[14] = ctrl1_safe_p2m_align;  // fake lane, port padding only
+    assign ctrl1_phy2mac[15] = ctrl1_safe_p2m_align;  // fake lane, port padding only
 
-    // Ctrl2 x8
+    // Ctrl2 x8 (declared x16, ports 8..15 are fake lanes)
     phy2mac_lane_t ctrl2_safe_p2m_align;
     assign ctrl2_safe_p2m_align = '{
         phy_mac_rxelecidle: 1'b1,
@@ -191,8 +203,16 @@ module pipe_lane_data_p2m #(
         .safe (ctrl2_safe_p2m_align),
         .dout (ctrl2_phy2mac[7])
     );
+    assign ctrl2_phy2mac[8] = ctrl2_safe_p2m_align;  // fake lane, port padding only
+    assign ctrl2_phy2mac[9] = ctrl2_safe_p2m_align;  // fake lane, port padding only
+    assign ctrl2_phy2mac[10] = ctrl2_safe_p2m_align;  // fake lane, port padding only
+    assign ctrl2_phy2mac[11] = ctrl2_safe_p2m_align;  // fake lane, port padding only
+    assign ctrl2_phy2mac[12] = ctrl2_safe_p2m_align;  // fake lane, port padding only
+    assign ctrl2_phy2mac[13] = ctrl2_safe_p2m_align;  // fake lane, port padding only
+    assign ctrl2_phy2mac[14] = ctrl2_safe_p2m_align;  // fake lane, port padding only
+    assign ctrl2_phy2mac[15] = ctrl2_safe_p2m_align;  // fake lane, port padding only
 
-    // Ctrl3 x4
+    // Ctrl3 x4 (declared x16, ports 4..15 are fake lanes)
     phy2mac_lane_t ctrl3_safe_p2m_align;
     assign ctrl3_safe_p2m_align = '{
         phy_mac_rxelecidle: 1'b1,
@@ -225,5 +245,17 @@ module pipe_lane_data_p2m #(
         .safe (ctrl3_safe_p2m_align),
         .dout (ctrl3_phy2mac[3])
     );
+    assign ctrl3_phy2mac[4] = ctrl3_safe_p2m_align;  // fake lane, port padding only
+    assign ctrl3_phy2mac[5] = ctrl3_safe_p2m_align;  // fake lane, port padding only
+    assign ctrl3_phy2mac[6] = ctrl3_safe_p2m_align;  // fake lane, port padding only
+    assign ctrl3_phy2mac[7] = ctrl3_safe_p2m_align;  // fake lane, port padding only
+    assign ctrl3_phy2mac[8] = ctrl3_safe_p2m_align;  // fake lane, port padding only
+    assign ctrl3_phy2mac[9] = ctrl3_safe_p2m_align;  // fake lane, port padding only
+    assign ctrl3_phy2mac[10] = ctrl3_safe_p2m_align;  // fake lane, port padding only
+    assign ctrl3_phy2mac[11] = ctrl3_safe_p2m_align;  // fake lane, port padding only
+    assign ctrl3_phy2mac[12] = ctrl3_safe_p2m_align;  // fake lane, port padding only
+    assign ctrl3_phy2mac[13] = ctrl3_safe_p2m_align;  // fake lane, port padding only
+    assign ctrl3_phy2mac[14] = ctrl3_safe_p2m_align;  // fake lane, port padding only
+    assign ctrl3_phy2mac[15] = ctrl3_safe_p2m_align;  // fake lane, port padding only
 
 endmodule

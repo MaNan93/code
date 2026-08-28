@@ -34,13 +34,16 @@ module pipe_lane_mapper_top #(
     output mac2phy_lane_t [LANE_COUNT-1:0] phy_mac2phy,
     input  phy2mac_lane_t [LANE_COUNT-1:0] phy_phy2mac,
 
-    // Controller side, each at its real width
+    // Controller side. Every controller's ports are declared at a uniform
+    // width x4 (the widest controller in this config) for ease of
+    // connection; a controller whose real width is narrower has fake lanes
+    // at its high-numbered ports -- see each controller's comment below.
     // PCIe_x4 x4
     input  mac2phy_lane_t [3:0] pcie_x4_mac2phy,
     output phy2mac_lane_t [3:0] pcie_x4_phy2mac,
-    // USB_x2 x2
-    input  mac2phy_lane_t [1:0] usb_x2_mac2phy,
-    output phy2mac_lane_t [1:0] usb_x2_phy2mac
+    // USB_x2 x2 (declared x4, ports 2..3 are fake lanes)
+    input  mac2phy_lane_t [3:0] usb_x2_mac2phy,
+    output phy2mac_lane_t [3:0] usb_x2_phy2mac
 );
 
     lane_sel_t sel_tgt;   // each group's currently effective owner selection (after sel_sync)

@@ -9,7 +9,7 @@ module pipe_lane_data_p2m #(
     input  lane_sel_t              sel_tgt,
     input  phy2mac_lane_t [LANE_COUNT-1:0] phy_phy2mac,
     output phy2mac_lane_t [3:0] pcie_x4_phy2mac,
-    output phy2mac_lane_t [1:0] usb_x2_phy2mac
+    output phy2mac_lane_t [3:0] usb_x2_phy2mac
 );
 
     // PCIe_x4 x4
@@ -36,7 +36,7 @@ module pipe_lane_data_p2m #(
         .dout (pcie_x4_phy2mac[3])
     );
 
-    // USB_x2 x2
+    // USB_x2 x2 (declared x4, ports 2..3 are fake lanes)
     phy2mac_lane_t usb_x2_safe_p2m_align;
     assign usb_x2_safe_p2m_align = '{
         phy_mac_rxelecidle: 1'b1,
@@ -57,5 +57,7 @@ module pipe_lane_data_p2m #(
         .safe (usb_x2_safe_p2m_align),
         .dout (usb_x2_phy2mac[1])
     );
+    assign usb_x2_phy2mac[2] = usb_x2_safe_p2m_align;  // fake lane, port padding only
+    assign usb_x2_phy2mac[3] = usb_x2_safe_p2m_align;  // fake lane, port padding only
 
 endmodule

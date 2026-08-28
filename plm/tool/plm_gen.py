@@ -557,7 +557,7 @@ def gen_data_m2p(cfg):
          "    output mac2phy_lane_t [LANE_COUNT-1:0] phy_mac2phy,"]
     for cid in sorted(cfg.controllers):
         c = cfg.controllers[cid]
-        L.append(f"    input  mac2phy_lane_t [{c.max_width-1}:0] {c.lname}_mac2phy,")
+        L.append(f"    input  mac2phy_lane_t [{cfg.decl_width-1}:0] {c.lname}_mac2phy,")
     L[-1] = L[-1].rstrip(",")
     L.append(");")
     L.append("")
@@ -604,7 +604,7 @@ def gen_data_p2m(cfg):
          "    input  phy2mac_lane_t [LANE_COUNT-1:0] phy_phy2mac,"]
     for cid in sorted(cfg.controllers):
         c = cfg.controllers[cid]
-        L.append(f"    output phy2mac_lane_t [{c.max_width-1}:0] {c.lname}_phy2mac,")
+        L.append(f"    output phy2mac_lane_t [{cfg.decl_width-1}:0] {c.lname}_phy2mac,")
     L[-1] = L[-1].rstrip(",")
     L.append(");")
     L.append("")
@@ -618,7 +618,9 @@ def gen_data_p2m(cfg):
             port_src.setdefault((cid, cl), set()).add((l, g.gid, b))
     for cid in sorted(cfg.controllers):
         c = cfg.controllers[cid]
-        L.append(f"    // {c.name} x{c.max_width}")
+        fake = (f" (declared x{cfg.decl_width}, ports {c.max_width}..{cfg.decl_width-1} are fake lanes)"
+                if cfg.decl_width > c.max_width else "")
+        L.append(f"    // {c.name} x{c.max_width}{fake}")
 
         # Compute this controller's active lowest-numbered physical lane
         # (used for safe alignment on unused ports)
@@ -643,11 +645,12 @@ def gen_data_p2m(cfg):
         L.append(f"    }};")
         L.append("")
 
-        for cl in range(c.max_width):
+        for cl in range(cfg.decl_width):
             srcs = sorted(port_src.get((cid, cl), set()))
             if not srcs:
+                why = "fake lane, port padding only" if cl >= c.max_width else "never driven in any mode"
                 L.append(f"    assign {c.lname}_phy2mac[{cl}] = {c.lname}_safe_p2m_align;"
-                         f"  // never driven in any mode")
+                         f"  // {why}")
                 continue
             if len(srcs) == 1 and cfg.groups[srcs[0][1]].is_direct:
                 l = srcs[0][0]
@@ -721,12 +724,17 @@ def gen_top(cfg):
     L.append("    output mac2phy_lane_t [LANE_COUNT-1:0] phy_mac2phy,")
     L.append("    input  phy2mac_lane_t [LANE_COUNT-1:0] phy_phy2mac,")
     L.append("")
-    L.append("    // Controller side, each at its real width")
+    L.append(f"    // Controller side. Every controller's ports are declared at a uniform")
+    L.append(f"    // width x{cfg.decl_width} (the widest controller in this config) for ease of")
+    L.append(f"    // connection; a controller whose real width is narrower has fake lanes")
+    L.append(f"    // at its high-numbered ports -- see each controller's comment below.")
     for cid in sorted(cfg.controllers):
         c = cfg.controllers[cid]
-        L.append(f"    // {c.name} x{c.max_width}")
-        L.append(f"    input  mac2phy_lane_t [{c.max_width-1}:0] {c.lname}_mac2phy,")
-        L.append(f"    output phy2mac_lane_t [{c.max_width-1}:0] {c.lname}_phy2mac,")
+        fake = (f" (declared x{cfg.decl_width}, ports {c.max_width}..{cfg.decl_width-1} are fake lanes)"
+                if cfg.decl_width > c.max_width else "")
+        L.append(f"    // {c.name} x{c.max_width}{fake}")
+        L.append(f"    input  mac2phy_lane_t [{cfg.decl_width-1}:0] {c.lname}_mac2phy,")
+        L.append(f"    output phy2mac_lane_t [{cfg.decl_width-1}:0] {c.lname}_phy2mac,")
     L[-1] = L[-1].rstrip(",")
     L.append(");")
     L.append("")
@@ -944,8 +952,8 @@ def gen_tb(cfg):
     L.append("    phy2mac_lane_t [LANE_COUNT-1:0] phy_phy2mac;")
     L.append("")
     for c in ctrls:
-        L.append(f"    mac2phy_lane_t [{c.max_width-1}:0] {c.lname}_mac2phy;")
-        L.append(f"    phy2mac_lane_t [{c.max_width-1}:0] {c.lname}_phy2mac;")
+        L.append(f"    mac2phy_lane_t [{cfg.decl_width-1}:0] {c.lname}_mac2phy;")
+        L.append(f"    phy2mac_lane_t [{cfg.decl_width-1}:0] {c.lname}_phy2mac;")
     L.append("")
 
     # ---- DUT instance
@@ -996,7 +1004,11 @@ def gen_tb(cfg):
     L.append("")
     L.append("    always_comb begin")
     for c in ctrls:
-        L.append(f"        for (int p = 0; p < {c.max_width}; p++) "
+        # Drives every declared port including any fake lanes at the high
+        # end (ports >= this controller's real max_width) -- their content
+        # is never checked, this just avoids leaving part of the array
+        # undriven (which would otherwise infer a latch / read as X).
+        L.append(f"        for (int p = 0; p < {cfg.decl_width}; p++) "
                  f"{c.lname}_mac2phy[p] = make_m2p({c.id}, p);")
     L.append(f"        for (int l = 0; l < LANE_COUNT; l++) begin")
     L.append(f"            phy_phy2mac[l] = make_p2m(l);")
@@ -1090,12 +1102,11 @@ def gen_tb(cfg):
     L.append("        end")
     L.append("")
     L.append("        for (int c = 0; c < NUM_CTRL; c++) begin")
-    L.append("            int max_w;")
-    L.append("            case (c)")
-    for c in ctrls:
-        L.append(f"                {c.id}: max_w = {c.max_width};")
-    L.append("                default: max_w = 0;")
-    L.append("            endcase")
+    # Every controller's port array is declared at the same uniform
+    # decl_width (see pipe_lane_mapper_top), so max_w no longer needs to
+    # vary per controller -- checking every declared port (including any
+    # fake lanes) also exercises their tie-off behavior.
+    L.append(f"            int max_w = {cfg.decl_width};")
     L.append("            for (int p = 0; p < max_w; p++) begin")
     L.append("                int src_lane;")
     L.append("                phy2mac_lane_t got;")

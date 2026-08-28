@@ -1,7 +1,7 @@
 //
 // PIPE lane mapper PHY->MAC data mux (converges by controller port).
-// sel_tgt's mutual exclusivity is guaranteed by sel_sync. Undriven ports are tied to the safe state.
-import pipe_pkg::*;
+// sel_tgt's mutual exclusivity is guaranteed by pipe_lane_sel_sync. Undriven ports are tied to the safe state.
+import pipe_lane_signal_pkg::*;
 
 module pipe_lane_data_p2m #(
     parameter int NL = 4

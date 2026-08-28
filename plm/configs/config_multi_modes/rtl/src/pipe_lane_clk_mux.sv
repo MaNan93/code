@@ -4,7 +4,7 @@
 // Each group's final sel_tgt is produced by pipe_lane_sel_gen and passed in as an input.
 // The feedback reset mux is in pipe_lane_rst_mux, the data muxes are in
 // pipe_lane_data_m2p / pipe_lane_data_p2m.
-import pipe_pkg::*;
+import pipe_lane_signal_pkg::*;
 
 module pipe_lane_clk_mux #(
     parameter int NL = 4,
@@ -41,8 +41,8 @@ module pipe_lane_clk_mux #(
     // G1 lane2~3: PCIe_x4, USB_x2
     logic [1:0] pin_gated_g1;
     logic pclk_in_g1;
-    clk_gate u_pin_gate_g1_b0 (.clk_in(ctrl_pclk[0]), .en(sel_tgt.g1[0]), .test_en(test_en), .clk_out(pin_gated_g1[0]));
-    clk_gate u_pin_gate_g1_b1 (.clk_in(ctrl_pclk[1]), .en(sel_tgt.g1[1]), .test_en(test_en), .clk_out(pin_gated_g1[1]));
+    pipe_lane_clk_gate u_pin_gate_g1_b0 (.clk_in(ctrl_pclk[0]), .en(sel_tgt.g1[0]), .test_en(test_en), .clk_out(pin_gated_g1[0]));
+    pipe_lane_clk_gate u_pin_gate_g1_b1 (.clk_in(ctrl_pclk[1]), .en(sel_tgt.g1[1]), .test_en(test_en), .clk_out(pin_gated_g1[1]));
     assign pclk_in_g1 = |pin_gated_g1;
     assign phy_pclk_in[2] = pclk_in_g1;
     assign phy_pclk_in[3] = pclk_in_g1;

@@ -1,5 +1,5 @@
 //=============================================================================
-// clk_gate -- clock-gating wrapper
+// pipe_lane_clk_gate -- clock-gating wrapper
 //
 // When gating a clock, the enable must only toggle while the clock is low,
 // otherwise the output can produce a narrow runt pulse. Guaranteeing that
@@ -14,7 +14,7 @@
 // en must already be registered in the clk_in domain (guaranteed by
 // bbm_sel_onehot).
 //=============================================================================
-module clk_gate (
+module pipe_lane_clk_gate (
     input  logic clk_in,
     input  logic en,        // same domain as clk_in, already registered
     input  logic test_en,   // DFT: force on during scan shift

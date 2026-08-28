@@ -4,7 +4,7 @@
 // Each group's final sel_tgt is produced by pipe_lane_sel_gen and passed in as an input.
 // The feedback reset mux is in pipe_lane_rst_mux, the data muxes are in
 // pipe_lane_data_m2p / pipe_lane_data_p2m.
-import pipe_pkg::*;
+import pipe_lane_signal_pkg::*;
 
 module pipe_lane_clk_mux #(
     parameter int NL = 16,
@@ -49,8 +49,8 @@ module pipe_lane_clk_mux #(
     // G1 lane4~7: Ctrl0, Ctrl1
     logic [1:0] pin_gated_g1;
     logic pclk_in_g1;
-    clk_gate u_pin_gate_g1_b0 (.clk_in(ctrl_pclk[0]), .en(sel_tgt.g1[0]), .test_en(test_en), .clk_out(pin_gated_g1[0]));
-    clk_gate u_pin_gate_g1_b1 (.clk_in(ctrl_pclk[1]), .en(sel_tgt.g1[1]), .test_en(test_en), .clk_out(pin_gated_g1[1]));
+    pipe_lane_clk_gate u_pin_gate_g1_b0 (.clk_in(ctrl_pclk[0]), .en(sel_tgt.g1[0]), .test_en(test_en), .clk_out(pin_gated_g1[0]));
+    pipe_lane_clk_gate u_pin_gate_g1_b1 (.clk_in(ctrl_pclk[1]), .en(sel_tgt.g1[1]), .test_en(test_en), .clk_out(pin_gated_g1[1]));
     assign pclk_in_g1 = |pin_gated_g1;
     assign phy_pclk_in[4] = pclk_in_g1;
     assign phy_pclk_in[5] = pclk_in_g1;
@@ -59,8 +59,8 @@ module pipe_lane_clk_mux #(
     // G2 lane8~11: Ctrl0, Ctrl2
     logic [1:0] pin_gated_g2;
     logic pclk_in_g2;
-    clk_gate u_pin_gate_g2_b0 (.clk_in(ctrl_pclk[0]), .en(sel_tgt.g2[0]), .test_en(test_en), .clk_out(pin_gated_g2[0]));
-    clk_gate u_pin_gate_g2_b1 (.clk_in(ctrl_pclk[2]), .en(sel_tgt.g2[1]), .test_en(test_en), .clk_out(pin_gated_g2[1]));
+    pipe_lane_clk_gate u_pin_gate_g2_b0 (.clk_in(ctrl_pclk[0]), .en(sel_tgt.g2[0]), .test_en(test_en), .clk_out(pin_gated_g2[0]));
+    pipe_lane_clk_gate u_pin_gate_g2_b1 (.clk_in(ctrl_pclk[2]), .en(sel_tgt.g2[1]), .test_en(test_en), .clk_out(pin_gated_g2[1]));
     assign pclk_in_g2 = |pin_gated_g2;
     assign phy_pclk_in[8] = pclk_in_g2;
     assign phy_pclk_in[9] = pclk_in_g2;
@@ -69,9 +69,9 @@ module pipe_lane_clk_mux #(
     // G3 lane12~15: Ctrl0, Ctrl2, Ctrl3
     logic [2:0] pin_gated_g3;
     logic pclk_in_g3;
-    clk_gate u_pin_gate_g3_b0 (.clk_in(ctrl_pclk[0]), .en(sel_tgt.g3[0]), .test_en(test_en), .clk_out(pin_gated_g3[0]));
-    clk_gate u_pin_gate_g3_b1 (.clk_in(ctrl_pclk[2]), .en(sel_tgt.g3[1]), .test_en(test_en), .clk_out(pin_gated_g3[1]));
-    clk_gate u_pin_gate_g3_b2 (.clk_in(ctrl_pclk[3]), .en(sel_tgt.g3[2]), .test_en(test_en), .clk_out(pin_gated_g3[2]));
+    pipe_lane_clk_gate u_pin_gate_g3_b0 (.clk_in(ctrl_pclk[0]), .en(sel_tgt.g3[0]), .test_en(test_en), .clk_out(pin_gated_g3[0]));
+    pipe_lane_clk_gate u_pin_gate_g3_b1 (.clk_in(ctrl_pclk[2]), .en(sel_tgt.g3[1]), .test_en(test_en), .clk_out(pin_gated_g3[1]));
+    pipe_lane_clk_gate u_pin_gate_g3_b2 (.clk_in(ctrl_pclk[3]), .en(sel_tgt.g3[2]), .test_en(test_en), .clk_out(pin_gated_g3[2]));
     assign pclk_in_g3 = |pin_gated_g3;
     assign phy_pclk_in[12] = pclk_in_g3;
     assign phy_pclk_in[13] = pclk_in_g3;

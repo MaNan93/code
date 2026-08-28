@@ -1,6 +1,6 @@
 //=============================================================================
-// sel_sync -- N-way one-hot branch-select generator, with a parameter to
-// pick between two implementations:
+// pipe_lane_sel_sync -- N-way one-hot branch-select generator, with a
+// parameter to pick between two implementations:
 //
 //   SYNC=1 (default): break-before-make + two-stage synchronizer, extended
 //   from the classic 2-clock glitch-free clock-mux enable structure to N
@@ -9,7 +9,7 @@
 //
 //     tgt[i] ---> REG --.
 //                         AND ---> [ FF FF ] ---> en[i]
-//     other_idle[i] -----'          sync2
+//     other_idle[i] -----'          pipe_lane_sync2
 //
 //     other_idle[i] = NOR(en[j], j != i)   -- raw wire, no separate
 //                                             synchronizer of its own.
@@ -23,7 +23,7 @@
 //   candidate branch actually shares one clock domain and tgt is already
 //   glitch-free in that domain -- there is no CDC protection in this mode.
 //=============================================================================
-module sel_sync #(
+module pipe_lane_sel_sync #(
     parameter int N    = 2,
     parameter bit SYNC = 1
 ) (
@@ -54,7 +54,7 @@ module sel_sync #(
                     else                  tgt_r <= tgt[i];
 
                 // two-stage synchronizer: d_in -> en[i]
-                sync2 #(.WIDTH(1)) u_sync_en (
+                pipe_lane_sync2 #(.WIDTH(1)) u_sync_en (
                     .clk   (branch_clk  [i]),
                     .rst_n (branch_rst_n[i]),
                     .d     (d_in),

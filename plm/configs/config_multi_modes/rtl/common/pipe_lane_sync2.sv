@@ -1,12 +1,12 @@
 //=============================================================================
-// sync2 -- two-stage synchronizer
+// pipe_lane_sync2 -- two-stage synchronizer
 //
 // Cross-clock-domain sampling. When WIDTH > 1, each bit is synchronized
 // independently -- no alignment across bits is guaranteed. Only safe for
 // "bits are mutually independent" or "at most one bit changes at a time"
 // cases. Do not use this to pass a multi-bit encoded value (e.g. mode).
 //=============================================================================
-module sync2 #(
+module pipe_lane_sync2 #(
     parameter int WIDTH = 1
 ) (
     input  logic             clk,

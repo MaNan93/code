@@ -4,7 +4,7 @@
 //
 // Output feeds directly into BBM's tgt port; BBM handles cross-domain
 // synchronization and interlocking.
-import pipe_pkg::*;
+import pipe_lane_signal_pkg::*;
 
 module pipe_lane_mode_dec #(
     parameter int NM = 2,

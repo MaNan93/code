@@ -2,7 +2,7 @@
 // PIPE lane mapper top level.
 //
 // Pure instantiation layer:
-//   pipe_lane_sel_gen  -- mode decoding + group sel_sync, produces sel_tgt
+//   pipe_lane_sel_gen  -- mode decoding + group pipe_lane_sel_sync, produces sel_tgt
 //   pipe_lane_clk_mux  -- controller pclk generation + feedback clock mux
 //   pipe_lane_rst_mux  -- feedback reset mux
 //   pipe_lane_data_m2p -- MAC->PHY data mux
@@ -14,7 +14,7 @@
 //   G1 lane4~7        Ctrl0 / Ctrl0 / Ctrl0 / Ctrl1 2-way BBM
 //   G2 lane8~11       Ctrl0 / Ctrl2 / Ctrl2 / Ctrl2 2-way BBM
 //   G3 lane12~15      Ctrl0 / Ctrl2 / Ctrl3 / Ctrl3 3-way BBM
-import pipe_pkg::*;
+import pipe_lane_signal_pkg::*;
 
 module pipe_lane_mapper_top #(
     parameter int NM = 4,
@@ -54,11 +54,11 @@ module pipe_lane_mapper_top #(
     output phy2mac_lane_t [15:0] ctrl3_phy2mac
 );
 
-    lane_sel_t sel_tgt;   // each group's currently effective owner selection (after sel_sync)
+    lane_sel_t sel_tgt;   // each group's currently effective owner selection (after pipe_lane_sel_sync)
     lane_sel_t dec_tgt;   // each group's raw decoder selection (unsynchronized), used by rst_mux
 
     //------------------------------------------------------------
-    // Select-generation submodule: mode decoding + group sel_sync, produces sel_tgt / dec_tgt
+    // Select-generation submodule: mode decoding + group pipe_lane_sel_sync, produces sel_tgt / dec_tgt
     //------------------------------------------------------------
     pipe_lane_sel_gen #(
         .NM (NM),
@@ -88,7 +88,7 @@ module pipe_lane_mapper_top #(
 
     //------------------------------------------------------------
     // Feedback reset-mux submodule: phy_rst_n selects ctrl_rst_n by current owner
-    // Uses dec_tgt (the decoder's raw output, not synchronized by sel_sync), not sel_tgt
+    // Uses dec_tgt (the decoder's raw output, not synchronized by pipe_lane_sel_sync), not sel_tgt
     //------------------------------------------------------------
     pipe_lane_rst_mux #(
         .NL (NL),

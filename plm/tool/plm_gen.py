@@ -109,7 +109,7 @@ def resolve_set(arg):
 # ---------------------------------------------------------------- type package
 
 def gen_pkg(cfg):
-    L = ["package pipe_pkg;", ""]
+    L = ["package pipe_lane_signal_pkg;", ""]
 
     for d, tname in (("mac2phy", "mac2phy_lane_t"), ("phy2mac", "phy2mac_lane_t")):
         sigs = [s for s in cfg.signals if s.direction == d]
@@ -174,7 +174,7 @@ def gen_decoder(cfg):
          "//",
          "// Output feeds directly into BBM's tgt port; BBM handles cross-domain",
          "// synchronization and interlocking.",
-         "import pipe_pkg::*;",
+         "import pipe_lane_signal_pkg::*;",
          "",
          "module pipe_lane_mode_dec #(",
          f"    parameter int NM = {nm},",
@@ -237,23 +237,23 @@ def gen_decoder(cfg):
 # ---------------------------------------------------------------- select-generation submodule
 
 def gen_sel_gen(cfg, sel_mode="sync"):
-    """Select-generation submodule: mode decoding + group sel_sync, produces
+    """Select-generation submodule: mode decoding + group pipe_lane_sel_sync, produces
     sel_tgt and dec_tgt.
 
-    The decoder and group sel_sync used to be crammed into the clock
+    The decoder and group pipe_lane_sel_sync used to be crammed into the clock
     submodule; now they're split out into a standalone pipe_lane_sel_gen
     with a clearer responsibility: this module only answers "who should
     each group listen to right now", and doesn't touch any clock-generation
     logic.
 
     It exposes two target signals:
-      sel_tgt -- the final, effective selection after sel_sync
+      sel_tgt -- the final, effective selection after pipe_lane_sel_sync
                  synchronization, break-before-make; used by clk_mux's
                  feedback clock mux and data_m2p/data_p2m.
       dec_tgt -- the decoder's raw (unsynchronized) target, purely
                  combinational and changes immediately with mode; used by
                  rst_mux, so the new owner's reset control can follow mode
-                 right away without waiting for sel_sync to finish
+                 right away without waiting for pipe_lane_sel_sync to finish
                  cross-domain synchronization and the BBM break window.
 
     The controller-side pclk candidates (pclk_tgt_cX) are also produced by
@@ -261,8 +261,8 @@ def gen_sel_gen(cfg, sel_mode="sync"):
     pipe_lane_clk_mux's glitch-free controller pclk switching -- this
     module doesn't consume it itself, just passes it through.
 
-    Each group's owner selection goes through the sel_sync module
-    (tool/common/sel_sync.sv), whose SYNC parameter switches between two
+    Each group's owner selection goes through the pipe_lane_sel_sync module
+    (tool/common/pipe_lane_sel_sync.sv), whose SYNC parameter switches between two
     implementations:
       sel_mode="sync" (default) -- SYNC=1'b1, break-before-make + a
                 two-stage synchronizer, safe across clock domains.
@@ -273,13 +273,13 @@ def gen_sel_gen(cfg, sel_mode="sync"):
                 otherwise multiple branches could briefly be 1 at once,
                 and pipe_lane_data_mux would OR the two data paths together.
 
-    This module needs ctrl_pclk as an input (sel_sync's branch_clk per
+    This module needs ctrl_pclk as an input (pipe_lane_sel_sync's branch_clk per
     group), and ctrl_pclk is pipe_lane_clk_mux's output -- so the two
     submodules form a ring connection at the top level, but there's no
     combinational loop: ctrl_pclk only depends on the decoder's
     pclk_tgt_cX (passed through by this module), which has nothing to do
     with the sel_tgt this module produces; and sel_tgt's dependency on
-    ctrl_pclk goes entirely through flops inside sel_sync, so there's no
+    ctrl_pclk goes entirely through flops inside pipe_lane_sel_sync, so there's no
     combinational feedback.
     """
     nm = len(cfg.modes)
@@ -291,14 +291,14 @@ def gen_sel_gen(cfg, sel_mode="sync"):
     L = ["//",
          "// PIPE lane mapper select-generation submodule.",
          "// Decodes mode into each group's raw target dec_tgt (combinational, for rst_mux),",
-         "// then uses sel_sync for break-before-make + cross-clock-domain synchronization to",
+         "// then uses pipe_lane_sel_sync for break-before-make + cross-clock-domain synchronization to",
          "// produce the final effective sel_tgt (for clk_mux's feedback clock mux and the data muxes).",
          "// pclk_tgt_cX is produced by the internal decoder and passed through to pipe_lane_clk_mux",
          "// for glitch-free switching of controller pclk candidates.",
-         f"// Group sel_sync mode: {sel_mode}"
+         f"// Group pipe_lane_sel_sync mode: {sel_mode}"
          + (" (SYNC=1, safe across clock domains)" if sel_mode == "sync"
             else " (SYNC=0, combinational passthrough, requires candidate controllers to share one clock domain)"),
-         "import pipe_pkg::*;",
+         "import pipe_lane_signal_pkg::*;",
          "",
          "module pipe_lane_sel_gen #(",
          f"    parameter int NM = {nm},",
@@ -311,7 +311,7 @@ def gen_sel_gen(cfg, sel_mode="sync"):
     # Same as gen_decoder: code and comment are assembled separately, comma
     # goes at the end of the code, before the comment.
     ports = [("    output lane_sel_t sel_tgt",
-              "   // final effective selection after sel_sync synchronization; used by clk_mux/data mux"),
+              "   // final effective selection after pipe_lane_sel_sync synchronization; used by clk_mux/data mux"),
              ("    output lane_sel_t dec_tgt",
               "   // decoder's raw (unsynchronized) target; used by rst_mux")]
     for c in muxed_c:
@@ -337,14 +337,14 @@ def gen_sel_gen(cfg, sel_mode="sync"):
     L.append("")
 
     L.append("    //------------------------------------------------------------")
-    L.append(f"    // One sel_sync per non-direct group (SYNC={sync_lit}).")
+    L.append(f"    // One pipe_lane_sel_sync per non-direct group (SYNC={sync_lit}).")
     L.append("    //------------------------------------------------------------")
     for g in cfg.groups:
         if g.is_direct:
             continue
         names = ", ".join(cfg.controllers[c].name for c in g.cands)
         L.append(f"    // G{g.gid} lane{g.lanes[0]}~{g.lanes[-1]}: {names}")
-        L.append(f"    sel_sync #(.N({g.n}), .SYNC({sync_lit})) u_sel_sync_g{g.gid} (")
+        L.append(f"    pipe_lane_sel_sync #(.N({g.n}), .SYNC({sync_lit})) u_sel_sync_g{g.gid} (")
         L.append(f"        .branch_clk   ({{"
                  + ", ".join(f"ctrl_pclk[{c}]" for c in reversed(g.cands)) + "}),")
         L.append(f"        .branch_rst_n ({{"
@@ -376,7 +376,7 @@ def gen_clk_mux(cfg):
 
     Switching the controller pclk candidate always forces SYNC=1'b1 --
     that's for glitch-free switching of the clock itself, unrelated to the
-    group's sel_sync mode.
+    group's pipe_lane_sel_sync mode.
     """
     LC, NC = cfg.lane_count, cfg.num_ctrl
     cc = cfg.ctrl_pclk_cands()
@@ -388,7 +388,7 @@ def gen_clk_mux(cfg):
          "// Each group's final sel_tgt is produced by pipe_lane_sel_gen and passed in as an input.",
          "// The feedback reset mux is in pipe_lane_rst_mux, the data muxes are in",
          "// pipe_lane_data_m2p / pipe_lane_data_p2m.",
-         "import pipe_pkg::*;",
+         "import pipe_lane_signal_pkg::*;",
          "",
          f"module pipe_lane_clk_mux #(",
          f"    parameter int NL = {LC},",
@@ -434,7 +434,7 @@ def gen_clk_mux(cfg):
                      f"{n}'b{1:0{n}b};")
             L.append(f"        else if (|pclk_tgt_c{cid}) pclk_tgt_hold_c{cid} <= "
                      f"pclk_tgt_c{cid};")
-            L.append(f"    sel_sync #(.N({n}), .SYNC(1'b1)) u_pclk_sel_sync_c{cid} (")
+            L.append(f"    pipe_lane_sel_sync #(.N({n}), .SYNC(1'b1)) u_pclk_sel_sync_c{cid} (")
             L.append(f"        .branch_clk   ({{"
                      + ", ".join(f"phy_pclk_out[{v}]" for v in reversed(cand)) + "}),")
             L.append(f"        .branch_rst_n ({{{n}{{ctrl_rst_n[{cid}]}}}}),")
@@ -442,7 +442,7 @@ def gen_clk_mux(cfg):
             L.append(f"        .en           (pen_c{cid})")
             L.append(f"    );")
             for i, v in enumerate(cand):
-                L.append(f"    clk_gate u_pclk_gate_c{cid}_b{i} ("
+                L.append(f"    pipe_lane_clk_gate u_pclk_gate_c{cid}_b{i} ("
                          f".clk_in(phy_pclk_out[{v}]), .en(pen_c{cid}[{i}]), "
                          f".test_en(test_en), .clk_out(pgated_c{cid}[{i}]));")
             L.append(f"    assign ctrl_pclk[{cid}] = |pgated_c{cid};")
@@ -463,7 +463,7 @@ def gen_clk_mux(cfg):
             names = ", ".join(cfg.controllers[c].name for c in g.cands)
             L.append(f"    // G{g.gid} lane{g.lanes[0]}~{g.lanes[-1]}: {names}")
             L.append(f"    logic [{g.n-1}:0] pin_gated_g{g.gid};")
-            # Lanes in the same group share one set of clk_gates, computing
+            # Lanes in the same group share one set of pipe_lane_clk_gate instances, computing
             # the pclk_in_gN intermediate signal just once. Each lane is
             # assigned from that intermediate signal rather than
             # referencing each other -- phy_pclk_in is a top-level output,
@@ -471,7 +471,7 @@ def gen_clk_mux(cfg):
             # self-loop on an output port (UNOPTFLAT).
             L.append(f"    logic pclk_in_g{g.gid};")
             for i, c in enumerate(g.cands):
-                L.append(f"    clk_gate u_pin_gate_g{g.gid}_b{i} ("
+                L.append(f"    pipe_lane_clk_gate u_pin_gate_g{g.gid}_b{i} ("
                          f".clk_in(ctrl_pclk[{c}]), .en(sel_tgt.g{g.gid}[{i}]), "
                          f".test_en(test_en), .clk_out(pin_gated_g{g.gid}[{i}]));")
             L.append(f"    assign pclk_in_g{g.gid} = |pin_gated_g{g.gid};")
@@ -491,7 +491,7 @@ def gen_rst_mux(cfg):
     actually wired to pipe_lane_sel_gen's dec_tgt (the decoder's raw,
     unsynchronized target), not sel_gen's final external sel_tgt. This
     lets the new owner's reset control change immediately with mode,
-    without waiting for sel_sync to finish cross-clock-domain
+    without waiting for pipe_lane_sel_sync to finish cross-clock-domain
     synchronization and the break-before-make window.
     """
     LC, NC = cfg.lane_count, cfg.num_ctrl
@@ -500,11 +500,11 @@ def gen_rst_mux(cfg):
          "// PIPE lane mapper feedback reset-mux submodule.",
          "// Each lane's phy_rst_n connects to its current owner's ctrl_rst_n.",
          "// The input port is named sel_tgt, but at the top level it's actually wired to",
-         "// pipe_lane_sel_gen's dec_tgt (the decoder's raw output, not synchronized by sel_sync),",
-         "// not sel_gen's final external sel_tgt -- reset follows mode directly, without waiting for sel_sync.",
+         "// pipe_lane_sel_gen's dec_tgt (the decoder's raw output, not synchronized by pipe_lane_sel_sync),",
+         "// not sel_gen's final external sel_tgt -- reset follows mode directly, without waiting for pipe_lane_sel_sync.",
          "// Reuses pipe_lane_data_mux's polarity normalization: when sel_tgt is all-zero (the handoff window,",
          "// no owner), the safe state is to hold reset (0), not float or hold the previous owner.",
-         "import pipe_pkg::*;",
+         "import pipe_lane_signal_pkg::*;",
          "",
          f"module pipe_lane_rst_mux #(",
          f"    parameter int NL = {LC},",
@@ -548,7 +548,7 @@ def gen_data_m2p(cfg):
     L = ["//",
          "// PIPE lane mapper MAC->PHY data mux.",
          "// pipe_lane_data_mux performs polarity normalization internally; output is SAFE_M2P when sel is all-zero.",
-         "import pipe_pkg::*;",
+         "import pipe_lane_signal_pkg::*;",
          "",
          f"module pipe_lane_data_m2p #(",
          f"    parameter int NL = {LC}",
@@ -594,8 +594,8 @@ def gen_data_p2m(cfg):
     LC = cfg.lane_count
     L = ["//",
          "// PIPE lane mapper PHY->MAC data mux (converges by controller port).",
-         "// sel_tgt's mutual exclusivity is guaranteed by sel_sync. Undriven ports are tied to the safe state.",
-         "import pipe_pkg::*;",
+         "// sel_tgt's mutual exclusivity is guaranteed by pipe_lane_sel_sync. Undriven ports are tied to the safe state.",
+         "import pipe_lane_signal_pkg::*;",
          "",
          f"module pipe_lane_data_p2m #(",
          f"    parameter int NL = {LC}",
@@ -695,7 +695,7 @@ def gen_top(cfg):
     L.append("// PIPE lane mapper top level.")
     L.append("//")
     L.append("// Pure instantiation layer:")
-    L.append("//   pipe_lane_sel_gen  -- mode decoding + group sel_sync, produces sel_tgt")
+    L.append("//   pipe_lane_sel_gen  -- mode decoding + group pipe_lane_sel_sync, produces sel_tgt")
     L.append("//   pipe_lane_clk_mux  -- controller pclk generation + feedback clock mux")
     L.append("//   pipe_lane_rst_mux  -- feedback reset mux")
     L.append("//   pipe_lane_data_m2p -- MAC->PHY data mux")
@@ -708,7 +708,7 @@ def gen_top(cfg):
         owners = " / ".join(cfg.controllers[g.owners[m]].name for m in cfg.modes)
         kind = "direct" if g.is_direct else f"{g.n}-way BBM"
         L.append(f"//   G{g.gid} {rng:<14} {owners:<24} {kind}")
-    L.append("import pipe_pkg::*;")
+    L.append("import pipe_lane_signal_pkg::*;")
     L.append("")
     L.append("module pipe_lane_mapper_top #(")
     L.append(f"    parameter int NM = {nm},")
@@ -749,7 +749,7 @@ def gen_top(cfg):
     muxed_c = [c for c in sorted(cfg.controllers) if len(cc[c]) > 1]
 
     # ---- internal wiring
-    L.append("    lane_sel_t sel_tgt;   // each group's currently effective owner selection (after sel_sync)")
+    L.append("    lane_sel_t sel_tgt;   // each group's currently effective owner selection (after pipe_lane_sel_sync)")
     L.append("    lane_sel_t dec_tgt;   // each group's raw decoder selection (unsynchronized), used by rst_mux")
     for c in muxed_c:
         L.append(f"    logic [{len(cc[c])-1}:0] pclk_tgt_c{c};"
@@ -758,7 +758,7 @@ def gen_top(cfg):
 
     # ---- select-generation submodule
     L.append("    //------------------------------------------------------------")
-    L.append("    // Select-generation submodule: mode decoding + group sel_sync, produces sel_tgt / dec_tgt")
+    L.append("    // Select-generation submodule: mode decoding + group pipe_lane_sel_sync, produces sel_tgt / dec_tgt")
     L.append("    //------------------------------------------------------------")
     L.append("    pipe_lane_sel_gen #(")
     L.append("        .NM (NM),")
@@ -797,7 +797,7 @@ def gen_top(cfg):
     # ---- feedback reset-mux submodule
     L.append("    //------------------------------------------------------------")
     L.append("    // Feedback reset-mux submodule: phy_rst_n selects ctrl_rst_n by current owner")
-    L.append("    // Uses dec_tgt (the decoder's raw output, not synchronized by sel_sync), not sel_tgt")
+    L.append("    // Uses dec_tgt (the decoder's raw output, not synchronized by pipe_lane_sel_sync), not sel_tgt")
     L.append("    //------------------------------------------------------------")
     L.append("    pipe_lane_rst_mux #(")
     L.append("        .NL (NL),")
@@ -855,9 +855,9 @@ def gen_filelist(cfg):
     directory directly -- each config set is fully self-contained and
     doesn't depend on tool/'s original location.
     """
-    common = ["sync2.sv", "sel_sync.sv", "clk_gate.sv", "pipe_lane_data_mux.sv"]
+    common = ["pipe_lane_sync2.sv", "pipe_lane_sel_sync.sv", "pipe_lane_clk_gate.sv", "pipe_lane_data_mux.sv"]
     gen = [
-        "pipe_pkg.sv",
+        "pipe_lane_signal_pkg.sv",
         "pipe_lane_mode_dec.sv",
         "pipe_lane_sel_gen.sv",
         "pipe_lane_clk_mux.sv",
@@ -914,7 +914,7 @@ def gen_tb(cfg):
          "//   4. During the BBM handoff window (sel all-zero), phy lanes present the safe state (txelecidle=1)",
          "//   5. phy_rst_n follows the current owner's ctrl_rst_n",
          "//=============================================================================",
-         "import pipe_pkg::*;",
+         "import pipe_lane_signal_pkg::*;",
          "",
          "module tb_pipe_lane_mapper;",
          ""]
@@ -1259,7 +1259,7 @@ def main():
                          "set name under configs/, then as a path if not found there; "
                          "omitting --config lists the available set names.")
     ap.add_argument("--sel-mode", choices=["sync", "comb"], default="sync",
-                    help="Which SYNC parameter the group's sel_sync module uses: "
+                    help="Which SYNC parameter the group's pipe_lane_sel_sync module uses: "
                          "sync=SYNC=1 (default, break-before-make + a two-stage "
                          "synchronizer, safe across clock domains); "
                          "comb=SYNC=0 (combinational passthrough, only safe when "
@@ -1293,7 +1293,7 @@ def main():
     print(f"RTL   : {out_rtl}")
     print(f"TB    : {tb_dir}")
     files = {
-        src / "pipe_pkg.sv": gen_pkg(cfg),
+        src / "pipe_lane_signal_pkg.sv": gen_pkg(cfg),
         src / "pipe_lane_mode_dec.sv": gen_decoder(cfg),
         src / "pipe_lane_sel_gen.sv": gen_sel_gen(cfg, a.sel_mode),
         src / "pipe_lane_clk_mux.sv": gen_clk_mux(cfg),

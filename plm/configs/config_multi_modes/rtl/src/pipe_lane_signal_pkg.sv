@@ -1,4 +1,4 @@
-package pipe_pkg;
+package pipe_lane_signal_pkg;
 
     // mac2phy direction; signals that go through BBM are packed into one type;
     typedef struct packed {
@@ -96,14 +96,10 @@ package pipe_pkg;
 
     // One one-hot select vector per lane group that needs BBM.
     // Direct groups don't appear here -- the type itself shows they have no choice to make.
-    // G0 (lane0~3): direct to Ctrl0, no sel
-    // G1 (lane4~7): bit0=Ctrl0, bit1=Ctrl1
-    // G2 (lane8~11): bit0=Ctrl0, bit1=Ctrl2
-    // G3 (lane12~15): bit0=Ctrl0, bit1=Ctrl2, bit2=Ctrl3
+    // G0 (lane0~1): direct to PCIe_x4, no sel
+    // G1 (lane2~3): bit0=PCIe_x4, bit1=USB_x2
     typedef struct packed {
         logic [1:0] g1;
-        logic [1:0] g2;
-        logic [2:0] g3;
     } lane_sel_t;
 
 endpackage

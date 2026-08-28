@@ -463,8 +463,8 @@ class Config:
         # The working clock must be fixed: a controller may only change
         # width in response to a mode switch, never its working clock. If
         # the lowest-numbered owned lane within its group changes across
-        # modes, multiple pclk candidates appear, forcing the sel_sync +
-        # clk_gate glitch-free switching logic -- but that kind of switch is
+        # modes, multiple pclk candidates appear, forcing the pipe_lane_sel_sync +
+        # pipe_lane_clk_gate glitch-free switching logic -- but that kind of switch is
         # still fundamentally break-before-make: the controller's clock
         # stalls during the transition regardless, so it doesn't actually
         # preserve continuity of operation, it just adds complexity for no

@@ -1,7 +1,7 @@
 //
 // PIPE lane mapper MAC->PHY data mux.
 // pipe_lane_data_mux performs polarity normalization internally; output is SAFE_M2P when sel is all-zero.
-import pipe_pkg::*;
+import pipe_lane_signal_pkg::*;
 
 module pipe_lane_data_m2p #(
     parameter int NL = 4

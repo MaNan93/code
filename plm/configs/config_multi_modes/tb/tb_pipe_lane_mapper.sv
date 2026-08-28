@@ -9,7 +9,7 @@
 //   4. During the BBM handoff window (sel all-zero), phy lanes present the safe state (txelecidle=1)
 //   5. phy_rst_n follows the current owner's ctrl_rst_n
 //=============================================================================
-import pipe_pkg::*;
+import pipe_lane_signal_pkg::*;
 
 module tb_pipe_lane_mapper;
 

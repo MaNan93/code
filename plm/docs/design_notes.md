@@ -7,7 +7,7 @@
 
 `Config._build_groups()` 按"每条 lane 在所有 mode 下的 owner 序列"分组：
 两条 lane 只有在**所有 mode 下 owner 完全一致**时才会被分进同一个 group。
-每个 group 各自拥有一套独立的 `sel_sync`，独立完成自己的 break-before-make
+每个 group 各自拥有一套独立的 `pipe_lane_sel_sync`，独立完成自己的 break-before-make
 (BBM) 时序，group 之间互不感知、互不互锁。
 
 这个分组规则不是任意选择，而是由一条硬约束反推出来的：**同一个 controller
@@ -21,9 +21,9 @@
 
 模式切换（比如 mode0 → mode1）不会让所有 lane 都进入 BBM 切换过程，只有
 **owner 在这次切换前后确实发生变化的那些 group**，才会让自己的 `sel_tgt`
-翻转、进而触发 `sel_sync` 走一次 BBM 窗口。
+翻转、进而触发 `pipe_lane_sel_sync` 走一次 BBM 窗口。
 
-owner 没有变化的 group，它对应的 `sel_tgt` 在切换前后取值相同，`sel_sync`
+owner 没有变化的 group，它对应的 `sel_tgt` 在切换前后取值相同，`pipe_lane_sel_sync`
 检测不到翻转，根本不会进入切换窗口——这些 lane 的数据通路（`data_m2p` /
 `data_p2m` 的对应分支）全程没有被扰动，仍然正常工作。
 
@@ -40,7 +40,7 @@ owner 没有变化的 group，它对应的 `sel_tgt` 在切换前后取值相同
 那条 owned lane"的 `phy_pclk_out`。
 
 如果某 controller 在不同 mode 下"最低编号 owned lane"发生了变化，就说明
-它在换 mode 时驱动它的工作时钟源变了，需要 `sel_sync` + `clk_gate` 做无
+它在换 mode 时驱动它的工作时钟源变了，需要 `pipe_lane_sel_sync` + `pipe_lane_clk_gate` 做无
 毛刺切换（先安全关断旧时钟，等新时钟稳定再打开新时钟）。
 
 **但这类切换本质上仍是 break-before-make**：切换窗口期间 `ctrl_pclk` 完全
@@ -108,16 +108,16 @@ len(controllers) == lane_count // g_min     # 数量必须与理想值一致
 ```
 pipe_lane_mapper_top
  ├─ u_mode_dec   (pipe_lane_mode_dec)  mode 译码，纯组合输出 dec_tgt
- ├─ u_sel_gen    (pipe_lane_sel_gen)   各 group 的 sel_sync，输出同步后的 sel_tgt
+ ├─ u_sel_gen    (pipe_lane_sel_gen)   各 group 的 pipe_lane_sel_sync，输出同步后的 sel_tgt
  ├─ u_clk_mux    (pipe_lane_clk_mux)   controller pclk 生成 + 无毛刺切换
  ├─ u_rst_mux    (pipe_lane_rst_mux)   复位 mux，接 dec_tgt（未同步，随 mode 立即变化）
  ├─ data_m2p / data_p2m                按 sel_tgt（同步后）做数据汇聚/分发
- └─ pipe_pkg                            公共参数/类型定义
+ └─ pipe_lane_signal_pkg              公共参数/类型定义
 ```
 
 `u_rst_mux` 特意接的是 `dec_tgt`（译码器原始输出）而不是 `sel_gen` 对外的
-`sel_tgt`（经 `sel_sync` 同步后的值），目的是让复位控制随 mode 立即变化，
-不必等待 `sel_sync` 完成同步和 BBM 窗口。
+`sel_tgt`（经 `pipe_lane_sel_sync` 同步后的值），目的是让复位控制随 mode 立即变化，
+不必等待 `pipe_lane_sel_sync` 完成同步和 BBM 窗口。
 
 ## 7. safe_state 与 tie_off：两套独立机制，各自只对一个方向生效
 
@@ -129,7 +129,7 @@ pipe_lane_mapper_top
 
 ### 7.1 m2p 方向：`safe_state` 生效，`tie_off` 完全不读
 
-`pipe_pkg.sv` 里由所有 `mac_phy_*` 信号的 `safe_state` 拼出 `SAFE_M2P`，
+`pipe_lane_signal_pkg.sv` 里由所有 `mac_phy_*` 信号的 `safe_state` 拼出 `SAFE_M2P`，
 直接接到每个 m2p `pipe_lane_data_mux` 的 `.safe()` 端口（`gen_data_m2p()`）。
 `gen_data_m2p()` 里完全不会出现 `tie_off`——它只按 lane 遍历（每条 phy
 lane 在每个 mode 下都必须有 owner，见校验规则），不存在"controller 端口
@@ -161,7 +161,7 @@ lane（见第 9 节）拿到正确安全值的唯一依据**。
 
 第 1 种用法（喂给真实 `pipe_lane_data_mux` 的 `.safe()` 端口）不一样：
 `pipe_lane_data_mux` 的极性归一化只在 `sel` 真的落到全 0 时才会呈现 `.safe()`
-的值。而 `sel_sync`（`tool/common/sel_sync.sv`）的 `SYNC=0`（`comb` 模式）
+的值。而 `pipe_lane_sel_sync`（`tool/common/pipe_lane_sel_sync.sv`）的 `SYNC=0`（`comb` 模式）
 是 `en = tgt` 直接透传，没有寄存器、没有同步——前提是 `tgt` 在对应时钟域
 里本来就无毛刺。这个前提成立时，`sel_tgt` 从一个 one-hot 值直接切到另一
 个，中间不会真的停留在全 0——也就是说 `.safe()` 的值在 `comb` 模式下压根
@@ -200,7 +200,7 @@ pclk 候选数恒为 1，`base_lane` 天然稳定，此风险已随第 3 节的�
 被打扰"的问题。
 
 - 每个 group 的 owner 一次性落定，`sel_tgt` 稳定到当前 mode 对应的 one-hot
-  位后不再变化——效果上等同于一张固定路由表。BBM/`sel_sync` 只在这一次配置
+  位后不再变化——效果上等同于一张固定路由表。BBM/`pipe_lane_sel_sync` 只在这一次配置
   转换里走一遍，之后闲置。
 - 直连 group（如 demo 的 G0）本来就是纯 wire，跟 mode 无关。
 - `ctrl_pclk` 本身是结构性固定的（`validate()` 强制每个 controller 只能有
@@ -215,7 +215,7 @@ pclk 候选数恒为 1，`base_lane` 天然稳定，此风险已随第 3 节的�
 
 - 分组规则（按"所有 mode 下 owner 序列是否完全一致"分组）保证：若某条 lane
   从 mode A 到 mode B owner 不变，其所在 group 的 `sel_tgt` 对应位不会翻转，
-  `sel_sync` 检测不到跳变，不会进入 BBM 窗口——该 lane 的数据通路全程未被
+  `pipe_lane_sel_sync` 检测不到跳变，不会进入 BBM 窗口——该 lane 的数据通路全程未被
   扰动。
 - 例（demo）：mode0→mode1 只切换 G2、G3，G0/G1 不受影响。若 Ctrl0 当时正靠
   G0+G1 的 lane 在跑，这次改 mode 完全不影响它，同时 G2/G3 从 Ctrl0 断开、

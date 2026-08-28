@@ -1,0 +1,3 @@
+ctrl_id,ctrl_name,max_width
+0,PCIe_x4,4
+1,USB_x2,2

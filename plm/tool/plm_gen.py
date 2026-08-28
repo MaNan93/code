@@ -1069,17 +1069,63 @@ def gen_tb(cfg):
             L.append(f"    localparam int G{g.gid}_LANES[{len(g.lanes)}] = "
                      f"'{{{lanes_str}}};")
         L.append("")
+
+        # Independently (not by probing DUT internals) compute, per
+        # candidate controller of a muxed group, the p2m struct it should
+        # present when its group's sel is all-zero. Mirrors
+        # *_safe_p2m_align in gen_data_p2m(), built from the same
+        # Signal.tie_expr(), but kept as a separate tb-side computation so
+        # this is a real external check of the DUT's behavior, not a
+        # tautology against its own internal signal.
+        muxed_ctrl_ids = sorted({c for g in muxed for c in g.cands})
+        cc = cfg.ctrl_pclk_cands()
+        p2m_signals = [s for s in cfg.signals if not s.is_m2p]
+        for cid in muxed_ctrl_ids:
+            c = cfg.controllers[cid]
+            cands = cc[cid]
+            base_lane = cands[0] if cands else 0
+            base_lane_expr = f"phy_phy2mac[{base_lane}]"
+            assign_parts = [f"{s.name}: {s.tie_expr(base_lane_expr)}"
+                             for s in p2m_signals if not s.tie_is_zero]
+            assign_parts.append("default: '0")
+            L.append(f"    phy2mac_lane_t exp_safe_p2m_{c.lname};")
+            L.append(f"    assign exp_safe_p2m_{c.lname} = '{{")
+            for part in assign_parts[:-1]:
+                L.append(f"        {part},")
+            L.append(f"        {assign_parts[-1]}")
+            L.append(f"    }};")
+        L.append("")
+
+        # Precompute, per muxed group, which (controller, port) pairs are
+        # actually routed through it -- validate() guarantees a port's
+        # drivers never span more than one group, so this is unambiguous.
+        port_group = {}
+        for m in cfg.modes:
+            for l in range(LC):
+                cid, cl = cfg.mapping[m][l]
+                g = cfg.group_of_lane(l)
+                if not g.is_direct:
+                    port_group[(cid, cl)] = g.gid
+
         L.append("    always @(dut.sel_tgt) begin")
         for g in muxed:
             L.append(f"        chk($onehot0(dut.sel_tgt.g{g.gid}), "
                      f"\"sel_tgt.g{g.gid} not one-hot0 (>1 branch enabled)\");")
         L.append("")
         for g in muxed:
-            L.append(f"        if (dut.sel_tgt.g{g.gid} == '0)")
+            L.append(f"        if (dut.sel_tgt.g{g.gid} == '0) begin")
             L.append(f"            foreach (G{g.gid}_LANES[i])")
-            L.append(f"                chk(phy_mac2phy[G{g.gid}_LANES[i]].mac_phy_txelecidle == 1'b1,")
-            L.append(f"                    $sformatf(\"G{g.gid} lane%0d: sel==0 but txelecidle!=1 "
-                     f"(safe state not shown in BBM gap)\", G{g.gid}_LANES[i]));")
+            L.append(f"                chk(phy_mac2phy[G{g.gid}_LANES[i]] == SAFE_M2P,")
+            L.append(f"                    $sformatf(\"G{g.gid} lane%0d: sel==0 but mac_phy data doesn't "
+                     f"match SAFE_M2P (safe state not shown in BBM gap)\", G{g.gid}_LANES[i]));")
+            for (cid, cl), gid in sorted(port_group.items()):
+                if gid != g.gid:
+                    continue
+                c = cfg.controllers[cid]
+                L.append(f"            chk({c.lname}_phy2mac[{cl}] == exp_safe_p2m_{c.lname},")
+                L.append(f"                $sformatf(\"G{g.gid} {c.name}[{cl}]: sel==0 but phy_mac data "
+                         f"doesn't match its tie_off-derived safe value (BBM gap)\"));")
+            L.append(f"        end")
         L.append("    end")
     else:
         L.append("    // This topology is all direct connections; no BBM groups, nothing to monitor.")

@@ -307,23 +307,111 @@ module tb_pipe_lane_mapper;
     localparam int G2_LANES[4] = '{8, 9, 10, 11};
     localparam int G3_LANES[4] = '{12, 13, 14, 15};
 
+    phy2mac_lane_t exp_safe_p2m_ctrl0;
+    assign exp_safe_p2m_ctrl0 = '{
+        phy_mac_rxelecidle: 1'b1,
+        phy_mac_messagebus: 8'd80,
+        phy_mac_phystatus: phy_phy2mac[0].phy_mac_phystatus,
+        default: '0
+    };
+    phy2mac_lane_t exp_safe_p2m_ctrl1;
+    assign exp_safe_p2m_ctrl1 = '{
+        phy_mac_rxelecidle: 1'b1,
+        phy_mac_messagebus: 8'd80,
+        phy_mac_phystatus: phy_phy2mac[4].phy_mac_phystatus,
+        default: '0
+    };
+    phy2mac_lane_t exp_safe_p2m_ctrl2;
+    assign exp_safe_p2m_ctrl2 = '{
+        phy_mac_rxelecidle: 1'b1,
+        phy_mac_messagebus: 8'd80,
+        phy_mac_phystatus: phy_phy2mac[8].phy_mac_phystatus,
+        default: '0
+    };
+    phy2mac_lane_t exp_safe_p2m_ctrl3;
+    assign exp_safe_p2m_ctrl3 = '{
+        phy_mac_rxelecidle: 1'b1,
+        phy_mac_messagebus: 8'd80,
+        phy_mac_phystatus: phy_phy2mac[12].phy_mac_phystatus,
+        default: '0
+    };
+
     always @(dut.sel_tgt) begin
         chk($onehot0(dut.sel_tgt.g1), "sel_tgt.g1 not one-hot0 (>1 branch enabled)");
         chk($onehot0(dut.sel_tgt.g2), "sel_tgt.g2 not one-hot0 (>1 branch enabled)");
         chk($onehot0(dut.sel_tgt.g3), "sel_tgt.g3 not one-hot0 (>1 branch enabled)");
 
-        if (dut.sel_tgt.g1 == '0)
+        if (dut.sel_tgt.g1 == '0) begin
             foreach (G1_LANES[i])
-                chk(phy_mac2phy[G1_LANES[i]].mac_phy_txelecidle == 1'b1,
-                    $sformatf("G1 lane%0d: sel==0 but txelecidle!=1 (safe state not shown in BBM gap)", G1_LANES[i]));
-        if (dut.sel_tgt.g2 == '0)
+                chk(phy_mac2phy[G1_LANES[i]] == SAFE_M2P,
+                    $sformatf("G1 lane%0d: sel==0 but mac_phy data doesn't match SAFE_M2P (safe state not shown in BBM gap)", G1_LANES[i]));
+            chk(ctrl0_phy2mac[4] == exp_safe_p2m_ctrl0,
+                $sformatf("G1 Ctrl0[4]: sel==0 but phy_mac data doesn't match its tie_off-derived safe value (BBM gap)"));
+            chk(ctrl0_phy2mac[5] == exp_safe_p2m_ctrl0,
+                $sformatf("G1 Ctrl0[5]: sel==0 but phy_mac data doesn't match its tie_off-derived safe value (BBM gap)"));
+            chk(ctrl0_phy2mac[6] == exp_safe_p2m_ctrl0,
+                $sformatf("G1 Ctrl0[6]: sel==0 but phy_mac data doesn't match its tie_off-derived safe value (BBM gap)"));
+            chk(ctrl0_phy2mac[7] == exp_safe_p2m_ctrl0,
+                $sformatf("G1 Ctrl0[7]: sel==0 but phy_mac data doesn't match its tie_off-derived safe value (BBM gap)"));
+            chk(ctrl1_phy2mac[0] == exp_safe_p2m_ctrl1,
+                $sformatf("G1 Ctrl1[0]: sel==0 but phy_mac data doesn't match its tie_off-derived safe value (BBM gap)"));
+            chk(ctrl1_phy2mac[1] == exp_safe_p2m_ctrl1,
+                $sformatf("G1 Ctrl1[1]: sel==0 but phy_mac data doesn't match its tie_off-derived safe value (BBM gap)"));
+            chk(ctrl1_phy2mac[2] == exp_safe_p2m_ctrl1,
+                $sformatf("G1 Ctrl1[2]: sel==0 but phy_mac data doesn't match its tie_off-derived safe value (BBM gap)"));
+            chk(ctrl1_phy2mac[3] == exp_safe_p2m_ctrl1,
+                $sformatf("G1 Ctrl1[3]: sel==0 but phy_mac data doesn't match its tie_off-derived safe value (BBM gap)"));
+        end
+        if (dut.sel_tgt.g2 == '0) begin
             foreach (G2_LANES[i])
-                chk(phy_mac2phy[G2_LANES[i]].mac_phy_txelecidle == 1'b1,
-                    $sformatf("G2 lane%0d: sel==0 but txelecidle!=1 (safe state not shown in BBM gap)", G2_LANES[i]));
-        if (dut.sel_tgt.g3 == '0)
+                chk(phy_mac2phy[G2_LANES[i]] == SAFE_M2P,
+                    $sformatf("G2 lane%0d: sel==0 but mac_phy data doesn't match SAFE_M2P (safe state not shown in BBM gap)", G2_LANES[i]));
+            chk(ctrl0_phy2mac[8] == exp_safe_p2m_ctrl0,
+                $sformatf("G2 Ctrl0[8]: sel==0 but phy_mac data doesn't match its tie_off-derived safe value (BBM gap)"));
+            chk(ctrl0_phy2mac[9] == exp_safe_p2m_ctrl0,
+                $sformatf("G2 Ctrl0[9]: sel==0 but phy_mac data doesn't match its tie_off-derived safe value (BBM gap)"));
+            chk(ctrl0_phy2mac[10] == exp_safe_p2m_ctrl0,
+                $sformatf("G2 Ctrl0[10]: sel==0 but phy_mac data doesn't match its tie_off-derived safe value (BBM gap)"));
+            chk(ctrl0_phy2mac[11] == exp_safe_p2m_ctrl0,
+                $sformatf("G2 Ctrl0[11]: sel==0 but phy_mac data doesn't match its tie_off-derived safe value (BBM gap)"));
+            chk(ctrl2_phy2mac[0] == exp_safe_p2m_ctrl2,
+                $sformatf("G2 Ctrl2[0]: sel==0 but phy_mac data doesn't match its tie_off-derived safe value (BBM gap)"));
+            chk(ctrl2_phy2mac[1] == exp_safe_p2m_ctrl2,
+                $sformatf("G2 Ctrl2[1]: sel==0 but phy_mac data doesn't match its tie_off-derived safe value (BBM gap)"));
+            chk(ctrl2_phy2mac[2] == exp_safe_p2m_ctrl2,
+                $sformatf("G2 Ctrl2[2]: sel==0 but phy_mac data doesn't match its tie_off-derived safe value (BBM gap)"));
+            chk(ctrl2_phy2mac[3] == exp_safe_p2m_ctrl2,
+                $sformatf("G2 Ctrl2[3]: sel==0 but phy_mac data doesn't match its tie_off-derived safe value (BBM gap)"));
+        end
+        if (dut.sel_tgt.g3 == '0) begin
             foreach (G3_LANES[i])
-                chk(phy_mac2phy[G3_LANES[i]].mac_phy_txelecidle == 1'b1,
-                    $sformatf("G3 lane%0d: sel==0 but txelecidle!=1 (safe state not shown in BBM gap)", G3_LANES[i]));
+                chk(phy_mac2phy[G3_LANES[i]] == SAFE_M2P,
+                    $sformatf("G3 lane%0d: sel==0 but mac_phy data doesn't match SAFE_M2P (safe state not shown in BBM gap)", G3_LANES[i]));
+            chk(ctrl0_phy2mac[12] == exp_safe_p2m_ctrl0,
+                $sformatf("G3 Ctrl0[12]: sel==0 but phy_mac data doesn't match its tie_off-derived safe value (BBM gap)"));
+            chk(ctrl0_phy2mac[13] == exp_safe_p2m_ctrl0,
+                $sformatf("G3 Ctrl0[13]: sel==0 but phy_mac data doesn't match its tie_off-derived safe value (BBM gap)"));
+            chk(ctrl0_phy2mac[14] == exp_safe_p2m_ctrl0,
+                $sformatf("G3 Ctrl0[14]: sel==0 but phy_mac data doesn't match its tie_off-derived safe value (BBM gap)"));
+            chk(ctrl0_phy2mac[15] == exp_safe_p2m_ctrl0,
+                $sformatf("G3 Ctrl0[15]: sel==0 but phy_mac data doesn't match its tie_off-derived safe value (BBM gap)"));
+            chk(ctrl2_phy2mac[4] == exp_safe_p2m_ctrl2,
+                $sformatf("G3 Ctrl2[4]: sel==0 but phy_mac data doesn't match its tie_off-derived safe value (BBM gap)"));
+            chk(ctrl2_phy2mac[5] == exp_safe_p2m_ctrl2,
+                $sformatf("G3 Ctrl2[5]: sel==0 but phy_mac data doesn't match its tie_off-derived safe value (BBM gap)"));
+            chk(ctrl2_phy2mac[6] == exp_safe_p2m_ctrl2,
+                $sformatf("G3 Ctrl2[6]: sel==0 but phy_mac data doesn't match its tie_off-derived safe value (BBM gap)"));
+            chk(ctrl2_phy2mac[7] == exp_safe_p2m_ctrl2,
+                $sformatf("G3 Ctrl2[7]: sel==0 but phy_mac data doesn't match its tie_off-derived safe value (BBM gap)"));
+            chk(ctrl3_phy2mac[0] == exp_safe_p2m_ctrl3,
+                $sformatf("G3 Ctrl3[0]: sel==0 but phy_mac data doesn't match its tie_off-derived safe value (BBM gap)"));
+            chk(ctrl3_phy2mac[1] == exp_safe_p2m_ctrl3,
+                $sformatf("G3 Ctrl3[1]: sel==0 but phy_mac data doesn't match its tie_off-derived safe value (BBM gap)"));
+            chk(ctrl3_phy2mac[2] == exp_safe_p2m_ctrl3,
+                $sformatf("G3 Ctrl3[2]: sel==0 but phy_mac data doesn't match its tie_off-derived safe value (BBM gap)"));
+            chk(ctrl3_phy2mac[3] == exp_safe_p2m_ctrl3,
+                $sformatf("G3 Ctrl3[3]: sel==0 but phy_mac data doesn't match its tie_off-derived safe value (BBM gap)"));
+        end
     end
 
     //------------------------------------------------------------ steady-state data-routing check

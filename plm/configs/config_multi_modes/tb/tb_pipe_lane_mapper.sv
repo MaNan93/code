@@ -159,13 +159,37 @@ module tb_pipe_lane_mapper;
 
     localparam int G1_LANES[2] = '{2, 3};
 
+    phy2mac_lane_t exp_safe_p2m_pcie_x4;
+    assign exp_safe_p2m_pcie_x4 = '{
+        phy_mac_rxelecidle: 1'b1,
+        phy_mac_messagebus: 8'd80,
+        phy_mac_phystatus: phy_phy2mac[0].phy_mac_phystatus,
+        default: '0
+    };
+    phy2mac_lane_t exp_safe_p2m_usb_x2;
+    assign exp_safe_p2m_usb_x2 = '{
+        phy_mac_rxelecidle: 1'b1,
+        phy_mac_messagebus: 8'd80,
+        phy_mac_phystatus: phy_phy2mac[2].phy_mac_phystatus,
+        default: '0
+    };
+
     always @(dut.sel_tgt) begin
         chk($onehot0(dut.sel_tgt.g1), "sel_tgt.g1 not one-hot0 (>1 branch enabled)");
 
-        if (dut.sel_tgt.g1 == '0)
+        if (dut.sel_tgt.g1 == '0) begin
             foreach (G1_LANES[i])
-                chk(phy_mac2phy[G1_LANES[i]].mac_phy_txelecidle == 1'b1,
-                    $sformatf("G1 lane%0d: sel==0 but txelecidle!=1 (safe state not shown in BBM gap)", G1_LANES[i]));
+                chk(phy_mac2phy[G1_LANES[i]] == SAFE_M2P,
+                    $sformatf("G1 lane%0d: sel==0 but mac_phy data doesn't match SAFE_M2P (safe state not shown in BBM gap)", G1_LANES[i]));
+            chk(pcie_x4_phy2mac[2] == exp_safe_p2m_pcie_x4,
+                $sformatf("G1 PCIe_x4[2]: sel==0 but phy_mac data doesn't match its tie_off-derived safe value (BBM gap)"));
+            chk(pcie_x4_phy2mac[3] == exp_safe_p2m_pcie_x4,
+                $sformatf("G1 PCIe_x4[3]: sel==0 but phy_mac data doesn't match its tie_off-derived safe value (BBM gap)"));
+            chk(usb_x2_phy2mac[0] == exp_safe_p2m_usb_x2,
+                $sformatf("G1 USB_x2[0]: sel==0 but phy_mac data doesn't match its tie_off-derived safe value (BBM gap)"));
+            chk(usb_x2_phy2mac[1] == exp_safe_p2m_usb_x2,
+                $sformatf("G1 USB_x2[1]: sel==0 but phy_mac data doesn't match its tie_off-derived safe value (BBM gap)"));
+        end
     end
 
     //------------------------------------------------------------ steady-state data-routing check

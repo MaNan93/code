@@ -70,12 +70,35 @@ class Signal:
         ss = str(safe_state).strip()
         self.safe_state = int(ss, 0) if ss else 0
         self.tie_off = str(tie_off).strip().lower()
-        if self.tie_off not in ("0", "1", "lane0"):
-            raise ValueError(f"tie_off must be '0', '1', or 'lane0', got '{self.tie_off}'")
+        if self.tie_off == "lane0":
+            self.tie_value = None
+        else:
+            # Any integer literal Python's int(x, 0) accepts: plain decimal
+            # ("0", "1"), or a prefixed literal ("0x50", "0b101"). This is
+            # deliberately more general than just 0/1 -- some phy2mac
+            # signals need to tie to a specific non-boolean idle pattern
+            # (e.g. a messagebus idle code), not just all-zero/all-one.
+            try:
+                self.tie_value = int(self.tie_off, 0)
+            except ValueError:
+                raise ValueError(
+                    f"tie_off must be 'lane0' or an integer literal "
+                    f"(e.g. 0, 1, 0x50), got '{self.tie_off}'")
+            if not (0 <= self.tie_value < (1 << self.width)):
+                raise ValueError(
+                    f"tie_off value {self.tie_value} is out of range for "
+                    f"width={self.width}")
 
     @property
     def is_m2p(self):
         return self.direction == "mac2phy"
+
+    @property
+    def tie_is_zero(self):
+        """True when this signal's tie value is a static, all-zero literal
+        -- gen_data_p2m() skips emitting these explicitly and relies on the
+        surrounding struct literal's `default: '0` instead."""
+        return self.tie_off != "lane0" and self.tie_value == 0
 
     def sv_literal(self, val):
         if self.width == 1:
@@ -99,9 +122,7 @@ class Signal:
         """
         if self.tie_off == "lane0":
             return f"{base_lane_expr}.{self.name}" if base_lane_expr is not None else "'0"
-        if self.tie_off == "1":
-            return self.sv_literal((1 << self.width) - 1)
-        return "'0"
+        return self.sv_literal(self.tie_value)
 
 
 class LaneGroup:
@@ -469,29 +490,19 @@ class Config:
         # tie_off and safe_state are two independently maintained mechanisms:
         # the former decides what a port that is NEVER mapped to any lane in
         # any mode should tie to; the latter decides the safe state when sel
-        # is all-zero during a BBM handoff window. But when tie_off takes a
-        # static value ("0"/"1"), it's actually expressing the same thing as
+        # is all-zero during a BBM handoff window. But when tie_off is a
+        # static literal, it's actually expressing the same thing as
         # safe_state -- if the two columns get edited out of sync in the
         # CSV, the config is self-contradictory (previously validate() never
         # checked this, see docs/design_notes.md section 7). tie_off=="lane0"
         # is a deliberate dynamic exception (currently only used by
         # phy_mac_phystatus) and is excluded from this static comparison.
         for s in self.signals:
-            if s.tie_off == "1":
-                expect = (1 << s.width) - 1
-                if s.safe_state != expect:
-                    err.append(
-                        f"Signal {s.name}: tie_off='1' but safe_state={s.safe_state} "
-                        f"(should be all-ones, i.e. {expect}). The two are meant to "
-                        f"express the same safe state -- please make these two "
-                        f"columns in pipe_signals.csv agree.")
-            elif s.tie_off == "0":
-                if s.safe_state != 0:
-                    err.append(
-                        f"Signal {s.name}: tie_off='0' but safe_state={s.safe_state} "
-                        f"(should be 0). The two are meant to express the same safe "
-                        f"state -- please make these two columns in "
-                        f"pipe_signals.csv agree.")
+            if s.tie_off != "lane0" and s.safe_state != s.tie_value:
+                err.append(
+                    f"Signal {s.name}: tie_off={s.tie_value} but safe_state={s.safe_state}. "
+                    f"The two are meant to express the same safe state -- please make "
+                    f"these two columns in pipe_signals.csv agree.")
 
         return err
 

@@ -28,8 +28,8 @@ phy_mac_rxsyncheader,phy2mac,2,0,0
 phy_mac_rxvalid,phy2mac,1,0,0
 phy_mac_rxstatus,phy2mac,3,0,0
 phy_mac_rxelecidle,phy2mac,1,1,1
-phy_mac_rxstandbystatus,phy2mac,1,1,1
-phy_mac_messagebus,phy2mac,8,0,0
+phy_mac_rxstandbystatus,phy2mac,1,0,0
+phy_mac_messagebus,phy2mac,8,0x50,0x50
 phy_mac_phystatus,phy2mac,1,0,lane0
 phy_mac_local_tx_coef_valid,phy2mac,1,0,0
 phy_mac_local_tx_pset_coef,phy2mac,18,0,0

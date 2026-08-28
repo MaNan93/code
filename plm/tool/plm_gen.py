@@ -632,7 +632,7 @@ def gen_data_p2m(cfg):
         p2m_signals = [s for s in cfg.signals if not s.is_m2p]
         base_lane_expr = f"phy_phy2mac[{base_lane}]"
         assign_parts = [f"{s.name}: {s.tie_expr(base_lane_expr)}"
-                         for s in p2m_signals if s.tie_off != "0"]
+                         for s in p2m_signals if not s.tie_is_zero]
         assign_parts.append("default: '0")
 
         L.append(f"    phy2mac_lane_t {c.lname}_safe_p2m_align;")
@@ -978,8 +978,8 @@ def gen_tb(cfg):
     L.append("        v.mac_phy_txdata      = {4'(cid), 20'h0, 8'(port)};")
     L.append("        v.mac_phy_txdatak     = 4'(port);")
     L.append("        v.mac_phy_txdatavalid = 1'b1;")
-    L.append("        v.mac_phy_txelecidle  = 1'b0;   // active -- SAFE would be 1")
-    L.append("        v.mac_phy_rxstandby   = 1'b0;   // active -- SAFE would be 1")
+    L.append("        v.mac_phy_txelecidle  = 1'b0;   // non-idle (may differ from the signal's safe state)")
+    L.append("        v.mac_phy_rxstandby   = 1'b0;   // non-idle (may differ from the signal's safe state)")
     L.append("        return v;")
     L.append("    endfunction")
     L.append("")
@@ -989,8 +989,8 @@ def gen_tb(cfg):
     L.append("        v.phy_mac_rxdata      = {8'hA5, 16'h0, 8'(lane)};")
     L.append("        v.phy_mac_rxdatak     = 4'(lane);")
     L.append("        v.phy_mac_rxdatavalid = 1'b1;")
-    L.append("        v.phy_mac_rxelecidle      = 1'b0;  // active -- SAFE would be 1")
-    L.append("        v.phy_mac_rxstandbystatus = 1'b0;  // active -- SAFE would be 1")
+    L.append("        v.phy_mac_rxelecidle      = 1'b0;  // non-idle (may differ from the signal's safe state)")
+    L.append("        v.phy_mac_rxstandbystatus = 1'b0;  // non-idle (may differ from the signal's safe state)")
     L.append("        return v;")
     L.append("    endfunction")
     L.append("")

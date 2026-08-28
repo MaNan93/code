@@ -18,7 +18,7 @@ module pipe_lane_data_p2m #(
     phy2mac_lane_t ctrl0_safe_p2m_align;
     assign ctrl0_safe_p2m_align = '{
         phy_mac_rxelecidle: 1'b1,
-        phy_mac_rxstandbystatus: 1'b1,
+        phy_mac_messagebus: 8'd80,
         phy_mac_phystatus: phy_phy2mac[0].phy_mac_phystatus,
         default: '0
     };
@@ -104,7 +104,7 @@ module pipe_lane_data_p2m #(
     phy2mac_lane_t ctrl1_safe_p2m_align;
     assign ctrl1_safe_p2m_align = '{
         phy_mac_rxelecidle: 1'b1,
-        phy_mac_rxstandbystatus: 1'b1,
+        phy_mac_messagebus: 8'd80,
         phy_mac_phystatus: phy_phy2mac[4].phy_mac_phystatus,
         default: '0
     };
@@ -138,7 +138,7 @@ module pipe_lane_data_p2m #(
     phy2mac_lane_t ctrl2_safe_p2m_align;
     assign ctrl2_safe_p2m_align = '{
         phy_mac_rxelecidle: 1'b1,
-        phy_mac_rxstandbystatus: 1'b1,
+        phy_mac_messagebus: 8'd80,
         phy_mac_phystatus: phy_phy2mac[8].phy_mac_phystatus,
         default: '0
     };
@@ -196,7 +196,7 @@ module pipe_lane_data_p2m #(
     phy2mac_lane_t ctrl3_safe_p2m_align;
     assign ctrl3_safe_p2m_align = '{
         phy_mac_rxelecidle: 1'b1,
-        phy_mac_rxstandbystatus: 1'b1,
+        phy_mac_messagebus: 8'd80,
         phy_mac_phystatus: phy_phy2mac[12].phy_mac_phystatus,
         default: '0
     };

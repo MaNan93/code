@@ -16,7 +16,7 @@ module pipe_lane_data_p2m #(
     phy2mac_lane_t pcie_x4_safe_p2m_align;
     assign pcie_x4_safe_p2m_align = '{
         phy_mac_rxelecidle: 1'b1,
-        phy_mac_rxstandbystatus: 1'b1,
+        phy_mac_messagebus: 8'd80,
         phy_mac_phystatus: phy_phy2mac[0].phy_mac_phystatus,
         default: '0
     };
@@ -40,7 +40,7 @@ module pipe_lane_data_p2m #(
     phy2mac_lane_t usb_x2_safe_p2m_align;
     assign usb_x2_safe_p2m_align = '{
         phy_mac_rxelecidle: 1'b1,
-        phy_mac_rxstandbystatus: 1'b1,
+        phy_mac_messagebus: 8'd80,
         phy_mac_phystatus: phy_phy2mac[2].phy_mac_phystatus,
         default: '0
     };

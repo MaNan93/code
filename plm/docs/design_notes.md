@@ -98,8 +98,10 @@ len(controllers) == lane_count // g_min     # 数量必须与理想值一致
 | controller 不能在所有 mode 下都没有 lane | 防止声明了但完全没用到的僵尸 controller |
 | controller 工作时钟候选数必须为 1 | 强制"工作时钟固定，只换宽度"（见第 3 节） |
 | controller 数量必须等于 `lane_count // g_min` | 数量与颗粒度对齐，避免僵尸 controller 或被迫破坏时钟固定约束（见第 4 节） |
-| `tie_off` 取静态值时必须与该信号的 `safe_state` 一致 | 两者本该表达同一个安全态，防止 CSV 改漏一处（见第 7 节） |
 | controller 的 `max_width` 不能超过 PHY 总 lane 数 | 超过总 lane 数的宽度在任何 mode 下都不可能被分满，声明了也用不到（见第 9 节） |
+
+> `tie_off` 与 `safe_state` **不**做一致性校验——见第 7 节，两者是各自只对
+> 一个方向生效的独立机制，允许（也应该按需）独立取值。
 
 ## 6. 模块层次一览
 
@@ -117,19 +119,72 @@ pipe_lane_mapper_top
 `sel_tgt`（经 `sel_sync` 同步后的值），目的是让复位控制随 mode 立即变化，
 不必等待 `sel_sync` 完成同步和 BBM 窗口。
 
-## 7. 已知但尚未处理的风险点（记录备查）
+## 7. safe_state 与 tie_off：两套独立机制，各自只对一个方向生效
 
-- `tie_off`（`pipe_lane_data_p2m.sv` 实际生效）与 `pipe_pkg.sv` 里的
-  `SAFE_P2M`/`safe_state`（未被引用，纯死代码）是两套独立维护的机制。
-  **已部分处理**：`Config.validate()` 现在会校验 `tie_off` 取静态值
-  （`"0"`/`"1"`）时是否与该信号的 `safe_state` 一致，两者不一致会在生成阶段
-  直接报错（见 `plm_config.py` 里 `tie_off`/`safe_state` 一致性检查）。
-  `tie_off="lane0"` 是有意的动态例外，不参与这项静态校验——`SAFE_P2M` 在
-  RTL 里仍然是死代码这一点本身没有变，只是不会再悄悄跟 `tie_off` 打架了。
-- `tie_off="lane0"` 使用的 `base_lane` 是编译期常量（取 `ctrl_pclk_cands()`
-  排序后最小候选）；在当前"工作时钟固定"的约束下，每个 controller 的
-  pclk 候选数恒为 1，`base_lane` 天然稳定，此风险已随第 3 节的校验规则
-  一并消除。
+`pipe_signals.csv` 里每个信号都有 `safe_state` 和 `tie_off` 两列，很容易
+以为它们表达的是同一件事、理应保持一致——曾经这里就是这么假设的，还专门
+加过一致性校验，后来发现是错的，已经去掉了。追踪生成器的代码会发现：
+**每个方向只有一列是真正被 RTL 用上的，另一列在那个方向上是纯粹的死配置**，
+两者允许、也应该按需独立取值。
+
+### 7.1 m2p 方向：`safe_state` 生效，`tie_off` 完全不读
+
+`pipe_pkg.sv` 里由所有 `mac_phy_*` 信号的 `safe_state` 拼出 `SAFE_M2P`，
+直接接到每个 m2p `onehot_mux` 的 `.safe()` 端口（`gen_data_m2p()`）。
+`gen_data_m2p()` 里完全不会出现 `tie_off`——它只按 lane 遍历（每条 phy
+lane 在每个 mode 下都必须有 owner，见校验规则），不存在"controller 端口
+没有驱动源"这种情况，用不上 `tie_off` 这种"没人用"的语义。
+
+### 7.2 p2m 方向：`tie_off` 生效，`safe_state`/`SAFE_P2M` 是死代码
+
+`gen_data_p2m()` 里每个 controller 都有一个 `{c.lname}_safe_p2m_align`
+结构体，由 `tie_off`（通过 `Signal.tie_expr()`）逐字段算出来。这个结构体
+被用在**两个地方**：
+
+1. 真正存在的 `onehot_mux` 实例的 `.safe()` 端口（这个端口在某些 mode 下
+   确实会被映射到，BBM 交接窗口用它）；
+2. 端口从未被任何 lane 映射到时的直接 `assign`（不经过 `onehot_mux`，
+   见第 9.1 节 unused lane）。
+
+`SAFE_P2M`（由 `safe_state` 拼出来）在这两处都没有被引用，只在
+`tb_pipe_lane_mapper.sv` 里当一个初始值用（马上会被逐字段覆盖，见
+`make_p2m()`/`check_mode()`），是彻头彻尾的死代码。p2m 方向的安全态
+完全由 `tie_off` 一列独立决定，`safe_state` 这一列填什么，实际 RTL
+行为都不受影响。
+
+### 7.3 `tie_off` 的两个角色，只有一个跟 `--sel-mode` 有关
+
+7.2 提到 `tie_off` 的两种用法里，第 2 种（端口从未被映射到，直接
+`assign`）是一条纯组合的硬 tie，不经过 `sel_tgt`/`onehot_mux`，不管
+`--sel-mode` 是 `sync` 还是 `comb` 都完全一样地生效——**这是 unused
+lane（见第 9 节）拿到正确安全值的唯一依据**。
+
+第 1 种用法（喂给真实 `onehot_mux` 的 `.safe()` 端口）不一样：
+`onehot_mux` 的极性归一化只在 `sel` 真的落到全 0 时才会呈现 `.safe()`
+的值。而 `sel_sync`（`tool/common/sel_sync.sv`）的 `SYNC=0`（`comb` 模式）
+是 `en = tgt` 直接透传，没有寄存器、没有同步——前提是 `tgt` 在对应时钟域
+里本来就无毛刺。这个前提成立时，`sel_tgt` 从一个 one-hot 值直接切到另一
+个，中间不会真的停留在全 0——也就是说 `.safe()` 的值在 `comb` 模式下压根
+不会被呈现出来，天然无意义。只有 `sync` 模式（`SYNC=1`，两级同步器 + 真
+正的 break-before-make）才会保证每次切换都经过一段真实的全 0 窗口，这时
+`.safe()`/`tie_off` 的取值才有意义、必须遵守（呼应第 8.2 节"真正需要切换
+的 group 走标准 BBM"那部分）。
+
+`safe_state` 同理：它唯一生效的地方（m2p 方向的 `onehot_mux.safe()`）
+也只在 `sync` 模式下才会被真正呈现，`comb` 模式下同样无意义。
+
+汇总：
+
+| | 生效方向 | 角色 | 是否跟 `--sel-mode` 有关 |
+|---|---|---|---|
+| `safe_state` | 仅 m2p（`SAFE_M2P`） | 喂给 `onehot_mux.safe()` | 有关——只有 `sync` 模式下才会被呈现；p2m 方向完全死代码 |
+| `tie_off` (a) | 仅 p2m | unused lane 的硬 tie，纯 `assign` | 无关——任何 `--sel-mode` 下都一样生效 |
+| `tie_off` (b) | 仅 p2m | 喂给 `onehot_mux.safe()`（端口有时会被映射到） | 有关——只有 `sync` 模式下才会被呈现 |
+
+`tie_off="lane0"` 使用的 `base_lane` 是编译期常量（取 `ctrl_pclk_cands()`
+排序后最小候选）；在当前"工作时钟固定"的约束下，每个 controller 的
+pclk 候选数恒为 1，`base_lane` 天然稳定，此风险已随第 3 节的校验规则
+一并消除。
 
 ## 8. 使用场景：静态配置 vs 动态重分配
 
@@ -170,8 +225,10 @@ pipe_lane_mapper_top
   切"而不用跟别的 group 互锁——这是"只扰动变化部分"的前提，不是靠额外仲裁
   逻辑堆出来的。
 - 真正需要切换的 group 走标准 BBM：`sel_tgt` 先归零（安全态）、旧 owner 断
-  开、新 owner 建立，期间 `onehot_mux` 保证呈现的是 `safe_state`，而不是悬
-  空或两路相或。
+  开、新 owner 建立，期间 `onehot_mux` 保证呈现的是安全值（m2p 方向是
+  `safe_state`，p2m 方向是 `tie_off`，见第 7 节），而不是悬空或两路相或——
+  这个保证只在 `sync` 模式下成立，`comb` 模式下 `sel` 不会真的停在全 0，
+  见第 7.3 节。
 
 一句话：动态重分配用的就是"改 mode"这同一个操作，只是发生在有 link 已经跑
 起来的时候；静态配置是同一个操作只发生一次、发生在还没有 link 跑起来的时
@@ -193,10 +250,12 @@ pipe_lane_mapper_top
 这正是 `tie_off`/`safe_p2m_align` 机制本来就要解决的问题——
 `pipe_lane_data_p2m.sv` 里 `if not srcs: assign ... = safe_p2m_align`：
 不管是"这个 mode 没用到"还是"所有 mode 都没用到"，只要 `port_src` 里查
-不到这个 `(cid, cl)` 组合，就自动落到这条 tie-off 分支，按
-`pipe_signals.csv` 里配置的 `tie_off` 语义安全 tie 掉。m2p 方向不需要
-特殊处理——数据是 controller 自己驱动出来的，用不用得上是下游（PHY 侧）
-的事，跟本生成器无关。
+不到这个 `(cid, cl)` 组合（且 `cl` 在这个 controller 真实的 `max_width`
+范围内），就自动落到这条 tie-off 分支，按 `pipe_signals.csv` 里配置的
+`tie_off` 语义安全 tie 掉——这条路径是纯组合 `assign`，跟 `--sel-mode`
+是 `sync` 还是 `comb` 无关（见第 7.3 节）。m2p 方向不需要特殊处理——数据
+是 controller 自己驱动出来的，用不用得上是下游（PHY 侧）的事，跟本生成器
+无关。
 
 ### 9.2 Fake lane（伪端口）：端口本身不对应任何真实硬件
 
@@ -213,11 +272,15 @@ USB_x2 的端口数组也被声明成 x4（`usb_x2_mac2phy[3:0]` /
 不对应任何真实硬件，纯粹是为了让不同宽度的 controller 在顶层暴露出同样
 形状的总线，方便连接。
 
-Fake lane 恰好落进跟 unused lane 完全相同的 `if not srcs:` 分支——从生成
-器的角度看，"这个 mode 没分到"和"压根不可能分到"结果都是 `port_src` 查
-不到这个 `(cid, cl)`，走同一条 tie-off 逻辑，不需要额外代码。m2p 方向同
-样不处理：这几个输入端口直接空读（Verilator 会报 `UNUSEDSIGNAL`，属预期，
-不用管）。
+Fake lane 跟 unused lane 的处理**不一样**：p2m 方向 fake lane 直接
+`assign ... = '0`，不走 `tie_off`/`safe_p2m_align`——它不是"这个端口目
+前没人用"，而是"这个端口从概念上就不存在"，没有理由跟着 `tie_off` 里为
+真实端口配置的安全值走（比如某信号 `tie_off=1`，对一个从不存在的端口
+没有意义）。`gen_tb()` 的 `check_mode()` 用每个 controller 的真实
+`max_width` 区分"`p >= real_max_w`"（fake，期望全 0）和"`p < real_max_w`
+但没有 `src_lane`"（unused，期望 `tie_expr()` 算出的值），避免两处判断
+分叉。m2p 方向同样不处理：这几个输入端口直接空读（Verilator 会报
+`UNUSEDSIGNAL`，属预期，不用管）。
 
 ### 9.3 两者的本质区别
 
@@ -225,7 +288,7 @@ Fake lane 恰好落进跟 unused lane 完全相同的 `if not srcs:` 分支—�
 |---|---|---|
 | 是否计入该 controller 的 `max_width` | 是，在真实能力范围内 | 否，超出真实能力，纯声明填充 |
 | 产生原因 | 某 controller 在某个（或所有）mode 下没分到那么多 lane | 同配置集里各 controller 宽度不一致，为统一声明宽度而补齐 |
-| p2m tie-off | `tie_off`/`safe_p2m_align`（已有机制） | 同一套机制，天然覆盖，无需额外代码 |
+| p2m tie-off | 按 `tie_off`/`safe_p2m_align` 逐字段取值 | 直接 tie 到 `'0`，不看 `tie_off` |
 | m2p | 不处理，controller 自己驱动，用不用是下游的事 | 不处理，输入端口空读 |
 | 随配置变化吗 | 会——换一套 `lane_mapping.csv` 分配方案，未使用的端口可能变多/变少 | 不会——只要 `controllers.csv` 里各 controller 的 `max_width` 不变，哪些端口是 fake 就不变 |
 | 依据 | `lane_mapping.csv` 的实际分配结果 | `Config.decl_width`（编译期从 `controllers.csv` 算出） |

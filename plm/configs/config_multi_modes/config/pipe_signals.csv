@@ -9,7 +9,7 @@ mac_phy_txelecidle,mac2phy,1,1,1
 mac_phy_txcompliance,mac2phy,1,0,0
 mac_phy_txdeemph,mac2phy,18,0,0
 mac_phy_rxpolarity,mac2phy,1,0,0
-mac_phy_rxstandby,mac2phy,1,1,1
+mac_phy_rxstandby,mac2phy,1,0,0
 mac_phy_messagebus,mac2phy,8,0,0
 mac_phy_rxpresethint,mac2phy,3,0,0
 mac_phy_local_pset_index,mac2phy,5,0,0

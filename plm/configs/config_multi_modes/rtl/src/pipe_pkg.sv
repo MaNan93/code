@@ -59,7 +59,7 @@ package pipe_pkg;
         mac_phy_txcompliance: 1'b0,
         mac_phy_txdeemph: 18'd0,
         mac_phy_rxpolarity: 1'b0,
-        mac_phy_rxstandby: 1'b1,
+        mac_phy_rxstandby: 1'b0,
         mac_phy_messagebus: 8'd0,
         mac_phy_rxpresethint: 3'd0,
         mac_phy_local_pset_index: 5'd0,

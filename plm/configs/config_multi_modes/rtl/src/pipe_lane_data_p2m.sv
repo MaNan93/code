@@ -57,7 +57,7 @@ module pipe_lane_data_p2m #(
         .safe (usb_x2_safe_p2m_align),
         .dout (usb_x2_phy2mac[1])
     );
-    assign usb_x2_phy2mac[2] = usb_x2_safe_p2m_align;  // fake lane, port padding only
-    assign usb_x2_phy2mac[3] = usb_x2_safe_p2m_align;  // fake lane, port padding only
+    assign usb_x2_phy2mac[2] = '0;  // fake lane, port padding only
+    assign usb_x2_phy2mac[3] = '0;  // fake lane, port padding only
 
 endmodule

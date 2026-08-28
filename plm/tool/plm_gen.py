@@ -648,9 +648,15 @@ def gen_data_p2m(cfg):
         for cl in range(cfg.decl_width):
             srcs = sorted(port_src.get((cid, cl), set()))
             if not srcs:
-                why = "fake lane, port padding only" if cl >= c.max_width else "never driven in any mode"
-                L.append(f"    assign {c.lname}_phy2mac[{cl}] = {c.lname}_safe_p2m_align;"
-                         f"  // {why}")
+                if cl >= c.max_width:
+                    # Fake lane: doesn't correspond to any real port at all,
+                    # so it doesn't go through tie_off/safe_p2m_align --
+                    # just tie it flat to 0.
+                    L.append(f"    assign {c.lname}_phy2mac[{cl}] = '0;"
+                             f"  // fake lane, port padding only")
+                else:
+                    L.append(f"    assign {c.lname}_phy2mac[{cl}] = {c.lname}_safe_p2m_align;"
+                             f"  // never driven in any mode")
                 continue
             if len(srcs) == 1 and cfg.groups[srcs[0][1]].is_direct:
                 l = srcs[0][0]
@@ -1105,8 +1111,16 @@ def gen_tb(cfg):
     # Every controller's port array is declared at the same uniform
     # decl_width (see pipe_lane_mapper_top), so max_w no longer needs to
     # vary per controller -- checking every declared port (including any
-    # fake lanes) also exercises their tie-off behavior.
+    # fake lanes) also exercises their tie-off behavior. real_max_w is
+    # still per-controller: it's what tells a fake lane (p >= real_max_w)
+    # apart from a real, merely-unused port (p < real_max_w).
     L.append(f"            int max_w = {cfg.decl_width};")
+    L.append("            int real_max_w;")
+    L.append("            case (c)")
+    for c in ctrls:
+        L.append(f"                {c.id}: real_max_w = {c.max_width};")
+    L.append("                default: real_max_w = 0;")
+    L.append("            endcase")
     L.append("            for (int p = 0; p < max_w; p++) begin")
     L.append("                int src_lane;")
     L.append("                phy2mac_lane_t got;")
@@ -1126,23 +1140,27 @@ def gen_tb(cfg):
     # compatible with more tools).
     L.append("                    phy2mac_lane_t exp_tie;")
     L.append("                    int active_base;")
-    L.append("                    exp_tie = SAFE_P2M;")
-    L.append("                    active_base = -1;")
-    L.append("                    for (int l = 0; l < LANE_COUNT; l++) begin")
-    L.append("                        if (owner_of(m, l) == c && active_base == -1) active_base = l;")
-    L.append("                    end")
+    L.append("                    if (p >= real_max_w) begin")
+    L.append("                        exp_tie = '0;  // fake lane, port padding only")
+    L.append("                    end else begin")
+    L.append("                        exp_tie = SAFE_P2M;")
+    L.append("                        active_base = -1;")
+    L.append("                        for (int l = 0; l < LANE_COUNT; l++) begin")
+    L.append("                            if (owner_of(m, l) == c && active_base == -1) active_base = l;")
+    L.append("                        end")
 
     # Dynamically assemble the expected value exp_tie (shares
     # Signal.tie_expr() with gen_data_p2m(), so the two tie_off checks
     # can't drift apart)
     p2m_signals = [s for s in cfg.signals if not s.is_m2p]
-    L.append("                    if (active_base != -1) begin")
+    L.append("                        if (active_base != -1) begin")
     for s in p2m_signals:
-        L.append(f"                        exp_tie.{s.name} = "
+        L.append(f"                            exp_tie.{s.name} = "
                   f"{s.tie_expr('phy_phy2mac[active_base]')};")
-    L.append("                    end else begin")
+    L.append("                        end else begin")
     for s in p2m_signals:
-        L.append(f"                        exp_tie.{s.name} = {s.tie_expr(None)};")
+        L.append(f"                            exp_tie.{s.name} = {s.tie_expr(None)};")
+    L.append("                        end")
     L.append("                    end")
 
     L.append("                    chk(got == exp_tie,")

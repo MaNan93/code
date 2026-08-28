@@ -349,6 +349,14 @@ module tb_pipe_lane_mapper;
 
         for (int c = 0; c < NUM_CTRL; c++) begin
             int max_w = 16;
+            int real_max_w;
+            case (c)
+                0: real_max_w = 16;
+                1: real_max_w = 4;
+                2: real_max_w = 8;
+                3: real_max_w = 4;
+                default: real_max_w = 0;
+            endcase
             for (int p = 0; p < max_w; p++) begin
                 int src_lane;
                 phy2mac_lane_t got;
@@ -366,47 +374,51 @@ module tb_pipe_lane_mapper;
                 if (src_lane == -1) begin
                     phy2mac_lane_t exp_tie;
                     int active_base;
-                    exp_tie = SAFE_P2M;
-                    active_base = -1;
-                    for (int l = 0; l < LANE_COUNT; l++) begin
-                        if (owner_of(m, l) == c && active_base == -1) active_base = l;
-                    end
-                    if (active_base != -1) begin
-                        exp_tie.phy_mac_rxdata = 32'd0;
-                        exp_tie.phy_mac_rxdatak = 4'd0;
-                        exp_tie.phy_mac_rxdatavalid = 1'b0;
-                        exp_tie.phy_mac_rxstartblock = 1'b0;
-                        exp_tie.phy_mac_rxsyncheader = 2'd0;
-                        exp_tie.phy_mac_rxvalid = 1'b0;
-                        exp_tie.phy_mac_rxstatus = 3'd0;
-                        exp_tie.phy_mac_rxelecidle = 1'b1;
-                        exp_tie.phy_mac_rxstandbystatus = 1'b0;
-                        exp_tie.phy_mac_messagebus = 8'd80;
-                        exp_tie.phy_mac_phystatus = phy_phy2mac[active_base].phy_mac_phystatus;
-                        exp_tie.phy_mac_local_tx_coef_valid = 1'b0;
-                        exp_tie.phy_mac_local_tx_pset_coef = 18'd0;
-                        exp_tie.phy_mac_localfs = 6'd0;
-                        exp_tie.phy_mac_locallf = 6'd0;
-                        exp_tie.phy_mac_dirfeedback = 6'd0;
-                        exp_tie.phy_mac_fomfeedback = 8'd0;
+                    if (p >= real_max_w) begin
+                        exp_tie = '0;  // fake lane, port padding only
                     end else begin
-                        exp_tie.phy_mac_rxdata = 32'd0;
-                        exp_tie.phy_mac_rxdatak = 4'd0;
-                        exp_tie.phy_mac_rxdatavalid = 1'b0;
-                        exp_tie.phy_mac_rxstartblock = 1'b0;
-                        exp_tie.phy_mac_rxsyncheader = 2'd0;
-                        exp_tie.phy_mac_rxvalid = 1'b0;
-                        exp_tie.phy_mac_rxstatus = 3'd0;
-                        exp_tie.phy_mac_rxelecidle = 1'b1;
-                        exp_tie.phy_mac_rxstandbystatus = 1'b0;
-                        exp_tie.phy_mac_messagebus = 8'd80;
-                        exp_tie.phy_mac_phystatus = '0;
-                        exp_tie.phy_mac_local_tx_coef_valid = 1'b0;
-                        exp_tie.phy_mac_local_tx_pset_coef = 18'd0;
-                        exp_tie.phy_mac_localfs = 6'd0;
-                        exp_tie.phy_mac_locallf = 6'd0;
-                        exp_tie.phy_mac_dirfeedback = 6'd0;
-                        exp_tie.phy_mac_fomfeedback = 8'd0;
+                        exp_tie = SAFE_P2M;
+                        active_base = -1;
+                        for (int l = 0; l < LANE_COUNT; l++) begin
+                            if (owner_of(m, l) == c && active_base == -1) active_base = l;
+                        end
+                        if (active_base != -1) begin
+                            exp_tie.phy_mac_rxdata = 32'd0;
+                            exp_tie.phy_mac_rxdatak = 4'd0;
+                            exp_tie.phy_mac_rxdatavalid = 1'b0;
+                            exp_tie.phy_mac_rxstartblock = 1'b0;
+                            exp_tie.phy_mac_rxsyncheader = 2'd0;
+                            exp_tie.phy_mac_rxvalid = 1'b0;
+                            exp_tie.phy_mac_rxstatus = 3'd0;
+                            exp_tie.phy_mac_rxelecidle = 1'b1;
+                            exp_tie.phy_mac_rxstandbystatus = 1'b0;
+                            exp_tie.phy_mac_messagebus = 8'd80;
+                            exp_tie.phy_mac_phystatus = phy_phy2mac[active_base].phy_mac_phystatus;
+                            exp_tie.phy_mac_local_tx_coef_valid = 1'b0;
+                            exp_tie.phy_mac_local_tx_pset_coef = 18'd0;
+                            exp_tie.phy_mac_localfs = 6'd0;
+                            exp_tie.phy_mac_locallf = 6'd0;
+                            exp_tie.phy_mac_dirfeedback = 6'd0;
+                            exp_tie.phy_mac_fomfeedback = 8'd0;
+                        end else begin
+                            exp_tie.phy_mac_rxdata = 32'd0;
+                            exp_tie.phy_mac_rxdatak = 4'd0;
+                            exp_tie.phy_mac_rxdatavalid = 1'b0;
+                            exp_tie.phy_mac_rxstartblock = 1'b0;
+                            exp_tie.phy_mac_rxsyncheader = 2'd0;
+                            exp_tie.phy_mac_rxvalid = 1'b0;
+                            exp_tie.phy_mac_rxstatus = 3'd0;
+                            exp_tie.phy_mac_rxelecidle = 1'b1;
+                            exp_tie.phy_mac_rxstandbystatus = 1'b0;
+                            exp_tie.phy_mac_messagebus = 8'd80;
+                            exp_tie.phy_mac_phystatus = '0;
+                            exp_tie.phy_mac_local_tx_coef_valid = 1'b0;
+                            exp_tie.phy_mac_local_tx_pset_coef = 18'd0;
+                            exp_tie.phy_mac_localfs = 6'd0;
+                            exp_tie.phy_mac_locallf = 6'd0;
+                            exp_tie.phy_mac_dirfeedback = 6'd0;
+                            exp_tie.phy_mac_fomfeedback = 8'd0;
+                        end
                     end
                     chk(got == exp_tie,
                         $sformatf("mode%0d ctrl%0d[%0d]: unmapped tie-off mismatch!", m, c, p));

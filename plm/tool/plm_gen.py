@@ -177,12 +177,12 @@ def gen_decoder(cfg):
          "import pipe_pkg::*;",
          "",
          "module pipe_lane_mode_dec #(",
-         f"    parameter int NUM_MODES = {nm},",
+         f"    parameter int NM = {nm},",
          f"    /* verilator lint_off UNUSEDPARAM */",
-         f"    parameter int NUM_CTRL  = {cfg.num_ctrl}   // only used by controllers with more than one candidate",
+         f"    parameter int NC = {cfg.num_ctrl}   // only used by controllers with more than one candidate",
          f"    /* verilator lint_on UNUSEDPARAM */",
          ") (",
-         "    input  logic [$clog2(NUM_MODES)-1:0] mode,"]
+         "    input  logic [$clog2(NM)-1:0] mode,"]
     # Output port list: sel_tgt is always present, pclk_tgt appended as
     # needed. The comma has to be inserted before the comment -- just
     # appending "," to the end of the whole line would put the comma inside
@@ -301,12 +301,12 @@ def gen_sel_gen(cfg, sel_mode="sync"):
          "import pipe_pkg::*;",
          "",
          "module pipe_lane_sel_gen #(",
-         f"    parameter int NUM_MODES = {nm},",
-         f"    parameter int NUM_CTRL  = {NC}",
+         f"    parameter int NM = {nm},",
+         f"    parameter int NC = {NC}",
          ") (",
-         "    input  logic [$clog2(NUM_MODES)-1:0] mode,",
-         "    input  logic [NUM_CTRL-1:0]   ctrl_pclk,",
-         "    input  logic [NUM_CTRL-1:0]   ctrl_rst_n,",
+         "    input  logic [$clog2(NM)-1:0] mode,",
+         "    input  logic [NC-1:0]   ctrl_pclk,",
+         "    input  logic [NC-1:0]   ctrl_rst_n,",
          ""]
     # Same as gen_decoder: code and comment are assembled separately, comma
     # goes at the end of the code, before the comment.
@@ -325,8 +325,8 @@ def gen_sel_gen(cfg, sel_mode="sync"):
 
     # decoder instance
     L.append("    pipe_lane_mode_dec #(")
-    L.append("        .NUM_MODES (NUM_MODES),")
-    L.append("        .NUM_CTRL  (NUM_CTRL)")
+    L.append("        .NM (NM),")
+    L.append("        .NC  (NC)")
     L.append("    ) u_mode_dec (")
     L.append("        .mode     (mode),")
     L.append("        .sel_tgt  (dec_tgt)" + ("," if muxed_c else ""))
@@ -391,22 +391,22 @@ def gen_clk_mux(cfg):
          "import pipe_pkg::*;",
          "",
          f"module pipe_lane_clk_mux #(",
-         f"    parameter int LANE_COUNT = {LC},",
-         f"    parameter int NUM_CTRL   = {NC}",
+         f"    parameter int NL = {LC},",
+         f"    parameter int NC = {NC}",
          ") (",
          "    /* verilator lint_off UNUSEDSIGNAL */",
-         "    input  logic [LANE_COUNT-1:0] phy_pclk_out,",
+         "    input  logic [NL-1:0] phy_pclk_out,",
          "    /* verilator lint_on UNUSEDSIGNAL */",
          "    input  logic                  test_en,",
-         "    input  logic [NUM_CTRL-1:0]   ctrl_rst_n,",
+         "    input  logic [NC-1:0]   ctrl_rst_n,",
          ""]
     for c in muxed_c:
         L.append(f"    input  logic [{len(cc[c])-1}:0] pclk_tgt_c{c},"
                  f"   // pclk candidate target for {cfg.controllers[c].name}, from sel_gen")
     L.append("    input  lane_sel_t              sel_tgt,   // each group's currently effective owner selection")
     L.append("")
-    L.append("    output logic [NUM_CTRL-1:0]   ctrl_pclk,")
-    L.append("    output logic [LANE_COUNT-1:0] phy_pclk_in")
+    L.append("    output logic [NC-1:0]   ctrl_pclk,")
+    L.append("    output logic [NL-1:0] phy_pclk_in")
     L.append(");")
     L.append("")
 
@@ -507,12 +507,12 @@ def gen_rst_mux(cfg):
          "import pipe_pkg::*;",
          "",
          f"module pipe_lane_rst_mux #(",
-         f"    parameter int LANE_COUNT = {LC},",
-         f"    parameter int NUM_CTRL   = {NC}",
+         f"    parameter int NL = {LC},",
+         f"    parameter int NC = {NC}",
          ") (",
-         "    input  logic [NUM_CTRL-1:0]   ctrl_rst_n,",
+         "    input  logic [NC-1:0]   ctrl_rst_n,",
          "    input  lane_sel_t              sel_tgt,",
-         "    output logic [LANE_COUNT-1:0] phy_rst_n",
+         "    output logic [NL-1:0] phy_rst_n",
          ");",
          ""]
 
@@ -551,10 +551,10 @@ def gen_data_m2p(cfg):
          "import pipe_pkg::*;",
          "",
          f"module pipe_lane_data_m2p #(",
-         f"    parameter int LANE_COUNT = {LC}",
+         f"    parameter int NL = {LC}",
          ") (",
          "    input  lane_sel_t              sel_tgt,",
-         "    output mac2phy_lane_t [LANE_COUNT-1:0] phy_mac2phy,"]
+         "    output mac2phy_lane_t [NL-1:0] phy_mac2phy,"]
     for cid in sorted(cfg.controllers):
         c = cfg.controllers[cid]
         L.append(f"    input  mac2phy_lane_t [{cfg.decl_width-1}:0] {c.lname}_mac2phy,")
@@ -598,10 +598,10 @@ def gen_data_p2m(cfg):
          "import pipe_pkg::*;",
          "",
          f"module pipe_lane_data_p2m #(",
-         f"    parameter int LANE_COUNT = {LC}",
+         f"    parameter int NL = {LC}",
          ") (",
          "    input  lane_sel_t              sel_tgt,",
-         "    input  phy2mac_lane_t [LANE_COUNT-1:0] phy_phy2mac,"]
+         "    input  phy2mac_lane_t [NL-1:0] phy_phy2mac,"]
     for cid in sorted(cfg.controllers):
         c = cfg.controllers[cid]
         L.append(f"    output phy2mac_lane_t [{cfg.decl_width-1}:0] {c.lname}_phy2mac,")
@@ -711,24 +711,24 @@ def gen_top(cfg):
     L.append("import pipe_pkg::*;")
     L.append("")
     L.append("module pipe_lane_mapper_top #(")
-    L.append(f"    parameter int NUM_MODES  = {nm},")
-    L.append(f"    parameter int LANE_COUNT = {LC},")
-    L.append(f"    parameter int NUM_CTRL   = {NC}")
+    L.append(f"    parameter int NM = {nm},")
+    L.append(f"    parameter int NL = {LC},")
+    L.append(f"    parameter int NC = {NC}")
     L.append(") (")
     L.append("    /* verilator lint_off UNUSEDSIGNAL */")
-    L.append("    input  logic [LANE_COUNT-1:0] phy_pclk_out,")
+    L.append("    input  logic [NL-1:0] phy_pclk_out,")
     L.append("    /* verilator lint_on UNUSEDSIGNAL */")
     L.append("    input  logic                  test_en,")
-    L.append("    input  logic [NUM_CTRL-1:0]   ctrl_rst_n,   // one per controller, already synchronized externally")
-    L.append("    input  logic [$clog2(NUM_MODES)-1:0] mode,")
+    L.append("    input  logic [NC-1:0]   ctrl_rst_n,   // one per controller, already synchronized externally")
+    L.append("    input  logic [$clog2(NM)-1:0] mode,")
     L.append("")
-    L.append("    output logic [NUM_CTRL-1:0]   ctrl_pclk,")
-    L.append("    output logic [LANE_COUNT-1:0] phy_pclk_in,")
-    L.append("    output logic [LANE_COUNT-1:0] phy_rst_n,")
+    L.append("    output logic [NC-1:0]   ctrl_pclk,")
+    L.append("    output logic [NL-1:0] phy_pclk_in,")
+    L.append("    output logic [NL-1:0] phy_rst_n,")
     L.append("")
     L.append("    // PHY-side PIPE data")
-    L.append("    output mac2phy_lane_t [LANE_COUNT-1:0] phy_mac2phy,")
-    L.append("    input  phy2mac_lane_t [LANE_COUNT-1:0] phy_phy2mac,")
+    L.append("    output mac2phy_lane_t [NL-1:0] phy_mac2phy,")
+    L.append("    input  phy2mac_lane_t [NL-1:0] phy_phy2mac,")
     L.append("")
     L.append(f"    // Controller side. Every controller's ports are declared at a uniform")
     L.append(f"    // width x{cfg.decl_width} (the widest controller in this config) for ease of")
@@ -761,8 +761,8 @@ def gen_top(cfg):
     L.append("    // Select-generation submodule: mode decoding + group sel_sync, produces sel_tgt / dec_tgt")
     L.append("    //------------------------------------------------------------")
     L.append("    pipe_lane_sel_gen #(")
-    L.append("        .NUM_MODES (NUM_MODES),")
-    L.append("        .NUM_CTRL  (NUM_CTRL)")
+    L.append("        .NM (NM),")
+    L.append("        .NC  (NC)")
     L.append("    ) u_sel_gen (")
     L.append("        .mode       (mode),")
     L.append("        .ctrl_pclk  (ctrl_pclk),")
@@ -780,8 +780,8 @@ def gen_top(cfg):
     L.append("    // Clock-mux submodule: ctrl_pclk generation + feedback clock mux")
     L.append("    //------------------------------------------------------------")
     L.append("    pipe_lane_clk_mux #(")
-    L.append("        .LANE_COUNT (LANE_COUNT),")
-    L.append("        .NUM_CTRL   (NUM_CTRL)")
+    L.append("        .NL (NL),")
+    L.append("        .NC   (NC)")
     L.append("    ) u_clk_mux (")
     L.append("        .phy_pclk_out (phy_pclk_out),")
     L.append("        .test_en      (test_en),")
@@ -800,8 +800,8 @@ def gen_top(cfg):
     L.append("    // Uses dec_tgt (the decoder's raw output, not synchronized by sel_sync), not sel_tgt")
     L.append("    //------------------------------------------------------------")
     L.append("    pipe_lane_rst_mux #(")
-    L.append("        .LANE_COUNT (LANE_COUNT),")
-    L.append("        .NUM_CTRL   (NUM_CTRL)")
+    L.append("        .NL (NL),")
+    L.append("        .NC   (NC)")
     L.append("    ) u_rst_mux (")
     L.append("        .ctrl_rst_n (ctrl_rst_n),")
     L.append("        .sel_tgt    (dec_tgt),")
@@ -814,7 +814,7 @@ def gen_top(cfg):
     L.append("    // MAC->PHY data mux")
     L.append("    //------------------------------------------------------------")
     L.append("    pipe_lane_data_m2p #(")
-    L.append("        .LANE_COUNT (LANE_COUNT)")
+    L.append("        .NL (NL)")
     L.append("    ) u_data_m2p (")
     L.append("        .sel_tgt      (sel_tgt),")
     L.append("        .phy_mac2phy  (phy_mac2phy),")
@@ -830,7 +830,7 @@ def gen_top(cfg):
     L.append("    // PHY->MAC data mux")
     L.append("    //------------------------------------------------------------")
     L.append("    pipe_lane_data_p2m #(")
-    L.append("        .LANE_COUNT (LANE_COUNT)")
+    L.append("        .NL (NL)")
     L.append("    ) u_data_p2m (")
     L.append("        .sel_tgt      (sel_tgt),")
     L.append("        .phy_phy2mac  (phy_phy2mac),")
@@ -919,9 +919,9 @@ def gen_tb(cfg):
          "module tb_pipe_lane_mapper;",
          ""]
 
-    L.append(f"    localparam int NUM_MODES  = {nm};")
-    L.append(f"    localparam int LANE_COUNT = {LC};")
-    L.append(f"    localparam int NUM_CTRL   = {NC};")
+    L.append(f"    localparam int NM  = {nm};")
+    L.append(f"    localparam int NL = {LC};")
+    L.append(f"    localparam int NC   = {NC};")
     L.append("")
 
     # ---- clocks
@@ -932,9 +932,9 @@ def gen_tb(cfg):
         L.append(f"        {p}{',' if i != LC-1 else ''}")
     L.append("    };")
     L.append("")
-    L.append("    logic [LANE_COUNT-1:0] phy_pclk_out;")
+    L.append("    logic [NL-1:0] phy_pclk_out;")
     L.append("")
-    L.append("    for (genvar l = 0; l < LANE_COUNT; l++) begin : g_clk")
+    L.append("    for (genvar l = 0; l < NL; l++) begin : g_clk")
     L.append("        initial begin")
     L.append("            phy_pclk_out[l] = 1'b0;")
     L.append("            #(l * 0.7);")
@@ -945,17 +945,17 @@ def gen_tb(cfg):
 
     # ---- DUT IO
     L.append("    //------------------------------------------------------------ DUT IO")
-    L.append("    logic [LANE_COUNT-1:0]      phy_phystatus_stim = '0;")
+    L.append("    logic [NL-1:0]      phy_phystatus_stim = '0;")
     L.append("    logic                       test_en = 1'b0;")
-    L.append("    logic [NUM_CTRL-1:0]        ctrl_rst_n = '0;")
-    L.append("    logic [$clog2(NUM_MODES)-1:0] mode = '0;")
+    L.append("    logic [NC-1:0]        ctrl_rst_n = '0;")
+    L.append("    logic [$clog2(NM)-1:0] mode = '0;")
     L.append("")
-    L.append("    logic [NUM_CTRL-1:0]        ctrl_pclk;")
-    L.append("    logic [LANE_COUNT-1:0]      phy_pclk_in;")
-    L.append("    logic [LANE_COUNT-1:0]      phy_rst_n;")
+    L.append("    logic [NC-1:0]        ctrl_pclk;")
+    L.append("    logic [NL-1:0]      phy_pclk_in;")
+    L.append("    logic [NL-1:0]      phy_rst_n;")
     L.append("")
-    L.append("    mac2phy_lane_t [LANE_COUNT-1:0] phy_mac2phy;")
-    L.append("    phy2mac_lane_t [LANE_COUNT-1:0] phy_phy2mac;")
+    L.append("    mac2phy_lane_t [NL-1:0] phy_mac2phy;")
+    L.append("    phy2mac_lane_t [NL-1:0] phy_phy2mac;")
     L.append("")
     for c in ctrls:
         L.append(f"    mac2phy_lane_t [{cfg.decl_width-1}:0] {c.lname}_mac2phy;")
@@ -964,9 +964,9 @@ def gen_tb(cfg):
 
     # ---- DUT instance
     L.append("    pipe_lane_mapper_top #(")
-    L.append("        .NUM_MODES  (NUM_MODES),")
-    L.append("        .LANE_COUNT (LANE_COUNT),")
-    L.append("        .NUM_CTRL   (NUM_CTRL)")
+    L.append("        .NM  (NM),")
+    L.append("        .NL (NL),")
+    L.append("        .NC   (NC)")
     L.append("    ) dut (")
     L.append("        .phy_pclk_out   (phy_pclk_out),")
     L.append("        .test_en        (test_en),")
@@ -1016,7 +1016,7 @@ def gen_tb(cfg):
         # undriven (which would otherwise infer a latch / read as X).
         L.append(f"        for (int p = 0; p < {cfg.decl_width}; p++) "
                  f"{c.lname}_mac2phy[p] = make_m2p({c.id}, p);")
-    L.append(f"        for (int l = 0; l < LANE_COUNT; l++) begin")
+    L.append(f"        for (int l = 0; l < NL; l++) begin")
     L.append(f"            phy_phy2mac[l] = make_p2m(l);")
     L.append(f"            phy_phy2mac[l].phy_mac_phystatus = phy_phystatus_stim[l];")
     L.append(f"        end")
@@ -1092,7 +1092,7 @@ def gen_tb(cfg):
     L.append("        phy2mac_lane_t exp_p2m;")
     L.append("        int cid, port;")
     L.append("")
-    L.append("        for (int l = 0; l < LANE_COUNT; l++) begin")
+    L.append("        for (int l = 0; l < NL; l++) begin")
     L.append("            cid  = owner_of(m, l);")
     L.append("            port = port_of(m, l);")
     L.append("            exp_m2p = make_m2p(cid, port);")
@@ -1107,7 +1107,7 @@ def gen_tb(cfg):
     L.append("                          m, l, phy_rst_n[l], cid));")
     L.append("        end")
     L.append("")
-    L.append("        for (int c = 0; c < NUM_CTRL; c++) begin")
+    L.append("        for (int c = 0; c < NC; c++) begin")
     # Every controller's port array is declared at the same uniform
     # decl_width (see pipe_lane_mapper_top), so max_w no longer needs to
     # vary per controller -- checking every declared port (including any
@@ -1125,7 +1125,7 @@ def gen_tb(cfg):
     L.append("                int src_lane;")
     L.append("                phy2mac_lane_t got;")
     L.append("                src_lane = -1;")
-    L.append("                for (int l = 0; l < LANE_COUNT; l++)")
+    L.append("                for (int l = 0; l < NL; l++)")
     L.append("                    if (owner_of(m, l) == c && port_of(m, l) == p) src_lane = l;")
     L.append("")
     L.append("                case (c)")
@@ -1145,7 +1145,7 @@ def gen_tb(cfg):
     L.append("                    end else begin")
     L.append("                        exp_tie = SAFE_P2M;")
     L.append("                        active_base = -1;")
-    L.append("                        for (int l = 0; l < LANE_COUNT; l++) begin")
+    L.append("                        for (int l = 0; l < NL; l++) begin")
     L.append("                            if (owner_of(m, l) == c && active_base == -1) active_base = l;")
     L.append("                        end")
 
@@ -1221,7 +1221,7 @@ def gen_tb(cfg):
              f" non-owner lanes stay high.")
     for c in ctrls:
         L.append(f"        ctrl_rst_n[{c.id}] = 1'b0; #SETTLE;")
-        L.append(f"        for (int l = 0; l < LANE_COUNT; l++) begin")
+        L.append(f"        for (int l = 0; l < NL; l++) begin")
         L.append(f"            bit expect_low;")
         L.append(f"            expect_low = (owner_of({last_m}, l) == {c.id});")
         L.append(f"            chk(phy_rst_n[l] == (expect_low ? 1'b0 : 1'b1),")

@@ -4,10 +4,10 @@
 import pipe_pkg::*;
 
 module pipe_lane_data_p2m #(
-    parameter int LANE_COUNT = 4
+    parameter int NL = 4
 ) (
     input  lane_sel_t              sel_tgt,
-    input  phy2mac_lane_t [LANE_COUNT-1:0] phy_phy2mac,
+    input  phy2mac_lane_t [NL-1:0] phy_phy2mac,
     output phy2mac_lane_t [3:0] pcie_x4_phy2mac,
     output phy2mac_lane_t [3:0] usb_x2_phy2mac
 );

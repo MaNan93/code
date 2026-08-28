@@ -9,20 +9,20 @@
 import pipe_pkg::*;
 
 module pipe_lane_sel_gen #(
-    parameter int NUM_MODES = 4,
-    parameter int NUM_CTRL  = 4
+    parameter int NM = 4,
+    parameter int NC = 4
 ) (
-    input  logic [$clog2(NUM_MODES)-1:0] mode,
-    input  logic [NUM_CTRL-1:0]   ctrl_pclk,
-    input  logic [NUM_CTRL-1:0]   ctrl_rst_n,
+    input  logic [$clog2(NM)-1:0] mode,
+    input  logic [NC-1:0]   ctrl_pclk,
+    input  logic [NC-1:0]   ctrl_rst_n,
 
     output lane_sel_t sel_tgt,   // final effective selection after sel_sync synchronization; used by clk_mux/data mux
     output lane_sel_t dec_tgt   // decoder's raw (unsynchronized) target; used by rst_mux
 );
 
     pipe_lane_mode_dec #(
-        .NUM_MODES (NUM_MODES),
-        .NUM_CTRL  (NUM_CTRL)
+        .NM (NM),
+        .NC  (NC)
     ) u_mode_dec (
         .mode     (mode),
         .sel_tgt  (dec_tgt)

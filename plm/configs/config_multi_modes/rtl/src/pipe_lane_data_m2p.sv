@@ -4,10 +4,10 @@
 import pipe_pkg::*;
 
 module pipe_lane_data_m2p #(
-    parameter int LANE_COUNT = 4
+    parameter int NL = 4
 ) (
     input  lane_sel_t              sel_tgt,
-    output mac2phy_lane_t [LANE_COUNT-1:0] phy_mac2phy,
+    output mac2phy_lane_t [NL-1:0] phy_mac2phy,
     input  mac2phy_lane_t [3:0] pcie_x4_mac2phy,
     input  mac2phy_lane_t [3:0] usb_x2_mac2phy
 );

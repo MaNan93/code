@@ -7,19 +7,19 @@
 import pipe_pkg::*;
 
 module pipe_lane_clk_mux #(
-    parameter int LANE_COUNT = 16,
-    parameter int NUM_CTRL   = 4
+    parameter int NL = 16,
+    parameter int NC = 4
 ) (
     /* verilator lint_off UNUSEDSIGNAL */
-    input  logic [LANE_COUNT-1:0] phy_pclk_out,
+    input  logic [NL-1:0] phy_pclk_out,
     /* verilator lint_on UNUSEDSIGNAL */
     input  logic                  test_en,
-    input  logic [NUM_CTRL-1:0]   ctrl_rst_n,
+    input  logic [NC-1:0]   ctrl_rst_n,
 
     input  lane_sel_t              sel_tgt,   // each group's currently effective owner selection
 
-    output logic [NUM_CTRL-1:0]   ctrl_pclk,
-    output logic [LANE_COUNT-1:0] phy_pclk_in
+    output logic [NC-1:0]   ctrl_pclk,
+    output logic [NL-1:0] phy_pclk_in
 );
 
     //------------------------------------------------------------

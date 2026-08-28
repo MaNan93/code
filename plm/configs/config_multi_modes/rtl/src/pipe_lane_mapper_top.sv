@@ -15,24 +15,24 @@
 import pipe_pkg::*;
 
 module pipe_lane_mapper_top #(
-    parameter int NUM_MODES  = 2,
-    parameter int LANE_COUNT = 4,
-    parameter int NUM_CTRL   = 2
+    parameter int NM = 2,
+    parameter int NL = 4,
+    parameter int NC = 2
 ) (
     /* verilator lint_off UNUSEDSIGNAL */
-    input  logic [LANE_COUNT-1:0] phy_pclk_out,
+    input  logic [NL-1:0] phy_pclk_out,
     /* verilator lint_on UNUSEDSIGNAL */
     input  logic                  test_en,
-    input  logic [NUM_CTRL-1:0]   ctrl_rst_n,   // one per controller, already synchronized externally
-    input  logic [$clog2(NUM_MODES)-1:0] mode,
+    input  logic [NC-1:0]   ctrl_rst_n,   // one per controller, already synchronized externally
+    input  logic [$clog2(NM)-1:0] mode,
 
-    output logic [NUM_CTRL-1:0]   ctrl_pclk,
-    output logic [LANE_COUNT-1:0] phy_pclk_in,
-    output logic [LANE_COUNT-1:0] phy_rst_n,
+    output logic [NC-1:0]   ctrl_pclk,
+    output logic [NL-1:0] phy_pclk_in,
+    output logic [NL-1:0] phy_rst_n,
 
     // PHY-side PIPE data
-    output mac2phy_lane_t [LANE_COUNT-1:0] phy_mac2phy,
-    input  phy2mac_lane_t [LANE_COUNT-1:0] phy_phy2mac,
+    output mac2phy_lane_t [NL-1:0] phy_mac2phy,
+    input  phy2mac_lane_t [NL-1:0] phy_phy2mac,
 
     // Controller side. Every controller's ports are declared at a uniform
     // width x4 (the widest controller in this config) for ease of
@@ -53,8 +53,8 @@ module pipe_lane_mapper_top #(
     // Select-generation submodule: mode decoding + group sel_sync, produces sel_tgt / dec_tgt
     //------------------------------------------------------------
     pipe_lane_sel_gen #(
-        .NUM_MODES (NUM_MODES),
-        .NUM_CTRL  (NUM_CTRL)
+        .NM (NM),
+        .NC  (NC)
     ) u_sel_gen (
         .mode       (mode),
         .ctrl_pclk  (ctrl_pclk),
@@ -67,8 +67,8 @@ module pipe_lane_mapper_top #(
     // Clock-mux submodule: ctrl_pclk generation + feedback clock mux
     //------------------------------------------------------------
     pipe_lane_clk_mux #(
-        .LANE_COUNT (LANE_COUNT),
-        .NUM_CTRL   (NUM_CTRL)
+        .NL (NL),
+        .NC   (NC)
     ) u_clk_mux (
         .phy_pclk_out (phy_pclk_out),
         .test_en      (test_en),
@@ -83,8 +83,8 @@ module pipe_lane_mapper_top #(
     // Uses dec_tgt (the decoder's raw output, not synchronized by sel_sync), not sel_tgt
     //------------------------------------------------------------
     pipe_lane_rst_mux #(
-        .LANE_COUNT (LANE_COUNT),
-        .NUM_CTRL   (NUM_CTRL)
+        .NL (NL),
+        .NC   (NC)
     ) u_rst_mux (
         .ctrl_rst_n (ctrl_rst_n),
         .sel_tgt    (dec_tgt),
@@ -95,7 +95,7 @@ module pipe_lane_mapper_top #(
     // MAC->PHY data mux
     //------------------------------------------------------------
     pipe_lane_data_m2p #(
-        .LANE_COUNT (LANE_COUNT)
+        .NL (NL)
     ) u_data_m2p (
         .sel_tgt      (sel_tgt),
         .phy_mac2phy  (phy_mac2phy),
@@ -107,7 +107,7 @@ module pipe_lane_mapper_top #(
     // PHY->MAC data mux
     //------------------------------------------------------------
     pipe_lane_data_p2m #(
-        .LANE_COUNT (LANE_COUNT)
+        .NL (NL)
     ) u_data_p2m (
         .sel_tgt      (sel_tgt),
         .phy_phy2mac  (phy_phy2mac),

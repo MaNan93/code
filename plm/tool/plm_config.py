@@ -381,8 +381,8 @@ class Config:
         err = []
         cp = self.ctrl_pclk_src()
 
-        # The mode port is declared with width $clog2(NUM_MODES), where
-        # NUM_MODES is the count of distinct modes. If the mode values
+        # The mode port is declared with width $clog2(NM), where
+        # NM is the count of distinct modes. If the mode values
         # aren't a contiguous range starting at 0, the width gets computed
         # from "count" rather than "max value + 1", and some mode values
         # would fall outside the port's width -- those case branches could

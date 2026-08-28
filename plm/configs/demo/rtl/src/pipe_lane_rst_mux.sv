@@ -9,12 +9,12 @@
 import pipe_pkg::*;
 
 module pipe_lane_rst_mux #(
-    parameter int LANE_COUNT = 16,
-    parameter int NUM_CTRL   = 4
+    parameter int NL = 16,
+    parameter int NC = 4
 ) (
-    input  logic [NUM_CTRL-1:0]   ctrl_rst_n,
+    input  logic [NC-1:0]   ctrl_rst_n,
     input  lane_sel_t              sel_tgt,
-    output logic [LANE_COUNT-1:0] phy_rst_n
+    output logic [NL-1:0] phy_rst_n
 );
 
     assign phy_rst_n[0] = ctrl_rst_n[0];  // G0 direct to Ctrl0

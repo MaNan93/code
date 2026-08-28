@@ -13,9 +13,9 @@ import pipe_pkg::*;
 
 module tb_pipe_lane_mapper;
 
-    localparam int NUM_MODES  = 2;
-    localparam int LANE_COUNT = 4;
-    localparam int NUM_CTRL   = 2;
+    localparam int NM  = 2;
+    localparam int NL = 4;
+    localparam int NC   = 2;
 
     //------------------------------------------------------------ clocks
     // Different period + phase offset per lane, to exercise asynchronous CDC.
@@ -26,9 +26,9 @@ module tb_pipe_lane_mapper;
         9
     };
 
-    logic [LANE_COUNT-1:0] phy_pclk_out;
+    logic [NL-1:0] phy_pclk_out;
 
-    for (genvar l = 0; l < LANE_COUNT; l++) begin : g_clk
+    for (genvar l = 0; l < NL; l++) begin : g_clk
         initial begin
             phy_pclk_out[l] = 1'b0;
             #(l * 0.7);
@@ -37,17 +37,17 @@ module tb_pipe_lane_mapper;
     end
 
     //------------------------------------------------------------ DUT IO
-    logic [LANE_COUNT-1:0]      phy_phystatus_stim = '0;
+    logic [NL-1:0]      phy_phystatus_stim = '0;
     logic                       test_en = 1'b0;
-    logic [NUM_CTRL-1:0]        ctrl_rst_n = '0;
-    logic [$clog2(NUM_MODES)-1:0] mode = '0;
+    logic [NC-1:0]        ctrl_rst_n = '0;
+    logic [$clog2(NM)-1:0] mode = '0;
 
-    logic [NUM_CTRL-1:0]        ctrl_pclk;
-    logic [LANE_COUNT-1:0]      phy_pclk_in;
-    logic [LANE_COUNT-1:0]      phy_rst_n;
+    logic [NC-1:0]        ctrl_pclk;
+    logic [NL-1:0]      phy_pclk_in;
+    logic [NL-1:0]      phy_rst_n;
 
-    mac2phy_lane_t [LANE_COUNT-1:0] phy_mac2phy;
-    phy2mac_lane_t [LANE_COUNT-1:0] phy_phy2mac;
+    mac2phy_lane_t [NL-1:0] phy_mac2phy;
+    phy2mac_lane_t [NL-1:0] phy_phy2mac;
 
     mac2phy_lane_t [3:0] pcie_x4_mac2phy;
     phy2mac_lane_t [3:0] pcie_x4_phy2mac;
@@ -55,9 +55,9 @@ module tb_pipe_lane_mapper;
     phy2mac_lane_t [3:0] usb_x2_phy2mac;
 
     pipe_lane_mapper_top #(
-        .NUM_MODES  (NUM_MODES),
-        .LANE_COUNT (LANE_COUNT),
-        .NUM_CTRL   (NUM_CTRL)
+        .NM  (NM),
+        .NL (NL),
+        .NC   (NC)
     ) dut (
         .phy_pclk_out   (phy_pclk_out),
         .test_en        (test_en),
@@ -100,7 +100,7 @@ module tb_pipe_lane_mapper;
     always_comb begin
         for (int p = 0; p < 4; p++) pcie_x4_mac2phy[p] = make_m2p(0, p);
         for (int p = 0; p < 4; p++) usb_x2_mac2phy[p] = make_m2p(1, p);
-        for (int l = 0; l < LANE_COUNT; l++) begin
+        for (int l = 0; l < NL; l++) begin
             phy_phy2mac[l] = make_p2m(l);
             phy_phy2mac[l].phy_mac_phystatus = phy_phystatus_stim[l];
         end
@@ -174,7 +174,7 @@ module tb_pipe_lane_mapper;
         phy2mac_lane_t exp_p2m;
         int cid, port;
 
-        for (int l = 0; l < LANE_COUNT; l++) begin
+        for (int l = 0; l < NL; l++) begin
             cid  = owner_of(m, l);
             port = port_of(m, l);
             exp_m2p = make_m2p(cid, port);
@@ -189,7 +189,7 @@ module tb_pipe_lane_mapper;
                           m, l, phy_rst_n[l], cid));
         end
 
-        for (int c = 0; c < NUM_CTRL; c++) begin
+        for (int c = 0; c < NC; c++) begin
             int max_w = 4;
             int real_max_w;
             case (c)
@@ -201,7 +201,7 @@ module tb_pipe_lane_mapper;
                 int src_lane;
                 phy2mac_lane_t got;
                 src_lane = -1;
-                for (int l = 0; l < LANE_COUNT; l++)
+                for (int l = 0; l < NL; l++)
                     if (owner_of(m, l) == c && port_of(m, l) == p) src_lane = l;
 
                 case (c)
@@ -217,7 +217,7 @@ module tb_pipe_lane_mapper;
                     end else begin
                         exp_tie = SAFE_P2M;
                         active_base = -1;
-                        for (int l = 0; l < LANE_COUNT; l++) begin
+                        for (int l = 0; l < NL; l++) begin
                             if (owner_of(m, l) == c && active_base == -1) active_base = l;
                         end
                         if (active_base != -1) begin
@@ -311,7 +311,7 @@ module tb_pipe_lane_mapper;
         // reset pulse checks in mode1
         // pulse each controller: its owner lanes' phy_rst_n should follow low, non-owner lanes stay high.
         ctrl_rst_n[0] = 1'b0; #SETTLE;
-        for (int l = 0; l < LANE_COUNT; l++) begin
+        for (int l = 0; l < NL; l++) begin
             bit expect_low;
             expect_low = (owner_of(1, l) == 0);
             chk(phy_rst_n[l] == (expect_low ? 1'b0 : 1'b1),
@@ -321,7 +321,7 @@ module tb_pipe_lane_mapper;
         ctrl_rst_n[0] = 1'b1; #SETTLE;
         check_mode(1);
         ctrl_rst_n[1] = 1'b0; #SETTLE;
-        for (int l = 0; l < LANE_COUNT; l++) begin
+        for (int l = 0; l < NL; l++) begin
             bit expect_low;
             expect_low = (owner_of(1, l) == 1);
             chk(phy_rst_n[l] == (expect_low ? 1'b0 : 1'b1),

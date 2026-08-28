@@ -7,12 +7,12 @@
 import pipe_pkg::*;
 
 module pipe_lane_mode_dec #(
-    parameter int NUM_MODES = 2,
+    parameter int NM = 2,
     /* verilator lint_off UNUSEDPARAM */
-    parameter int NUM_CTRL  = 2   // only used by controllers with more than one candidate
+    parameter int NC = 2   // only used by controllers with more than one candidate
     /* verilator lint_on UNUSEDPARAM */
 ) (
-    input  logic [$clog2(NUM_MODES)-1:0] mode,
+    input  logic [$clog2(NM)-1:0] mode,
     output lane_sel_t sel_tgt
 );
 

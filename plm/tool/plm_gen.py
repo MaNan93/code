@@ -1145,10 +1145,24 @@ def gen_tb(cfg):
         # DUT's pipe_lane_data_mux chain (an always_comb feeding a separate
         # continuous assign) -- reading them in the very same trigger as
         # sel_tgt's own change races that propagation, with no guarantee
-        # it has settled yet. Checking against the snapshot (not
-        # dut.sel_tgt again) also means a same-time-step follow-up change
-        # can't retroactively make this check compare against the wrong
-        # generation of sel_tgt.
+        # it has settled yet.
+        #
+        # The #1 delay can straddle a REAL subsequent transition, not just
+        # the delta-cycle settling it's meant to wait out: each group's
+        # sel_tgt bits are produced by independent per-branch synchronizers
+        # clocked by that branch's own controller pclk (pipe_lane_sel_sync),
+        # so with 3+ branches on unrelated clocks it's easy for the very
+        # next branch's synchronizer to complete its break-before-make
+        # handoff within that same 1ns -- e.g. a group cycling straight from
+        # its highest bit back to its lowest one (mode wrap-around) can spend
+        # only a couple ns in the all-zero gap before the incoming branch's
+        # enable lands. If that happens, dut.sel_tgt has already moved past
+        # the snapshot by the time we check, so the snapshot's "still in the
+        # gap" expectation is stale -- re-read dut.sel_tgt after the delay
+        # and only assert the safe-state expectation if the group is STILL
+        # all-zero there; otherwise this trigger's gap already ended and the
+        # next dut.sel_tgt edge (already guaranteed, since it just changed)
+        # will re-enter this block and check the new state correctly.
         L.append("            lane_sel_t sel_snap;")
         L.append("            sel_snap = dut.sel_tgt;")
         L.append("            #1;")
@@ -1157,7 +1171,7 @@ def gen_tb(cfg):
                      f"\"sel_tgt.g{g.gid} not one-hot0 (>1 branch enabled)\");")
         L.append("")
         for g in muxed:
-            L.append(f"            if (sel_snap.g{g.gid} == '0) begin")
+            L.append(f"            if (sel_snap.g{g.gid} == '0 && dut.sel_tgt.g{g.gid} == '0) begin")
             L.append(f"                foreach (G{g.gid}_LANES[i])")
             L.append(f"                    chk_m2p(phy_mac2phy[G{g.gid}_LANES[i]], SAFE_M2P,")
             L.append(f"                        $sformatf(\"G{g.gid} lane%0d: sel==0 BBM gap\", G{g.gid}_LANES[i]));")

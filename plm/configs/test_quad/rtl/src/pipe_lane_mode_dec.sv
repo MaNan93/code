@@ -21,24 +21,24 @@ module pipe_lane_mode_dec #(
 
         unique case (mode)
             0: begin
-                sel_tgt.g1 = 2'b01;  // Ctrl0
-                sel_tgt.g2 = 2'b01;  // Ctrl0
-                sel_tgt.g3 = 3'b001;  // Ctrl0
+                sel_tgt.g1 = 2'b01;  // CtrlA
+                sel_tgt.g2 = 2'b01;  // CtrlA
+                sel_tgt.g3 = 4'b0001;  // CtrlA
             end
             1: begin
-                sel_tgt.g1 = 2'b01;  // Ctrl0
-                sel_tgt.g2 = 2'b10;  // Ctrl2
-                sel_tgt.g3 = 3'b010;  // Ctrl2
+                sel_tgt.g1 = 2'b10;  // CtrlB
+                sel_tgt.g2 = 2'b01;  // CtrlA
+                sel_tgt.g3 = 4'b0010;  // CtrlB
             end
             2: begin
-                sel_tgt.g1 = 2'b01;  // Ctrl0
-                sel_tgt.g2 = 2'b10;  // Ctrl2
-                sel_tgt.g3 = 3'b100;  // Ctrl3
+                sel_tgt.g1 = 2'b01;  // CtrlA
+                sel_tgt.g2 = 2'b10;  // CtrlC
+                sel_tgt.g3 = 4'b0100;  // CtrlC
             end
             3: begin
-                sel_tgt.g1 = 2'b10;  // Ctrl1
-                sel_tgt.g2 = 2'b10;  // Ctrl2
-                sel_tgt.g3 = 3'b100;  // Ctrl3
+                sel_tgt.g1 = 2'b10;  // CtrlB
+                sel_tgt.g2 = 2'b10;  // CtrlC
+                sel_tgt.g3 = 4'b1000;  // CtrlD
             end
             default: begin
                 sel_tgt = '0;

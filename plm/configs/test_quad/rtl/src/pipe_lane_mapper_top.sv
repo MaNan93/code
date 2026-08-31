@@ -10,15 +10,15 @@
 //
 // Lane grouping: lanes with the same owner sequence are grouped automatically, sharing one BBM.
 //
-//   G0 lane0~3        Ctrl0 / Ctrl0 / Ctrl0 / Ctrl0 direct
-//   G1 lane4~7        Ctrl0 / Ctrl0 / Ctrl0 / Ctrl1 2-way BBM
-//   G2 lane8~11       Ctrl0 / Ctrl2 / Ctrl2 / Ctrl2 2-way BBM
-//   G3 lane12~15      Ctrl0 / Ctrl2 / Ctrl3 / Ctrl3 3-way BBM
+//   G0 lane0~2        CtrlA / CtrlA / CtrlA / CtrlA direct
+//   G1 lane3~5        CtrlA / CtrlB / CtrlA / CtrlB 2-way BBM
+//   G2 lane6~8        CtrlA / CtrlA / CtrlC / CtrlC 2-way BBM
+//   G3 lane9~11       CtrlA / CtrlB / CtrlC / CtrlD 4-way BBM
 import pipe_lane_signal_pkg::*;
 
 module pipe_lane_mapper_top #(
     parameter int NM = 4,
-    parameter int NL = 16,
+    parameter int NL = 12,
     parameter int NC = 4
 ) (
     /* verilator lint_off UNUSEDSIGNAL */
@@ -37,21 +37,21 @@ module pipe_lane_mapper_top #(
     input  phy2mac_lane_t [NL-1:0] phy_phy2mac,
 
     // Controller side. Every controller's ports are declared at a uniform
-    // width x16 (the widest controller in this config) for ease of
+    // width x12 (the widest controller in this config) for ease of
     // connection; a controller whose real width is narrower has fake lanes
     // at its high-numbered ports -- see each controller's comment below.
-    // Ctrl0 x16
-    input  mac2phy_lane_t [15:0] ctrl0_mac2phy,
-    output phy2mac_lane_t [15:0] ctrl0_phy2mac,
-    // Ctrl1 x4 (declared x16, ports 4..15 are fake lanes)
-    input  mac2phy_lane_t [15:0] ctrl1_mac2phy,
-    output phy2mac_lane_t [15:0] ctrl1_phy2mac,
-    // Ctrl2 x8 (declared x16, ports 8..15 are fake lanes)
-    input  mac2phy_lane_t [15:0] ctrl2_mac2phy,
-    output phy2mac_lane_t [15:0] ctrl2_phy2mac,
-    // Ctrl3 x4 (declared x16, ports 4..15 are fake lanes)
-    input  mac2phy_lane_t [15:0] ctrl3_mac2phy,
-    output phy2mac_lane_t [15:0] ctrl3_phy2mac
+    // CtrlA x12
+    input  mac2phy_lane_t [11:0] ctrla_mac2phy,
+    output phy2mac_lane_t [11:0] ctrla_phy2mac,
+    // CtrlB x6 (declared x12, ports 6..11 are fake lanes)
+    input  mac2phy_lane_t [11:0] ctrlb_mac2phy,
+    output phy2mac_lane_t [11:0] ctrlb_phy2mac,
+    // CtrlC x8 (declared x12, ports 8..11 are fake lanes)
+    input  mac2phy_lane_t [11:0] ctrlc_mac2phy,
+    output phy2mac_lane_t [11:0] ctrlc_phy2mac,
+    // CtrlD x3 (declared x12, ports 3..11 are fake lanes)
+    input  mac2phy_lane_t [11:0] ctrld_mac2phy,
+    output phy2mac_lane_t [11:0] ctrld_phy2mac
 );
 
     lane_sel_t sel_tgt;   // each group's currently effective owner selection (after pipe_lane_sel_sync)
@@ -107,10 +107,10 @@ module pipe_lane_mapper_top #(
     ) u_data_m2p (
         .sel_tgt      (sel_tgt),
         .phy_mac2phy  (phy_mac2phy),
-        .ctrl0_mac2phy (ctrl0_mac2phy),
-        .ctrl1_mac2phy (ctrl1_mac2phy),
-        .ctrl2_mac2phy (ctrl2_mac2phy),
-        .ctrl3_mac2phy (ctrl3_mac2phy)
+        .ctrla_mac2phy (ctrla_mac2phy),
+        .ctrlb_mac2phy (ctrlb_mac2phy),
+        .ctrlc_mac2phy (ctrlc_mac2phy),
+        .ctrld_mac2phy (ctrld_mac2phy)
     );
 
     //------------------------------------------------------------
@@ -121,10 +121,10 @@ module pipe_lane_mapper_top #(
     ) u_data_p2m (
         .sel_tgt      (sel_tgt),
         .phy_phy2mac  (phy_phy2mac),
-        .ctrl0_phy2mac (ctrl0_phy2mac),
-        .ctrl1_phy2mac (ctrl1_phy2mac),
-        .ctrl2_phy2mac (ctrl2_phy2mac),
-        .ctrl3_phy2mac (ctrl3_phy2mac)
+        .ctrla_phy2mac (ctrla_phy2mac),
+        .ctrlb_phy2mac (ctrlb_phy2mac),
+        .ctrlc_phy2mac (ctrlc_phy2mac),
+        .ctrld_phy2mac (ctrld_phy2mac)
     );
 
 endmodule

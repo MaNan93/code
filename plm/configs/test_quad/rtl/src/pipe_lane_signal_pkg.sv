@@ -96,14 +96,14 @@ package pipe_lane_signal_pkg;
 
     // One one-hot select vector per lane group that needs BBM.
     // Direct groups don't appear here -- the type itself shows they have no choice to make.
-    // G0 (lane0~3): direct to Ctrl0, no sel
-    // G1 (lane4~7): bit0=Ctrl0, bit1=Ctrl1
-    // G2 (lane8~11): bit0=Ctrl0, bit1=Ctrl2
-    // G3 (lane12~15): bit0=Ctrl0, bit1=Ctrl2, bit2=Ctrl3
+    // G0 (lane0~2): direct to CtrlA, no sel
+    // G1 (lane3~5): bit0=CtrlA, bit1=CtrlB
+    // G2 (lane6~8): bit0=CtrlA, bit1=CtrlC
+    // G3 (lane9~11): bit0=CtrlA, bit1=CtrlB, bit2=CtrlC, bit3=CtrlD
     typedef struct packed {
         logic [1:0] g1;
         logic [1:0] g2;
-        logic [2:0] g3;
+        logic [3:0] g3;
     } lane_sel_t;
 
 endpackage

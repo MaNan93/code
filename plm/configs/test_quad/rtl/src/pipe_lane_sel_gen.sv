@@ -9,8 +9,8 @@
 import pipe_lane_signal_pkg::*;
 
 module pipe_lane_sel_gen #(
-    parameter int NM = 2,
-    parameter int NC = 2
+    parameter int NM = 4,
+    parameter int NC = 4
 ) (
     input  logic [$clog2(NM)-1:0] mode,
     input  logic [NC-1:0]   ctrl_pclk,
@@ -31,12 +31,28 @@ module pipe_lane_sel_gen #(
     //------------------------------------------------------------
     // One pipe_lane_sel_sync per non-direct group (SYNC=1'b1).
     //------------------------------------------------------------
-    // G1 lane2~3: PCIe_x4, USB_x2
+    // G1 lane3~5: CtrlA, CtrlB
     pipe_lane_sel_sync #(.N(2), .SYNC(1'b1)) u_sel_sync_g1 (
         .branch_clk   ({ctrl_pclk[1], ctrl_pclk[0]}),
         .branch_rst_n ({ctrl_rst_n[1], ctrl_rst_n[0]}),
         .tgt          (dec_tgt.g1),
         .en           (sel_tgt.g1)
+    );
+
+    // G2 lane6~8: CtrlA, CtrlC
+    pipe_lane_sel_sync #(.N(2), .SYNC(1'b1)) u_sel_sync_g2 (
+        .branch_clk   ({ctrl_pclk[2], ctrl_pclk[0]}),
+        .branch_rst_n ({ctrl_rst_n[2], ctrl_rst_n[0]}),
+        .tgt          (dec_tgt.g2),
+        .en           (sel_tgt.g2)
+    );
+
+    // G3 lane9~11: CtrlA, CtrlB, CtrlC, CtrlD
+    pipe_lane_sel_sync #(.N(4), .SYNC(1'b1)) u_sel_sync_g3 (
+        .branch_clk   ({ctrl_pclk[3], ctrl_pclk[2], ctrl_pclk[1], ctrl_pclk[0]}),
+        .branch_rst_n ({ctrl_rst_n[3], ctrl_rst_n[2], ctrl_rst_n[1], ctrl_rst_n[0]}),
+        .tgt          (dec_tgt.g3),
+        .en           (sel_tgt.g3)
     );
 
 endmodule

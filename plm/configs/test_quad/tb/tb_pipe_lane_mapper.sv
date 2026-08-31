@@ -13,17 +13,25 @@ import pipe_lane_signal_pkg::*;
 
 module tb_pipe_lane_mapper;
 
-    localparam int NM  = 2;
-    localparam int NL = 4;
-    localparam int NC   = 2;
+    localparam int NM  = 4;
+    localparam int NL = 12;
+    localparam int NC   = 4;
 
     //------------------------------------------------------------ clocks
     // Different period + phase offset per lane, to exercise asynchronous CDC.
-    localparam int unsigned PERIOD_NS [0:3] = '{
+    localparam int unsigned PERIOD_NS [0:11] = '{
         3,
         5,
         7,
-        9
+        9,
+        11,
+        13,
+        15,
+        3,
+        5,
+        7,
+        9,
+        11
     };
 
     logic [NL-1:0] phy_pclk_out;
@@ -49,10 +57,14 @@ module tb_pipe_lane_mapper;
     mac2phy_lane_t [NL-1:0] phy_mac2phy;
     phy2mac_lane_t [NL-1:0] phy_phy2mac;
 
-    mac2phy_lane_t [3:0] pcie_x4_mac2phy;
-    phy2mac_lane_t [3:0] pcie_x4_phy2mac;
-    mac2phy_lane_t [3:0] usb_x2_mac2phy;
-    phy2mac_lane_t [3:0] usb_x2_phy2mac;
+    mac2phy_lane_t [11:0] ctrla_mac2phy;
+    phy2mac_lane_t [11:0] ctrla_phy2mac;
+    mac2phy_lane_t [11:0] ctrlb_mac2phy;
+    phy2mac_lane_t [11:0] ctrlb_phy2mac;
+    mac2phy_lane_t [11:0] ctrlc_mac2phy;
+    phy2mac_lane_t [11:0] ctrlc_phy2mac;
+    mac2phy_lane_t [11:0] ctrld_mac2phy;
+    phy2mac_lane_t [11:0] ctrld_phy2mac;
 
     pipe_lane_mapper_top #(
         .NM  (NM),
@@ -68,10 +80,14 @@ module tb_pipe_lane_mapper;
         .phy_rst_n      (phy_rst_n),
         .phy_mac2phy    (phy_mac2phy),
         .phy_phy2mac    (phy_phy2mac),
-        .pcie_x4_mac2phy (pcie_x4_mac2phy),
-        .pcie_x4_phy2mac (pcie_x4_phy2mac),
-        .usb_x2_mac2phy (usb_x2_mac2phy),
-        .usb_x2_phy2mac (usb_x2_phy2mac)
+        .ctrla_mac2phy (ctrla_mac2phy),
+        .ctrla_phy2mac (ctrla_phy2mac),
+        .ctrlb_mac2phy (ctrlb_mac2phy),
+        .ctrlb_phy2mac (ctrlb_phy2mac),
+        .ctrlc_mac2phy (ctrlc_mac2phy),
+        .ctrlc_phy2mac (ctrlc_phy2mac),
+        .ctrld_mac2phy (ctrld_mac2phy),
+        .ctrld_phy2mac (ctrld_phy2mac)
     );
 
     //------------------------------------------------------------ stimulus patterns
@@ -98,8 +114,10 @@ module tb_pipe_lane_mapper;
     endfunction
 
     always_comb begin
-        for (int p = 0; p < 4; p++) pcie_x4_mac2phy[p] = make_m2p(0, p);
-        for (int p = 0; p < 4; p++) usb_x2_mac2phy[p] = make_m2p(1, p);
+        for (int p = 0; p < 12; p++) ctrla_mac2phy[p] = make_m2p(0, p);
+        for (int p = 0; p < 12; p++) ctrlb_mac2phy[p] = make_m2p(1, p);
+        for (int p = 0; p < 12; p++) ctrlc_mac2phy[p] = make_m2p(2, p);
+        for (int p = 0; p < 12; p++) ctrld_mac2phy[p] = make_m2p(3, p);
         for (int l = 0; l < NL; l++) begin
             phy_phy2mac[l] = make_p2m(l);
             phy_phy2mac[l].phy_mac_phystatus = phy_phystatus_stim[l];
@@ -114,13 +132,59 @@ module tb_pipe_lane_mapper;
                 1: return 0;
                 2: return 0;
                 3: return 0;
+                4: return 0;
+                5: return 0;
+                6: return 0;
+                7: return 0;
+                8: return 0;
+                9: return 0;
+                10: return 0;
+                11: return 0;
                 default: return -1;
             endcase
             1: case (l)
                 0: return 0;
                 1: return 0;
-                2: return 1;
+                2: return 0;
                 3: return 1;
+                4: return 1;
+                5: return 1;
+                6: return 0;
+                7: return 0;
+                8: return 0;
+                9: return 1;
+                10: return 1;
+                11: return 1;
+                default: return -1;
+            endcase
+            2: case (l)
+                0: return 0;
+                1: return 0;
+                2: return 0;
+                3: return 0;
+                4: return 0;
+                5: return 0;
+                6: return 2;
+                7: return 2;
+                8: return 2;
+                9: return 2;
+                10: return 2;
+                11: return 2;
+                default: return -1;
+            endcase
+            3: case (l)
+                0: return 0;
+                1: return 0;
+                2: return 0;
+                3: return 1;
+                4: return 1;
+                5: return 1;
+                6: return 2;
+                7: return 2;
+                8: return 2;
+                9: return 3;
+                10: return 3;
+                11: return 3;
                 default: return -1;
             endcase
             default: return -1;
@@ -134,13 +198,59 @@ module tb_pipe_lane_mapper;
                 1: return 1;
                 2: return 2;
                 3: return 3;
+                4: return 4;
+                5: return 5;
+                6: return 6;
+                7: return 7;
+                8: return 8;
+                9: return 9;
+                10: return 10;
+                11: return 11;
                 default: return -1;
             endcase
             1: case (l)
                 0: return 0;
                 1: return 1;
-                2: return 0;
-                3: return 1;
+                2: return 2;
+                3: return 0;
+                4: return 1;
+                5: return 2;
+                6: return 6;
+                7: return 7;
+                8: return 8;
+                9: return 3;
+                10: return 4;
+                11: return 5;
+                default: return -1;
+            endcase
+            2: case (l)
+                0: return 0;
+                1: return 1;
+                2: return 2;
+                3: return 3;
+                4: return 4;
+                5: return 5;
+                6: return 0;
+                7: return 1;
+                8: return 2;
+                9: return 3;
+                10: return 4;
+                11: return 5;
+                default: return -1;
+            endcase
+            3: case (l)
+                0: return 0;
+                1: return 1;
+                2: return 2;
+                3: return 0;
+                4: return 1;
+                5: return 2;
+                6: return 0;
+                7: return 1;
+                8: return 2;
+                9: return 0;
+                10: return 1;
+                11: return 2;
                 default: return -1;
             endcase
             default: return -1;
@@ -239,20 +349,32 @@ module tb_pipe_lane_mapper;
             $sformatf("%s: phy_mac_fomfeedback mismatch, got=%0h expected=%0h", ctx, got.phy_mac_fomfeedback, exp.phy_mac_fomfeedback));
     endtask
 
-    localparam int G1_LANES[2] = '{2, 3};
+    localparam int G1_LANES[3] = '{3, 4, 5};
+    localparam int G2_LANES[3] = '{6, 7, 8};
+    localparam int G3_LANES[3] = '{9, 10, 11};
 
-    phy2mac_lane_t exp_safe_p2m_pcie_x4;
-    assign exp_safe_p2m_pcie_x4 = '{
-        phy_mac_rxelecidle: 1'b1,
+    phy2mac_lane_t exp_safe_p2m_ctrla;
+    assign exp_safe_p2m_ctrla = '{
         phy_mac_messagebus: 8'd80,
         phy_mac_phystatus: phy_phy2mac[0].phy_mac_phystatus,
         default: '0
     };
-    phy2mac_lane_t exp_safe_p2m_usb_x2;
-    assign exp_safe_p2m_usb_x2 = '{
-        phy_mac_rxelecidle: 1'b1,
+    phy2mac_lane_t exp_safe_p2m_ctrlb;
+    assign exp_safe_p2m_ctrlb = '{
         phy_mac_messagebus: 8'd80,
-        phy_mac_phystatus: phy_phy2mac[2].phy_mac_phystatus,
+        phy_mac_phystatus: phy_phy2mac[3].phy_mac_phystatus,
+        default: '0
+    };
+    phy2mac_lane_t exp_safe_p2m_ctrlc;
+    assign exp_safe_p2m_ctrlc = '{
+        phy_mac_messagebus: 8'd80,
+        phy_mac_phystatus: phy_phy2mac[6].phy_mac_phystatus,
+        default: '0
+    };
+    phy2mac_lane_t exp_safe_p2m_ctrld;
+    assign exp_safe_p2m_ctrld = '{
+        phy_mac_messagebus: 8'd80,
+        phy_mac_phystatus: phy_phy2mac[9].phy_mac_phystatus,
         default: '0
     };
 
@@ -264,19 +386,71 @@ module tb_pipe_lane_mapper;
             sel_snap = dut.sel_tgt;
             #1;
             chk($onehot0(sel_snap.g1), "sel_tgt.g1 not one-hot0 (>1 branch enabled)");
+            chk($onehot0(sel_snap.g2), "sel_tgt.g2 not one-hot0 (>1 branch enabled)");
+            chk($onehot0(sel_snap.g3), "sel_tgt.g3 not one-hot0 (>1 branch enabled)");
 
-            if (sel_snap.g1 == '0) begin
+            if (sel_snap.g1 == '0 && dut.sel_tgt.g1 == '0) begin
                 foreach (G1_LANES[i])
                     chk_m2p(phy_mac2phy[G1_LANES[i]], SAFE_M2P,
                         $sformatf("G1 lane%0d: sel==0 BBM gap", G1_LANES[i]));
-                chk_p2m(pcie_x4_phy2mac[2], exp_safe_p2m_pcie_x4,
-                    "G1 PCIe_x4[2]: sel==0 BBM gap");
-                chk_p2m(pcie_x4_phy2mac[3], exp_safe_p2m_pcie_x4,
-                    "G1 PCIe_x4[3]: sel==0 BBM gap");
-                chk_p2m(usb_x2_phy2mac[0], exp_safe_p2m_usb_x2,
-                    "G1 USB_x2[0]: sel==0 BBM gap");
-                chk_p2m(usb_x2_phy2mac[1], exp_safe_p2m_usb_x2,
-                    "G1 USB_x2[1]: sel==0 BBM gap");
+                chk_p2m(ctrla_phy2mac[3], exp_safe_p2m_ctrla,
+                    "G1 CtrlA[3]: sel==0 BBM gap");
+                chk_p2m(ctrla_phy2mac[4], exp_safe_p2m_ctrla,
+                    "G1 CtrlA[4]: sel==0 BBM gap");
+                chk_p2m(ctrla_phy2mac[5], exp_safe_p2m_ctrla,
+                    "G1 CtrlA[5]: sel==0 BBM gap");
+                chk_p2m(ctrlb_phy2mac[0], exp_safe_p2m_ctrlb,
+                    "G1 CtrlB[0]: sel==0 BBM gap");
+                chk_p2m(ctrlb_phy2mac[1], exp_safe_p2m_ctrlb,
+                    "G1 CtrlB[1]: sel==0 BBM gap");
+                chk_p2m(ctrlb_phy2mac[2], exp_safe_p2m_ctrlb,
+                    "G1 CtrlB[2]: sel==0 BBM gap");
+            end
+            if (sel_snap.g2 == '0 && dut.sel_tgt.g2 == '0) begin
+                foreach (G2_LANES[i])
+                    chk_m2p(phy_mac2phy[G2_LANES[i]], SAFE_M2P,
+                        $sformatf("G2 lane%0d: sel==0 BBM gap", G2_LANES[i]));
+                chk_p2m(ctrla_phy2mac[6], exp_safe_p2m_ctrla,
+                    "G2 CtrlA[6]: sel==0 BBM gap");
+                chk_p2m(ctrla_phy2mac[7], exp_safe_p2m_ctrla,
+                    "G2 CtrlA[7]: sel==0 BBM gap");
+                chk_p2m(ctrla_phy2mac[8], exp_safe_p2m_ctrla,
+                    "G2 CtrlA[8]: sel==0 BBM gap");
+                chk_p2m(ctrlc_phy2mac[0], exp_safe_p2m_ctrlc,
+                    "G2 CtrlC[0]: sel==0 BBM gap");
+                chk_p2m(ctrlc_phy2mac[1], exp_safe_p2m_ctrlc,
+                    "G2 CtrlC[1]: sel==0 BBM gap");
+                chk_p2m(ctrlc_phy2mac[2], exp_safe_p2m_ctrlc,
+                    "G2 CtrlC[2]: sel==0 BBM gap");
+            end
+            if (sel_snap.g3 == '0 && dut.sel_tgt.g3 == '0) begin
+                foreach (G3_LANES[i])
+                    chk_m2p(phy_mac2phy[G3_LANES[i]], SAFE_M2P,
+                        $sformatf("G3 lane%0d: sel==0 BBM gap", G3_LANES[i]));
+                chk_p2m(ctrla_phy2mac[9], exp_safe_p2m_ctrla,
+                    "G3 CtrlA[9]: sel==0 BBM gap");
+                chk_p2m(ctrla_phy2mac[10], exp_safe_p2m_ctrla,
+                    "G3 CtrlA[10]: sel==0 BBM gap");
+                chk_p2m(ctrla_phy2mac[11], exp_safe_p2m_ctrla,
+                    "G3 CtrlA[11]: sel==0 BBM gap");
+                chk_p2m(ctrlb_phy2mac[3], exp_safe_p2m_ctrlb,
+                    "G3 CtrlB[3]: sel==0 BBM gap");
+                chk_p2m(ctrlb_phy2mac[4], exp_safe_p2m_ctrlb,
+                    "G3 CtrlB[4]: sel==0 BBM gap");
+                chk_p2m(ctrlb_phy2mac[5], exp_safe_p2m_ctrlb,
+                    "G3 CtrlB[5]: sel==0 BBM gap");
+                chk_p2m(ctrlc_phy2mac[3], exp_safe_p2m_ctrlc,
+                    "G3 CtrlC[3]: sel==0 BBM gap");
+                chk_p2m(ctrlc_phy2mac[4], exp_safe_p2m_ctrlc,
+                    "G3 CtrlC[4]: sel==0 BBM gap");
+                chk_p2m(ctrlc_phy2mac[5], exp_safe_p2m_ctrlc,
+                    "G3 CtrlC[5]: sel==0 BBM gap");
+                chk_p2m(ctrld_phy2mac[0], exp_safe_p2m_ctrld,
+                    "G3 CtrlD[0]: sel==0 BBM gap");
+                chk_p2m(ctrld_phy2mac[1], exp_safe_p2m_ctrld,
+                    "G3 CtrlD[1]: sel==0 BBM gap");
+                chk_p2m(ctrld_phy2mac[2], exp_safe_p2m_ctrld,
+                    "G3 CtrlD[2]: sel==0 BBM gap");
             end
         end
     end
@@ -300,11 +474,13 @@ module tb_pipe_lane_mapper;
         end
 
         for (int c = 0; c < NC; c++) begin
-            int max_w = 4;
+            int max_w = 12;
             int real_max_w;
             case (c)
-                0: real_max_w = 4;
-                1: real_max_w = 2;
+                0: real_max_w = 12;
+                1: real_max_w = 6;
+                2: real_max_w = 8;
+                3: real_max_w = 3;
                 default: real_max_w = 0;
             endcase
             for (int p = 0; p < max_w; p++) begin
@@ -315,8 +491,10 @@ module tb_pipe_lane_mapper;
                     if (owner_of(m, l) == c && port_of(m, l) == p) src_lane = l;
 
                 case (c)
-                    0: got = pcie_x4_phy2mac[p];
-                    1: got = usb_x2_phy2mac[p];
+                    0: got = ctrla_phy2mac[p];
+                    1: got = ctrlb_phy2mac[p];
+                    2: got = ctrlc_phy2mac[p];
+                    3: got = ctrld_phy2mac[p];
                 endcase
 
                 if (src_lane == -1) begin
@@ -338,7 +516,7 @@ module tb_pipe_lane_mapper;
                             exp_tie.phy_mac_rxsyncheader = 2'd0;
                             exp_tie.phy_mac_rxvalid = 1'b0;
                             exp_tie.phy_mac_rxstatus = 3'd0;
-                            exp_tie.phy_mac_rxelecidle = 1'b1;
+                            exp_tie.phy_mac_rxelecidle = 1'b0;
                             exp_tie.phy_mac_rxstandbystatus = 1'b0;
                             exp_tie.phy_mac_messagebus = 8'd80;
                             exp_tie.phy_mac_phystatus = phy_phy2mac[active_base].phy_mac_phystatus;
@@ -356,7 +534,7 @@ module tb_pipe_lane_mapper;
                             exp_tie.phy_mac_rxsyncheader = 2'd0;
                             exp_tie.phy_mac_rxvalid = 1'b0;
                             exp_tie.phy_mac_rxstatus = 3'd0;
-                            exp_tie.phy_mac_rxelecidle = 1'b1;
+                            exp_tie.phy_mac_rxelecidle = 1'b0;
                             exp_tie.phy_mac_rxstandbystatus = 1'b0;
                             exp_tie.phy_mac_messagebus = 8'd80;
                             exp_tie.phy_mac_phystatus = '0;
@@ -383,7 +561,7 @@ module tb_pipe_lane_mapper;
     endtask
 
     //------------------------------------------------------------ sequencing
-    localparam realtime SETTLE = 180;
+    localparam realtime SETTLE = 300;
 
     initial begin
 `ifdef DUMP_FSDB
@@ -413,33 +591,67 @@ module tb_pipe_lane_mapper;
         check_mode(1);
         phy_phystatus_stim[0] = 1'b0; #20;
         check_mode(1);
+        mode = 2; #SETTLE;
+        check_mode(2);
+        // toggle physical lane 0's phystatus and dynamically verify it's followed correctly
+        phy_phystatus_stim[0] = 1'b1; #20;
+        check_mode(2);
+        phy_phystatus_stim[0] = 1'b0; #20;
+        check_mode(2);
+        mode = 3; #SETTLE;
+        check_mode(3);
+        // toggle physical lane 0's phystatus and dynamically verify it's followed correctly
+        phy_phystatus_stim[0] = 1'b1; #20;
+        check_mode(3);
+        phy_phystatus_stim[0] = 1'b0; #20;
+        check_mode(3);
 
         // non-adjacent jump
         mode = 0; #SETTLE; check_mode(0);
-        mode = 1; #SETTLE; check_mode(1);
+        mode = 3; #SETTLE; check_mode(3);
 
-        // reset pulse checks in mode1
+        // reset pulse checks in mode3
         // pulse each controller: its owner lanes' phy_rst_n should follow low, non-owner lanes stay high.
         ctrl_rst_n[0] = 1'b0; #SETTLE;
         for (int l = 0; l < NL; l++) begin
             bit expect_low;
-            expect_low = (owner_of(1, l) == 0);
+            expect_low = (owner_of(3, l) == 0);
             chk(phy_rst_n[l] == (expect_low ? 1'b0 : 1'b1),
-                $sformatf("mode1 lane%0d: ctrl_rst_n[0]=0 pulse, expected phy_rst_n=%0b", l, expect_low ? 1'b0 : 1'b1));
+                $sformatf("mode3 lane%0d: ctrl_rst_n[0]=0 pulse, expected phy_rst_n=%0b", l, expect_low ? 1'b0 : 1'b1));
         end
         $display("%0t: ctrl_rst_n[0] pulse checked (%0d cumulative errors)", $time, err_count);
         ctrl_rst_n[0] = 1'b1; #SETTLE;
-        check_mode(1);
+        check_mode(3);
         ctrl_rst_n[1] = 1'b0; #SETTLE;
         for (int l = 0; l < NL; l++) begin
             bit expect_low;
-            expect_low = (owner_of(1, l) == 1);
+            expect_low = (owner_of(3, l) == 1);
             chk(phy_rst_n[l] == (expect_low ? 1'b0 : 1'b1),
-                $sformatf("mode1 lane%0d: ctrl_rst_n[1]=0 pulse, expected phy_rst_n=%0b", l, expect_low ? 1'b0 : 1'b1));
+                $sformatf("mode3 lane%0d: ctrl_rst_n[1]=0 pulse, expected phy_rst_n=%0b", l, expect_low ? 1'b0 : 1'b1));
         end
         $display("%0t: ctrl_rst_n[1] pulse checked (%0d cumulative errors)", $time, err_count);
         ctrl_rst_n[1] = 1'b1; #SETTLE;
-        check_mode(1);
+        check_mode(3);
+        ctrl_rst_n[2] = 1'b0; #SETTLE;
+        for (int l = 0; l < NL; l++) begin
+            bit expect_low;
+            expect_low = (owner_of(3, l) == 2);
+            chk(phy_rst_n[l] == (expect_low ? 1'b0 : 1'b1),
+                $sformatf("mode3 lane%0d: ctrl_rst_n[2]=0 pulse, expected phy_rst_n=%0b", l, expect_low ? 1'b0 : 1'b1));
+        end
+        $display("%0t: ctrl_rst_n[2] pulse checked (%0d cumulative errors)", $time, err_count);
+        ctrl_rst_n[2] = 1'b1; #SETTLE;
+        check_mode(3);
+        ctrl_rst_n[3] = 1'b0; #SETTLE;
+        for (int l = 0; l < NL; l++) begin
+            bit expect_low;
+            expect_low = (owner_of(3, l) == 3);
+            chk(phy_rst_n[l] == (expect_low ? 1'b0 : 1'b1),
+                $sformatf("mode3 lane%0d: ctrl_rst_n[3]=0 pulse, expected phy_rst_n=%0b", l, expect_low ? 1'b0 : 1'b1));
+        end
+        $display("%0t: ctrl_rst_n[3] pulse checked (%0d cumulative errors)", $time, err_count);
+        ctrl_rst_n[3] = 1'b1; #SETTLE;
+        check_mode(3);
 
         if (err_count == 0) $display("TB_RESULT: PASS");
         else                 $display("TB_RESULT: FAIL (%0d errors)", err_count);

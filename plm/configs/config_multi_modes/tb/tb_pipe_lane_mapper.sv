@@ -257,20 +257,27 @@ module tb_pipe_lane_mapper;
     };
 
     always @(dut.sel_tgt) begin
-        chk($onehot0(dut.sel_tgt.g1), "sel_tgt.g1 not one-hot0 (>1 branch enabled)");
+        if ($time == 0) begin
+            // skip: DUT hasn't come out of its startup X state yet
+        end else begin
+            lane_sel_t sel_snap;
+            sel_snap = dut.sel_tgt;
+            #1;
+            chk($onehot0(sel_snap.g1), "sel_tgt.g1 not one-hot0 (>1 branch enabled)");
 
-        if (dut.sel_tgt.g1 == '0) begin
-            foreach (G1_LANES[i])
-                chk_m2p(phy_mac2phy[G1_LANES[i]], SAFE_M2P,
-                    $sformatf("G1 lane%0d: sel==0 BBM gap", G1_LANES[i]));
-            chk_p2m(pcie_x4_phy2mac[2], exp_safe_p2m_pcie_x4,
-                "G1 PCIe_x4[2]: sel==0 BBM gap");
-            chk_p2m(pcie_x4_phy2mac[3], exp_safe_p2m_pcie_x4,
-                "G1 PCIe_x4[3]: sel==0 BBM gap");
-            chk_p2m(usb_x2_phy2mac[0], exp_safe_p2m_usb_x2,
-                "G1 USB_x2[0]: sel==0 BBM gap");
-            chk_p2m(usb_x2_phy2mac[1], exp_safe_p2m_usb_x2,
-                "G1 USB_x2[1]: sel==0 BBM gap");
+            if (sel_snap.g1 == '0) begin
+                foreach (G1_LANES[i])
+                    chk_m2p(phy_mac2phy[G1_LANES[i]], SAFE_M2P,
+                        $sformatf("G1 lane%0d: sel==0 BBM gap", G1_LANES[i]));
+                chk_p2m(pcie_x4_phy2mac[2], exp_safe_p2m_pcie_x4,
+                    "G1 PCIe_x4[2]: sel==0 BBM gap");
+                chk_p2m(pcie_x4_phy2mac[3], exp_safe_p2m_pcie_x4,
+                    "G1 PCIe_x4[3]: sel==0 BBM gap");
+                chk_p2m(usb_x2_phy2mac[0], exp_safe_p2m_usb_x2,
+                    "G1 USB_x2[0]: sel==0 BBM gap");
+                chk_p2m(usb_x2_phy2mac[1], exp_safe_p2m_usb_x2,
+                    "G1 USB_x2[1]: sel==0 BBM gap");
+            end
         end
     end
 

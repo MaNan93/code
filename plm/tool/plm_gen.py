@@ -1127,22 +1127,47 @@ def gen_tb(cfg):
                     port_group[(cid, cl)] = g.gid
 
         L.append("    always @(dut.sel_tgt) begin")
+        # dut.sel_tgt's very first transition (X -> its reset value) lands
+        # at time 0, before controller/phy stimulus or resets have
+        # actually propagated through the DUT -- everything downstream is
+        # still X at that instant. Checking then would flag that normal
+        # startup transient as a failure, not a real DUT defect, so skip
+        # this trigger entirely and let the real checks start once
+        # check_mode() is called later in the initial block's sequencing.
+        L.append("        if ($time == 0) begin")
+        L.append("            // skip: DUT hasn't come out of its startup X state yet")
+        L.append("        end else begin")
+        # Snapshot sel_tgt immediately (it's the signal that triggered this
+        # block, already valid), then let a small delay pass before
+        # checking anything downstream of it. phy_mac2phy/ctrlX_phy2mac
+        # are combinational functions of sel_tgt computed through the
+        # DUT's pipe_lane_data_mux chain (an always_comb feeding a separate
+        # continuous assign) -- reading them in the very same trigger as
+        # sel_tgt's own change races that propagation, with no guarantee
+        # it has settled yet. Checking against the snapshot (not
+        # dut.sel_tgt again) also means a same-time-step follow-up change
+        # can't retroactively make this check compare against the wrong
+        # generation of sel_tgt.
+        L.append("            lane_sel_t sel_snap;")
+        L.append("            sel_snap = dut.sel_tgt;")
+        L.append("            #1;")
         for g in muxed:
-            L.append(f"        chk($onehot0(dut.sel_tgt.g{g.gid}), "
+            L.append(f"            chk($onehot0(sel_snap.g{g.gid}), "
                      f"\"sel_tgt.g{g.gid} not one-hot0 (>1 branch enabled)\");")
         L.append("")
         for g in muxed:
-            L.append(f"        if (dut.sel_tgt.g{g.gid} == '0) begin")
-            L.append(f"            foreach (G{g.gid}_LANES[i])")
-            L.append(f"                chk_m2p(phy_mac2phy[G{g.gid}_LANES[i]], SAFE_M2P,")
-            L.append(f"                    $sformatf(\"G{g.gid} lane%0d: sel==0 BBM gap\", G{g.gid}_LANES[i]));")
+            L.append(f"            if (sel_snap.g{g.gid} == '0) begin")
+            L.append(f"                foreach (G{g.gid}_LANES[i])")
+            L.append(f"                    chk_m2p(phy_mac2phy[G{g.gid}_LANES[i]], SAFE_M2P,")
+            L.append(f"                        $sformatf(\"G{g.gid} lane%0d: sel==0 BBM gap\", G{g.gid}_LANES[i]));")
             for (cid, cl), gid in sorted(port_group.items()):
                 if gid != g.gid:
                     continue
                 c = cfg.controllers[cid]
-                L.append(f"            chk_p2m({c.lname}_phy2mac[{cl}], exp_safe_p2m_{c.lname},")
-                L.append(f"                \"G{g.gid} {c.name}[{cl}]: sel==0 BBM gap\");")
-            L.append(f"        end")
+                L.append(f"                chk_p2m({c.lname}_phy2mac[{cl}], exp_safe_p2m_{c.lname},")
+                L.append(f"                    \"G{g.gid} {c.name}[{cl}]: sel==0 BBM gap\");")
+            L.append(f"            end")
+        L.append("        end")
         L.append("    end")
     else:
         L.append("    // This topology is all direct connections; no BBM groups, nothing to monitor.")

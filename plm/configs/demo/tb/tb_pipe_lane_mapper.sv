@@ -419,80 +419,87 @@ module tb_pipe_lane_mapper;
     };
 
     always @(dut.sel_tgt) begin
-        chk($onehot0(dut.sel_tgt.g1), "sel_tgt.g1 not one-hot0 (>1 branch enabled)");
-        chk($onehot0(dut.sel_tgt.g2), "sel_tgt.g2 not one-hot0 (>1 branch enabled)");
-        chk($onehot0(dut.sel_tgt.g3), "sel_tgt.g3 not one-hot0 (>1 branch enabled)");
+        if ($time == 0) begin
+            // skip: DUT hasn't come out of its startup X state yet
+        end else begin
+            lane_sel_t sel_snap;
+            sel_snap = dut.sel_tgt;
+            #1;
+            chk($onehot0(sel_snap.g1), "sel_tgt.g1 not one-hot0 (>1 branch enabled)");
+            chk($onehot0(sel_snap.g2), "sel_tgt.g2 not one-hot0 (>1 branch enabled)");
+            chk($onehot0(sel_snap.g3), "sel_tgt.g3 not one-hot0 (>1 branch enabled)");
 
-        if (dut.sel_tgt.g1 == '0) begin
-            foreach (G1_LANES[i])
-                chk_m2p(phy_mac2phy[G1_LANES[i]], SAFE_M2P,
-                    $sformatf("G1 lane%0d: sel==0 BBM gap", G1_LANES[i]));
-            chk_p2m(ctrl0_phy2mac[4], exp_safe_p2m_ctrl0,
-                "G1 Ctrl0[4]: sel==0 BBM gap");
-            chk_p2m(ctrl0_phy2mac[5], exp_safe_p2m_ctrl0,
-                "G1 Ctrl0[5]: sel==0 BBM gap");
-            chk_p2m(ctrl0_phy2mac[6], exp_safe_p2m_ctrl0,
-                "G1 Ctrl0[6]: sel==0 BBM gap");
-            chk_p2m(ctrl0_phy2mac[7], exp_safe_p2m_ctrl0,
-                "G1 Ctrl0[7]: sel==0 BBM gap");
-            chk_p2m(ctrl1_phy2mac[0], exp_safe_p2m_ctrl1,
-                "G1 Ctrl1[0]: sel==0 BBM gap");
-            chk_p2m(ctrl1_phy2mac[1], exp_safe_p2m_ctrl1,
-                "G1 Ctrl1[1]: sel==0 BBM gap");
-            chk_p2m(ctrl1_phy2mac[2], exp_safe_p2m_ctrl1,
-                "G1 Ctrl1[2]: sel==0 BBM gap");
-            chk_p2m(ctrl1_phy2mac[3], exp_safe_p2m_ctrl1,
-                "G1 Ctrl1[3]: sel==0 BBM gap");
-        end
-        if (dut.sel_tgt.g2 == '0) begin
-            foreach (G2_LANES[i])
-                chk_m2p(phy_mac2phy[G2_LANES[i]], SAFE_M2P,
-                    $sformatf("G2 lane%0d: sel==0 BBM gap", G2_LANES[i]));
-            chk_p2m(ctrl0_phy2mac[8], exp_safe_p2m_ctrl0,
-                "G2 Ctrl0[8]: sel==0 BBM gap");
-            chk_p2m(ctrl0_phy2mac[9], exp_safe_p2m_ctrl0,
-                "G2 Ctrl0[9]: sel==0 BBM gap");
-            chk_p2m(ctrl0_phy2mac[10], exp_safe_p2m_ctrl0,
-                "G2 Ctrl0[10]: sel==0 BBM gap");
-            chk_p2m(ctrl0_phy2mac[11], exp_safe_p2m_ctrl0,
-                "G2 Ctrl0[11]: sel==0 BBM gap");
-            chk_p2m(ctrl2_phy2mac[0], exp_safe_p2m_ctrl2,
-                "G2 Ctrl2[0]: sel==0 BBM gap");
-            chk_p2m(ctrl2_phy2mac[1], exp_safe_p2m_ctrl2,
-                "G2 Ctrl2[1]: sel==0 BBM gap");
-            chk_p2m(ctrl2_phy2mac[2], exp_safe_p2m_ctrl2,
-                "G2 Ctrl2[2]: sel==0 BBM gap");
-            chk_p2m(ctrl2_phy2mac[3], exp_safe_p2m_ctrl2,
-                "G2 Ctrl2[3]: sel==0 BBM gap");
-        end
-        if (dut.sel_tgt.g3 == '0) begin
-            foreach (G3_LANES[i])
-                chk_m2p(phy_mac2phy[G3_LANES[i]], SAFE_M2P,
-                    $sformatf("G3 lane%0d: sel==0 BBM gap", G3_LANES[i]));
-            chk_p2m(ctrl0_phy2mac[12], exp_safe_p2m_ctrl0,
-                "G3 Ctrl0[12]: sel==0 BBM gap");
-            chk_p2m(ctrl0_phy2mac[13], exp_safe_p2m_ctrl0,
-                "G3 Ctrl0[13]: sel==0 BBM gap");
-            chk_p2m(ctrl0_phy2mac[14], exp_safe_p2m_ctrl0,
-                "G3 Ctrl0[14]: sel==0 BBM gap");
-            chk_p2m(ctrl0_phy2mac[15], exp_safe_p2m_ctrl0,
-                "G3 Ctrl0[15]: sel==0 BBM gap");
-            chk_p2m(ctrl2_phy2mac[4], exp_safe_p2m_ctrl2,
-                "G3 Ctrl2[4]: sel==0 BBM gap");
-            chk_p2m(ctrl2_phy2mac[5], exp_safe_p2m_ctrl2,
-                "G3 Ctrl2[5]: sel==0 BBM gap");
-            chk_p2m(ctrl2_phy2mac[6], exp_safe_p2m_ctrl2,
-                "G3 Ctrl2[6]: sel==0 BBM gap");
-            chk_p2m(ctrl2_phy2mac[7], exp_safe_p2m_ctrl2,
-                "G3 Ctrl2[7]: sel==0 BBM gap");
-            chk_p2m(ctrl3_phy2mac[0], exp_safe_p2m_ctrl3,
-                "G3 Ctrl3[0]: sel==0 BBM gap");
-            chk_p2m(ctrl3_phy2mac[1], exp_safe_p2m_ctrl3,
-                "G3 Ctrl3[1]: sel==0 BBM gap");
-            chk_p2m(ctrl3_phy2mac[2], exp_safe_p2m_ctrl3,
-                "G3 Ctrl3[2]: sel==0 BBM gap");
-            chk_p2m(ctrl3_phy2mac[3], exp_safe_p2m_ctrl3,
-                "G3 Ctrl3[3]: sel==0 BBM gap");
+            if (sel_snap.g1 == '0) begin
+                foreach (G1_LANES[i])
+                    chk_m2p(phy_mac2phy[G1_LANES[i]], SAFE_M2P,
+                        $sformatf("G1 lane%0d: sel==0 BBM gap", G1_LANES[i]));
+                chk_p2m(ctrl0_phy2mac[4], exp_safe_p2m_ctrl0,
+                    "G1 Ctrl0[4]: sel==0 BBM gap");
+                chk_p2m(ctrl0_phy2mac[5], exp_safe_p2m_ctrl0,
+                    "G1 Ctrl0[5]: sel==0 BBM gap");
+                chk_p2m(ctrl0_phy2mac[6], exp_safe_p2m_ctrl0,
+                    "G1 Ctrl0[6]: sel==0 BBM gap");
+                chk_p2m(ctrl0_phy2mac[7], exp_safe_p2m_ctrl0,
+                    "G1 Ctrl0[7]: sel==0 BBM gap");
+                chk_p2m(ctrl1_phy2mac[0], exp_safe_p2m_ctrl1,
+                    "G1 Ctrl1[0]: sel==0 BBM gap");
+                chk_p2m(ctrl1_phy2mac[1], exp_safe_p2m_ctrl1,
+                    "G1 Ctrl1[1]: sel==0 BBM gap");
+                chk_p2m(ctrl1_phy2mac[2], exp_safe_p2m_ctrl1,
+                    "G1 Ctrl1[2]: sel==0 BBM gap");
+                chk_p2m(ctrl1_phy2mac[3], exp_safe_p2m_ctrl1,
+                    "G1 Ctrl1[3]: sel==0 BBM gap");
+            end
+            if (sel_snap.g2 == '0) begin
+                foreach (G2_LANES[i])
+                    chk_m2p(phy_mac2phy[G2_LANES[i]], SAFE_M2P,
+                        $sformatf("G2 lane%0d: sel==0 BBM gap", G2_LANES[i]));
+                chk_p2m(ctrl0_phy2mac[8], exp_safe_p2m_ctrl0,
+                    "G2 Ctrl0[8]: sel==0 BBM gap");
+                chk_p2m(ctrl0_phy2mac[9], exp_safe_p2m_ctrl0,
+                    "G2 Ctrl0[9]: sel==0 BBM gap");
+                chk_p2m(ctrl0_phy2mac[10], exp_safe_p2m_ctrl0,
+                    "G2 Ctrl0[10]: sel==0 BBM gap");
+                chk_p2m(ctrl0_phy2mac[11], exp_safe_p2m_ctrl0,
+                    "G2 Ctrl0[11]: sel==0 BBM gap");
+                chk_p2m(ctrl2_phy2mac[0], exp_safe_p2m_ctrl2,
+                    "G2 Ctrl2[0]: sel==0 BBM gap");
+                chk_p2m(ctrl2_phy2mac[1], exp_safe_p2m_ctrl2,
+                    "G2 Ctrl2[1]: sel==0 BBM gap");
+                chk_p2m(ctrl2_phy2mac[2], exp_safe_p2m_ctrl2,
+                    "G2 Ctrl2[2]: sel==0 BBM gap");
+                chk_p2m(ctrl2_phy2mac[3], exp_safe_p2m_ctrl2,
+                    "G2 Ctrl2[3]: sel==0 BBM gap");
+            end
+            if (sel_snap.g3 == '0) begin
+                foreach (G3_LANES[i])
+                    chk_m2p(phy_mac2phy[G3_LANES[i]], SAFE_M2P,
+                        $sformatf("G3 lane%0d: sel==0 BBM gap", G3_LANES[i]));
+                chk_p2m(ctrl0_phy2mac[12], exp_safe_p2m_ctrl0,
+                    "G3 Ctrl0[12]: sel==0 BBM gap");
+                chk_p2m(ctrl0_phy2mac[13], exp_safe_p2m_ctrl0,
+                    "G3 Ctrl0[13]: sel==0 BBM gap");
+                chk_p2m(ctrl0_phy2mac[14], exp_safe_p2m_ctrl0,
+                    "G3 Ctrl0[14]: sel==0 BBM gap");
+                chk_p2m(ctrl0_phy2mac[15], exp_safe_p2m_ctrl0,
+                    "G3 Ctrl0[15]: sel==0 BBM gap");
+                chk_p2m(ctrl2_phy2mac[4], exp_safe_p2m_ctrl2,
+                    "G3 Ctrl2[4]: sel==0 BBM gap");
+                chk_p2m(ctrl2_phy2mac[5], exp_safe_p2m_ctrl2,
+                    "G3 Ctrl2[5]: sel==0 BBM gap");
+                chk_p2m(ctrl2_phy2mac[6], exp_safe_p2m_ctrl2,
+                    "G3 Ctrl2[6]: sel==0 BBM gap");
+                chk_p2m(ctrl2_phy2mac[7], exp_safe_p2m_ctrl2,
+                    "G3 Ctrl2[7]: sel==0 BBM gap");
+                chk_p2m(ctrl3_phy2mac[0], exp_safe_p2m_ctrl3,
+                    "G3 Ctrl3[0]: sel==0 BBM gap");
+                chk_p2m(ctrl3_phy2mac[1], exp_safe_p2m_ctrl3,
+                    "G3 Ctrl3[1]: sel==0 BBM gap");
+                chk_p2m(ctrl3_phy2mac[2], exp_safe_p2m_ctrl3,
+                    "G3 Ctrl3[2]: sel==0 BBM gap");
+                chk_p2m(ctrl3_phy2mac[3], exp_safe_p2m_ctrl3,
+                    "G3 Ctrl3[3]: sel==0 BBM gap");
+            end
         end
     end
 

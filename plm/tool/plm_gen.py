@@ -1063,6 +1063,25 @@ def gen_tb(cfg):
     L.append("        end")
     L.append("    endtask")
     L.append("")
+
+    # Per-field struct comparison, so a mismatch reports exactly which
+    # signal differs (and its actual/expected values) instead of just
+    # "the struct doesn't match" -- every whole-struct/multi-field
+    # comparison in this tb goes through these two tasks.
+    m2p_signals = [s for s in cfg.signals if s.is_m2p]
+    p2m_signals_all = [s for s in cfg.signals if not s.is_m2p]
+    L.append("    task automatic chk_m2p(input mac2phy_lane_t got, input mac2phy_lane_t exp, input string ctx);")
+    for s in m2p_signals:
+        L.append(f"        chk(got.{s.name} == exp.{s.name},")
+        L.append(f"            $sformatf(\"%s: {s.name} mismatch, got=%0h expected=%0h\", ctx, got.{s.name}, exp.{s.name}));")
+    L.append("    endtask")
+    L.append("")
+    L.append("    task automatic chk_p2m(input phy2mac_lane_t got, input phy2mac_lane_t exp, input string ctx);")
+    for s in p2m_signals_all:
+        L.append(f"        chk(got.{s.name} == exp.{s.name},")
+        L.append(f"            $sformatf(\"%s: {s.name} mismatch, got=%0h expected=%0h\", ctx, got.{s.name}, exp.{s.name}));")
+    L.append("    endtask")
+    L.append("")
     if muxed:
         for g in muxed:
             lanes_str = ", ".join(str(l) for l in g.lanes)
@@ -1115,16 +1134,14 @@ def gen_tb(cfg):
         for g in muxed:
             L.append(f"        if (dut.sel_tgt.g{g.gid} == '0) begin")
             L.append(f"            foreach (G{g.gid}_LANES[i])")
-            L.append(f"                chk(phy_mac2phy[G{g.gid}_LANES[i]] == SAFE_M2P,")
-            L.append(f"                    $sformatf(\"G{g.gid} lane%0d: sel==0 but mac_phy data doesn't "
-                     f"match SAFE_M2P (safe state not shown in BBM gap)\", G{g.gid}_LANES[i]));")
+            L.append(f"                chk_m2p(phy_mac2phy[G{g.gid}_LANES[i]], SAFE_M2P,")
+            L.append(f"                    $sformatf(\"G{g.gid} lane%0d: sel==0 BBM gap\", G{g.gid}_LANES[i]));")
             for (cid, cl), gid in sorted(port_group.items()):
                 if gid != g.gid:
                     continue
                 c = cfg.controllers[cid]
-                L.append(f"            chk({c.lname}_phy2mac[{cl}] == exp_safe_p2m_{c.lname},")
-                L.append(f"                $sformatf(\"G{g.gid} {c.name}[{cl}]: sel==0 but phy_mac data "
-                         f"doesn't match its tie_off-derived safe value (BBM gap)\"));")
+                L.append(f"            chk_p2m({c.lname}_phy2mac[{cl}], exp_safe_p2m_{c.lname},")
+                L.append(f"                \"G{g.gid} {c.name}[{cl}]: sel==0 BBM gap\");")
             L.append(f"        end")
         L.append("    end")
     else:
@@ -1142,11 +1159,8 @@ def gen_tb(cfg):
     L.append("            cid  = owner_of(m, l);")
     L.append("            port = port_of(m, l);")
     L.append("            exp_m2p = make_m2p(cid, port);")
-    L.append("            chk(phy_mac2phy[l].mac_phy_txdata == exp_m2p.mac_phy_txdata &&")
-    L.append("                phy_mac2phy[l].mac_phy_txdatavalid == 1'b1 &&")
-    L.append("                phy_mac2phy[l].mac_phy_txelecidle == 1'b0,")
-    L.append("                $sformatf(\"mode%0d lane%0d: phy_mac2phy mismatch, expected ctrl%0d port%0d\",")
-    L.append("                          m, l, cid, port));")
+    L.append("            chk_m2p(phy_mac2phy[l], exp_m2p,")
+    L.append("                $sformatf(\"mode%0d lane%0d: expected ctrl%0d port%0d\", m, l, cid, port));")
     L.append("")
     L.append("            chk(phy_rst_n[l] == ctrl_rst_n[cid],")
     L.append("                $sformatf(\"mode%0d lane%0d: phy_rst_n=%0b does not follow owner ctrl%0d\",")
@@ -1209,12 +1223,18 @@ def gen_tb(cfg):
     L.append("                        end")
     L.append("                    end")
 
-    L.append("                    chk(got == exp_tie,")
-    L.append("                        $sformatf(\"mode%0d ctrl%0d[%0d]: unmapped tie-off mismatch!\", m, c, p));")
+    L.append("                    chk_p2m(got, exp_tie,")
+    L.append("                        $sformatf(\"mode%0d ctrl%0d[%0d]: unmapped tie-off\", m, c, p));")
     L.append("                end else begin")
     L.append("                    exp_p2m = make_p2m(src_lane);")
-    L.append("                    chk(got.phy_mac_rxdata == exp_p2m.phy_mac_rxdata &&")
-    L.append("                        got.phy_mac_rxdatavalid == 1'b1 && got.phy_mac_rxelecidle == 1'b0,")
+    # make_p2m() alone always leaves phy_mac_phystatus at SAFE_P2M's
+    # static value; the real phy_phy2mac stimulus (see the always_comb
+    # above) overrides it per-lane from phy_phystatus_stim afterwards.
+    # exp_p2m must replicate that same override, or this now-comprehensive
+    # per-field check spuriously fails whenever phy_phystatus_stim[src_lane]
+    # is toggled non-zero during a check_mode() call.
+    L.append("                    exp_p2m.phy_mac_phystatus = phy_phystatus_stim[src_lane];")
+    L.append("                    chk_p2m(got, exp_p2m,")
     L.append("                        $sformatf(\"mode%0d ctrl%0d[%0d]: expected lane%0d data\", m, c, p, src_lane));")
     L.append("                end")
     L.append("            end")

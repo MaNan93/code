@@ -303,6 +303,88 @@ module tb_pipe_lane_mapper;
         end
     endtask
 
+    task automatic chk_m2p(input mac2phy_lane_t got, input mac2phy_lane_t exp, input string ctx);
+        chk(got.mac_phy_txdata == exp.mac_phy_txdata,
+            $sformatf("%s: mac_phy_txdata mismatch, got=%0h expected=%0h", ctx, got.mac_phy_txdata, exp.mac_phy_txdata));
+        chk(got.mac_phy_txdatak == exp.mac_phy_txdatak,
+            $sformatf("%s: mac_phy_txdatak mismatch, got=%0h expected=%0h", ctx, got.mac_phy_txdatak, exp.mac_phy_txdatak));
+        chk(got.mac_phy_txdatavalid == exp.mac_phy_txdatavalid,
+            $sformatf("%s: mac_phy_txdatavalid mismatch, got=%0h expected=%0h", ctx, got.mac_phy_txdatavalid, exp.mac_phy_txdatavalid));
+        chk(got.mac_phy_txstartblock == exp.mac_phy_txstartblock,
+            $sformatf("%s: mac_phy_txstartblock mismatch, got=%0h expected=%0h", ctx, got.mac_phy_txstartblock, exp.mac_phy_txstartblock));
+        chk(got.mac_phy_txsyncheader == exp.mac_phy_txsyncheader,
+            $sformatf("%s: mac_phy_txsyncheader mismatch, got=%0h expected=%0h", ctx, got.mac_phy_txsyncheader, exp.mac_phy_txsyncheader));
+        chk(got.mac_phy_txdetectrx_loopback == exp.mac_phy_txdetectrx_loopback,
+            $sformatf("%s: mac_phy_txdetectrx_loopback mismatch, got=%0h expected=%0h", ctx, got.mac_phy_txdetectrx_loopback, exp.mac_phy_txdetectrx_loopback));
+        chk(got.mac_phy_txelecidle == exp.mac_phy_txelecidle,
+            $sformatf("%s: mac_phy_txelecidle mismatch, got=%0h expected=%0h", ctx, got.mac_phy_txelecidle, exp.mac_phy_txelecidle));
+        chk(got.mac_phy_txcompliance == exp.mac_phy_txcompliance,
+            $sformatf("%s: mac_phy_txcompliance mismatch, got=%0h expected=%0h", ctx, got.mac_phy_txcompliance, exp.mac_phy_txcompliance));
+        chk(got.mac_phy_txdeemph == exp.mac_phy_txdeemph,
+            $sformatf("%s: mac_phy_txdeemph mismatch, got=%0h expected=%0h", ctx, got.mac_phy_txdeemph, exp.mac_phy_txdeemph));
+        chk(got.mac_phy_rxpolarity == exp.mac_phy_rxpolarity,
+            $sformatf("%s: mac_phy_rxpolarity mismatch, got=%0h expected=%0h", ctx, got.mac_phy_rxpolarity, exp.mac_phy_rxpolarity));
+        chk(got.mac_phy_rxstandby == exp.mac_phy_rxstandby,
+            $sformatf("%s: mac_phy_rxstandby mismatch, got=%0h expected=%0h", ctx, got.mac_phy_rxstandby, exp.mac_phy_rxstandby));
+        chk(got.mac_phy_messagebus == exp.mac_phy_messagebus,
+            $sformatf("%s: mac_phy_messagebus mismatch, got=%0h expected=%0h", ctx, got.mac_phy_messagebus, exp.mac_phy_messagebus));
+        chk(got.mac_phy_rxpresethint == exp.mac_phy_rxpresethint,
+            $sformatf("%s: mac_phy_rxpresethint mismatch, got=%0h expected=%0h", ctx, got.mac_phy_rxpresethint, exp.mac_phy_rxpresethint));
+        chk(got.mac_phy_local_pset_index == exp.mac_phy_local_pset_index,
+            $sformatf("%s: mac_phy_local_pset_index mismatch, got=%0h expected=%0h", ctx, got.mac_phy_local_pset_index, exp.mac_phy_local_pset_index));
+        chk(got.mac_phy_getlocal_pset_coef == exp.mac_phy_getlocal_pset_coef,
+            $sformatf("%s: mac_phy_getlocal_pset_coef mismatch, got=%0h expected=%0h", ctx, got.mac_phy_getlocal_pset_coef, exp.mac_phy_getlocal_pset_coef));
+        chk(got.mac_phy_invalid_req == exp.mac_phy_invalid_req,
+            $sformatf("%s: mac_phy_invalid_req mismatch, got=%0h expected=%0h", ctx, got.mac_phy_invalid_req, exp.mac_phy_invalid_req));
+        chk(got.mac_phy_rxeqeval == exp.mac_phy_rxeqeval,
+            $sformatf("%s: mac_phy_rxeqeval mismatch, got=%0h expected=%0h", ctx, got.mac_phy_rxeqeval, exp.mac_phy_rxeqeval));
+        chk(got.mac_phy_fs == exp.mac_phy_fs,
+            $sformatf("%s: mac_phy_fs mismatch, got=%0h expected=%0h", ctx, got.mac_phy_fs, exp.mac_phy_fs));
+        chk(got.mac_phy_lf == exp.mac_phy_lf,
+            $sformatf("%s: mac_phy_lf mismatch, got=%0h expected=%0h", ctx, got.mac_phy_lf, exp.mac_phy_lf));
+        chk(got.mac_phy_dirchange == exp.mac_phy_dirchange,
+            $sformatf("%s: mac_phy_dirchange mismatch, got=%0h expected=%0h", ctx, got.mac_phy_dirchange, exp.mac_phy_dirchange));
+        chk(got.mac_phy_rxeqinprogress == exp.mac_phy_rxeqinprogress,
+            $sformatf("%s: mac_phy_rxeqinprogress mismatch, got=%0h expected=%0h", ctx, got.mac_phy_rxeqinprogress, exp.mac_phy_rxeqinprogress));
+    endtask
+
+    task automatic chk_p2m(input phy2mac_lane_t got, input phy2mac_lane_t exp, input string ctx);
+        chk(got.phy_mac_rxdata == exp.phy_mac_rxdata,
+            $sformatf("%s: phy_mac_rxdata mismatch, got=%0h expected=%0h", ctx, got.phy_mac_rxdata, exp.phy_mac_rxdata));
+        chk(got.phy_mac_rxdatak == exp.phy_mac_rxdatak,
+            $sformatf("%s: phy_mac_rxdatak mismatch, got=%0h expected=%0h", ctx, got.phy_mac_rxdatak, exp.phy_mac_rxdatak));
+        chk(got.phy_mac_rxdatavalid == exp.phy_mac_rxdatavalid,
+            $sformatf("%s: phy_mac_rxdatavalid mismatch, got=%0h expected=%0h", ctx, got.phy_mac_rxdatavalid, exp.phy_mac_rxdatavalid));
+        chk(got.phy_mac_rxstartblock == exp.phy_mac_rxstartblock,
+            $sformatf("%s: phy_mac_rxstartblock mismatch, got=%0h expected=%0h", ctx, got.phy_mac_rxstartblock, exp.phy_mac_rxstartblock));
+        chk(got.phy_mac_rxsyncheader == exp.phy_mac_rxsyncheader,
+            $sformatf("%s: phy_mac_rxsyncheader mismatch, got=%0h expected=%0h", ctx, got.phy_mac_rxsyncheader, exp.phy_mac_rxsyncheader));
+        chk(got.phy_mac_rxvalid == exp.phy_mac_rxvalid,
+            $sformatf("%s: phy_mac_rxvalid mismatch, got=%0h expected=%0h", ctx, got.phy_mac_rxvalid, exp.phy_mac_rxvalid));
+        chk(got.phy_mac_rxstatus == exp.phy_mac_rxstatus,
+            $sformatf("%s: phy_mac_rxstatus mismatch, got=%0h expected=%0h", ctx, got.phy_mac_rxstatus, exp.phy_mac_rxstatus));
+        chk(got.phy_mac_rxelecidle == exp.phy_mac_rxelecidle,
+            $sformatf("%s: phy_mac_rxelecidle mismatch, got=%0h expected=%0h", ctx, got.phy_mac_rxelecidle, exp.phy_mac_rxelecidle));
+        chk(got.phy_mac_rxstandbystatus == exp.phy_mac_rxstandbystatus,
+            $sformatf("%s: phy_mac_rxstandbystatus mismatch, got=%0h expected=%0h", ctx, got.phy_mac_rxstandbystatus, exp.phy_mac_rxstandbystatus));
+        chk(got.phy_mac_messagebus == exp.phy_mac_messagebus,
+            $sformatf("%s: phy_mac_messagebus mismatch, got=%0h expected=%0h", ctx, got.phy_mac_messagebus, exp.phy_mac_messagebus));
+        chk(got.phy_mac_phystatus == exp.phy_mac_phystatus,
+            $sformatf("%s: phy_mac_phystatus mismatch, got=%0h expected=%0h", ctx, got.phy_mac_phystatus, exp.phy_mac_phystatus));
+        chk(got.phy_mac_local_tx_coef_valid == exp.phy_mac_local_tx_coef_valid,
+            $sformatf("%s: phy_mac_local_tx_coef_valid mismatch, got=%0h expected=%0h", ctx, got.phy_mac_local_tx_coef_valid, exp.phy_mac_local_tx_coef_valid));
+        chk(got.phy_mac_local_tx_pset_coef == exp.phy_mac_local_tx_pset_coef,
+            $sformatf("%s: phy_mac_local_tx_pset_coef mismatch, got=%0h expected=%0h", ctx, got.phy_mac_local_tx_pset_coef, exp.phy_mac_local_tx_pset_coef));
+        chk(got.phy_mac_localfs == exp.phy_mac_localfs,
+            $sformatf("%s: phy_mac_localfs mismatch, got=%0h expected=%0h", ctx, got.phy_mac_localfs, exp.phy_mac_localfs));
+        chk(got.phy_mac_locallf == exp.phy_mac_locallf,
+            $sformatf("%s: phy_mac_locallf mismatch, got=%0h expected=%0h", ctx, got.phy_mac_locallf, exp.phy_mac_locallf));
+        chk(got.phy_mac_dirfeedback == exp.phy_mac_dirfeedback,
+            $sformatf("%s: phy_mac_dirfeedback mismatch, got=%0h expected=%0h", ctx, got.phy_mac_dirfeedback, exp.phy_mac_dirfeedback));
+        chk(got.phy_mac_fomfeedback == exp.phy_mac_fomfeedback,
+            $sformatf("%s: phy_mac_fomfeedback mismatch, got=%0h expected=%0h", ctx, got.phy_mac_fomfeedback, exp.phy_mac_fomfeedback));
+    endtask
+
     localparam int G1_LANES[4] = '{4, 5, 6, 7};
     localparam int G2_LANES[4] = '{8, 9, 10, 11};
     localparam int G3_LANES[4] = '{12, 13, 14, 15};
@@ -343,74 +425,74 @@ module tb_pipe_lane_mapper;
 
         if (dut.sel_tgt.g1 == '0) begin
             foreach (G1_LANES[i])
-                chk(phy_mac2phy[G1_LANES[i]] == SAFE_M2P,
-                    $sformatf("G1 lane%0d: sel==0 but mac_phy data doesn't match SAFE_M2P (safe state not shown in BBM gap)", G1_LANES[i]));
-            chk(ctrl0_phy2mac[4] == exp_safe_p2m_ctrl0,
-                $sformatf("G1 Ctrl0[4]: sel==0 but phy_mac data doesn't match its tie_off-derived safe value (BBM gap)"));
-            chk(ctrl0_phy2mac[5] == exp_safe_p2m_ctrl0,
-                $sformatf("G1 Ctrl0[5]: sel==0 but phy_mac data doesn't match its tie_off-derived safe value (BBM gap)"));
-            chk(ctrl0_phy2mac[6] == exp_safe_p2m_ctrl0,
-                $sformatf("G1 Ctrl0[6]: sel==0 but phy_mac data doesn't match its tie_off-derived safe value (BBM gap)"));
-            chk(ctrl0_phy2mac[7] == exp_safe_p2m_ctrl0,
-                $sformatf("G1 Ctrl0[7]: sel==0 but phy_mac data doesn't match its tie_off-derived safe value (BBM gap)"));
-            chk(ctrl1_phy2mac[0] == exp_safe_p2m_ctrl1,
-                $sformatf("G1 Ctrl1[0]: sel==0 but phy_mac data doesn't match its tie_off-derived safe value (BBM gap)"));
-            chk(ctrl1_phy2mac[1] == exp_safe_p2m_ctrl1,
-                $sformatf("G1 Ctrl1[1]: sel==0 but phy_mac data doesn't match its tie_off-derived safe value (BBM gap)"));
-            chk(ctrl1_phy2mac[2] == exp_safe_p2m_ctrl1,
-                $sformatf("G1 Ctrl1[2]: sel==0 but phy_mac data doesn't match its tie_off-derived safe value (BBM gap)"));
-            chk(ctrl1_phy2mac[3] == exp_safe_p2m_ctrl1,
-                $sformatf("G1 Ctrl1[3]: sel==0 but phy_mac data doesn't match its tie_off-derived safe value (BBM gap)"));
+                chk_m2p(phy_mac2phy[G1_LANES[i]], SAFE_M2P,
+                    $sformatf("G1 lane%0d: sel==0 BBM gap", G1_LANES[i]));
+            chk_p2m(ctrl0_phy2mac[4], exp_safe_p2m_ctrl0,
+                "G1 Ctrl0[4]: sel==0 BBM gap");
+            chk_p2m(ctrl0_phy2mac[5], exp_safe_p2m_ctrl0,
+                "G1 Ctrl0[5]: sel==0 BBM gap");
+            chk_p2m(ctrl0_phy2mac[6], exp_safe_p2m_ctrl0,
+                "G1 Ctrl0[6]: sel==0 BBM gap");
+            chk_p2m(ctrl0_phy2mac[7], exp_safe_p2m_ctrl0,
+                "G1 Ctrl0[7]: sel==0 BBM gap");
+            chk_p2m(ctrl1_phy2mac[0], exp_safe_p2m_ctrl1,
+                "G1 Ctrl1[0]: sel==0 BBM gap");
+            chk_p2m(ctrl1_phy2mac[1], exp_safe_p2m_ctrl1,
+                "G1 Ctrl1[1]: sel==0 BBM gap");
+            chk_p2m(ctrl1_phy2mac[2], exp_safe_p2m_ctrl1,
+                "G1 Ctrl1[2]: sel==0 BBM gap");
+            chk_p2m(ctrl1_phy2mac[3], exp_safe_p2m_ctrl1,
+                "G1 Ctrl1[3]: sel==0 BBM gap");
         end
         if (dut.sel_tgt.g2 == '0) begin
             foreach (G2_LANES[i])
-                chk(phy_mac2phy[G2_LANES[i]] == SAFE_M2P,
-                    $sformatf("G2 lane%0d: sel==0 but mac_phy data doesn't match SAFE_M2P (safe state not shown in BBM gap)", G2_LANES[i]));
-            chk(ctrl0_phy2mac[8] == exp_safe_p2m_ctrl0,
-                $sformatf("G2 Ctrl0[8]: sel==0 but phy_mac data doesn't match its tie_off-derived safe value (BBM gap)"));
-            chk(ctrl0_phy2mac[9] == exp_safe_p2m_ctrl0,
-                $sformatf("G2 Ctrl0[9]: sel==0 but phy_mac data doesn't match its tie_off-derived safe value (BBM gap)"));
-            chk(ctrl0_phy2mac[10] == exp_safe_p2m_ctrl0,
-                $sformatf("G2 Ctrl0[10]: sel==0 but phy_mac data doesn't match its tie_off-derived safe value (BBM gap)"));
-            chk(ctrl0_phy2mac[11] == exp_safe_p2m_ctrl0,
-                $sformatf("G2 Ctrl0[11]: sel==0 but phy_mac data doesn't match its tie_off-derived safe value (BBM gap)"));
-            chk(ctrl2_phy2mac[0] == exp_safe_p2m_ctrl2,
-                $sformatf("G2 Ctrl2[0]: sel==0 but phy_mac data doesn't match its tie_off-derived safe value (BBM gap)"));
-            chk(ctrl2_phy2mac[1] == exp_safe_p2m_ctrl2,
-                $sformatf("G2 Ctrl2[1]: sel==0 but phy_mac data doesn't match its tie_off-derived safe value (BBM gap)"));
-            chk(ctrl2_phy2mac[2] == exp_safe_p2m_ctrl2,
-                $sformatf("G2 Ctrl2[2]: sel==0 but phy_mac data doesn't match its tie_off-derived safe value (BBM gap)"));
-            chk(ctrl2_phy2mac[3] == exp_safe_p2m_ctrl2,
-                $sformatf("G2 Ctrl2[3]: sel==0 but phy_mac data doesn't match its tie_off-derived safe value (BBM gap)"));
+                chk_m2p(phy_mac2phy[G2_LANES[i]], SAFE_M2P,
+                    $sformatf("G2 lane%0d: sel==0 BBM gap", G2_LANES[i]));
+            chk_p2m(ctrl0_phy2mac[8], exp_safe_p2m_ctrl0,
+                "G2 Ctrl0[8]: sel==0 BBM gap");
+            chk_p2m(ctrl0_phy2mac[9], exp_safe_p2m_ctrl0,
+                "G2 Ctrl0[9]: sel==0 BBM gap");
+            chk_p2m(ctrl0_phy2mac[10], exp_safe_p2m_ctrl0,
+                "G2 Ctrl0[10]: sel==0 BBM gap");
+            chk_p2m(ctrl0_phy2mac[11], exp_safe_p2m_ctrl0,
+                "G2 Ctrl0[11]: sel==0 BBM gap");
+            chk_p2m(ctrl2_phy2mac[0], exp_safe_p2m_ctrl2,
+                "G2 Ctrl2[0]: sel==0 BBM gap");
+            chk_p2m(ctrl2_phy2mac[1], exp_safe_p2m_ctrl2,
+                "G2 Ctrl2[1]: sel==0 BBM gap");
+            chk_p2m(ctrl2_phy2mac[2], exp_safe_p2m_ctrl2,
+                "G2 Ctrl2[2]: sel==0 BBM gap");
+            chk_p2m(ctrl2_phy2mac[3], exp_safe_p2m_ctrl2,
+                "G2 Ctrl2[3]: sel==0 BBM gap");
         end
         if (dut.sel_tgt.g3 == '0) begin
             foreach (G3_LANES[i])
-                chk(phy_mac2phy[G3_LANES[i]] == SAFE_M2P,
-                    $sformatf("G3 lane%0d: sel==0 but mac_phy data doesn't match SAFE_M2P (safe state not shown in BBM gap)", G3_LANES[i]));
-            chk(ctrl0_phy2mac[12] == exp_safe_p2m_ctrl0,
-                $sformatf("G3 Ctrl0[12]: sel==0 but phy_mac data doesn't match its tie_off-derived safe value (BBM gap)"));
-            chk(ctrl0_phy2mac[13] == exp_safe_p2m_ctrl0,
-                $sformatf("G3 Ctrl0[13]: sel==0 but phy_mac data doesn't match its tie_off-derived safe value (BBM gap)"));
-            chk(ctrl0_phy2mac[14] == exp_safe_p2m_ctrl0,
-                $sformatf("G3 Ctrl0[14]: sel==0 but phy_mac data doesn't match its tie_off-derived safe value (BBM gap)"));
-            chk(ctrl0_phy2mac[15] == exp_safe_p2m_ctrl0,
-                $sformatf("G3 Ctrl0[15]: sel==0 but phy_mac data doesn't match its tie_off-derived safe value (BBM gap)"));
-            chk(ctrl2_phy2mac[4] == exp_safe_p2m_ctrl2,
-                $sformatf("G3 Ctrl2[4]: sel==0 but phy_mac data doesn't match its tie_off-derived safe value (BBM gap)"));
-            chk(ctrl2_phy2mac[5] == exp_safe_p2m_ctrl2,
-                $sformatf("G3 Ctrl2[5]: sel==0 but phy_mac data doesn't match its tie_off-derived safe value (BBM gap)"));
-            chk(ctrl2_phy2mac[6] == exp_safe_p2m_ctrl2,
-                $sformatf("G3 Ctrl2[6]: sel==0 but phy_mac data doesn't match its tie_off-derived safe value (BBM gap)"));
-            chk(ctrl2_phy2mac[7] == exp_safe_p2m_ctrl2,
-                $sformatf("G3 Ctrl2[7]: sel==0 but phy_mac data doesn't match its tie_off-derived safe value (BBM gap)"));
-            chk(ctrl3_phy2mac[0] == exp_safe_p2m_ctrl3,
-                $sformatf("G3 Ctrl3[0]: sel==0 but phy_mac data doesn't match its tie_off-derived safe value (BBM gap)"));
-            chk(ctrl3_phy2mac[1] == exp_safe_p2m_ctrl3,
-                $sformatf("G3 Ctrl3[1]: sel==0 but phy_mac data doesn't match its tie_off-derived safe value (BBM gap)"));
-            chk(ctrl3_phy2mac[2] == exp_safe_p2m_ctrl3,
-                $sformatf("G3 Ctrl3[2]: sel==0 but phy_mac data doesn't match its tie_off-derived safe value (BBM gap)"));
-            chk(ctrl3_phy2mac[3] == exp_safe_p2m_ctrl3,
-                $sformatf("G3 Ctrl3[3]: sel==0 but phy_mac data doesn't match its tie_off-derived safe value (BBM gap)"));
+                chk_m2p(phy_mac2phy[G3_LANES[i]], SAFE_M2P,
+                    $sformatf("G3 lane%0d: sel==0 BBM gap", G3_LANES[i]));
+            chk_p2m(ctrl0_phy2mac[12], exp_safe_p2m_ctrl0,
+                "G3 Ctrl0[12]: sel==0 BBM gap");
+            chk_p2m(ctrl0_phy2mac[13], exp_safe_p2m_ctrl0,
+                "G3 Ctrl0[13]: sel==0 BBM gap");
+            chk_p2m(ctrl0_phy2mac[14], exp_safe_p2m_ctrl0,
+                "G3 Ctrl0[14]: sel==0 BBM gap");
+            chk_p2m(ctrl0_phy2mac[15], exp_safe_p2m_ctrl0,
+                "G3 Ctrl0[15]: sel==0 BBM gap");
+            chk_p2m(ctrl2_phy2mac[4], exp_safe_p2m_ctrl2,
+                "G3 Ctrl2[4]: sel==0 BBM gap");
+            chk_p2m(ctrl2_phy2mac[5], exp_safe_p2m_ctrl2,
+                "G3 Ctrl2[5]: sel==0 BBM gap");
+            chk_p2m(ctrl2_phy2mac[6], exp_safe_p2m_ctrl2,
+                "G3 Ctrl2[6]: sel==0 BBM gap");
+            chk_p2m(ctrl2_phy2mac[7], exp_safe_p2m_ctrl2,
+                "G3 Ctrl2[7]: sel==0 BBM gap");
+            chk_p2m(ctrl3_phy2mac[0], exp_safe_p2m_ctrl3,
+                "G3 Ctrl3[0]: sel==0 BBM gap");
+            chk_p2m(ctrl3_phy2mac[1], exp_safe_p2m_ctrl3,
+                "G3 Ctrl3[1]: sel==0 BBM gap");
+            chk_p2m(ctrl3_phy2mac[2], exp_safe_p2m_ctrl3,
+                "G3 Ctrl3[2]: sel==0 BBM gap");
+            chk_p2m(ctrl3_phy2mac[3], exp_safe_p2m_ctrl3,
+                "G3 Ctrl3[3]: sel==0 BBM gap");
         end
     end
 
@@ -424,11 +506,8 @@ module tb_pipe_lane_mapper;
             cid  = owner_of(m, l);
             port = port_of(m, l);
             exp_m2p = make_m2p(cid, port);
-            chk(phy_mac2phy[l].mac_phy_txdata == exp_m2p.mac_phy_txdata &&
-                phy_mac2phy[l].mac_phy_txdatavalid == 1'b1 &&
-                phy_mac2phy[l].mac_phy_txelecidle == 1'b0,
-                $sformatf("mode%0d lane%0d: phy_mac2phy mismatch, expected ctrl%0d port%0d",
-                          m, l, cid, port));
+            chk_m2p(phy_mac2phy[l], exp_m2p,
+                $sformatf("mode%0d lane%0d: expected ctrl%0d port%0d", m, l, cid, port));
 
             chk(phy_rst_n[l] == ctrl_rst_n[cid],
                 $sformatf("mode%0d lane%0d: phy_rst_n=%0b does not follow owner ctrl%0d",
@@ -508,12 +587,12 @@ module tb_pipe_lane_mapper;
                             exp_tie.phy_mac_fomfeedback = 8'd0;
                         end
                     end
-                    chk(got == exp_tie,
-                        $sformatf("mode%0d ctrl%0d[%0d]: unmapped tie-off mismatch!", m, c, p));
+                    chk_p2m(got, exp_tie,
+                        $sformatf("mode%0d ctrl%0d[%0d]: unmapped tie-off", m, c, p));
                 end else begin
                     exp_p2m = make_p2m(src_lane);
-                    chk(got.phy_mac_rxdata == exp_p2m.phy_mac_rxdata &&
-                        got.phy_mac_rxdatavalid == 1'b1 && got.phy_mac_rxelecidle == 1'b0,
+                    exp_p2m.phy_mac_phystatus = phy_phystatus_stim[src_lane];
+                    chk_p2m(got, exp_p2m,
                         $sformatf("mode%0d ctrl%0d[%0d]: expected lane%0d data", m, c, p, src_lane));
                 end
             end

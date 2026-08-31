@@ -1,0 +1,5 @@
+ctrl_id,ctrl_name,max_width
+0,CtrlX16,16
+1,CtrlX8,8
+2,CtrlX4a,4
+3,CtrlX4b,4

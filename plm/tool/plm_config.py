@@ -58,7 +58,7 @@ class Signal:
     wrong means sending PHY / the controller a meaningful-looking fake
     command during the handoff window (e.g. txelecidle should be 1).
 
-    Every signal in the table goes through BBM (the synchronized sel).
+    Every signal in the table goes through NOV (the synchronized sel).
     Reset (phy_rst_n / ctrl_rst_n) is a separate port and isn't in this
     table.
     """
@@ -131,9 +131,9 @@ class LaneGroup:
     Groups are derived automatically: a lane's owner sequence across all
     modes is used as its signature, and lanes with the same signature are
     bucketed together. Lanes in the same group always change owner together,
-    so they share one tgt bit, one BBM, and one en group -- this is the main
-    payoff versus handling lanes individually (the demo config's BBM count
-    drops from 12 to 3).
+    so they share one tgt bit, one NOV, and one en group -- this is the main
+    payoff versus handling lanes individually (a config's NOV count is one
+    per group, not one per lane).
     """
 
     def __init__(self, gid, lanes, owners_by_mode):
@@ -432,7 +432,7 @@ class Config:
 
         # Every driving source for a given controller port must come from
         # the same group. Otherwise that port's convergence mux would have
-        # sel bits coming from independent BBMs in different groups -- each
+        # sel bits coming from independent NOVs in different groups -- each
         # converges on its own with no interlock between them, and they
         # could briefly both be 1 at once, causing the two data paths to be
         # OR'd together. Cross-group interlocking is too expensive to
@@ -465,7 +465,7 @@ class Config:
         # the lowest-numbered owned lane within its group changes across
         # modes, multiple pclk candidates appear, forcing the pipe_lane_sel_sync +
         # pipe_lane_clk_gate glitch-free switching logic -- but that kind of switch is
-        # still fundamentally break-before-make: the controller's clock
+        # still fundamentally non-overlap: the controller's clock
         # stalls during the transition regardless, so it doesn't actually
         # preserve continuity of operation, it just adds complexity for no
         # real benefit. So multiple candidates are simply disallowed here,
@@ -523,23 +523,23 @@ class Config:
         cp, cc = self.ctrl_pclk_src(), self.ctrl_pclk_cands()
 
         L.append("Lane groups (lanes with an identical owner sequence are grouped "
-                  "automatically; a group shares one BBM)")
+                  "automatically; a group shares one NOV)")
         L.append("")
         hdr = "  Grp  lane        " + "  ".join(f"mode{m}" for m in self.modes)
         L.append(hdr)
         L.append("  " + "-" * (len(hdr) - 2))
-        nbbm = 0
+        nnov = 0
         for g in self.groups:
             rng = (f"{g.lanes[0]}~{g.lanes[-1]}" if len(g.lanes) > 1
                    else f"{g.lanes[0]}")
             owners = "  ".join(
                 f"{self.controllers[g.owners[m]].name:<5}" for m in self.modes)
-            kind = "direct" if g.is_direct else f"{g.n}-way BBM"
+            kind = "direct" if g.is_direct else f"{g.n}-way NOV"
             if not g.is_direct:
-                nbbm += 1
+                nnov += 1
             L.append(f"  G{g.gid}  lane{rng:<8}  {owners}  -> {kind}")
         L.append("")
-        L.append(f"  {len(self.groups)} groups total, {nbbm} need BBM")
+        L.append(f"  {len(self.groups)} groups total, {nnov} need NOV")
         L.append("")
 
         L.append("Controller pclk source (lowest lane in the group; holds its "
@@ -569,7 +569,7 @@ class Config:
                      f"safe={s.safe_state}{note}")
         L.append("")
 
-        L.append("Impact of mode transitions (BBM only touches these groups)")
+        L.append("Impact of mode transitions (NOV only touches these groups)")
         L.append("")
         for a in self.modes:
             for b in self.modes:

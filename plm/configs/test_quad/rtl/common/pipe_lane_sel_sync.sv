@@ -2,7 +2,7 @@
 // pipe_lane_sel_sync -- N-way one-hot branch-select generator, with a
 // parameter to pick between two implementations:
 //
-//   SYNC=1 (default): break-before-make + two-stage synchronizer, extended
+//   SYNC=1 (default): non-overlap + two-stage synchronizer, extended
 //   from the classic 2-clock glitch-free clock-mux enable structure to N
 //   branches. Per branch: 1 register + 1 two-stage synchronizer (3 flops,
 //   3N total):

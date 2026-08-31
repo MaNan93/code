@@ -1,6 +1,6 @@
 package pipe_lane_signal_pkg;
 
-    // mac2phy direction; signals that go through BBM are packed into one type;
+    // mac2phy direction; signals that go through NOV are packed into one type;
     typedef struct packed {
         logic [31:0] mac_phy_txdata;
         logic [3:0] mac_phy_txdatak;
@@ -25,7 +25,7 @@ package pipe_lane_signal_pkg;
         logic mac_phy_rxeqinprogress;
     } mac2phy_lane_t;
 
-    // phy2mac direction; signals that go through BBM are packed into one type;
+    // phy2mac direction; signals that go through NOV are packed into one type;
     typedef struct packed {
         logic [31:0] phy_mac_rxdata;
         logic [3:0] phy_mac_rxdatak;
@@ -46,7 +46,7 @@ package pipe_lane_signal_pkg;
         logic [7:0] phy_mac_fomfeedback;
     } phy2mac_lane_t;
 
-    // Value to present when there's no owner (the BBM handoff window).
+    // Value to present when there's no owner (the NOV handoff window).
     // pipe_lane_data_mux uses this for polarity normalization, so sel==0 naturally lands on the safe state.
     localparam mac2phy_lane_t SAFE_M2P = '{
         mac_phy_txdata: 32'd0,
@@ -72,7 +72,7 @@ package pipe_lane_signal_pkg;
         mac_phy_rxeqinprogress: 1'b0
     };
 
-    // Value to present when there's no owner (the BBM handoff window).
+    // Value to present when there's no owner (the NOV handoff window).
     // pipe_lane_data_mux uses this for polarity normalization, so sel==0 naturally lands on the safe state.
     localparam phy2mac_lane_t SAFE_P2M = '{
         phy_mac_rxdata: 32'd0,
@@ -94,7 +94,7 @@ package pipe_lane_signal_pkg;
         phy_mac_fomfeedback: 8'd0
     };
 
-    // One one-hot select vector per lane group that needs BBM.
+    // One one-hot select vector per lane group that needs NOV.
     // Direct groups don't appear here -- the type itself shows they have no choice to make.
     // G0 (lane0~0): direct to CtrlAlpha, no sel
     // G1 (lane1~1): bit0=CtrlAlpha, bit1=CtrlDelta

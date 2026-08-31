@@ -1,7 +1,7 @@
 //=============================================================================
 // pipe_lane_data_mux -- one-hot select + polarity normalization
 //
-// When sel is all-zero (the break-before-make handoff window, or this port
+// When sel is all-zero (the non-overlap handoff window, or this port
 // currently has no driving source), the output equals SAFE instead of
 // all-zero.
 //
@@ -31,7 +31,7 @@
 //
 // The demux direction (one controller port receiving multiple phy lanes)
 // uses the same module -- the only difference is that sel's bits come from
-// different groups' BBM. The generator validates that a given port's
+// different groups' NOV. The generator validates that a given port's
 // driving sources must all come from the same group, to guarantee sel's
 // mutual exclusivity.
 //=============================================================================

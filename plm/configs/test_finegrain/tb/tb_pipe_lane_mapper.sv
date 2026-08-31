@@ -5,8 +5,8 @@
 // Checks:
 //   1. Steady-state data routing matches lane_mapping.csv exactly
 //   2. Unmapped controller ports read back SAFE_P2M
-//   3. Group sel vectors are always one-hot0 (break-before-make)
-//   4. During the BBM handoff window (sel all-zero), phy lanes present the safe state (txelecidle=1)
+//   3. Group sel vectors are always one-hot0 (non-overlap)
+//   4. During the NOV handoff window (sel all-zero), phy lanes present the safe state (txelecidle=1)
 //   5. phy_rst_n follows the current owner's ctrl_rst_n
 //=============================================================================
 import pipe_lane_signal_pkg::*;
@@ -195,7 +195,7 @@ module tb_pipe_lane_mapper;
         endcase
     endfunction
 
-    //------------------------------------------------------------ BBM one-hot / safe-state monitor
+    //------------------------------------------------------------ NOV one-hot / safe-state monitor
     int unsigned err_count = 0;
 
     task automatic chk(input bit ok, input string msg);
@@ -336,29 +336,29 @@ module tb_pipe_lane_mapper;
             if (sel_snap.g1 == '0 && dut.sel_tgt.g1 == '0) begin
                 foreach (G1_LANES[i])
                     chk_m2p(phy_mac2phy[G1_LANES[i]], SAFE_M2P,
-                        $sformatf("G1 lane%0d: sel==0 BBM gap", G1_LANES[i]));
+                        $sformatf("G1 lane%0d: sel==0 NOV gap", G1_LANES[i]));
                 chk_p2m(ctrlalpha_phy2mac[1], exp_safe_p2m_ctrlalpha,
-                    "G1 CtrlAlpha[1]: sel==0 BBM gap");
+                    "G1 CtrlAlpha[1]: sel==0 NOV gap");
                 chk_p2m(ctrldelta_phy2mac[0], exp_safe_p2m_ctrldelta,
-                    "G1 CtrlDelta[0]: sel==0 BBM gap");
+                    "G1 CtrlDelta[0]: sel==0 NOV gap");
             end
             if (sel_snap.g2 == '0 && dut.sel_tgt.g2 == '0) begin
                 foreach (G2_LANES[i])
                     chk_m2p(phy_mac2phy[G2_LANES[i]], SAFE_M2P,
-                        $sformatf("G2 lane%0d: sel==0 BBM gap", G2_LANES[i]));
+                        $sformatf("G2 lane%0d: sel==0 NOV gap", G2_LANES[i]));
                 chk_p2m(ctrlalpha_phy2mac[2], exp_safe_p2m_ctrlalpha,
-                    "G2 CtrlAlpha[2]: sel==0 BBM gap");
+                    "G2 CtrlAlpha[2]: sel==0 NOV gap");
                 chk_p2m(ctrlepsilon_phy2mac[0], exp_safe_p2m_ctrlepsilon,
-                    "G2 CtrlEpsilon[0]: sel==0 BBM gap");
+                    "G2 CtrlEpsilon[0]: sel==0 NOV gap");
             end
             if (sel_snap.g4 == '0 && dut.sel_tgt.g4 == '0) begin
                 foreach (G4_LANES[i])
                     chk_m2p(phy_mac2phy[G4_LANES[i]], SAFE_M2P,
-                        $sformatf("G4 lane%0d: sel==0 BBM gap", G4_LANES[i]));
+                        $sformatf("G4 lane%0d: sel==0 NOV gap", G4_LANES[i]));
                 chk_p2m(ctrlbeta_phy2mac[1], exp_safe_p2m_ctrlbeta,
-                    "G4 CtrlBeta[1]: sel==0 BBM gap");
+                    "G4 CtrlBeta[1]: sel==0 NOV gap");
                 chk_p2m(ctrlzeta_phy2mac[0], exp_safe_p2m_ctrlzeta,
-                    "G4 CtrlZeta[0]: sel==0 BBM gap");
+                    "G4 CtrlZeta[0]: sel==0 NOV gap");
             end
         end
     end

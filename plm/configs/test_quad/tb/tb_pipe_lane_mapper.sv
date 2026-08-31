@@ -5,8 +5,8 @@
 // Checks:
 //   1. Steady-state data routing matches lane_mapping.csv exactly
 //   2. Unmapped controller ports read back SAFE_P2M
-//   3. Group sel vectors are always one-hot0 (break-before-make)
-//   4. During the BBM handoff window (sel all-zero), phy lanes present the safe state (txelecidle=1)
+//   3. Group sel vectors are always one-hot0 (non-overlap)
+//   4. During the NOV handoff window (sel all-zero), phy lanes present the safe state (txelecidle=1)
 //   5. phy_rst_n follows the current owner's ctrl_rst_n
 //=============================================================================
 import pipe_lane_signal_pkg::*;
@@ -257,7 +257,7 @@ module tb_pipe_lane_mapper;
         endcase
     endfunction
 
-    //------------------------------------------------------------ BBM one-hot / safe-state monitor
+    //------------------------------------------------------------ NOV one-hot / safe-state monitor
     int unsigned err_count = 0;
 
     task automatic chk(input bit ok, input string msg);
@@ -392,65 +392,65 @@ module tb_pipe_lane_mapper;
             if (sel_snap.g1 == '0 && dut.sel_tgt.g1 == '0) begin
                 foreach (G1_LANES[i])
                     chk_m2p(phy_mac2phy[G1_LANES[i]], SAFE_M2P,
-                        $sformatf("G1 lane%0d: sel==0 BBM gap", G1_LANES[i]));
+                        $sformatf("G1 lane%0d: sel==0 NOV gap", G1_LANES[i]));
                 chk_p2m(ctrla_phy2mac[3], exp_safe_p2m_ctrla,
-                    "G1 CtrlA[3]: sel==0 BBM gap");
+                    "G1 CtrlA[3]: sel==0 NOV gap");
                 chk_p2m(ctrla_phy2mac[4], exp_safe_p2m_ctrla,
-                    "G1 CtrlA[4]: sel==0 BBM gap");
+                    "G1 CtrlA[4]: sel==0 NOV gap");
                 chk_p2m(ctrla_phy2mac[5], exp_safe_p2m_ctrla,
-                    "G1 CtrlA[5]: sel==0 BBM gap");
+                    "G1 CtrlA[5]: sel==0 NOV gap");
                 chk_p2m(ctrlb_phy2mac[0], exp_safe_p2m_ctrlb,
-                    "G1 CtrlB[0]: sel==0 BBM gap");
+                    "G1 CtrlB[0]: sel==0 NOV gap");
                 chk_p2m(ctrlb_phy2mac[1], exp_safe_p2m_ctrlb,
-                    "G1 CtrlB[1]: sel==0 BBM gap");
+                    "G1 CtrlB[1]: sel==0 NOV gap");
                 chk_p2m(ctrlb_phy2mac[2], exp_safe_p2m_ctrlb,
-                    "G1 CtrlB[2]: sel==0 BBM gap");
+                    "G1 CtrlB[2]: sel==0 NOV gap");
             end
             if (sel_snap.g2 == '0 && dut.sel_tgt.g2 == '0) begin
                 foreach (G2_LANES[i])
                     chk_m2p(phy_mac2phy[G2_LANES[i]], SAFE_M2P,
-                        $sformatf("G2 lane%0d: sel==0 BBM gap", G2_LANES[i]));
+                        $sformatf("G2 lane%0d: sel==0 NOV gap", G2_LANES[i]));
                 chk_p2m(ctrla_phy2mac[6], exp_safe_p2m_ctrla,
-                    "G2 CtrlA[6]: sel==0 BBM gap");
+                    "G2 CtrlA[6]: sel==0 NOV gap");
                 chk_p2m(ctrla_phy2mac[7], exp_safe_p2m_ctrla,
-                    "G2 CtrlA[7]: sel==0 BBM gap");
+                    "G2 CtrlA[7]: sel==0 NOV gap");
                 chk_p2m(ctrla_phy2mac[8], exp_safe_p2m_ctrla,
-                    "G2 CtrlA[8]: sel==0 BBM gap");
+                    "G2 CtrlA[8]: sel==0 NOV gap");
                 chk_p2m(ctrlc_phy2mac[0], exp_safe_p2m_ctrlc,
-                    "G2 CtrlC[0]: sel==0 BBM gap");
+                    "G2 CtrlC[0]: sel==0 NOV gap");
                 chk_p2m(ctrlc_phy2mac[1], exp_safe_p2m_ctrlc,
-                    "G2 CtrlC[1]: sel==0 BBM gap");
+                    "G2 CtrlC[1]: sel==0 NOV gap");
                 chk_p2m(ctrlc_phy2mac[2], exp_safe_p2m_ctrlc,
-                    "G2 CtrlC[2]: sel==0 BBM gap");
+                    "G2 CtrlC[2]: sel==0 NOV gap");
             end
             if (sel_snap.g3 == '0 && dut.sel_tgt.g3 == '0) begin
                 foreach (G3_LANES[i])
                     chk_m2p(phy_mac2phy[G3_LANES[i]], SAFE_M2P,
-                        $sformatf("G3 lane%0d: sel==0 BBM gap", G3_LANES[i]));
+                        $sformatf("G3 lane%0d: sel==0 NOV gap", G3_LANES[i]));
                 chk_p2m(ctrla_phy2mac[9], exp_safe_p2m_ctrla,
-                    "G3 CtrlA[9]: sel==0 BBM gap");
+                    "G3 CtrlA[9]: sel==0 NOV gap");
                 chk_p2m(ctrla_phy2mac[10], exp_safe_p2m_ctrla,
-                    "G3 CtrlA[10]: sel==0 BBM gap");
+                    "G3 CtrlA[10]: sel==0 NOV gap");
                 chk_p2m(ctrla_phy2mac[11], exp_safe_p2m_ctrla,
-                    "G3 CtrlA[11]: sel==0 BBM gap");
+                    "G3 CtrlA[11]: sel==0 NOV gap");
                 chk_p2m(ctrlb_phy2mac[3], exp_safe_p2m_ctrlb,
-                    "G3 CtrlB[3]: sel==0 BBM gap");
+                    "G3 CtrlB[3]: sel==0 NOV gap");
                 chk_p2m(ctrlb_phy2mac[4], exp_safe_p2m_ctrlb,
-                    "G3 CtrlB[4]: sel==0 BBM gap");
+                    "G3 CtrlB[4]: sel==0 NOV gap");
                 chk_p2m(ctrlb_phy2mac[5], exp_safe_p2m_ctrlb,
-                    "G3 CtrlB[5]: sel==0 BBM gap");
+                    "G3 CtrlB[5]: sel==0 NOV gap");
                 chk_p2m(ctrlc_phy2mac[3], exp_safe_p2m_ctrlc,
-                    "G3 CtrlC[3]: sel==0 BBM gap");
+                    "G3 CtrlC[3]: sel==0 NOV gap");
                 chk_p2m(ctrlc_phy2mac[4], exp_safe_p2m_ctrlc,
-                    "G3 CtrlC[4]: sel==0 BBM gap");
+                    "G3 CtrlC[4]: sel==0 NOV gap");
                 chk_p2m(ctrlc_phy2mac[5], exp_safe_p2m_ctrlc,
-                    "G3 CtrlC[5]: sel==0 BBM gap");
+                    "G3 CtrlC[5]: sel==0 NOV gap");
                 chk_p2m(ctrld_phy2mac[0], exp_safe_p2m_ctrld,
-                    "G3 CtrlD[0]: sel==0 BBM gap");
+                    "G3 CtrlD[0]: sel==0 NOV gap");
                 chk_p2m(ctrld_phy2mac[1], exp_safe_p2m_ctrld,
-                    "G3 CtrlD[1]: sel==0 BBM gap");
+                    "G3 CtrlD[1]: sel==0 NOV gap");
                 chk_p2m(ctrld_phy2mac[2], exp_safe_p2m_ctrld,
-                    "G3 CtrlD[2]: sel==0 BBM gap");
+                    "G3 CtrlD[2]: sel==0 NOV gap");
             end
         end
     end

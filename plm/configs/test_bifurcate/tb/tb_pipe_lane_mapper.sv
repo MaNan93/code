@@ -5,8 +5,8 @@
 // Checks:
 //   1. Steady-state data routing matches lane_mapping.csv exactly
 //   2. Unmapped controller ports read back SAFE_P2M
-//   3. Group sel vectors are always one-hot0 (break-before-make)
-//   4. During the BBM handoff window (sel all-zero), phy lanes present the safe state (txelecidle=1)
+//   3. Group sel vectors are always one-hot0 (non-overlap)
+//   4. During the NOV handoff window (sel all-zero), phy lanes present the safe state (txelecidle=1)
 //   5. phy_rst_n follows the current owner's ctrl_rst_n
 //=============================================================================
 import pipe_lane_signal_pkg::*;
@@ -255,7 +255,7 @@ module tb_pipe_lane_mapper;
         endcase
     endfunction
 
-    //------------------------------------------------------------ BBM one-hot / safe-state monitor
+    //------------------------------------------------------------ NOV one-hot / safe-state monitor
     int unsigned err_count = 0;
 
     task automatic chk(input bit ok, input string msg);
@@ -390,73 +390,73 @@ module tb_pipe_lane_mapper;
             if (sel_snap.g1 == '0 && dut.sel_tgt.g1 == '0) begin
                 foreach (G1_LANES[i])
                     chk_m2p(phy_mac2phy[G1_LANES[i]], SAFE_M2P,
-                        $sformatf("G1 lane%0d: sel==0 BBM gap", G1_LANES[i]));
+                        $sformatf("G1 lane%0d: sel==0 NOV gap", G1_LANES[i]));
                 chk_p2m(ctrlx16_phy2mac[4], exp_safe_p2m_ctrlx16,
-                    "G1 CtrlX16[4]: sel==0 BBM gap");
+                    "G1 CtrlX16[4]: sel==0 NOV gap");
                 chk_p2m(ctrlx16_phy2mac[5], exp_safe_p2m_ctrlx16,
-                    "G1 CtrlX16[5]: sel==0 BBM gap");
+                    "G1 CtrlX16[5]: sel==0 NOV gap");
                 chk_p2m(ctrlx16_phy2mac[6], exp_safe_p2m_ctrlx16,
-                    "G1 CtrlX16[6]: sel==0 BBM gap");
+                    "G1 CtrlX16[6]: sel==0 NOV gap");
                 chk_p2m(ctrlx16_phy2mac[7], exp_safe_p2m_ctrlx16,
-                    "G1 CtrlX16[7]: sel==0 BBM gap");
+                    "G1 CtrlX16[7]: sel==0 NOV gap");
                 chk_p2m(ctrlx4b_phy2mac[0], exp_safe_p2m_ctrlx4b,
-                    "G1 CtrlX4b[0]: sel==0 BBM gap");
+                    "G1 CtrlX4b[0]: sel==0 NOV gap");
                 chk_p2m(ctrlx4b_phy2mac[1], exp_safe_p2m_ctrlx4b,
-                    "G1 CtrlX4b[1]: sel==0 BBM gap");
+                    "G1 CtrlX4b[1]: sel==0 NOV gap");
                 chk_p2m(ctrlx4b_phy2mac[2], exp_safe_p2m_ctrlx4b,
-                    "G1 CtrlX4b[2]: sel==0 BBM gap");
+                    "G1 CtrlX4b[2]: sel==0 NOV gap");
                 chk_p2m(ctrlx4b_phy2mac[3], exp_safe_p2m_ctrlx4b,
-                    "G1 CtrlX4b[3]: sel==0 BBM gap");
+                    "G1 CtrlX4b[3]: sel==0 NOV gap");
             end
             if (sel_snap.g2 == '0 && dut.sel_tgt.g2 == '0) begin
                 foreach (G2_LANES[i])
                     chk_m2p(phy_mac2phy[G2_LANES[i]], SAFE_M2P,
-                        $sformatf("G2 lane%0d: sel==0 BBM gap", G2_LANES[i]));
+                        $sformatf("G2 lane%0d: sel==0 NOV gap", G2_LANES[i]));
                 chk_p2m(ctrlx16_phy2mac[8], exp_safe_p2m_ctrlx16,
-                    "G2 CtrlX16[8]: sel==0 BBM gap");
+                    "G2 CtrlX16[8]: sel==0 NOV gap");
                 chk_p2m(ctrlx16_phy2mac[9], exp_safe_p2m_ctrlx16,
-                    "G2 CtrlX16[9]: sel==0 BBM gap");
+                    "G2 CtrlX16[9]: sel==0 NOV gap");
                 chk_p2m(ctrlx16_phy2mac[10], exp_safe_p2m_ctrlx16,
-                    "G2 CtrlX16[10]: sel==0 BBM gap");
+                    "G2 CtrlX16[10]: sel==0 NOV gap");
                 chk_p2m(ctrlx16_phy2mac[11], exp_safe_p2m_ctrlx16,
-                    "G2 CtrlX16[11]: sel==0 BBM gap");
+                    "G2 CtrlX16[11]: sel==0 NOV gap");
                 chk_p2m(ctrlx8_phy2mac[0], exp_safe_p2m_ctrlx8,
-                    "G2 CtrlX8[0]: sel==0 BBM gap");
+                    "G2 CtrlX8[0]: sel==0 NOV gap");
                 chk_p2m(ctrlx8_phy2mac[1], exp_safe_p2m_ctrlx8,
-                    "G2 CtrlX8[1]: sel==0 BBM gap");
+                    "G2 CtrlX8[1]: sel==0 NOV gap");
                 chk_p2m(ctrlx8_phy2mac[2], exp_safe_p2m_ctrlx8,
-                    "G2 CtrlX8[2]: sel==0 BBM gap");
+                    "G2 CtrlX8[2]: sel==0 NOV gap");
                 chk_p2m(ctrlx8_phy2mac[3], exp_safe_p2m_ctrlx8,
-                    "G2 CtrlX8[3]: sel==0 BBM gap");
+                    "G2 CtrlX8[3]: sel==0 NOV gap");
             end
             if (sel_snap.g3 == '0 && dut.sel_tgt.g3 == '0) begin
                 foreach (G3_LANES[i])
                     chk_m2p(phy_mac2phy[G3_LANES[i]], SAFE_M2P,
-                        $sformatf("G3 lane%0d: sel==0 BBM gap", G3_LANES[i]));
+                        $sformatf("G3 lane%0d: sel==0 NOV gap", G3_LANES[i]));
                 chk_p2m(ctrlx16_phy2mac[12], exp_safe_p2m_ctrlx16,
-                    "G3 CtrlX16[12]: sel==0 BBM gap");
+                    "G3 CtrlX16[12]: sel==0 NOV gap");
                 chk_p2m(ctrlx16_phy2mac[13], exp_safe_p2m_ctrlx16,
-                    "G3 CtrlX16[13]: sel==0 BBM gap");
+                    "G3 CtrlX16[13]: sel==0 NOV gap");
                 chk_p2m(ctrlx16_phy2mac[14], exp_safe_p2m_ctrlx16,
-                    "G3 CtrlX16[14]: sel==0 BBM gap");
+                    "G3 CtrlX16[14]: sel==0 NOV gap");
                 chk_p2m(ctrlx16_phy2mac[15], exp_safe_p2m_ctrlx16,
-                    "G3 CtrlX16[15]: sel==0 BBM gap");
+                    "G3 CtrlX16[15]: sel==0 NOV gap");
                 chk_p2m(ctrlx8_phy2mac[4], exp_safe_p2m_ctrlx8,
-                    "G3 CtrlX8[4]: sel==0 BBM gap");
+                    "G3 CtrlX8[4]: sel==0 NOV gap");
                 chk_p2m(ctrlx8_phy2mac[5], exp_safe_p2m_ctrlx8,
-                    "G3 CtrlX8[5]: sel==0 BBM gap");
+                    "G3 CtrlX8[5]: sel==0 NOV gap");
                 chk_p2m(ctrlx8_phy2mac[6], exp_safe_p2m_ctrlx8,
-                    "G3 CtrlX8[6]: sel==0 BBM gap");
+                    "G3 CtrlX8[6]: sel==0 NOV gap");
                 chk_p2m(ctrlx8_phy2mac[7], exp_safe_p2m_ctrlx8,
-                    "G3 CtrlX8[7]: sel==0 BBM gap");
+                    "G3 CtrlX8[7]: sel==0 NOV gap");
                 chk_p2m(ctrlx4a_phy2mac[0], exp_safe_p2m_ctrlx4a,
-                    "G3 CtrlX4a[0]: sel==0 BBM gap");
+                    "G3 CtrlX4a[0]: sel==0 NOV gap");
                 chk_p2m(ctrlx4a_phy2mac[1], exp_safe_p2m_ctrlx4a,
-                    "G3 CtrlX4a[1]: sel==0 BBM gap");
+                    "G3 CtrlX4a[1]: sel==0 NOV gap");
                 chk_p2m(ctrlx4a_phy2mac[2], exp_safe_p2m_ctrlx4a,
-                    "G3 CtrlX4a[2]: sel==0 BBM gap");
+                    "G3 CtrlX4a[2]: sel==0 NOV gap");
                 chk_p2m(ctrlx4a_phy2mac[3], exp_safe_p2m_ctrlx4a,
-                    "G3 CtrlX4a[3]: sel==0 BBM gap");
+                    "G3 CtrlX4a[3]: sel==0 NOV gap");
             end
         end
     end

@@ -7,8 +7,8 @@
 
 `Config._build_groups()` 按"每条 lane 在所有 mode 下的 owner 序列"分组：
 两条 lane 只有在**所有 mode 下 owner 完全一致**时才会被分进同一个 group。
-每个 group 各自拥有一套独立的 `pipe_lane_sel_sync`，独立完成自己的 break-before-make
-(BBM) 时序，group 之间互不感知、互不互锁。
+每个 group 各自拥有一套独立的 `pipe_lane_sel_sync`，独立完成自己的 non-overlap
+(NOV) 时序，group 之间互不感知、互不互锁。
 
 这个分组规则不是任意选择，而是由一条硬约束反推出来的：**同一个 controller
 端口的所有驱动源，必须来自同一个 group**（`validate()` 中已校验）。原因是
@@ -19,9 +19,9 @@
 
 ## 2. "动态切换"的语义：只有真正变化的部分会经历切换窗口
 
-模式切换（比如 mode0 → mode1）不会让所有 lane 都进入 BBM 切换过程，只有
+模式切换（比如 mode0 → mode1）不会让所有 lane 都进入 NOV 切换过程，只有
 **owner 在这次切换前后确实发生变化的那些 group**，才会让自己的 `sel_tgt`
-翻转、进而触发 `pipe_lane_sel_sync` 走一次 BBM 窗口。
+翻转、进而触发 `pipe_lane_sel_sync` 走一次 NOV 窗口。
 
 owner 没有变化的 group，它对应的 `sel_tgt` 在切换前后取值相同，`pipe_lane_sel_sync`
 检测不到翻转，根本不会进入切换窗口——这些 lane 的数据通路（`data_m2p` /
@@ -43,7 +43,7 @@ owner 没有变化的 group，它对应的 `sel_tgt` 在切换前后取值相同
 它在换 mode 时驱动它的工作时钟源变了，需要 `pipe_lane_sel_sync` + `pipe_lane_clk_gate` 做无
 毛刺切换（先安全关断旧时钟，等新时钟稳定再打开新时钟）。
 
-**但这类切换本质上仍是 break-before-make**：切换窗口期间 `ctrl_pclk` 完全
+**但这类切换本质上仍是 non-overlap**：切换窗口期间 `ctrl_pclk` 完全
 不翻转，controller 在这段时间里本来就等同于跟时钟断开，逻辑状态该丢的还是
 会丢。也就是说无毛刺切换只解决了电路层面的问题（避免窄脉冲/亚稳态污染下
 游），并不能让 controller 在切换中保持工作连续性——效果上跟"直接换时钟源、
@@ -94,7 +94,7 @@ len(controllers) == lane_count // g_min     # 数量必须与理想值一致
 | mode 取值必须从 0 开始连续 | 避免译码器端口位宽不够，部分 mode 分支永远选不到 |
 | lane owner 的 ctrl_id/ctrl_lane 合法性 | 防止引用未定义 controller 或超过 max_width |
 | 同一 controller 端口不能被多条 lane 同时驱动 | 基本拓扑合法性 |
-| 同一 controller 端口的驱动源必须来自同一 group | 保证每个 group 能独立、无需互锁地完成 BBM 判断（见第 1 节） |
+| 同一 controller 端口的驱动源必须来自同一 group | 保证每个 group 能独立、无需互锁地完成 NOV 判断（见第 1 节） |
 | controller 不能在所有 mode 下都没有 lane | 防止声明了但完全没用到的僵尸 controller |
 | controller 工作时钟候选数必须为 1 | 强制"工作时钟固定，只换宽度"（见第 3 节） |
 | controller 数量必须等于 `lane_count // g_min` | 数量与颗粒度对齐，避免僵尸 controller 或被迫破坏时钟固定约束（见第 4 节） |
@@ -117,7 +117,7 @@ pipe_lane_mapper_top
 
 `u_rst_mux` 特意接的是 `dec_tgt`（译码器原始输出）而不是 `sel_gen` 对外的
 `sel_tgt`（经 `pipe_lane_sel_sync` 同步后的值），目的是让复位控制随 mode 立即变化，
-不必等待 `pipe_lane_sel_sync` 完成同步和 BBM 窗口。
+不必等待 `pipe_lane_sel_sync` 完成同步和 NOV 窗口。
 
 ## 7. safe_state 与 tie_off：两套独立机制，各自只对一个方向生效
 
@@ -142,7 +142,7 @@ lane 在每个 mode 下都必须有 owner，见校验规则），不存在"contr
 被用在**两个地方**：
 
 1. 真正存在的 `pipe_lane_data_mux` 实例的 `.safe()` 端口（这个端口在某些 mode 下
-   确实会被映射到，BBM 交接窗口用它）；
+   确实会被映射到，NOV 交接窗口用它）；
 2. 端口从未被任何 lane 映射到时的直接 `assign`（不经过 `pipe_lane_data_mux`，
    见第 9.1 节 unused lane）。
 
@@ -166,9 +166,9 @@ lane（见第 9 节）拿到正确安全值的唯一依据**。
 里本来就无毛刺。这个前提成立时，`sel_tgt` 从一个 one-hot 值直接切到另一
 个，中间不会真的停留在全 0——也就是说 `.safe()` 的值在 `comb` 模式下压根
 不会被呈现出来，天然无意义。只有 `sync` 模式（`SYNC=1`，两级同步器 + 真
-正的 break-before-make）才会保证每次切换都经过一段真实的全 0 窗口，这时
+正的 non-overlap）才会保证每次切换都经过一段真实的全 0 窗口，这时
 `.safe()`/`tie_off` 的取值才有意义、必须遵守（呼应第 8.2 节"真正需要切换
-的 group 走标准 BBM"那部分）。
+的 group 走标准 NOV"那部分）。
 
 `safe_state` 同理：它唯一生效的地方（m2p 方向的 `pipe_lane_data_mux.safe()`）
 也只在 `sync` 模式下才会被真正呈现，`comb` 模式下同样无意义。
@@ -188,7 +188,7 @@ pclk 候选数恒为 1，`base_lane` 天然稳定，此风险已随第 3 节的�
 
 ## 8. 使用场景：静态配置 vs 动态重分配
 
-`mode` 输入和分组 BBM 是同一套机制，这里从"什么时候改 mode"这个使用场景的
+`mode` 输入和分组 NOV 是同一套机制，这里从"什么时候改 mode"这个使用场景的
 角度做个归纳，方便对照第 1、2 节的分组规则去理解。RTL 本身不区分这两种场景
 ——是否"安全"完全由分组规则的性质保证，不依赖任何运行时判断"现在有没有
 活跃 link"。
@@ -200,7 +200,7 @@ pclk 候选数恒为 1，`base_lane` 天然稳定，此风险已随第 3 节的�
 被打扰"的问题。
 
 - 每个 group 的 owner 一次性落定，`sel_tgt` 稳定到当前 mode 对应的 one-hot
-  位后不再变化——效果上等同于一张固定路由表。BBM/`pipe_lane_sel_sync` 只在这一次配置
+  位后不再变化——效果上等同于一张固定路由表。NOV/`pipe_lane_sel_sync` 只在这一次配置
   转换里走一遍，之后闲置。
 - 直连 group（如 demo 的 G0）本来就是纯 wire，跟 mode 无关。
 - `ctrl_pclk` 本身是结构性固定的（`validate()` 强制每个 controller 只能有
@@ -215,7 +215,7 @@ pclk 候选数恒为 1，`base_lane` 天然稳定，此风险已随第 3 节的�
 
 - 分组规则（按"所有 mode 下 owner 序列是否完全一致"分组）保证：若某条 lane
   从 mode A 到 mode B owner 不变，其所在 group 的 `sel_tgt` 对应位不会翻转，
-  `pipe_lane_sel_sync` 检测不到跳变，不会进入 BBM 窗口——该 lane 的数据通路全程未被
+  `pipe_lane_sel_sync` 检测不到跳变，不会进入 NOV 窗口——该 lane 的数据通路全程未被
   扰动。
 - 例（demo）：mode0→mode1 只切换 G2、G3，G0/G1 不受影响。若 Ctrl0 当时正靠
   G0+G1 的 lane 在跑，这次改 mode 完全不影响它，同时 G2/G3 从 Ctrl0 断开、
@@ -224,7 +224,7 @@ pclk 候选数恒为 1，`base_lane` 天然稳定，此风险已随第 3 节的�
   `validate()` 强制检查）存在的意义，就是保证每个 group 能独立判断"要不要
   切"而不用跟别的 group 互锁——这是"只扰动变化部分"的前提，不是靠额外仲裁
   逻辑堆出来的。
-- 真正需要切换的 group 走标准 BBM：`sel_tgt` 先归零（安全态）、旧 owner 断
+- 真正需要切换的 group 走标准 NOV：`sel_tgt` 先归零（安全态）、旧 owner 断
   开、新 owner 建立，期间 `pipe_lane_data_mux` 保证呈现的是安全值（m2p 方向是
   `safe_state`，p2m 方向是 `tie_off`，见第 7 节），而不是悬空或两路相或——
   这个保证只在 `sync` 模式下成立，`comb` 模式下 `sel` 不会真的停在全 0，

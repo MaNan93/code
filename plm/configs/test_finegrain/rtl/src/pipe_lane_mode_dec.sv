@@ -2,7 +2,7 @@
 // mode decoding: produces each lane group's target owner, and each
 // controller's target pclk source. Purely combinational, no state.
 //
-// Output feeds directly into BBM's tgt port; BBM handles cross-domain
+// Output feeds directly into NOV's tgt port; NOV handles cross-domain
 // synchronization and interlocking.
 import pipe_lane_signal_pkg::*;
 

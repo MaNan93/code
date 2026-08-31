@@ -8,12 +8,12 @@
 //   pipe_lane_data_m2p -- MAC->PHY data mux
 //   pipe_lane_data_p2m -- PHY->MAC data mux
 //
-// Lane grouping: lanes with the same owner sequence are grouped automatically, sharing one BBM.
+// Lane grouping: lanes with the same owner sequence are grouped automatically, sharing one NOV.
 //
 //   G0 lane0~3        CtrlX16 / CtrlX16 / CtrlX16 direct
-//   G1 lane4~7        CtrlX16 / CtrlX16 / CtrlX4b 2-way BBM
-//   G2 lane8~11       CtrlX16 / CtrlX8 / CtrlX8 2-way BBM
-//   G3 lane12~15      CtrlX16 / CtrlX8 / CtrlX4a 3-way BBM
+//   G1 lane4~7        CtrlX16 / CtrlX16 / CtrlX4b 2-way NOV
+//   G2 lane8~11       CtrlX16 / CtrlX8 / CtrlX8 2-way NOV
+//   G3 lane12~15      CtrlX16 / CtrlX8 / CtrlX4a 3-way NOV
 import pipe_lane_signal_pkg::*;
 
 module pipe_lane_mapper_top #(

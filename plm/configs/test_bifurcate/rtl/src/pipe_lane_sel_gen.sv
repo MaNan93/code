@@ -1,7 +1,7 @@
 //
 // PIPE lane mapper select-generation submodule.
 // Decodes mode into each group's raw target dec_tgt (combinational, for rst_mux),
-// then uses pipe_lane_sel_sync for break-before-make + cross-clock-domain synchronization to
+// then uses pipe_lane_sel_sync for non-overlap + cross-clock-domain synchronization to
 // produce the final effective sel_tgt (for clk_mux's feedback clock mux and the data muxes).
 // pclk_tgt_cX is produced by the internal decoder and passed through to pipe_lane_clk_mux
 // for glitch-free switching of controller pclk candidates.

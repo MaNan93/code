@@ -3,7 +3,7 @@
 PIPE Lane Mapper RTL generator.
 
 Only generates the config-dependent parts: type definitions, mode
-decoding, and the instantiation/wiring of the common modules. BBM, the
+decoding, and the instantiation/wiring of the common modules. NOV, the
 synchronizer, clock gating, and the one-hot mux are all hand-written
 modules under tool/common -- they don't change with the config.
 
@@ -114,7 +114,7 @@ def gen_pkg(cfg):
 
     for d, tname in (("mac2phy", "mac2phy_lane_t"), ("phy2mac", "phy2mac_lane_t")):
         sigs = [s for s in cfg.signals if s.direction == d]
-        L.append(f"    // {d} direction; signals that go through BBM are packed into one type;")
+        L.append(f"    // {d} direction; signals that go through NOV are packed into one type;")
         L.append("    typedef struct packed {")
         for s in sigs:
             w = "" if s.width == 1 else f"[{s.width-1}:0] "
@@ -126,7 +126,7 @@ def gen_pkg(cfg):
     for d, tname, cname in (("mac2phy", "mac2phy_lane_t", "SAFE_M2P"),
                             ("phy2mac", "phy2mac_lane_t", "SAFE_P2M")):
         sigs = [s for s in cfg.signals if s.direction == d]
-        L.append(f"    // Value to present when there's no owner (the BBM handoff window).")
+        L.append(f"    // Value to present when there's no owner (the NOV handoff window).")
         L.append(f"    // pipe_lane_data_mux uses this for polarity normalization, so sel==0 naturally lands on the safe state.")
         L.append(f"    localparam {tname} {cname} = '{{")
         for i, s in enumerate(sigs):
@@ -136,7 +136,7 @@ def gen_pkg(cfg):
         L.append("")
 
     # each group's sel type
-    L.append("    // One one-hot select vector per lane group that needs BBM.")
+    L.append("    // One one-hot select vector per lane group that needs NOV.")
     L.append("    // Direct groups don't appear here -- the type itself shows they have no choice to make.")
     for g in cfg.groups:
         if g.is_direct:
@@ -173,7 +173,7 @@ def gen_decoder(cfg):
          "// mode decoding: produces each lane group's target owner, and each",
          "// controller's target pclk source. Purely combinational, no state.",
          "//",
-         "// Output feeds directly into BBM's tgt port; BBM handles cross-domain",
+         "// Output feeds directly into NOV's tgt port; NOV handles cross-domain",
          "// synchronization and interlocking.",
          "import pipe_lane_signal_pkg::*;",
          "",
@@ -249,13 +249,13 @@ def gen_sel_gen(cfg, sel_mode="sync"):
 
     It exposes two target signals:
       sel_tgt -- the final, effective selection after pipe_lane_sel_sync
-                 synchronization, break-before-make; used by clk_mux's
+                 synchronization, non-overlap; used by clk_mux's
                  feedback clock mux and data_m2p/data_p2m.
       dec_tgt -- the decoder's raw (unsynchronized) target, purely
                  combinational and changes immediately with mode; used by
                  rst_mux, so the new owner's reset control can follow mode
                  right away without waiting for pipe_lane_sel_sync to finish
-                 cross-domain synchronization and the BBM break window.
+                 cross-domain synchronization and the NOV break window.
 
     The controller-side pclk candidates (pclk_tgt_cX) are also produced by
     the internal decoder, but that signal is meant for
@@ -265,7 +265,7 @@ def gen_sel_gen(cfg, sel_mode="sync"):
     Each group's owner selection goes through the pipe_lane_sel_sync module
     (tool/common/pipe_lane_sel_sync.sv), whose SYNC parameter switches between two
     implementations:
-      sel_mode="sync" (default) -- SYNC=1'b1, break-before-make + a
+      sel_mode="sync" (default) -- SYNC=1'b1, non-overlap + a
                 two-stage synchronizer, safe across clock domains.
       sel_mode="comb"           -- SYNC=1'b0, en is directly tgt, pure
                 combinational passthrough. Only safe when every candidate
@@ -292,7 +292,7 @@ def gen_sel_gen(cfg, sel_mode="sync"):
     L = ["//",
          "// PIPE lane mapper select-generation submodule.",
          "// Decodes mode into each group's raw target dec_tgt (combinational, for rst_mux),",
-         "// then uses pipe_lane_sel_sync for break-before-make + cross-clock-domain synchronization to",
+         "// then uses pipe_lane_sel_sync for non-overlap + cross-clock-domain synchronization to",
          "// produce the final effective sel_tgt (for clk_mux's feedback clock mux and the data muxes).",
          "// pclk_tgt_cX is produced by the internal decoder and passed through to pipe_lane_clk_mux",
          "// for glitch-free switching of controller pclk candidates.",
@@ -493,7 +493,7 @@ def gen_rst_mux(cfg):
     unsynchronized target), not sel_gen's final external sel_tgt. This
     lets the new owner's reset control change immediately with mode,
     without waiting for pipe_lane_sel_sync to finish cross-clock-domain
-    synchronization and the break-before-make window.
+    synchronization and the non-overlap window.
     """
     LC, NC = cfg.lane_count, cfg.num_ctrl
 
@@ -702,12 +702,12 @@ def gen_top(cfg):
     L.append("//   pipe_lane_data_m2p -- MAC->PHY data mux")
     L.append("//   pipe_lane_data_p2m -- PHY->MAC data mux")
     L.append("//")
-    L.append("// Lane grouping: lanes with the same owner sequence are grouped automatically, sharing one BBM.")
+    L.append("// Lane grouping: lanes with the same owner sequence are grouped automatically, sharing one NOV.")
     L.append("//")
     for g in cfg.groups:
         rng = f"lane{g.lanes[0]}~{g.lanes[-1]}" if len(g.lanes) > 1 else f"lane{g.lanes[0]}"
         owners = " / ".join(cfg.controllers[g.owners[m]].name for m in cfg.modes)
-        kind = "direct" if g.is_direct else f"{g.n}-way BBM"
+        kind = "direct" if g.is_direct else f"{g.n}-way NOV"
         L.append(f"//   G{g.gid} {rng:<14} {owners:<24} {kind}")
     L.append("import pipe_lane_signal_pkg::*;")
     L.append("")
@@ -889,8 +889,8 @@ def gen_tb(cfg):
     Checks:
       1. Steady-state data routing matches lane_mapping.csv exactly
       2. Unmapped controller ports read back SAFE_P2M
-      3. Group sel vectors are always one-hot0 (break-before-make)
-      4. During the BBM handoff window (sel all-zero), phy lanes present the safe state
+      3. Group sel vectors are always one-hot0 (non-overlap)
+      4. During the NOV handoff window (sel all-zero), phy lanes present the safe state
       5. phy_rst_n follows the current owner's ctrl_rst_n
     """
     nm = len(cfg.modes)
@@ -911,8 +911,8 @@ def gen_tb(cfg):
          "// Checks:",
          "//   1. Steady-state data routing matches lane_mapping.csv exactly",
          "//   2. Unmapped controller ports read back SAFE_P2M",
-         "//   3. Group sel vectors are always one-hot0 (break-before-make)",
-         "//   4. During the BBM handoff window (sel all-zero), phy lanes present the safe state (txelecidle=1)",
+         "//   3. Group sel vectors are always one-hot0 (non-overlap)",
+         "//   4. During the NOV handoff window (sel all-zero), phy lanes present the safe state (txelecidle=1)",
          "//   5. phy_rst_n follows the current owner's ctrl_rst_n",
          "//=============================================================================",
          "import pipe_lane_signal_pkg::*;",
@@ -1053,8 +1053,8 @@ def gen_tb(cfg):
     L.append("    endfunction")
     L.append("")
 
-    # ---- BBM monitor
-    L.append("    //------------------------------------------------------------ BBM one-hot / safe-state monitor")
+    # ---- NOV monitor
+    L.append("    //------------------------------------------------------------ NOV one-hot / safe-state monitor")
     L.append("    int unsigned err_count = 0;")
     L.append("")
     L.append("    task automatic chk(input bit ok, input string msg);")
@@ -1152,7 +1152,7 @@ def gen_tb(cfg):
         # sel_tgt bits are produced by independent per-branch synchronizers
         # clocked by that branch's own controller pclk (pipe_lane_sel_sync),
         # so with 3+ branches on unrelated clocks it's easy for the very
-        # next branch's synchronizer to complete its break-before-make
+        # next branch's synchronizer to complete its non-overlap
         # handoff within that same 1ns -- e.g. a group cycling straight from
         # its highest bit back to its lowest one (mode wrap-around) can spend
         # only a couple ns in the all-zero gap before the incoming branch's
@@ -1174,18 +1174,18 @@ def gen_tb(cfg):
             L.append(f"            if (sel_snap.g{g.gid} == '0 && dut.sel_tgt.g{g.gid} == '0) begin")
             L.append(f"                foreach (G{g.gid}_LANES[i])")
             L.append(f"                    chk_m2p(phy_mac2phy[G{g.gid}_LANES[i]], SAFE_M2P,")
-            L.append(f"                        $sformatf(\"G{g.gid} lane%0d: sel==0 BBM gap\", G{g.gid}_LANES[i]));")
+            L.append(f"                        $sformatf(\"G{g.gid} lane%0d: sel==0 NOV gap\", G{g.gid}_LANES[i]));")
             for (cid, cl), gid in sorted(port_group.items()):
                 if gid != g.gid:
                     continue
                 c = cfg.controllers[cid]
                 L.append(f"                chk_p2m({c.lname}_phy2mac[{cl}], exp_safe_p2m_{c.lname},")
-                L.append(f"                    \"G{g.gid} {c.name}[{cl}]: sel==0 BBM gap\");")
+                L.append(f"                    \"G{g.gid} {c.name}[{cl}]: sel==0 NOV gap\");")
             L.append(f"            end")
         L.append("        end")
         L.append("    end")
     else:
-        L.append("    // This topology is all direct connections; no BBM groups, nothing to monitor.")
+        L.append("    // This topology is all direct connections; no NOV groups, nothing to monitor.")
     L.append("")
 
     # ---- check_mode
@@ -1366,7 +1366,7 @@ def main():
                          "omitting --config lists the available set names.")
     ap.add_argument("--sel-mode", choices=["sync", "comb"], default="sync",
                     help="Which SYNC parameter the group's pipe_lane_sel_sync module uses: "
-                         "sync=SYNC=1 (default, break-before-make + a two-stage "
+                         "sync=SYNC=1 (default, non-overlap + a two-stage "
                          "synchronizer, safe across clock domains); "
                          "comb=SYNC=0 (combinational passthrough, only safe when "
                          "the candidate controllers share one clock domain)")

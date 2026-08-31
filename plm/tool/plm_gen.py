@@ -32,6 +32,7 @@ PLM_ROOT = SCRIPT_DIR.parent                           # .../plm
 CONFIGS_ROOT = PLM_ROOT / "configs"                    # .../plm/configs
 BUILTIN_CFG = SCRIPT_DIR / "config"          # built-in default CSVs (if shipped alongside the tool)
 COMMON_DIR = SCRIPT_DIR / "common"          # hand-written common modules (config-independent, shipped with the tool)
+TB_MAKEFILE = SCRIPT_DIR / "tb_makefile.mk"  # hand-written VCS/Verdi Makefile (config-independent), copied to <set>/tb/Makefile
 CSV_NAMES = ("controllers.csv", "lane_mapping.csv", "pipe_signals.csv")
 
 sys.path.insert(0, str(SCRIPT_DIR))
@@ -1379,6 +1380,13 @@ def main():
     for f in COMMON_DIR.iterdir():
         if f.is_file():
             shutil.copy2(f, common_dst / f.name)
+
+    # Same idea for the VCS/Verdi Makefile: it's config-independent (no
+    # config-specific content, just relative paths), so every config set
+    # gets an identical copy instead of it being hand-maintained per set
+    # and silently missing wherever nobody remembered to add it.
+    if TB_MAKEFILE.is_file():
+        shutil.copy2(TB_MAKEFILE, tb_dir / "makefile")
 
     print(f"Config: {csv_dir}")
     print(f"RTL   : {out_rtl}")

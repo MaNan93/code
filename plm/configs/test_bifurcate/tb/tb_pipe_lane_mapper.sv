@@ -13,7 +13,6 @@ import pipe_lane_signal_pkg::*;
 
 module tb_pipe_lane_mapper;
 
-    localparam int NM  = 3;
     localparam int NL = 16;
     localparam int NC   = 4;
 
@@ -52,7 +51,7 @@ module tb_pipe_lane_mapper;
     logic [NL-1:0]      phy_phystatus_stim = '0;
     logic                       test_en = 1'b0;
     logic [NC-1:0]        ctrl_rst_n = '0;
-    logic [$clog2(NM)-1:0] mode = '0;
+    logic [1:0] mode = '0;
 
     logic [NC-1:0]        ctrl_pclk;
     logic [NL-1:0]      phy_pclk_in;
@@ -63,17 +62,16 @@ module tb_pipe_lane_mapper;
 
     mac2phy_lane_t [15:0] ctrlx16_mac2phy;
     phy2mac_lane_t [15:0] ctrlx16_phy2mac;
-    mac2phy_lane_t [15:0] ctrlx8_mac2phy;
-    phy2mac_lane_t [15:0] ctrlx8_phy2mac;
-    mac2phy_lane_t [15:0] ctrlx4a_mac2phy;
-    phy2mac_lane_t [15:0] ctrlx4a_phy2mac;
-    mac2phy_lane_t [15:0] ctrlx4b_mac2phy;
-    phy2mac_lane_t [15:0] ctrlx4b_phy2mac;
+    mac2phy_lane_t [7:0] ctrlx8_mac2phy;
+    phy2mac_lane_t [7:0] ctrlx8_phy2mac;
+    mac2phy_lane_t [3:0] ctrlx4a_mac2phy;
+    phy2mac_lane_t [3:0] ctrlx4a_phy2mac;
+    mac2phy_lane_t [3:0] ctrlx4b_mac2phy;
+    phy2mac_lane_t [3:0] ctrlx4b_phy2mac;
 
     pipe_lane_mapper_top #(
-        .NM  (NM),
         .NL (NL),
-        .NC   (NC)
+        .NC (NC)
     ) dut (
         .phy_pclk_out   (phy_pclk_out),
         .test_en        (test_en),
@@ -119,9 +117,9 @@ module tb_pipe_lane_mapper;
 
     always_comb begin
         for (int p = 0; p < 16; p++) ctrlx16_mac2phy[p] = make_m2p(0, p);
-        for (int p = 0; p < 16; p++) ctrlx8_mac2phy[p] = make_m2p(1, p);
-        for (int p = 0; p < 16; p++) ctrlx4a_mac2phy[p] = make_m2p(2, p);
-        for (int p = 0; p < 16; p++) ctrlx4b_mac2phy[p] = make_m2p(3, p);
+        for (int p = 0; p < 8; p++) ctrlx8_mac2phy[p] = make_m2p(1, p);
+        for (int p = 0; p < 4; p++) ctrlx4a_mac2phy[p] = make_m2p(2, p);
+        for (int p = 0; p < 4; p++) ctrlx4b_mac2phy[p] = make_m2p(3, p);
         for (int l = 0; l < NL; l++) begin
             phy_phy2mac[l] = make_p2m(l);
             phy_phy2mac[l].phy_mac_phystatus = phy_phystatus_stim[l];
@@ -480,14 +478,13 @@ module tb_pipe_lane_mapper;
         end
 
         for (int c = 0; c < NC; c++) begin
-            int max_w = 16;
-            int real_max_w;
+            int max_w;
             case (c)
-                0: real_max_w = 16;
-                1: real_max_w = 8;
-                2: real_max_w = 4;
-                3: real_max_w = 4;
-                default: real_max_w = 0;
+                0: max_w = 16;
+                1: max_w = 8;
+                2: max_w = 4;
+                3: max_w = 4;
+                default: max_w = 0;
             endcase
             for (int p = 0; p < max_w; p++) begin
                 int src_lane;
@@ -506,51 +503,47 @@ module tb_pipe_lane_mapper;
                 if (src_lane == -1) begin
                     phy2mac_lane_t exp_tie;
                     int active_base;
-                    if (p >= real_max_w) begin
-                        exp_tie = '0;  // fake lane, port padding only
+                    exp_tie = SAFE_P2M;
+                    active_base = -1;
+                    for (int l = 0; l < NL; l++) begin
+                        if (owner_of(m, l) == c && active_base == -1) active_base = l;
+                    end
+                    if (active_base != -1) begin
+                        exp_tie.phy_mac_rxdata = 32'd0;
+                        exp_tie.phy_mac_rxdatak = 4'd0;
+                        exp_tie.phy_mac_rxdatavalid = 1'b0;
+                        exp_tie.phy_mac_rxstartblock = 1'b0;
+                        exp_tie.phy_mac_rxsyncheader = 2'd0;
+                        exp_tie.phy_mac_rxvalid = 1'b0;
+                        exp_tie.phy_mac_rxstatus = 3'd0;
+                        exp_tie.phy_mac_rxelecidle = 1'b0;
+                        exp_tie.phy_mac_rxstandbystatus = 1'b0;
+                        exp_tie.phy_mac_messagebus = 8'd80;
+                        exp_tie.phy_mac_phystatus = phy_phy2mac[active_base].phy_mac_phystatus;
+                        exp_tie.phy_mac_local_tx_coef_valid = 1'b0;
+                        exp_tie.phy_mac_local_tx_pset_coef = 18'd0;
+                        exp_tie.phy_mac_localfs = 6'd0;
+                        exp_tie.phy_mac_locallf = 6'd0;
+                        exp_tie.phy_mac_dirfeedback = 6'd0;
+                        exp_tie.phy_mac_fomfeedback = 8'd0;
                     end else begin
-                        exp_tie = SAFE_P2M;
-                        active_base = -1;
-                        for (int l = 0; l < NL; l++) begin
-                            if (owner_of(m, l) == c && active_base == -1) active_base = l;
-                        end
-                        if (active_base != -1) begin
-                            exp_tie.phy_mac_rxdata = 32'd0;
-                            exp_tie.phy_mac_rxdatak = 4'd0;
-                            exp_tie.phy_mac_rxdatavalid = 1'b0;
-                            exp_tie.phy_mac_rxstartblock = 1'b0;
-                            exp_tie.phy_mac_rxsyncheader = 2'd0;
-                            exp_tie.phy_mac_rxvalid = 1'b0;
-                            exp_tie.phy_mac_rxstatus = 3'd0;
-                            exp_tie.phy_mac_rxelecidle = 1'b0;
-                            exp_tie.phy_mac_rxstandbystatus = 1'b0;
-                            exp_tie.phy_mac_messagebus = 8'd80;
-                            exp_tie.phy_mac_phystatus = phy_phy2mac[active_base].phy_mac_phystatus;
-                            exp_tie.phy_mac_local_tx_coef_valid = 1'b0;
-                            exp_tie.phy_mac_local_tx_pset_coef = 18'd0;
-                            exp_tie.phy_mac_localfs = 6'd0;
-                            exp_tie.phy_mac_locallf = 6'd0;
-                            exp_tie.phy_mac_dirfeedback = 6'd0;
-                            exp_tie.phy_mac_fomfeedback = 8'd0;
-                        end else begin
-                            exp_tie.phy_mac_rxdata = 32'd0;
-                            exp_tie.phy_mac_rxdatak = 4'd0;
-                            exp_tie.phy_mac_rxdatavalid = 1'b0;
-                            exp_tie.phy_mac_rxstartblock = 1'b0;
-                            exp_tie.phy_mac_rxsyncheader = 2'd0;
-                            exp_tie.phy_mac_rxvalid = 1'b0;
-                            exp_tie.phy_mac_rxstatus = 3'd0;
-                            exp_tie.phy_mac_rxelecidle = 1'b0;
-                            exp_tie.phy_mac_rxstandbystatus = 1'b0;
-                            exp_tie.phy_mac_messagebus = 8'd80;
-                            exp_tie.phy_mac_phystatus = '0;
-                            exp_tie.phy_mac_local_tx_coef_valid = 1'b0;
-                            exp_tie.phy_mac_local_tx_pset_coef = 18'd0;
-                            exp_tie.phy_mac_localfs = 6'd0;
-                            exp_tie.phy_mac_locallf = 6'd0;
-                            exp_tie.phy_mac_dirfeedback = 6'd0;
-                            exp_tie.phy_mac_fomfeedback = 8'd0;
-                        end
+                        exp_tie.phy_mac_rxdata = 32'd0;
+                        exp_tie.phy_mac_rxdatak = 4'd0;
+                        exp_tie.phy_mac_rxdatavalid = 1'b0;
+                        exp_tie.phy_mac_rxstartblock = 1'b0;
+                        exp_tie.phy_mac_rxsyncheader = 2'd0;
+                        exp_tie.phy_mac_rxvalid = 1'b0;
+                        exp_tie.phy_mac_rxstatus = 3'd0;
+                        exp_tie.phy_mac_rxelecidle = 1'b0;
+                        exp_tie.phy_mac_rxstandbystatus = 1'b0;
+                        exp_tie.phy_mac_messagebus = 8'd80;
+                        exp_tie.phy_mac_phystatus = '0;
+                        exp_tie.phy_mac_local_tx_coef_valid = 1'b0;
+                        exp_tie.phy_mac_local_tx_pset_coef = 18'd0;
+                        exp_tie.phy_mac_localfs = 6'd0;
+                        exp_tie.phy_mac_locallf = 6'd0;
+                        exp_tie.phy_mac_dirfeedback = 6'd0;
+                        exp_tie.phy_mac_fomfeedback = 8'd0;
                     end
                     chk_p2m(got, exp_tie,
                         $sformatf("mode%0d ctrl%0d[%0d]: unmapped tie-off", m, c, p));

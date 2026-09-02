@@ -24,6 +24,7 @@ package pipe_lane_signal_pkg;
         logic mac_phy_dirchange;
         logic mac_phy_rxeqinprogress;
     } mac2phy_lane_t;
+    localparam int MAC2PHY_W = $bits(mac2phy_lane_t);
 
     // phy2mac direction; signals that go through NOV are packed into one type;
     typedef struct packed {
@@ -45,6 +46,7 @@ package pipe_lane_signal_pkg;
         logic [5:0] phy_mac_dirfeedback;
         logic [7:0] phy_mac_fomfeedback;
     } phy2mac_lane_t;
+    localparam int PHY2MAC_W = $bits(phy2mac_lane_t);
 
     // Value to present when there's no owner (the NOV handoff window).
     // pipe_lane_data_mux uses this for polarity normalization, so sel==0 naturally lands on the safe state.

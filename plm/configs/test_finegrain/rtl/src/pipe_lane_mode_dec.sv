@@ -1,4 +1,3 @@
-//
 // mode decoding: produces each lane group's target owner, and each
 // controller's target pclk source. Purely combinational, no state.
 //
@@ -7,12 +6,9 @@
 import pipe_lane_signal_pkg::*;
 
 module pipe_lane_mode_dec #(
-    parameter int NM = 3,
-    /* verilator lint_off UNUSEDPARAM */
     parameter int NC = 6   // only used by controllers with more than one candidate
-    /* verilator lint_on UNUSEDPARAM */
 ) (
-    input  logic [$clog2(NM)-1:0] mode,
+    input  logic [1:0] mode,
     output lane_sel_t sel_tgt
 );
 

@@ -1,4 +1,3 @@
-//
 // PIPE lane mapper select-generation submodule.
 // Decodes mode into each group's raw target dec_tgt (combinational, for rst_mux),
 // then uses pipe_lane_sel_sync for non-overlap + cross-clock-domain synchronization to
@@ -9,10 +8,9 @@
 import pipe_lane_signal_pkg::*;
 
 module pipe_lane_sel_gen #(
-    parameter int NM = 4,
     parameter int NC = 4
 ) (
-    input  logic [$clog2(NM)-1:0] mode,
+    input  logic [1:0] mode,
     input  logic [NC-1:0]   ctrl_pclk,
     input  logic [NC-1:0]   ctrl_rst_n,
 
@@ -21,8 +19,7 @@ module pipe_lane_sel_gen #(
 );
 
     pipe_lane_mode_dec #(
-        .NM (NM),
-        .NC  (NC)
+        .NC (NC)
     ) u_mode_dec (
         .mode     (mode),
         .sel_tgt  (dec_tgt)

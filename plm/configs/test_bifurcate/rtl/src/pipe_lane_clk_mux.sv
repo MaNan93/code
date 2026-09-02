@@ -1,8 +1,7 @@
-//
 // PIPE lane mapper clock-mux submodule.
 // Contains: controller pclk generation, feedback clock mux.
 // Each group's final sel_tgt is produced by pipe_lane_sel_gen and passed in as an input.
-// The feedback reset mux is in pipe_lane_rst_mux, the data muxes are in
+// The reset mux is in pipe_lane_rst_mux, the data muxes are in
 // pipe_lane_data_m2p / pipe_lane_data_p2m.
 import pipe_lane_signal_pkg::*;
 
@@ -10,9 +9,7 @@ module pipe_lane_clk_mux #(
     parameter int NL = 16,
     parameter int NC = 4
 ) (
-    /* verilator lint_off UNUSEDSIGNAL */
     input  logic [NL-1:0] phy_pclk_out,
-    /* verilator lint_on UNUSEDSIGNAL */
     input  logic                  test_en,
     input  logic [NC-1:0]   ctrl_rst_n,
 

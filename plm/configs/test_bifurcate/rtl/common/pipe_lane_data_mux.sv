@@ -24,7 +24,7 @@
 // safe is a runtime input port, not a parameter: most call sites pass a
 // compile-time constant, but for a tie_off=lane0 signal like
 // phy_mac_phystatus, its "safe state" has to follow base_lane's current
-// actual value (see *_safe_p2m_align in pipe_lane_data_p2m.sv) -- that's
+// actual value (see *_p2m_tie in pipe_lane_data_p2m.sv) -- that's
 // only known at runtime, and doesn't satisfy the compile-time-constant
 // requirement of a parameter. To keep both call patterns legal on the same
 // module, safe is uniformly made a port.
@@ -39,20 +39,19 @@ module pipe_lane_data_mux #(
     parameter int WIDTH = 1,
     parameter int N     = 2
 ) (
-    input  logic [N-1:0]            sel,    // one-hot, may be all-zero
-    input  logic [N-1:0][WIDTH-1:0] din,
-    input  logic [WIDTH-1:0]        safe,
-    output logic [WIDTH-1:0]        dout
+    input  logic [    N-1:0]            sel,   // one-hot, may be all-zero
+    input  logic [    N-1:0][WIDTH-1:0] din,
+    input  logic [WIDTH-1:0]            safe,
+    output logic [WIDTH-1:0]            dout
 );
 
-    logic [WIDTH-1:0] acc;
+  logic [WIDTH-1:0] acc;
 
-    always_comb begin
-        acc = '0;
-        for (int i = 0; i < N; i++)
-            acc |= (din[i] ^ safe) & {WIDTH{sel[i]}};
-    end
+  always_comb begin
+    acc = '0;
+    for (int i = 0; i < N; i++) acc |= (din[i] ^ safe) & {WIDTH{sel[i]}};
+  end
 
-    assign dout = acc ^ safe;
+  assign dout = acc ^ safe;
 
 endmodule

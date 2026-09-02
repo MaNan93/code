@@ -15,16 +15,16 @@ module pipe_lane_sync2 #(
     output logic [WIDTH-1:0] q       // synchronized into the clk domain
 );
 
-    logic [WIDTH-1:0] meta;
+  logic [WIDTH-1:0] meta;
 
-    always_ff @(posedge clk or negedge rst_n) begin
-        if (!rst_n) begin
-            meta <= '0;
-            q    <= '0;
-        end else begin
-            meta <= d;
-            q    <= meta;
-        end
+  always_ff @(posedge clk or negedge rst_n) begin
+    if (!rst_n) begin
+      meta <= '0;
+      q    <= '0;
+    end else begin
+      meta <= d;
+      q    <= meta;
     end
+  end
 
 endmodule

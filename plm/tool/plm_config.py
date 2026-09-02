@@ -37,6 +37,7 @@ def _stripped(reader):
 
 # ---------------------------------------------------------------- data model
 
+
 class Controller:
     def __init__(self, ctrl_id, name, max_width):
         self.id = int(str(ctrl_id).strip())
@@ -65,7 +66,7 @@ class Signal:
 
     def __init__(self, name, direction, width, safe_state, tie_off):
         self.name = str(name).strip()
-        self.direction = str(direction).strip()       # mac2phy | phy2mac
+        self.direction = str(direction).strip()  # mac2phy | phy2mac
         self.width = int(str(width).strip())
         ss = str(safe_state).strip()
         self.safe_state = int(ss, 0) if ss else 0
@@ -83,11 +84,12 @@ class Signal:
             except ValueError:
                 raise ValueError(
                     f"tie_off must be 'lane0' or an integer literal "
-                    f"(e.g. 0, 1, 0x50), got '{self.tie_off}'")
+                    f"(e.g. 0, 1, 0x50), got '{self.tie_off}'"
+                )
             if not (0 <= self.tie_value < (1 << self.width)):
                 raise ValueError(
-                    f"tie_off value {self.tie_value} is out of range for "
-                    f"width={self.width}")
+                    f"tie_off value {self.tie_value} is out of range for " f"width={self.width}"
+                )
 
     @property
     def is_m2p(self):
@@ -138,9 +140,9 @@ class LaneGroup:
 
     def __init__(self, gid, lanes, owners_by_mode):
         self.gid = gid
-        self.lanes = lanes                    # list of phy lanes
-        self.owners = owners_by_mode          # {mode: ctrl_id}
-        self.cands = sorted(set(owners_by_mode.values()))   # candidate ctrl_ids
+        self.lanes = lanes  # list of phy lanes
+        self.owners = owners_by_mode  # {mode: ctrl_id}
+        self.cands = sorted(set(owners_by_mode.values()))  # candidate ctrl_ids
 
     @property
     def n(self):
@@ -156,36 +158,24 @@ class LaneGroup:
 
 # ---------------------------------------------------------------- parsing
 
+
 class Config:
     def __init__(self, cfg_dir):
         d = Path(cfg_dir)
         self.dir = d
         self.controllers = self._load_ctrl(d / "controllers.csv")
         self.signals = self._load_sig(d / "pipe_signals.csv")
-        self.modes, self.lane_count, self.mapping = \
-            self._load_map(d / "lane_mapping.csv")
+        self.modes, self.lane_count, self.mapping = self._load_map(d / "lane_mapping.csv")
         self.num_ctrl = max(self.controllers) + 1
         self.groups = self._build_groups()
-
-        # Every controller's RTL port array is declared at this uniform
-        # width -- the widest controller's max_width -- for ease of
-        # connection (e.g. so a x2 and a x4 controller expose same-shaped
-        # buses). A narrower controller's ports at or beyond its own real
-        # max_width are "fake lanes": they can never be legally assigned a
-        # PHY lane (validate() still bounds lane_mapping.csv against each
-        # controller's own real max_width), they exist purely as
-        # declaration padding. p2m ties them off through the same
-        # tie_off/safe_p2m_align path as any other unmapped port; m2p is
-        # simply left unread on those extra bits.
-        self.decl_width = max((c.max_width for c in self.controllers.values()),
-                               default=0)
 
     # -- controllers.csv
     @staticmethod
     def _load_ctrl(path):
         out = {}
-        for i, r in enumerate(_stripped(
-                csv.DictReader(open(path, newline="", encoding="utf-8"))), start=2):
+        for i, r in enumerate(
+            _stripped(csv.DictReader(open(path, newline="", encoding="utf-8"))), start=2
+        ):
             for col in ("ctrl_id", "ctrl_name", "max_width"):
                 if col not in r or not (r[col] or "").strip():
                     raise SystemExit(f"{path} line {i}: missing {col}")
@@ -202,8 +192,9 @@ class Config:
     def _load_sig(path):
         out = []
         seen = set()
-        for i, r in enumerate(_stripped(
-                csv.DictReader(open(path, newline="", encoding="utf-8"))), start=2):
+        for i, r in enumerate(
+            _stripped(csv.DictReader(open(path, newline="", encoding="utf-8"))), start=2
+        ):
             for col in ("signal_name", "direction", "width", "safe_state", "tie_off"):
                 if col not in r or not (r[col] or "").strip():
                     raise SystemExit(f"{path} line {i}: missing {col}")
@@ -214,19 +205,19 @@ class Config:
             d = r["direction"]
             if d not in ("mac2phy", "phy2mac"):
                 raise SystemExit(
-                    f"{path} line {i}: direction='{d}' is invalid, "
-                    f"must be mac2phy or phy2mac")
+                    f"{path} line {i}: direction='{d}' is invalid, " f"must be mac2phy or phy2mac"
+                )
             try:
                 s = Signal(name, d, r["width"], r["safe_state"], r["tie_off"])
             except ValueError as e:
-                raise SystemExit(
-                    f"{path} line {i}: signal attribute validation failed, {e}")
+                raise SystemExit(f"{path} line {i}: signal attribute validation failed, {e}")
             if s.width < 1:
                 raise SystemExit(f"{path} line {i}: width must be >= 1")
             if s.safe_state >= (1 << s.width):
                 raise SystemExit(
                     f"{path} line {i}: signal {name} has safe_state="
-                    f"{s.safe_state}, out of range for width={s.width}")
+                    f"{s.safe_state}, out of range for width={s.width}"
+                )
             out.append(s)
         if not out:
             raise SystemExit(f"{path}: no signals defined")
@@ -263,7 +254,8 @@ class Config:
                     f"but the header only defines {lane_count} "
                     f"({cols[0]}..{cols[-1]}).\n"
                     f"  extra: {', '.join(extra)}\n"
-                    f"  Please extend the header to lane{lane_count + len(extra) - 1}.")
+                    f"  Please extend the header to lane{lane_count + len(extra) - 1}."
+                )
             miss = [c for c in cols if r.get(c) is None]
             if miss:
                 raise SystemExit(f"{path} line {i}: missing {', '.join(miss)}")
@@ -284,17 +276,18 @@ class Config:
                 if not cell:
                     raise SystemExit(
                         f"{path} line {i} {col}: cell is empty. "
-                        f"Every phy lane must have an owner in every mode.")
+                        f"Every phy lane must have an owner in every mode."
+                    )
                 if cell.count("-") != 1:
                     raise SystemExit(
                         f"{path} line {i} {col}: '{cell}' has the wrong format, "
-                        f"expected ctrl_id-ctrl_lane (e.g. 0-5)")
+                        f"expected ctrl_id-ctrl_lane (e.g. 0-5)"
+                    )
                 a, b = cell.split("-")
                 try:
                     per[idx] = (int(a), int(b))
                 except ValueError:
-                    raise SystemExit(
-                        f"{path} line {i} {col}: '{cell}' contains a non-integer")
+                    raise SystemExit(f"{path} line {i} {col}: '{cell}' contains a non-integer")
             modes.append(m)
             mapping[m] = per
 
@@ -313,8 +306,7 @@ class Config:
         for l in range(self.lane_count):
             buckets.setdefault(sig[l], []).append(l)
         groups = []
-        for gid, (s, lanes) in enumerate(
-                sorted(buckets.items(), key=lambda kv: kv[1][0])):
+        for gid, (s, lanes) in enumerate(sorted(buckets.items(), key=lambda kv: kv[1][0])):
             owners = {m: s[i] for i, m in enumerate(self.modes)}
             groups.append(LaneGroup(gid, lanes, owners))
         return groups
@@ -341,16 +333,14 @@ class Config:
         for cid in self.controllers:
             per = {}
             for m in self.modes:
-                owned = [l for l in range(self.lane_count)
-                         if self.mapping[m][l][0] == cid]
+                owned = [l for l in range(self.lane_count) if self.mapping[m][l][0] == cid]
                 per[m] = min(owned) if owned else None
             res[cid] = per
         return res
 
     def ctrl_pclk_cands(self):
         src = self.ctrl_pclk_src()
-        return {cid: sorted({v for v in p.values() if v is not None})
-                for cid, p in src.items()}
+        return {cid: sorted({v for v in p.values() if v is not None}) for cid, p in src.items()}
 
     def _min_granularity(self):
         """For each controller, the minimum width across every mode where
@@ -367,8 +357,7 @@ class Config:
         for cid in self.controllers:
             widths = []
             for m in self.modes:
-                w = sum(1 for l in range(self.lane_count)
-                        if self.mapping[m][l][0] == cid)
+                w = sum(1 for l in range(self.lane_count) if self.mapping[m][l][0] == cid)
                 if w > 0:
                     widths.append(w)
             if widths:
@@ -395,7 +384,8 @@ class Config:
                 f"currently {sorted(actual)}. The decoder's mode port is "
                 f"declared with width $clog2(mode count); non-contiguous "
                 f"values or a range not starting at 0 will leave some mode "
-                f"branches unreachable in hardware.")
+                f"branches unreachable in hardware."
+            )
 
         # A controller's max_width can never actually be reached if it
         # exceeds the total PHY lane count -- there simply aren't enough
@@ -409,7 +399,8 @@ class Config:
                     f"{c.name}: max_width={c.max_width} exceeds the total PHY "
                     f"lane count ({self.lane_count}) declared in "
                     f"lane_mapping.csv. No mode can ever assign it that many "
-                    f"lanes -- max_width can be at most {self.lane_count}.")
+                    f"lanes -- max_width can be at most {self.lane_count}."
+                )
 
         for m in self.modes:
             seen = {}
@@ -421,13 +412,14 @@ class Config:
                 c = self.controllers[cid]
                 if cl >= c.max_width:
                     err.append(
-                        f"[mode {m}] lane{l} -> {c.name}[{cl}] "
-                        f"exceeds max_width={c.max_width}")
+                        f"[mode {m}] lane{l} -> {c.name}[{cl}] " f"exceeds max_width={c.max_width}"
+                    )
                 key = (cid, cl)
                 if key in seen:
                     err.append(
                         f"[mode {m}] {self.controllers[cid].name}[{cl}] "
-                        f"is driven by both lane{seen[key]} and lane{l}")
+                        f"is driven by both lane{seen[key]} and lane{l}"
+                    )
                 seen[key] = l
 
         # Every driving source for a given controller port must come from
@@ -445,20 +437,21 @@ class Config:
                 port_groups.setdefault((cid, cl), {})[g.gid] = l
         for (cid, cl), gs in sorted(port_groups.items()):
             if len(gs) > 1:
-                nm = self.controllers[cid].name if cid in self.controllers \
-                    else f"ctrl{cid}"
+                nm = self.controllers[cid].name if cid in self.controllers else f"ctrl{cid}"
                 detail = ", ".join(f"G{g}(lane{l})" for g, l in sorted(gs.items()))
                 err.append(
                     f"{nm}[{cl}]'s driving sources span multiple lane groups: {detail}.\n"
                     f"    Every driving source for one controller port must come from "
                     f"the same group, otherwise the convergence mux's sel bits can't be "
-                    f"guaranteed mutually exclusive. Please adjust the lane assignment.")
+                    f"guaranteed mutually exclusive. Please adjust the lane assignment."
+                )
 
         for cid, per in cp.items():
             if all(v is None for v in per.values()):
                 err.append(
                     f"{self.controllers[cid].name} is never assigned a lane in "
-                    f"any mode; please remove it from controllers.csv")
+                    f"any mode; please remove it from controllers.csv"
+                )
 
         # The working clock must be fixed: a controller may only change
         # width in response to a mode switch, never its working clock. If
@@ -480,7 +473,8 @@ class Config:
                     f"controller's working clock to stay fixed and only respond "
                     f"to mode switches by changing width: please adjust the lane "
                     f"assignment so this controller's lowest-numbered owned lane "
-                    f"stays the same across every mode where it's active.")
+                    f"stays the same across every mode where it's active."
+                )
 
         # Controller count should align with "total PHY lane count / minimum
         # allocation granularity". The granularity is inferred from the
@@ -500,7 +494,8 @@ class Config:
                     f"Total PHY lane count {self.lane_count} is not divisible by "
                     f"the minimum allocation granularity {g_min} (determined by "
                     f"{self.controllers[min(gran, key=gran.get)].name}); lanes "
-                    f"can't be evenly split across controllers at this granularity.")
+                    f"can't be evenly split across controllers at this granularity."
+                )
             else:
                 ideal = self.lane_count // g_min
                 actual = len(self.controllers)
@@ -511,8 +506,9 @@ class Config:
                         f"({self.lane_count}/{g_min}={ideal}). Too many leaves some "
                         f"controllers permanently without a lane; too few may force "
                         f"some controller to change its lowest-numbered owned lane "
-                        f"across modes, conflicting with the \"fixed working clock\" "
-                        f"constraint.")
+                        f'across modes, conflicting with the "fixed working clock" '
+                        f"constraint."
+                    )
 
         return err
 
@@ -522,18 +518,18 @@ class Config:
         L = []
         cp, cc = self.ctrl_pclk_src(), self.ctrl_pclk_cands()
 
-        L.append("Lane groups (lanes with an identical owner sequence are grouped "
-                  "automatically; a group shares one NOV)")
+        L.append(
+            "Lane groups (lanes with an identical owner sequence are grouped "
+            "automatically; a group shares one NOV)"
+        )
         L.append("")
         hdr = "  Grp  lane        " + "  ".join(f"mode{m}" for m in self.modes)
         L.append(hdr)
         L.append("  " + "-" * (len(hdr) - 2))
         nnov = 0
         for g in self.groups:
-            rng = (f"{g.lanes[0]}~{g.lanes[-1]}" if len(g.lanes) > 1
-                   else f"{g.lanes[0]}")
-            owners = "  ".join(
-                f"{self.controllers[g.owners[m]].name:<5}" for m in self.modes)
+            rng = f"{g.lanes[0]}~{g.lanes[-1]}" if len(g.lanes) > 1 else f"{g.lanes[0]}"
+            owners = "  ".join(f"{self.controllers[g.owners[m]].name:<5}" for m in self.modes)
             kind = "direct" if g.is_direct else f"{g.n}-way NOV"
             if not g.is_direct:
                 nnov += 1
@@ -542,31 +538,34 @@ class Config:
         L.append(f"  {len(self.groups)} groups total, {nnov} need NOV")
         L.append("")
 
-        L.append("Controller pclk source (lowest lane in the group; holds its "
-                  "previous selection when not assigned a lane)")
+        L.append(
+            "Controller pclk source (lowest lane in the group; holds its "
+            "previous selection when not assigned a lane)"
+        )
         L.append("")
         for cid in sorted(self.controllers):
             c = self.controllers[cid]
             per = ", ".join(
-                f"m{m}=" + (f"phy{v}" if v is not None else "-")
-                for m, v in cp[cid].items())
+                f"m{m}=" + (f"phy{v}" if v is not None else "-") for m, v in cp[cid].items()
+            )
             cand = cc[cid]
             kind = "direct" if len(cand) == 1 else f"{len(cand)}-way clock mux"
-            fake = (f"  (declared x{self.decl_width}, ports {c.max_width}..{self.decl_width-1} are fake lanes)"
-                    if self.decl_width > c.max_width else "")
-            L.append(f"  {c.name:<6} x{c.max_width:<3} {per}{fake}")
+            L.append(f"  {c.name:<6} x{c.max_width:<3} {per}")
             L.append(f"           candidates {cand} -> {kind}")
         L.append("")
 
-        L.append("Signal safe states (value shown when sel is all-zero, "
-                  "implemented via pipe_lane_data_mux polarity normalization)")
+        L.append(
+            "Signal safe states (value shown when sel is all-zero, "
+            "implemented via pipe_lane_data_mux polarity normalization)"
+        )
         L.append("")
         for s in self.signals:
             note = ""
             if s.safe_state != 0:
                 note = "  <- needs polarity normalization"
-            L.append(f"  {s.name:<14} {s.direction:<8} [{s.width:>2}] "
-                     f"safe={s.safe_state}{note}")
+            L.append(
+                f"  {s.name:<14} {s.direction:<8} [{s.width:>2}] " f"safe={s.safe_state}{note}"
+            )
         L.append("")
 
         L.append("Impact of mode transitions (NOV only touches these groups)")
@@ -575,12 +574,13 @@ class Config:
             for b in self.modes:
                 if a == b:
                     continue
-                chg = [g.gid for g in self.groups
-                       if g.owners[a] != g.owners[b]]
+                chg = [g.gid for g in self.groups if g.owners[a] != g.owners[b]]
                 keep = [g.gid for g in self.groups if g.gid not in chg]
-                L.append(f"  mode {a} -> {b}: switches "
-                         f"{['G%d' % x for x in chg] if chg else 'none'}, "
-                         f"unaffected {['G%d' % x for x in keep] if keep else 'none'}")
+                L.append(
+                    f"  mode {a} -> {b}: switches "
+                    f"{['G%d' % x for x in chg] if chg else 'none'}, "
+                    f"unaffected {['G%d' % x for x in keep] if keep else 'none'}"
+                )
         return "\n".join(L)
 
 
@@ -597,8 +597,8 @@ def load(cfg_dir):
 
 if __name__ == "__main__":
     import argparse
+
     ap = argparse.ArgumentParser(description="Parse and analyze a PIPE lane topology config")
-    ap.add_argument("--config",
-                    default=str(Path(__file__).resolve().parent / "config"))
+    ap.add_argument("--config", default=str(Path(__file__).resolve().parent / "config"))
     a = ap.parse_args()
     print(load(a.config).report())

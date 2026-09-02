@@ -1,5 +1,4 @@
-//
-// PIPE lane mapper feedback reset-mux submodule.
+// PIPE lane mapper reset-mux submodule.
 // Each lane's phy_rst_n connects to its current owner's ctrl_rst_n.
 // The input port is named sel_tgt, but at the top level it's actually wired to
 // pipe_lane_sel_gen's dec_tgt (the decoder's raw output, not synchronized by pipe_lane_sel_sync),

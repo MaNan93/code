@@ -18,11 +18,19 @@
 #
 # 透传额外参数给 plm_gen.py，例如切到组合直通的 sel_sync：
 #   make all GENFLAGS="--sel-mode comb"
+#
+# 某个配置集本身就是为了演示某个非默认 flag 存在的（比如 test_maxpclk 演示
+# --pclk-mode phy-input-max-pclk），这种 flag 要跟着配置集本身固定下来，不
+# 能指望每次手动传 GENFLAGS——在下面用 GENFLAGS_<配置集名> 声明，$(CONFIGS)
+# 的通用规则会自动叠加上去。
 
 PYTHON    ?= python3
 GENFLAGS  ?=
 VERILATOR ?= verilator
 LINTFLAGS ?= --lint-only -Wall -Wno-fatal
+
+# 每个配置集固定绑定的额外生成参数（不需要的配置集不用列在这里）。
+GENFLAGS_test_maxpclk := --pclk-mode phy-input-max-pclk
 
 # 自动发现 configs/ 下的配置集：凡是 configs/<name>/config/controllers.csv
 # 存在的 <name> 都算一个集，不用每加一套配置就手改 Makefile。
@@ -35,7 +43,7 @@ LINT_TARGETS   := $(CONFIGS:%=lint-%)
 all: $(CONFIGS)
 
 $(CONFIGS):
-	$(PYTHON) tool/plm_gen.py --config $@ --quiet $(GENFLAGS)
+	$(PYTHON) tool/plm_gen.py --config $@ --quiet $(GENFLAGS) $(GENFLAGS_$@)
 
 list:
 	@echo "configs/ 下的配置集：$(CONFIGS)"

@@ -9,13 +9,11 @@ module pipe_lane_clk_mux #(
     parameter int NL = 6,
     parameter int NC = 6
 ) (
-    input  logic [NL-1:0] phy_pclk_out,
-    input  logic                  test_en,
-    input  logic [NC-1:0]   ctrl_rst_n,
-
-    input  lane_sel_t              sel_tgt,   // each group's currently effective owner selection
-
-    output logic [NC-1:0]   ctrl_pclk,
+    input logic [NL-1:0] phy_pclk_out,
+    input logic test_en,
+    input logic [NC-1:0] ctrl_rst_n,
+    input lane_sel_t sel_tgt,   // each group's currently effective owner selection
+    output logic [NC-1:0] ctrl_pclk,
     output logic [NL-1:0] phy_pclk_in
 );
 
@@ -51,14 +49,14 @@ module pipe_lane_clk_mux #(
     logic pclk_in_g1;
     pipe_lane_clk_gate u_pin_gate_g1_b0 (.clk_in(ctrl_pclk[0]), .en(sel_tgt.g1[0]), .test_en(test_en), .clk_out(pin_gated_g1[0]));
     pipe_lane_clk_gate u_pin_gate_g1_b1 (.clk_in(ctrl_pclk[3]), .en(sel_tgt.g1[1]), .test_en(test_en), .clk_out(pin_gated_g1[1]));
-    assign pclk_in_g1 = |pin_gated_g1;
+    pipe_lane_clk_or #(.N(2)) u_pin_or_g1 (.clk_in(pin_gated_g1), .clk_out(pclk_in_g1));
     assign phy_pclk_in[1] = pclk_in_g1;
     // G2 lane2~2: CtrlAlpha, CtrlEpsilon
     logic [1:0] pin_gated_g2;
     logic pclk_in_g2;
     pipe_lane_clk_gate u_pin_gate_g2_b0 (.clk_in(ctrl_pclk[0]), .en(sel_tgt.g2[0]), .test_en(test_en), .clk_out(pin_gated_g2[0]));
     pipe_lane_clk_gate u_pin_gate_g2_b1 (.clk_in(ctrl_pclk[4]), .en(sel_tgt.g2[1]), .test_en(test_en), .clk_out(pin_gated_g2[1]));
-    assign pclk_in_g2 = |pin_gated_g2;
+    pipe_lane_clk_or #(.N(2)) u_pin_or_g2 (.clk_in(pin_gated_g2), .clk_out(pclk_in_g2));
     assign phy_pclk_in[2] = pclk_in_g2;
     assign phy_pclk_in[3] = ctrl_pclk[1];  // G3 direct to CtrlBeta
     // G4 lane4~4: CtrlBeta, CtrlZeta
@@ -66,7 +64,7 @@ module pipe_lane_clk_mux #(
     logic pclk_in_g4;
     pipe_lane_clk_gate u_pin_gate_g4_b0 (.clk_in(ctrl_pclk[1]), .en(sel_tgt.g4[0]), .test_en(test_en), .clk_out(pin_gated_g4[0]));
     pipe_lane_clk_gate u_pin_gate_g4_b1 (.clk_in(ctrl_pclk[5]), .en(sel_tgt.g4[1]), .test_en(test_en), .clk_out(pin_gated_g4[1]));
-    assign pclk_in_g4 = |pin_gated_g4;
+    pipe_lane_clk_or #(.N(2)) u_pin_or_g4 (.clk_in(pin_gated_g4), .clk_out(pclk_in_g4));
     assign phy_pclk_in[4] = pclk_in_g4;
     assign phy_pclk_in[5] = ctrl_pclk[2];  // G5 direct to CtrlGamma
 

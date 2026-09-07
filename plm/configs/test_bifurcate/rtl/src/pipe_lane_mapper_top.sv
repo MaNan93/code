@@ -19,31 +19,28 @@ module pipe_lane_mapper_top #(
     parameter int NL = 16,
     parameter int NC = 4
 ) (
-    input  logic [NL-1:0] phy_pclk_out,
-    input  logic                  test_en,
-    input  logic [NC-1:0]   ctrl_rst_n,   // one per controller, already synchronized externally
-    input  logic [1:0] mode,
-
-    output logic [NC-1:0]   ctrl_pclk,
+    input logic [NL-1:0] phy_pclk_out,
+    input logic test_en,
+    input logic [NC-1:0] ctrl_rst_n,   // one per controller, already synchronized externally
+    input logic [1:0] mode,
+    output logic [NC-1:0] ctrl_pclk,
     output logic [NL-1:0] phy_pclk_in,
     output logic [NL-1:0] phy_rst_n,
-
     // PHY-side PIPE data
     output mac2phy_lane_t [NL-1:0] phy_mac2phy,
-    input  phy2mac_lane_t [NL-1:0] phy_phy2mac,
-
+    input phy2mac_lane_t [NL-1:0] phy_phy2mac,
     // Controller side. Each controller's ports are declared at its own real max_width.
     // CtrlX16 x16
-    input  mac2phy_lane_t [15:0] ctrlx16_mac2phy,
+    input mac2phy_lane_t [15:0] ctrlx16_mac2phy,
     output phy2mac_lane_t [15:0] ctrlx16_phy2mac,
     // CtrlX8 x8
-    input  mac2phy_lane_t [7:0] ctrlx8_mac2phy,
+    input mac2phy_lane_t [7:0] ctrlx8_mac2phy,
     output phy2mac_lane_t [7:0] ctrlx8_phy2mac,
     // CtrlX4a x4
-    input  mac2phy_lane_t [3:0] ctrlx4a_mac2phy,
+    input mac2phy_lane_t [3:0] ctrlx4a_mac2phy,
     output phy2mac_lane_t [3:0] ctrlx4a_phy2mac,
     // CtrlX4b x4
-    input  mac2phy_lane_t [3:0] ctrlx4b_mac2phy,
+    input mac2phy_lane_t [3:0] ctrlx4b_mac2phy,
     output phy2mac_lane_t [3:0] ctrlx4b_phy2mac
 );
 

@@ -2,8 +2,9 @@
 """
 PIPE Lane Mapper generator -- config parsing, validation, and topology analysis.
 
-Reads three CSVs and produces analysis results consumed by RTL generation.
-RTL generation lives in plm_gen.py in the same directory.
+Reads three CSVs and produces analysis results consumed by both
+generators in the same directory: plm_gen_rtl.py (RTL) and plm_gen_tb.py
+(testbench).
 """
 
 import csv

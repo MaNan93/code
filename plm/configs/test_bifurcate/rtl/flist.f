@@ -6,6 +6,7 @@
 common/pipe_lane_sync2.sv
 common/pipe_lane_sel_sync.sv
 common/pipe_lane_clk_gate.sv
+common/pipe_lane_clk_or.sv
 common/pipe_lane_data_mux.sv
 
 src/pipe_lane_signal_pkg.sv

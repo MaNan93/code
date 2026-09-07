@@ -10,10 +10,9 @@ import pipe_lane_signal_pkg::*;
 module pipe_lane_sel_gen #(
     parameter int NC = 6
 ) (
-    input  logic [1:0] mode,
-    input  logic [NC-1:0]   ctrl_pclk,
-    input  logic [NC-1:0]   ctrl_rst_n,
-
+    input logic [1:0] mode,
+    input logic [NC-1:0] ctrl_pclk,
+    input logic [NC-1:0] ctrl_rst_n,
     output lane_sel_t sel_tgt,   // final effective selection after pipe_lane_sel_sync synchronization; used by clk_mux/data mux
     output lane_sel_t dec_tgt   // decoder's raw (unsynchronized) target; used by rst_mux
 );

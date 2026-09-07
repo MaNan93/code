@@ -5,14 +5,14 @@ import pipe_lane_signal_pkg::*;
 module pipe_lane_data_m2p #(
     parameter int NL = 6
 ) (
-    input  lane_sel_t              sel_tgt,
+    input lane_sel_t sel_tgt,
     output mac2phy_lane_t [NL-1:0] phy_mac2phy,
-    input  mac2phy_lane_t [2:0] ctrlalpha_mac2phy,
-    input  mac2phy_lane_t [1:0] ctrlbeta_mac2phy,
-    input  mac2phy_lane_t [0:0] ctrlgamma_mac2phy,
-    input  mac2phy_lane_t [0:0] ctrldelta_mac2phy,
-    input  mac2phy_lane_t [0:0] ctrlepsilon_mac2phy,
-    input  mac2phy_lane_t [0:0] ctrlzeta_mac2phy
+    input mac2phy_lane_t [2:0] ctrlalpha_mac2phy,
+    input mac2phy_lane_t [1:0] ctrlbeta_mac2phy,
+    input mac2phy_lane_t [0:0] ctrlgamma_mac2phy,
+    input mac2phy_lane_t [0:0] ctrldelta_mac2phy,
+    input mac2phy_lane_t [0:0] ctrlepsilon_mac2phy,
+    input mac2phy_lane_t [0:0] ctrlzeta_mac2phy
 );
 
     assign phy_mac2phy[0] = ctrlalpha_mac2phy[0];  // direct connection

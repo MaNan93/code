@@ -5,8 +5,8 @@ import pipe_lane_signal_pkg::*;
 module pipe_lane_data_p2m #(
     parameter int NL = 12
 ) (
-    input  lane_sel_t              sel_tgt,
-    input  phy2mac_lane_t [NL-1:0] phy_phy2mac,
+    input lane_sel_t sel_tgt,
+    input phy2mac_lane_t [NL-1:0] phy_phy2mac,
     output phy2mac_lane_t [11:0] ctrla_phy2mac,
     output phy2mac_lane_t [5:0] ctrlb_phy2mac,
     output phy2mac_lane_t [7:0] ctrlc_phy2mac,

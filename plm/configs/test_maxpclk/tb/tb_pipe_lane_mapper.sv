@@ -78,8 +78,7 @@ module tb_pipe_lane_mapper;
     logic [NC-1:0]        ctrl_rst_n = '0;
     logic [1:0] mode = '0;
 
-    logic [NC-1:0]        ctrl_pclk;
-    logic [NL-1:0]      phy_pclk_in;
+    logic [NL-1:0]      phy_pclk;
     logic [NL-1:0]      phy_rst_n;
 
     mac2phy_lane_t [NL-1:0] phy_mac2phy;
@@ -98,13 +97,11 @@ module tb_pipe_lane_mapper;
         .NL (NL),
         .NC (NC)
     ) dut (
-        .max_pclk       (max_pclk),
         .test_en        (test_en),
         .ctrl_rst_n     (ctrl_rst_n),
         .mode           (mode),
         .rx_clk         (rx_clk),
-        .ctrl_pclk      (ctrl_pclk),
-        .phy_pclk_in    (phy_pclk_in),
+        .phy_pclk       (phy_pclk),
         .phy_rst_n      (phy_rst_n),
         .phy_mac2phy    (phy_mac2phy),
         .phy_phy2mac    (phy_phy2mac),
@@ -414,82 +411,227 @@ module tb_pipe_lane_mapper;
         default: '0
     };
 
-    always @(dut.sel_tgt) begin
+    //------------------------------------------------------------
+    // NOV monitor: one per BBM lane (each lane's seltgt is its own
+    // independent sync result, not shared across the group).
+    //------------------------------------------------------------
+    always @(dut.seltgt_g1_l3) begin
         if ($time == 0) begin
             // skip: DUT hasn't come out of its startup X state yet
         end else begin
-            lane_sel_t sel_snap;
-            sel_snap = dut.sel_tgt;
+            logic [1:0] sel_snap;
+            sel_snap = dut.seltgt_g1_l3;
             #1;
-            chk($onehot0(sel_snap.g1), "sel_tgt.g1 not one-hot0 (>1 branch enabled)");
-            chk($onehot0(sel_snap.g2), "sel_tgt.g2 not one-hot0 (>1 branch enabled)");
-            chk($onehot0(sel_snap.g3), "sel_tgt.g3 not one-hot0 (>1 branch enabled)");
+            chk($onehot0(sel_snap), "seltgt_g1_l3 not one-hot0 (>1 branch enabled)");
 
-            if (sel_snap.g1 == '0 && dut.sel_tgt.g1 == '0) begin
-                foreach (G1_LANES[i])
-                    chk_m2p(phy_mac2phy[G1_LANES[i]], SAFE_M2P,
-                        $sformatf("G1 lane%0d: sel==0 NOV gap", G1_LANES[i]));
+            if (sel_snap == '0 && dut.seltgt_g1_l3 == '0)
+                chk_m2p(phy_mac2phy[3], SAFE_M2P,
+                    "G1 lane3: sel==0 NOV gap");
+
+            if (sel_snap[0] == 1'b0 && dut.seltgt_g1_l3[0] == 1'b0)
                 chk_p2m(ctrla_phy2mac[3], exp_safe_p2m_ctrla,
-                    "G1 CtrlA[3]: sel==0 NOV gap");
-                chk_p2m(ctrla_phy2mac[4], exp_safe_p2m_ctrla,
-                    "G1 CtrlA[4]: sel==0 NOV gap");
-                chk_p2m(ctrla_phy2mac[5], exp_safe_p2m_ctrla,
-                    "G1 CtrlA[5]: sel==0 NOV gap");
+                    "G1 CtrlA[3]: not owner");
+            if (sel_snap[1] == 1'b0 && dut.seltgt_g1_l3[1] == 1'b0)
                 chk_p2m(ctrlb_phy2mac[0], exp_safe_p2m_ctrlb,
-                    "G1 CtrlB[0]: sel==0 NOV gap");
-                chk_p2m(ctrlb_phy2mac[1], exp_safe_p2m_ctrlb,
-                    "G1 CtrlB[1]: sel==0 NOV gap");
-                chk_p2m(ctrlb_phy2mac[2], exp_safe_p2m_ctrlb,
-                    "G1 CtrlB[2]: sel==0 NOV gap");
-            end
-            if (sel_snap.g2 == '0 && dut.sel_tgt.g2 == '0) begin
-                foreach (G2_LANES[i])
-                    chk_m2p(phy_mac2phy[G2_LANES[i]], SAFE_M2P,
-                        $sformatf("G2 lane%0d: sel==0 NOV gap", G2_LANES[i]));
-                chk_p2m(ctrla_phy2mac[6], exp_safe_p2m_ctrla,
-                    "G2 CtrlA[6]: sel==0 NOV gap");
-                chk_p2m(ctrla_phy2mac[7], exp_safe_p2m_ctrla,
-                    "G2 CtrlA[7]: sel==0 NOV gap");
-                chk_p2m(ctrla_phy2mac[8], exp_safe_p2m_ctrla,
-                    "G2 CtrlA[8]: sel==0 NOV gap");
-                chk_p2m(ctrlc_phy2mac[0], exp_safe_p2m_ctrlc,
-                    "G2 CtrlC[0]: sel==0 NOV gap");
-                chk_p2m(ctrlc_phy2mac[1], exp_safe_p2m_ctrlc,
-                    "G2 CtrlC[1]: sel==0 NOV gap");
-                chk_p2m(ctrlc_phy2mac[2], exp_safe_p2m_ctrlc,
-                    "G2 CtrlC[2]: sel==0 NOV gap");
-            end
-            if (sel_snap.g3 == '0 && dut.sel_tgt.g3 == '0) begin
-                foreach (G3_LANES[i])
-                    chk_m2p(phy_mac2phy[G3_LANES[i]], SAFE_M2P,
-                        $sformatf("G3 lane%0d: sel==0 NOV gap", G3_LANES[i]));
-                chk_p2m(ctrla_phy2mac[9], exp_safe_p2m_ctrla,
-                    "G3 CtrlA[9]: sel==0 NOV gap");
-                chk_p2m(ctrla_phy2mac[10], exp_safe_p2m_ctrla,
-                    "G3 CtrlA[10]: sel==0 NOV gap");
-                chk_p2m(ctrla_phy2mac[11], exp_safe_p2m_ctrla,
-                    "G3 CtrlA[11]: sel==0 NOV gap");
-                chk_p2m(ctrlb_phy2mac[3], exp_safe_p2m_ctrlb,
-                    "G3 CtrlB[3]: sel==0 NOV gap");
-                chk_p2m(ctrlb_phy2mac[4], exp_safe_p2m_ctrlb,
-                    "G3 CtrlB[4]: sel==0 NOV gap");
-                chk_p2m(ctrlb_phy2mac[5], exp_safe_p2m_ctrlb,
-                    "G3 CtrlB[5]: sel==0 NOV gap");
-                chk_p2m(ctrlc_phy2mac[3], exp_safe_p2m_ctrlc,
-                    "G3 CtrlC[3]: sel==0 NOV gap");
-                chk_p2m(ctrlc_phy2mac[4], exp_safe_p2m_ctrlc,
-                    "G3 CtrlC[4]: sel==0 NOV gap");
-                chk_p2m(ctrlc_phy2mac[5], exp_safe_p2m_ctrlc,
-                    "G3 CtrlC[5]: sel==0 NOV gap");
-                chk_p2m(ctrld_phy2mac[0], exp_safe_p2m_ctrld,
-                    "G3 CtrlD[0]: sel==0 NOV gap");
-                chk_p2m(ctrld_phy2mac[1], exp_safe_p2m_ctrld,
-                    "G3 CtrlD[1]: sel==0 NOV gap");
-                chk_p2m(ctrld_phy2mac[2], exp_safe_p2m_ctrld,
-                    "G3 CtrlD[2]: sel==0 NOV gap");
-            end
+                    "G1 CtrlB[0]: not owner");
         end
     end
+
+    always @(dut.seltgt_g1_l4) begin
+        if ($time == 0) begin
+            // skip: DUT hasn't come out of its startup X state yet
+        end else begin
+            logic [1:0] sel_snap;
+            sel_snap = dut.seltgt_g1_l4;
+            #1;
+            chk($onehot0(sel_snap), "seltgt_g1_l4 not one-hot0 (>1 branch enabled)");
+
+            if (sel_snap == '0 && dut.seltgt_g1_l4 == '0)
+                chk_m2p(phy_mac2phy[4], SAFE_M2P,
+                    "G1 lane4: sel==0 NOV gap");
+
+            if (sel_snap[0] == 1'b0 && dut.seltgt_g1_l4[0] == 1'b0)
+                chk_p2m(ctrla_phy2mac[4], exp_safe_p2m_ctrla,
+                    "G1 CtrlA[4]: not owner");
+            if (sel_snap[1] == 1'b0 && dut.seltgt_g1_l4[1] == 1'b0)
+                chk_p2m(ctrlb_phy2mac[1], exp_safe_p2m_ctrlb,
+                    "G1 CtrlB[1]: not owner");
+        end
+    end
+
+    always @(dut.seltgt_g1_l5) begin
+        if ($time == 0) begin
+            // skip: DUT hasn't come out of its startup X state yet
+        end else begin
+            logic [1:0] sel_snap;
+            sel_snap = dut.seltgt_g1_l5;
+            #1;
+            chk($onehot0(sel_snap), "seltgt_g1_l5 not one-hot0 (>1 branch enabled)");
+
+            if (sel_snap == '0 && dut.seltgt_g1_l5 == '0)
+                chk_m2p(phy_mac2phy[5], SAFE_M2P,
+                    "G1 lane5: sel==0 NOV gap");
+
+            if (sel_snap[0] == 1'b0 && dut.seltgt_g1_l5[0] == 1'b0)
+                chk_p2m(ctrla_phy2mac[5], exp_safe_p2m_ctrla,
+                    "G1 CtrlA[5]: not owner");
+            if (sel_snap[1] == 1'b0 && dut.seltgt_g1_l5[1] == 1'b0)
+                chk_p2m(ctrlb_phy2mac[2], exp_safe_p2m_ctrlb,
+                    "G1 CtrlB[2]: not owner");
+        end
+    end
+
+    always @(dut.seltgt_g2_l6) begin
+        if ($time == 0) begin
+            // skip: DUT hasn't come out of its startup X state yet
+        end else begin
+            logic [1:0] sel_snap;
+            sel_snap = dut.seltgt_g2_l6;
+            #1;
+            chk($onehot0(sel_snap), "seltgt_g2_l6 not one-hot0 (>1 branch enabled)");
+
+            if (sel_snap == '0 && dut.seltgt_g2_l6 == '0)
+                chk_m2p(phy_mac2phy[6], SAFE_M2P,
+                    "G2 lane6: sel==0 NOV gap");
+
+            if (sel_snap[0] == 1'b0 && dut.seltgt_g2_l6[0] == 1'b0)
+                chk_p2m(ctrla_phy2mac[6], exp_safe_p2m_ctrla,
+                    "G2 CtrlA[6]: not owner");
+            if (sel_snap[1] == 1'b0 && dut.seltgt_g2_l6[1] == 1'b0)
+                chk_p2m(ctrlc_phy2mac[0], exp_safe_p2m_ctrlc,
+                    "G2 CtrlC[0]: not owner");
+        end
+    end
+
+    always @(dut.seltgt_g2_l7) begin
+        if ($time == 0) begin
+            // skip: DUT hasn't come out of its startup X state yet
+        end else begin
+            logic [1:0] sel_snap;
+            sel_snap = dut.seltgt_g2_l7;
+            #1;
+            chk($onehot0(sel_snap), "seltgt_g2_l7 not one-hot0 (>1 branch enabled)");
+
+            if (sel_snap == '0 && dut.seltgt_g2_l7 == '0)
+                chk_m2p(phy_mac2phy[7], SAFE_M2P,
+                    "G2 lane7: sel==0 NOV gap");
+
+            if (sel_snap[0] == 1'b0 && dut.seltgt_g2_l7[0] == 1'b0)
+                chk_p2m(ctrla_phy2mac[7], exp_safe_p2m_ctrla,
+                    "G2 CtrlA[7]: not owner");
+            if (sel_snap[1] == 1'b0 && dut.seltgt_g2_l7[1] == 1'b0)
+                chk_p2m(ctrlc_phy2mac[1], exp_safe_p2m_ctrlc,
+                    "G2 CtrlC[1]: not owner");
+        end
+    end
+
+    always @(dut.seltgt_g2_l8) begin
+        if ($time == 0) begin
+            // skip: DUT hasn't come out of its startup X state yet
+        end else begin
+            logic [1:0] sel_snap;
+            sel_snap = dut.seltgt_g2_l8;
+            #1;
+            chk($onehot0(sel_snap), "seltgt_g2_l8 not one-hot0 (>1 branch enabled)");
+
+            if (sel_snap == '0 && dut.seltgt_g2_l8 == '0)
+                chk_m2p(phy_mac2phy[8], SAFE_M2P,
+                    "G2 lane8: sel==0 NOV gap");
+
+            if (sel_snap[0] == 1'b0 && dut.seltgt_g2_l8[0] == 1'b0)
+                chk_p2m(ctrla_phy2mac[8], exp_safe_p2m_ctrla,
+                    "G2 CtrlA[8]: not owner");
+            if (sel_snap[1] == 1'b0 && dut.seltgt_g2_l8[1] == 1'b0)
+                chk_p2m(ctrlc_phy2mac[2], exp_safe_p2m_ctrlc,
+                    "G2 CtrlC[2]: not owner");
+        end
+    end
+
+    always @(dut.seltgt_g3_l9) begin
+        if ($time == 0) begin
+            // skip: DUT hasn't come out of its startup X state yet
+        end else begin
+            logic [3:0] sel_snap;
+            sel_snap = dut.seltgt_g3_l9;
+            #1;
+            chk($onehot0(sel_snap), "seltgt_g3_l9 not one-hot0 (>1 branch enabled)");
+
+            if (sel_snap == '0 && dut.seltgt_g3_l9 == '0)
+                chk_m2p(phy_mac2phy[9], SAFE_M2P,
+                    "G3 lane9: sel==0 NOV gap");
+
+            if (sel_snap[0] == 1'b0 && dut.seltgt_g3_l9[0] == 1'b0)
+                chk_p2m(ctrla_phy2mac[9], exp_safe_p2m_ctrla,
+                    "G3 CtrlA[9]: not owner");
+            if (sel_snap[1] == 1'b0 && dut.seltgt_g3_l9[1] == 1'b0)
+                chk_p2m(ctrlb_phy2mac[3], exp_safe_p2m_ctrlb,
+                    "G3 CtrlB[3]: not owner");
+            if (sel_snap[2] == 1'b0 && dut.seltgt_g3_l9[2] == 1'b0)
+                chk_p2m(ctrlc_phy2mac[3], exp_safe_p2m_ctrlc,
+                    "G3 CtrlC[3]: not owner");
+            if (sel_snap[3] == 1'b0 && dut.seltgt_g3_l9[3] == 1'b0)
+                chk_p2m(ctrld_phy2mac[0], exp_safe_p2m_ctrld,
+                    "G3 CtrlD[0]: not owner");
+        end
+    end
+
+    always @(dut.seltgt_g3_l10) begin
+        if ($time == 0) begin
+            // skip: DUT hasn't come out of its startup X state yet
+        end else begin
+            logic [3:0] sel_snap;
+            sel_snap = dut.seltgt_g3_l10;
+            #1;
+            chk($onehot0(sel_snap), "seltgt_g3_l10 not one-hot0 (>1 branch enabled)");
+
+            if (sel_snap == '0 && dut.seltgt_g3_l10 == '0)
+                chk_m2p(phy_mac2phy[10], SAFE_M2P,
+                    "G3 lane10: sel==0 NOV gap");
+
+            if (sel_snap[0] == 1'b0 && dut.seltgt_g3_l10[0] == 1'b0)
+                chk_p2m(ctrla_phy2mac[10], exp_safe_p2m_ctrla,
+                    "G3 CtrlA[10]: not owner");
+            if (sel_snap[1] == 1'b0 && dut.seltgt_g3_l10[1] == 1'b0)
+                chk_p2m(ctrlb_phy2mac[4], exp_safe_p2m_ctrlb,
+                    "G3 CtrlB[4]: not owner");
+            if (sel_snap[2] == 1'b0 && dut.seltgt_g3_l10[2] == 1'b0)
+                chk_p2m(ctrlc_phy2mac[4], exp_safe_p2m_ctrlc,
+                    "G3 CtrlC[4]: not owner");
+            if (sel_snap[3] == 1'b0 && dut.seltgt_g3_l10[3] == 1'b0)
+                chk_p2m(ctrld_phy2mac[1], exp_safe_p2m_ctrld,
+                    "G3 CtrlD[1]: not owner");
+        end
+    end
+
+    always @(dut.seltgt_g3_l11) begin
+        if ($time == 0) begin
+            // skip: DUT hasn't come out of its startup X state yet
+        end else begin
+            logic [3:0] sel_snap;
+            sel_snap = dut.seltgt_g3_l11;
+            #1;
+            chk($onehot0(sel_snap), "seltgt_g3_l11 not one-hot0 (>1 branch enabled)");
+
+            if (sel_snap == '0 && dut.seltgt_g3_l11 == '0)
+                chk_m2p(phy_mac2phy[11], SAFE_M2P,
+                    "G3 lane11: sel==0 NOV gap");
+
+            if (sel_snap[0] == 1'b0 && dut.seltgt_g3_l11[0] == 1'b0)
+                chk_p2m(ctrla_phy2mac[11], exp_safe_p2m_ctrla,
+                    "G3 CtrlA[11]: not owner");
+            if (sel_snap[1] == 1'b0 && dut.seltgt_g3_l11[1] == 1'b0)
+                chk_p2m(ctrlb_phy2mac[5], exp_safe_p2m_ctrlb,
+                    "G3 CtrlB[5]: not owner");
+            if (sel_snap[2] == 1'b0 && dut.seltgt_g3_l11[2] == 1'b0)
+                chk_p2m(ctrlc_phy2mac[5], exp_safe_p2m_ctrlc,
+                    "G3 CtrlC[5]: not owner");
+            if (sel_snap[3] == 1'b0 && dut.seltgt_g3_l11[3] == 1'b0)
+                chk_p2m(ctrld_phy2mac[2], exp_safe_p2m_ctrld,
+                    "G3 CtrlD[2]: not owner");
+        end
+    end
+
+
 
     //------------------------------------------------------------ steady-state data-routing check
     task automatic check_mode(input int m);

@@ -11,8 +11,8 @@ module pipe_lane_rst_mux #(
     parameter int NL = 16,
     parameter int NC = 4
 ) (
-    input  logic [NC-1:0]   ctrl_rst_n,
-    input  lane_sel_t              sel_tgt,
+    input logic [NC-1:0] ctrl_rst_n,
+    input lane_sel_t sel_tgt,
     output logic [NL-1:0] phy_rst_n
 );
 

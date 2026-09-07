@@ -8,7 +8,7 @@ import pipe_lane_signal_pkg::*;
 module pipe_lane_mode_dec #(
     parameter int NC = 6   // only used by controllers with more than one candidate
 ) (
-    input  logic [1:0] mode,
+    input logic [1:0] mode,
     output lane_sel_t sel_tgt
 );
 

@@ -5,7 +5,7 @@ from setuptools import setup, find_packages
 
 setup(
     name="ef",
-    version="1.2.0",
+    version="1.3.0",
     packages=find_packages(where="src"),
     package_dir={"": "src"},
     python_requires=">=3.6",

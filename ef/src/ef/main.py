@@ -65,172 +65,207 @@ class FileListExpander:
             indent = "    " * self.indent_level
             self.output_buffer.append(indent + item)
 
-    def strip_inline_comment(self, line):
-        """移除行尾注释，尽量避免误删引号内内容。"""
-        in_single_quote = False
-        in_double_quote = False
-        escaped = False
-        i = 0
+    def remove_comments(self, line, in_block_comment):
+        """移除 # / // 行注释以及 /* ... */ 块注释（块注释可跨行）。
 
-        while i < len(line):
+        引号内的内容不受影响。返回 (清理后的文本, 新的块注释状态)，
+        调用方需要把返回的状态原样传给下一行，这样块注释才能正确跨行。
+        """
+        result = []
+        quote = ''
+        i = 0
+        n = len(line)
+
+        while i < n:
             ch = line[i]
 
-            if escaped:
-                escaped = False
+            # 处于块注释内：只找 "*/" 结束标记
+            if in_block_comment:
+                if ch == '*' and i + 1 < n and line[i + 1] == '/':
+                    in_block_comment = False
+                    i += 2
+                    continue
                 i += 1
+                continue
+
+            # 引号内：原样保留，直到遇到匹配的引号
+            if quote:
+                result.append(ch)
+                if ch == quote:
+                    quote = ''
+                i += 1
+                continue
+
+            if ch in ('"', "'"):
+                quote = ch
+                result.append(ch)
+                i += 1
+                continue
+
+            # 单行注释：'#' 或 '//'，且前面是行首或空白，避免误删文件名里的字符
+            if ch == '#' and (i == 0 or line[i - 1].isspace()):
+                break
+
+            if ch == '/' and i + 1 < n and line[i + 1] == '/' \
+                    and (i == 0 or line[i - 1].isspace()):
+                break
+
+            # 块注释起始 '/*'
+            if ch == '/' and i + 1 < n and line[i + 1] == '*' \
+                    and (i == 0 or line[i - 1].isspace()):
+                in_block_comment = True
+                i += 2
+                continue
+
+            result.append(ch)
+            i += 1
+
+        return ''.join(result), in_block_comment
+
+    def tokenize(self, line):
+        """把一行拆分成多个 token，支持带空格的引号内容和反斜杠转义。
+
+        这样一行里出现多个选项（"-v a.v -v b.v"）或者带空格的引号路径
+        （+incdir+"my dir"）才能被正确地拆分/还原，而不是被当成一个
+        不可分割的字符串整体处理。
+        """
+        tokens = []
+        current = []
+        quote = ''
+        escape = False
+
+        for ch in line:
+            if escape:
+                current.append(ch)
+                escape = False
                 continue
 
             if ch == '\\':
-                escaped = True
-                i += 1
+                escape = True
                 continue
 
-            if not in_double_quote and ch == "'":
-                in_single_quote = not in_single_quote
-                i += 1
+            if quote:
+                if ch == quote:
+                    quote = ''
+                else:
+                    current.append(ch)
                 continue
 
-            if not in_single_quote and ch == '"':
-                in_double_quote = not in_double_quote
-                i += 1
+            if ch in ('"', "'"):
+                quote = ch
                 continue
 
-            if in_single_quote or in_double_quote:
-                i += 1
+            if ch.isspace():
+                if current:
+                    tokens.append(''.join(current))
+                    current = []
                 continue
 
-            if ch == '#' and (i == 0 or line[i - 1].isspace()):
-                return line[:i].rstrip()
+            current.append(ch)
 
-            if line.startswith('//', i) and (i == 0 or line[i - 1].isspace()):
-                return line[:i].rstrip()
+        if escape:
+            current.append('\\')
 
-            i += 1
+        if quote:
+            raise ValueError(f"filelist 中有未闭合的引号: {line}")
 
-        return line
-    
-    def parse_line(self, line, base_dir=None, use_file_dir=False, source_file=None, line_num=0):
-        """解析单行内容"""
-        line = self.expand_env_vars(line)
-        
-        # 处理 +incdir+path
-        if line.startswith('+incdir+'):
-            path = line[8:]
-            if use_file_dir and base_dir and not os.path.isabs(path):
-                abs_path = os.path.abspath(os.path.join(base_dir, path))
-                if not os.path.exists(abs_path):
+        if current:
+            tokens.append(''.join(current))
+
+        return tokens
+
+    def _resolve_relative(self, value, base_dir, use_file_dir):
+        """把 value 解析成绝对路径。
+
+        - 已经是绝对路径：直接折叠成绝对路径。
+        - 相对路径 + -F 语义（use_file_dir 且有 base_dir）：相对于所在
+          filelist 的目录解析。
+        - 相对路径 + -f 语义（或没有可用的 base_dir）：VCS 的 -f 不建立
+          filelist 目录 context，退化为相对当前工作目录解析。
+
+        注意：这里总是返回一个绝对路径，不会返回"原始未解析文本"。
+        之前的实现在这种情况下直接把 flag/token 的原始相对文本透传出去，
+        导致同一次 -f 解析里，普通源文件路径已经被展开成绝对路径，
+        而 -v/-y/+incdir+ 却还是相对路径——同一份最终参数流里绝对路径和
+        相对路径混杂，对下游（尤其是不在原分析目录下再次使用这份参数流的
+        场景）是不一致、容易出错的，所以统一在这里做 cwd 兜底解析。
+        """
+        if os.path.isabs(value):
+            return os.path.abspath(value)
+        if use_file_dir and base_dir:
+            return os.path.abspath(os.path.join(base_dir, value))
+        return os.path.abspath(value)
+
+    def parse_token(self, token, base_dir=None, use_file_dir=False, source_file=None, line_num=0):
+        """解析一个已经从行里拆分出来的 token（+incdir+.../+define+.../普通文件路径等）。"""
+        token = self.expand_env_vars(token)
+
+        # 处理 +incdir+path[+path2+path3...]
+        # VCS 允许一个 +incdir+ 里用 '+' 接多个目录，需要先按 '+' 拆开，
+        # 再逐个解析，不能把整段当成一个目录名。
+        if token.startswith('+incdir+'):
+            raw_dirs = token[8:].split('+')
+            resolved_dirs = []
+            for raw_dir in raw_dirs:
+                # 前导/尾随/连续的 '+'（比如 "+incdir+dir1+" 或
+                # "+incdir++dir1"）会拆出空字符串，它不是一个真实目录，
+                # 必须跳过——否则会被当成"当前目录"误加进 include 路径。
+                if raw_dir == '':
+                    continue
+                resolved = self._resolve_relative(raw_dir, base_dir, use_file_dir)
+                if not os.path.exists(resolved):
                     self.warnings.append({
                         'type': 'missing_directory',
-                        'message': f"include目录不存在: '{abs_path}'",
+                        'message': f"include目录不存在: '{resolved}'",
                         'source_file': source_file,
                         'line_number': line_num,
-                        'original_line': line
+                        'original_line': token
                     })
-                return f'+incdir+{abs_path}'
-            else:
-                if not os.path.isabs(path):
-                    return line
-                else:
-                    abs_path = os.path.abspath(path)
-                    if not os.path.exists(abs_path):
-                        self.warnings.append({
-                            'type': 'missing_directory',
-                            'message': f"include目录不存在: '{abs_path}'",
-                            'source_file': source_file,
-                            'line_number': line_num,
-                            'original_line': line
-                        })
-                    return f'+incdir+{abs_path}'
-        
-        # 处理 -y path
-        elif line.startswith('-y '):
-            path = line[3:].strip()
-            if use_file_dir and base_dir and not os.path.isabs(path):
-                abs_path = os.path.abspath(os.path.join(base_dir, path))
-                if not os.path.exists(abs_path):
-                    self.warnings.append({
-                        'type': 'missing_directory',
-                        'message': f"library目录不存在: '{abs_path}'",
-                        'source_file': source_file,
-                        'line_number': line_num,
-                        'original_line': line
-                    })
-                return f'-y {abs_path}'
-            else:
-                if not os.path.isabs(path):
-                    return line
-                else:
-                    abs_path = os.path.abspath(path)
-                    if not os.path.exists(abs_path):
-                        self.warnings.append({
-                            'type': 'missing_directory',
-                            'message': f"library目录不存在: '{abs_path}'",
-                            'source_file': source_file,
-                            'line_number': line_num,
-                            'original_line': line
-                        })
-                    return f'-y {abs_path}'
-        
-        # 处理 -v path（库文件）
-        elif line.startswith('-v '):
-            path = line[3:].strip()
-            if use_file_dir and base_dir and not os.path.isabs(path):
-                abs_path = os.path.abspath(os.path.join(base_dir, path))
-                if not os.path.exists(abs_path):
-                    self.warnings.append({
-                        'type': 'missing_file',
-                        'message': f"库文件不存在: '{abs_path}'",
-                        'source_file': source_file,
-                        'line_number': line_num,
-                        'original_line': line
-                    })
-                return f'-v {abs_path}'
-            else:
-                if not os.path.isabs(path):
-                    return line
-                else:
-                    abs_path = os.path.abspath(path)
-                    if not os.path.exists(abs_path):
-                        self.warnings.append({
-                            'type': 'missing_file',
-                            'message': f"库文件不存在: '{abs_path}'",
-                            'source_file': source_file,
-                            'line_number': line_num,
-                            'original_line': line
-                        })
-                    return f'-v {abs_path}'
-        
-        # 处理 +libext+
-        elif line.startswith('+libext+'):
-            return line
-        
-        # 处理 +define+
-        elif line.startswith('+define+'):
-            return line
-        
-        # 处理其他编译选项
-        elif line.startswith('+') or (line.startswith('-') and not line.startswith('-f ') and not line.startswith('-F ')):
-            return line
-        
+                resolved_dirs.append(resolved)
+            return '+incdir+' + '+'.join(resolved_dirs)
+
+        # 处理 +libext+ / +define+：保留参数，不做路径解析
+        if token.startswith('+libext+') or token.startswith('+define+'):
+            return token
+
+        # 处理其他以 +/- 开头的编译选项：原样透传
+        if token.startswith('+') or token.startswith('-'):
+            return token
+
         # 普通文件路径
+        resolved = self._resolve_relative(token, base_dir, use_file_dir)
+
+        if not os.path.exists(resolved):
+            self.warnings.append({
+                'type': 'missing_file',
+                'message': f"文件不存在: '{resolved}'",
+                'source_file': source_file,
+                'line_number': line_num,
+                'original_line': token
+            })
+
+        return resolved
+
+    def parse_flag_path(self, flag, value, base_dir=None, use_file_dir=False, source_file=None, line_num=0):
+        """解析 -v/-y 这类"标志 + 独立路径 token"的选项。"""
+        value = self.expand_env_vars(value)
+        resolved = self._resolve_relative(value, base_dir, use_file_dir)
+
+        if flag == '-v':
+            kind, label = 'missing_file', '库文件'
         else:
-            if base_dir and not os.path.isabs(line):
-                full_path = os.path.join(base_dir, line)
-            else:
-                full_path = line
-            
-            abs_path = os.path.abspath(full_path)
-            
-            if not os.path.exists(abs_path):
-                self.warnings.append({
-                    'type': 'missing_file',
-                    'message': f"文件不存在: '{abs_path}'",
-                    'source_file': source_file,
-                    'line_number': line_num,
-                    'original_line': line
-                })
-            
-            return abs_path
+            kind, label = 'missing_directory', 'library目录'
+
+        if not os.path.exists(resolved):
+            self.warnings.append({
+                'type': kind,
+                'message': f"{label}不存在: '{resolved}'",
+                'source_file': source_file,
+                'line_number': line_num,
+                'original_line': f'{flag} {value}'
+            })
+
+        return f'{flag} {resolved}'
     
     def expand(self, file_path, base_dir=None, use_file_dir=False, mode_str=None):
         """递归展开文件列表"""
@@ -282,42 +317,107 @@ class FileListExpander:
             with open(abs_path, 'r', encoding='utf-8') as f:
                 lines = f.readlines()
 
-            for line_num, line in enumerate(lines, 1):
-                line = line.strip()
-                
-                # 跳过空行
-                if not line:
-                    continue
-                
-                # 跳过完整的注释行
-                if line.startswith('#') or line.startswith('//'):
+            # 块注释状态按文件独立起算，不会从父 filelist 带进来，
+            # 也不会带出到父 filelist（和每个文件独立解析的语义一致）。
+            in_block_comment = False
+
+            for line_num, raw_line in enumerate(lines, 1):
+                raw_line = raw_line.rstrip('\r\n')
+
+                # 跳过空行（提前判断，避免不必要的处理）
+                if not raw_line.strip():
                     continue
 
-                line = self.strip_inline_comment(line)
-                
-                # 再次检查处理后的行是否为空
-                if not line:
+                cleaned, in_block_comment = self.remove_comments(raw_line, in_block_comment)
+
+                # 整行都是注释 / 处理后为空，跳过
+                if not cleaned.strip():
+                    continue
+
+                try:
+                    tokens = self.tokenize(cleaned)
+                except ValueError as exc:
+                    self.errors.append({
+                        'type': 'syntax_error',
+                        'message': str(exc),
+                        'source_file': abs_path,
+                        'line_number': line_num,
+                        'suggestion': '请检查该行的引号是否成对出现'
+                    })
+                    self.log(f"{abs_path}:{line_num}: {exc}")
+                    self.has_critical_error = True
+                    continue
+
+                if not tokens:
                     continue
 
                 if self.verbose_level >= 2:
-                    self.log(f"[{abs_path}:{line_num}] {line}", level=2)
-                
-                if line.startswith('-f '):
-                    nested_file = line[3:].strip()
-                    self.expand(nested_file, base_dir=None, use_file_dir=False, mode_str="-f")
-                
-                elif line.startswith('-F '):
-                    nested_file = line[3:].strip()
-                    nested_base_dir = os.path.dirname(abs_path)
-                    self.expand(nested_file, base_dir=nested_base_dir, use_file_dir=True, mode_str="-F")
-                
-                else:
-                    result = self.parse_line(line, base_dir=current_base_dir, 
-                                            use_file_dir=use_file_dir, 
-                                            source_file=abs_path,
-                                            line_num=line_num)
+                    self.log(f"[{abs_path}:{line_num}] {cleaned.strip()}", level=2)
+
+                idx = 0
+                while idx < len(tokens):
+                    token = tokens[idx]
+
+                    if token == '-f':
+                        if idx + 1 >= len(tokens):
+                            self.errors.append({
+                                'type': 'syntax_error',
+                                'message': '-f 缺少参数',
+                                'source_file': abs_path,
+                                'line_number': line_num,
+                                'suggestion': '请在 -f 后面指定要展开的文件列表'
+                            })
+                            self.has_critical_error = True
+                            break
+                        nested_file = tokens[idx + 1]
+                        self.expand(nested_file, base_dir=None, use_file_dir=False, mode_str="-f")
+                        idx += 2
+                        continue
+
+                    if token == '-F':
+                        if idx + 1 >= len(tokens):
+                            self.errors.append({
+                                'type': 'syntax_error',
+                                'message': '-F 缺少参数',
+                                'source_file': abs_path,
+                                'line_number': line_num,
+                                'suggestion': '请在 -F 后面指定要展开的文件列表'
+                            })
+                            self.has_critical_error = True
+                            break
+                        nested_file = tokens[idx + 1]
+                        nested_base_dir = os.path.dirname(abs_path)
+                        self.expand(nested_file, base_dir=nested_base_dir, use_file_dir=True, mode_str="-F")
+                        idx += 2
+                        continue
+
+                    if token in ('-v', '-y'):
+                        if idx + 1 >= len(tokens):
+                            self.errors.append({
+                                'type': 'syntax_error',
+                                'message': f'{token} 缺少参数',
+                                'source_file': abs_path,
+                                'line_number': line_num,
+                                'suggestion': f'请在 {token} 后面指定路径'
+                            })
+                            self.has_critical_error = True
+                            break
+                        value = tokens[idx + 1]
+                        result = self.parse_flag_path(token, value, base_dir=current_base_dir,
+                                                       use_file_dir=use_file_dir,
+                                                       source_file=abs_path,
+                                                       line_num=line_num)
+                        self.add_result(result)
+                        idx += 2
+                        continue
+
+                    result = self.parse_token(token, base_dir=current_base_dir,
+                                               use_file_dir=use_file_dir,
+                                               source_file=abs_path,
+                                               line_num=line_num)
                     self.add_result(result)
-        
+                    idx += 1
+
         except PermissionError:
             error_msg = f"没有权限读取文件: {abs_path}"
             self.errors.append({
@@ -450,44 +550,78 @@ def ef(input_file, mode='f', base_dir=None, verbose=False):
     return expander.get_result()
 
 
+class _CollectFileSpecAction(argparse.Action):
+    """记录 -f/-F 在命令行里出现的先后顺序。
+
+    -f 和 -F 共用同一个 dest，都用这个 action，这样可以重复指定、也可以
+    互相穿插（比如 "-f a.f -F b.f -f c.f"），并且严格按命令行里出现的
+    顺序保存下来，交给 main() 依次展开、拼接结果——和 Perl 那个工具的
+    命令行语义保持一致。
+    """
+
+    def __call__(self, parser, namespace, values, option_string=None):
+        specs = getattr(namespace, self.dest, None)
+        if specs is None:
+            specs = []
+        mode = 'F' if option_string == '-F' else 'f'
+        specs.append((mode, values))
+        setattr(namespace, self.dest, specs)
+
+
 def main():
     """主函数"""
     parser = argparse.ArgumentParser(
-        description="文件列表展开工具（支持 -f/-F 递归解析）"
+        description="文件列表展开工具（支持 -f/-F 递归解析，-f/-F 可以重复出现多次，"
+                     "按命令行顺序依次展开并拼接成一份结果）"
     )
-    mode_group = parser.add_mutually_exclusive_group()
-    mode_group.add_argument('-f', dest='file_f', metavar='FILE', help='直接解析，编译选项保持原样')
-    mode_group.add_argument('-F', dest='file_F', metavar='FILE', help='解析，相对路径加上文件目录')
-    parser.add_argument('input_file', nargs='?', help='输入文件（等价于 -f FILE）')
+    parser.add_argument('-f', metavar='FILE', dest='file_specs', action=_CollectFileSpecAction,
+                         help='直接解析，编译选项保持原样；可重复指定')
+    parser.add_argument('-F', metavar='FILE', dest='file_specs', action=_CollectFileSpecAction,
+                         help='解析，相对路径加上文件目录；可重复指定')
+    parser.add_argument('input_file', nargs='?', help='输入文件（等价于单个 -f FILE），不能和 -f/-F 同时使用')
     parser.add_argument('-o', '--output', metavar='FILE', help='输出文件路径')
     parser.add_argument('-v', '--verbose', action='count', default=0, help='显示详细调试信息（可重复，如 -vv）')
     parser.add_argument('--very-verbose', action='store_true', help='very verbose（等价于 -vv）')
 
     args = parser.parse_args()
 
-    specified_inputs = [args.file_f, args.file_F, args.input_file]
-    input_count = sum(1 for item in specified_inputs if item)
-    if input_count == 0:
-        parser.error('未指定输入文件')
-    if input_count > 1:
-        parser.error('请仅指定一个输入文件来源：位置参数、-f 或 -F')
+    file_specs = args.file_specs or []
 
-    if args.file_F:
-        mode = 'F'
-        input_file = args.file_F
-    elif args.file_f:
-        mode = 'f'
-        input_file = args.file_f
-    else:
-        mode = 'f'
-        input_file = args.input_file
+    if file_specs and args.input_file:
+        parser.error('请仅指定一种输入文件来源：位置参数，或者一个/多个 -f、-F')
+    if not file_specs and not args.input_file:
+        parser.error('未指定输入文件')
+
+    if not file_specs:
+        file_specs = [('f', args.input_file)]
 
     output_file = args.output
     verbose = 2 if args.very_verbose else min(args.verbose, 2)
-    
-    # 使用便捷函数
-    result = ef(input_file, mode=mode, verbose=verbose)
-    
+
+    # 依次展开命令行上出现过的每一个 -f/-F，按出现顺序把结果拼接起来
+    combined_success = True
+    combined_items = []
+    combined_errors = []
+    combined_warnings = []
+    combined_output = []
+
+    for mode, input_file in file_specs:
+        one_result = ef(input_file, mode=mode, verbose=verbose)
+        combined_success = combined_success and one_result['success']
+        combined_items.extend(one_result['items'])
+        combined_errors.extend(one_result['errors'])
+        combined_warnings.extend(one_result['warnings'])
+        if verbose and one_result['output']:
+            combined_output.extend(one_result['output'])
+
+    result = {
+        'success': combined_success,
+        'items': combined_items,
+        'errors': combined_errors,
+        'warnings': combined_warnings,
+        'output': combined_output if verbose else None,
+    }
+
     # 输出结果
     if verbose and result['output']:
         for line in result['output']:

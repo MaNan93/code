@@ -1,0 +1,73 @@
+// PIPE lane mapper clock-mux submodule.
+// Contains: controller pclk generation, feedback clock mux.
+// Each group's final sel_tgt is produced by pipe_lane_sel_gen and passed in as an input.
+// The reset mux is in pipe_lane_rst_mux, the data muxes are in
+// pipe_lane_data_m2p / pipe_lane_data_p2m.
+import pipe_lane_signal_pkg::*;
+
+module pipe_lane_clk_mux #(
+    parameter int NL = 12,
+    parameter int NC = 4
+) (
+    input logic [NL-1:0] phy_pclk_out,
+    input logic test_en,
+    input logic [NC-1:0] ctrl_rst_n,
+    input lane_sel_t sel_tgt,   // each group's currently effective owner selection
+    output logic [NC-1:0] ctrl_pclk,
+    output logic [NL-1:0] phy_pclk_in
+);
+
+    //------------------------------------------------------------
+    // controller pclk: always taken from the lowest-numbered lane in its group.
+    // Only needs a glitch-free switch when there's more than one candidate.
+    //------------------------------------------------------------
+    // CtrlA: uses phy_pclk[0] in every mode, direct connection
+    assign ctrl_pclk[0] = phy_pclk_out[0];
+
+    // CtrlB: uses phy_pclk[3] in every mode, direct connection
+    assign ctrl_pclk[1] = phy_pclk_out[3];
+
+    // CtrlC: uses phy_pclk[6] in every mode, direct connection
+    assign ctrl_pclk[2] = phy_pclk_out[6];
+
+    // CtrlD: uses phy_pclk[9] in every mode, direct connection
+    assign ctrl_pclk[3] = phy_pclk_out[9];
+
+    //------------------------------------------------------------
+    // Feedback clock: each lane's pclk_in connects to its current owner's ctrl_pclk.
+    // Shares the same en group as the data path, so data and clock switch in lockstep.
+    //------------------------------------------------------------
+    assign phy_pclk_in[0] = ctrl_pclk[0];  // G0 direct to CtrlA
+    assign phy_pclk_in[1] = ctrl_pclk[0];  // G0 direct to CtrlA
+    assign phy_pclk_in[2] = ctrl_pclk[0];  // G0 direct to CtrlA
+    // G1 lane3~5: CtrlA, CtrlB
+    logic [1:0] pin_gated_g1;
+    logic pclk_in_g1;
+    pipe_lane_clk_gate u_pin_gate_g1_b0 (.clk_in(ctrl_pclk[0]), .en(sel_tgt.g1[0]), .test_en(test_en), .clk_out(pin_gated_g1[0]));
+    pipe_lane_clk_gate u_pin_gate_g1_b1 (.clk_in(ctrl_pclk[1]), .en(sel_tgt.g1[1]), .test_en(test_en), .clk_out(pin_gated_g1[1]));
+    pipe_lane_clk_or #(.N(2)) u_pin_or_g1 (.clk_in(pin_gated_g1), .clk_out(pclk_in_g1));
+    assign phy_pclk_in[3] = pclk_in_g1;
+    assign phy_pclk_in[4] = pclk_in_g1;
+    assign phy_pclk_in[5] = pclk_in_g1;
+    // G2 lane6~8: CtrlA, CtrlC
+    logic [1:0] pin_gated_g2;
+    logic pclk_in_g2;
+    pipe_lane_clk_gate u_pin_gate_g2_b0 (.clk_in(ctrl_pclk[0]), .en(sel_tgt.g2[0]), .test_en(test_en), .clk_out(pin_gated_g2[0]));
+    pipe_lane_clk_gate u_pin_gate_g2_b1 (.clk_in(ctrl_pclk[2]), .en(sel_tgt.g2[1]), .test_en(test_en), .clk_out(pin_gated_g2[1]));
+    pipe_lane_clk_or #(.N(2)) u_pin_or_g2 (.clk_in(pin_gated_g2), .clk_out(pclk_in_g2));
+    assign phy_pclk_in[6] = pclk_in_g2;
+    assign phy_pclk_in[7] = pclk_in_g2;
+    assign phy_pclk_in[8] = pclk_in_g2;
+    // G3 lane9~11: CtrlA, CtrlB, CtrlC, CtrlD
+    logic [3:0] pin_gated_g3;
+    logic pclk_in_g3;
+    pipe_lane_clk_gate u_pin_gate_g3_b0 (.clk_in(ctrl_pclk[0]), .en(sel_tgt.g3[0]), .test_en(test_en), .clk_out(pin_gated_g3[0]));
+    pipe_lane_clk_gate u_pin_gate_g3_b1 (.clk_in(ctrl_pclk[1]), .en(sel_tgt.g3[1]), .test_en(test_en), .clk_out(pin_gated_g3[1]));
+    pipe_lane_clk_gate u_pin_gate_g3_b2 (.clk_in(ctrl_pclk[2]), .en(sel_tgt.g3[2]), .test_en(test_en), .clk_out(pin_gated_g3[2]));
+    pipe_lane_clk_gate u_pin_gate_g3_b3 (.clk_in(ctrl_pclk[3]), .en(sel_tgt.g3[3]), .test_en(test_en), .clk_out(pin_gated_g3[3]));
+    pipe_lane_clk_or #(.N(4)) u_pin_or_g3 (.clk_in(pin_gated_g3), .clk_out(pclk_in_g3));
+    assign phy_pclk_in[9] = pclk_in_g3;
+    assign phy_pclk_in[10] = pclk_in_g3;
+    assign phy_pclk_in[11] = pclk_in_g3;
+
+endmodule

@@ -1,0 +1,7 @@
+ctrl_id,ctrl_name,max_width
+0,CtrlAlpha,3
+1,CtrlBeta,2
+2,CtrlGamma,1
+3,CtrlDelta,1
+4,CtrlEpsilon,1
+5,CtrlZeta,1

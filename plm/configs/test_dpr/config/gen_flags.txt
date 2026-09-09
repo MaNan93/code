@@ -1,0 +1,6 @@
+# 支持: pclk-mode = phy-output | phy-input-max-pclk
+#       sel-mode  = sync | comb
+#       dpr       = true | false
+pclk-mode = phy-output
+sel-mode = sync
+dpr = true

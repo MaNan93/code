@@ -114,6 +114,17 @@ PIPE 规范允许两种截然不同的 PCLK 归属方式，两者互斥，一次
   本身在这个域内已经无毛刺时才安全；否则多个分支可能短暂同时为 1，
   `pipe_lane_data_mux` 会把两路数据相或。
 
+这个策略是 `pipe_lane_mapper` 顶层的一个模块参数（`SEL_SYNC`），不是
+生成阶段写死进每个实例的字面量——`pipe_lane_sel_gen` 里所有数据路径的
+`pipe_lane_sel_sync`（`sel_tgt`/`seltgt_gN_lL` 那些）统一接到这一个
+参数上，值从顶层一路传下去，实例化时不改代码就能覆盖。`sync`/`comb`
+只是决定这个参数的默认值。
+
+`rx_clk`、controller pclk 候选切换这些无毛刺时钟切换用的
+`pipe_lane_sel_sync`（3.5.2 节 `u_rxclk_sel_sync_*`、3.5.1 节
+`u_pclk_sel_sync_*`）**不**接这个参数，永远硬编码 `SYNC=1'b1`——它们
+门控的是时钟本身，这条安全性质不应该由使用者关掉（呼应 4.1 节）。
+
 这两种模式对 `safe_state`/`tie_off` 是否真正生效有直接影响，详见 4.4
 节。
 
@@ -144,18 +155,38 @@ link 跑起来的时候。
 ### 3.1 模块层次
 
 ```
-pipe_lane_mapper_top
- ├─ u_mode_dec   (pipe_lane_mode_dec)  mode 译码，纯组合输出 dec_tgt
- ├─ u_sel_gen    (pipe_lane_sel_gen)   各 group/lane 的 pipe_lane_sel_sync，输出同步后的选择信号
- ├─ u_clk_mux    (pipe_lane_clk_mux)   两套时钟架构各自的 PCLK 生成/路由 + 无毛刺切换
- ├─ u_rst_mux    (pipe_lane_rst_mux)   复位 mux，接 dec_tgt（未同步，随 mode 立即变化）
- ├─ data_m2p / data_p2m                按同步后的选择信号做数据汇聚/分发
- └─ pipe_lane_signal_pkg              公共参数/类型定义
+pipe_lane_mapper_connection (可选的 flat 包装层，见下)
+ └─ pipe_lane_mapper
+     ├─ u_mode_dec   (pipe_lane_mode_dec)  mode 译码，纯组合输出 dec_tgt
+     ├─ u_sel_gen    (pipe_lane_sel_gen)   各 group/lane 的 pipe_lane_sel_sync，输出同步后的选择信号
+     ├─ u_clk_mux    (pipe_lane_clk_mux)   两套时钟架构各自的 PCLK 生成/路由 + 无毛刺切换
+     ├─ u_rst_mux    (pipe_lane_rst_mux)   复位 mux，接 dec_tgt（未同步，随 mode 立即变化）
+     ├─ data_m2p / data_p2m                按同步后的选择信号做数据汇聚/分发
+     └─ pipe_lane_signal_pkg              公共参数/类型定义
 ```
 
 `u_rst_mux` 特意接的是 `dec_tgt`（译码器原始输出）而不是 `sel_gen` 对外
 同步后的选择信号，目的是让复位控制随 mode 立即变化，不必等待
 `pipe_lane_sel_sync` 完成同步和 NOV 窗口——两者的差异见 3.3 节图 1。
+
+`pipe_lane_mapper` 的 PIPE 数据端口本身是两个 struct 数组（PHY 侧一个，
+每个 controller 一个，字段来自 `pipe_signals.csv`），不是拉平的信号列表
+——这是设计本身，不是过渡态。`pipe_lane_mapper_connection` 是随
+`pipe_lane_mapper.sv` 一起自动生成的纯包装模块，实例化 mapper 本体，把
+这两个 struct 端口展开成一个个 flat 信号端口，给不想处理 SV struct 端口
+的下游流程/IP 用；mapper 本体完全不知道这层包装的存在。
+
+`pipe_signals.csv` 的 `signal_type` 列（`perlane`/`shared`）只影响这个
+包装层怎么给某个 controller 展开端口：`perlane`（默认）展开成该
+controller 自己 `max_width` 条 lane 的数组；`shared` 收缩成一个标量端口
+——同一个 controller 自己的所有 lane 只有一个值（比如真实 PIPE 里的
+Rate/PowerDown，一个 controller 通常是整条 link 一起变，不是逐 lane
+变）。PHY 侧不受这个字段影响，永远按 lane 展开——一条 PHY lane 当前属于
+哪个 controller 本来就随 mode 变化，即使某个信号在 controller 自己的
+lane 之间是共享的，PHY 侧仍然需要每条 lane 各自的值。`shared` 信号写方向
+（进 mapper）由包装层把这一个标量复制到该 controller 的每条 lane；读方向
+（出 mapper）取 lane0 的值作为这个标量输出，前提是这个 controller 自己
+的所有 lane 在这个信号上本来就该一致——这个前提不由生成器校验。
 
 ### 3.2 Lane 分组算法
 
@@ -244,8 +275,8 @@ owner"的窗口。
 
 **图 4**：紫色——每个 controller 有自己独立的外部 PLL 时钟
 `max_pclk`（未分频，不是 controller 的真实工作时钟，也不是
-`pipe_lane_mapper_top` 的顶层端口——它是外部 PLL 直接给 controller
-的信号，分频这一步发生在 `pipe_lane_mapper_top` 范围之外）。绿色——
+`pipe_lane_mapper` 的顶层端口——它是外部 PLL 直接给 controller
+的信号，分频这一步发生在 `pipe_lane_mapper` 范围之外）。绿色——
 controller 自己做分频，
 分频结果按每个端口一位的形式输出成 `{c}_pclk[]`，格式和
 `{c}_mac2phy` 完全一样。橙色——`pipe_lane_clk_mux` 负责两个方向的
@@ -258,7 +289,7 @@ wire）：`phy-output` 模式下 `ctrl_pclk` 是真实存在的一路信号，�
 controller 自己造不出这路时钟，需要 `pipe_lane_clk_mux` 从
 `phy_pclk_out` 候选里选出来再喂给它；这套架构里恰好相反——controller
 自己已经用 `max_pclk` 分频出了工作时钟，并按端口送出来
-（`{c}_pclk[]`），`pipe_lane_clk_mux`/`pipe_lane_mapper_top` 不需要
+（`{c}_pclk[]`），`pipe_lane_clk_mux`/`pipe_lane_mapper` 不需要
 再算出一路 `ctrl_pclk` 还给 controller，那只是把某个端口位换个名字
 重新送回去、没有实际作用。`{c}_pclk[]` 才是唯一真实存在的时钟来源，
 而且是**按端口**的，不是按 controller 一根——这一点是这套架构里最

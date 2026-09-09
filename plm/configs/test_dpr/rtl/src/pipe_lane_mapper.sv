@@ -15,9 +15,10 @@
 //   G3 lane9~11       CtrlA / CtrlB / CtrlC / CtrlD 4-way NOV
 import pipe_lane_signal_pkg::*;
 
-module pipe_lane_mapper_top #(
+module pipe_lane_mapper #(
     parameter int NL = 12,
-    parameter int NC = 4
+    parameter int NC = 4,
+    parameter bit SEL_SYNC = 1'b1   // pipe_lane_sel_gen's data-path pipe_lane_sel_sync SYNC, see there
 ) (
     input logic [NL-1:0] phy_pclk_out,
     input logic test_en,
@@ -29,6 +30,13 @@ module pipe_lane_mapper_top #(
     // PHY-side PIPE data
     output mac2phy_lane_t [NL-1:0] phy_mac2phy,
     input phy2mac_lane_t [NL-1:0] phy_phy2mac,
+    // DPR (diagnostic probe): a virtual controller with link width NL,
+    // connected 1:1 to every PHY lane -- v_lane_mask[l]=1 overrides lane l.
+    input logic [NL-1:0] v_lane_mask,
+    input logic dpr_rst_n,
+    input mac2phy_lane_t [NL-1:0] dpr_mac2phy,
+    output phy2mac_lane_t [NL-1:0] dpr_phy2mac,
+    output logic dpr_pclk,
     // Controller side. Each controller's ports are declared at its own real max_width.
     // CtrlA x12
     input mac2phy_lane_t [11:0] ctrla_mac2phy,
@@ -45,18 +53,23 @@ module pipe_lane_mapper_top #(
 );
 
     lane_sel_t sel_tgt;   // each group's currently effective owner selection (after pipe_lane_sel_sync)
-    lane_sel_t dec_tgt;   // each group's raw decoder selection (unsynchronized), used by rst_mux
+    lane_sel_t dec_tgt;   // each group's raw decoder selection (unsynchronized, DPR-combined), used by rst_mux
 
     //------------------------------------------------------------
     // Select-generation submodule: mode decoding + group pipe_lane_sel_sync, produces sel_tgt / dec_tgt
     //------------------------------------------------------------
     pipe_lane_sel_gen #(
-        .NC (NC)
+        .NC (NC),
+        .NL (NL),
+        .SEL_SYNC (SEL_SYNC)
     ) u_sel_gen (
         .mode       (mode),
         .ctrl_pclk  (ctrl_pclk),
         .ctrl_rst_n (ctrl_rst_n),
         .sel_tgt    (sel_tgt),
+        .v_lane_mask (v_lane_mask),
+        .dpr_rst_n   (dpr_rst_n),
+        .dpr_pclk    (dpr_pclk),
         .dec_tgt    (dec_tgt)
     );
 
@@ -71,7 +84,10 @@ module pipe_lane_mapper_top #(
         .test_en      (test_en),
         .ctrl_rst_n   (ctrl_rst_n),
         .sel_tgt      (sel_tgt),
+        .v_lane_mask  (v_lane_mask),
+        .dpr_rst_n    (dpr_rst_n),
         .ctrl_pclk    (ctrl_pclk),
+        .dpr_pclk     (dpr_pclk),
         .phy_pclk_in  (phy_pclk_in)
     );
 
@@ -84,6 +100,7 @@ module pipe_lane_mapper_top #(
         .NC   (NC)
     ) u_rst_mux (
         .ctrl_rst_n (ctrl_rst_n),
+        .dpr_rst_n  (dpr_rst_n),
         .sel_tgt    (dec_tgt),
         .phy_rst_n  (phy_rst_n)
     );
@@ -96,6 +113,7 @@ module pipe_lane_mapper_top #(
     ) u_data_m2p (
         .sel_tgt      (sel_tgt),
         .phy_mac2phy  (phy_mac2phy),
+        .dpr_mac2phy  (dpr_mac2phy),
         .ctrla_mac2phy (ctrla_mac2phy),
         .ctrlb_mac2phy (ctrlb_mac2phy),
         .ctrlc_mac2phy (ctrlc_mac2phy),
@@ -110,6 +128,8 @@ module pipe_lane_mapper_top #(
     ) u_data_p2m (
         .sel_tgt      (sel_tgt),
         .phy_phy2mac  (phy_phy2mac),
+        .v_lane_mask  (v_lane_mask),
+        .dpr_phy2mac  (dpr_phy2mac),
         .ctrla_phy2mac (ctrla_phy2mac),
         .ctrlb_phy2mac (ctrlb_phy2mac),
         .ctrlc_phy2mac (ctrlc_phy2mac),

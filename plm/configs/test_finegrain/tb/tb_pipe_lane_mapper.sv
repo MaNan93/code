@@ -63,7 +63,7 @@ module tb_pipe_lane_mapper;
     mac2phy_lane_t [0:0] ctrlzeta_mac2phy;
     phy2mac_lane_t [0:0] ctrlzeta_phy2mac;
 
-    pipe_lane_mapper_top #(
+    pipe_lane_mapper #(
         .NL (NL),
         .NC (NC)
     ) dut (

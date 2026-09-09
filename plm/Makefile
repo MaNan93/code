@@ -21,8 +21,10 @@
 #   make tb-demo      # 只重新生成 demo 的 testbench
 #   make list         # 列出 configs/ 下识别到的配置集名字
 #   make clean        # 删掉所有配置集的生成物（rtl/、tb/tb_pipe_lane_mapper.sv）
+#   make clean-demo   # 只删掉 demo 这一套的生成物
+#   make help         # 打印这份用法（含当前识别到的配置集名字）
 #
-# 透传额外参数：
+# 透传额外参数（全局，适用于每一次 make 调用，跨所有配置集）：
 #   GENFLAGS      两个工具都会收到，比如切时钟架构：
 #                   make all GENFLAGS="--pclk-mode phy-input-max-pclk"
 #   RTL_GENFLAGS  只传给 plm_gen_rtl.py，比如切到组合直通的 sel_sync：
@@ -30,27 +32,56 @@
 #   TB_GENFLAGS   只传给 plm_gen_tb.py
 #
 # 某个配置集本身就是为了演示某个非默认 flag 存在的（比如 test_maxpclk 演示
-# --pclk-mode phy-input-max-pclk，RTL 和 TB 都要用这个 flag），这种 flag 要
-# 跟着配置集本身固定下来，不能指望每次手动传 GENFLAGS——在下面用
-# GENFLAGS_<配置集名> 声明，会同时叠加给 RTL 和 TB 两边的生成命令。
+# --pclk-mode phy-input-max-pclk），这种 flag 不在这里配置——写在那套配置集
+# 自己的 configs/<SET>/config/gen_flags.txt 里（跟三个 CSV 放一起，两个
+# Python 工具都会读，各自只认自己认识的 key），这样配置集本身就是自包含的，
+# 不需要为了给它固定一个 flag 而回来改这个 Makefile。上面的 GENFLAGS 系列
+# 变量地位更高，可以临时覆盖任何配置集自带的 gen_flags.txt。
 
 PYTHON       ?= python3
 GENFLAGS     ?=
 RTL_GENFLAGS ?=
 TB_GENFLAGS  ?=
 
-# 每个配置集固定绑定的额外生成参数（不需要的配置集不用列在这里），同时
-# 传给 plm_gen_rtl.py 和 plm_gen_tb.py。
-GENFLAGS_test_maxpclk := --pclk-mode phy-input-max-pclk
-
 # 自动发现 configs/ 下的配置集：凡是 configs/<name>/config/controllers.csv
 # 存在的 <name> 都算一个集，不用每加一套配置就手改 Makefile。
 CONFIG_MARKERS := $(wildcard configs/*/config/controllers.csv)
 CONFIGS        := $(patsubst configs/%/config/controllers.csv,%,$(CONFIG_MARKERS))
 
-.PHONY: all list clean $(CONFIGS) FORCE
+.PHONY: all help list clean $(CONFIGS) FORCE
 
 all: $(CONFIGS)
+
+## Note: these @echo lines are deliberately English-only. This
+## repo's make.exe (conda-forge GNU Make on Windows) mangles non-ASCII
+## text piped through its shell -- confirmed with a minimal isolated
+## repro (a one-line makefile with `@echo "<Chinese>"` alone), so it's
+## the toolchain, not this file. See docs/tool_usage.md and this
+## file's own (Chinese) comments for the full write-up.
+help:
+	@echo "Usage:"
+	@echo "  make               same as make all: generate RTL + testbench for every config set"
+	@echo "  make -k            same, but keep going past a failed config set"
+	@echo "  make <SET>         generate RTL + testbench for one config set, e.g. make test_quad"
+	@echo "  make rtl-<SET>     regenerate only that config set's RTL"
+	@echo "  make tb-<SET>      regenerate only that config set's testbench"
+	@echo "  make list          list the config sets found under configs/"
+	@echo "  make clean         delete every config set's generated output"
+	@echo "  make clean-<SET>   delete one config set's generated output"
+	@echo "  make help          print this"
+	@echo ""
+	@echo "Config sets found: $(CONFIGS)"
+	@echo ""
+	@echo "Pass-through vars (apply to every config set in this invocation, override"
+	@echo "any config set's own gen_flags.txt):"
+	@echo "  GENFLAGS      goes to both tools, e.g. make all GENFLAGS=\"--pclk-mode phy-input-max-pclk\""
+	@echo "  RTL_GENFLAGS  only to plm_gen_rtl.py"
+	@echo "  TB_GENFLAGS   only to plm_gen_tb.py"
+	@echo ""
+	@echo "A config set's own fixed flags go in configs/<SET>/config/gen_flags.txt --"
+	@echo "both tools read it automatically, no need to pass it on the command line."
+	@echo ""
+	@echo "See this file's own header comments and docs/tool_usage.md for more."
 
 # 每套配置集：RTL 和 testbench 都刷新。
 $(CONFIGS): %: rtl-% tb-%
@@ -59,18 +90,18 @@ $(CONFIGS): %: rtl-% tb-%
 # 重新跑（GNU make 对模式规则生成的目标不会那样处理），所以用经典的 FORCE
 # 依赖强制。
 rtl-%: FORCE
-	$(PYTHON) tool/plm_gen_rtl.py --config $* --quiet $(GENFLAGS) $(RTL_GENFLAGS) $(GENFLAGS_$*)
+	$(PYTHON) tool/plm_gen_rtl.py --config $* --quiet $(GENFLAGS) $(RTL_GENFLAGS)
 
 tb-%: FORCE
-	$(PYTHON) tool/plm_gen_tb.py --config $* --quiet $(GENFLAGS) $(TB_GENFLAGS) $(GENFLAGS_$*)
+	$(PYTHON) tool/plm_gen_tb.py --config $* --quiet $(GENFLAGS) $(TB_GENFLAGS)
 
 list:
-	@echo "configs/ 下的配置集：$(CONFIGS)"
+	@echo "Config sets found under configs/: $(CONFIGS)"
 
-clean:
-	@for c in $(CONFIGS); do \
-		echo "清理 configs/$$c/rtl 与 configs/$$c/tb/tb_pipe_lane_mapper.sv"; \
-		rm -rf configs/$$c/rtl configs/$$c/tb/tb_pipe_lane_mapper.sv; \
-	done
+clean: $(CONFIGS:%=clean-%)
+
+clean-%: FORCE
+	@echo "cleaning configs/$*/rtl and configs/$*/tb/tb_pipe_lane_mapper.sv"
+	rm -rf configs/$*/rtl configs/$*/tb/tb_pipe_lane_mapper.sv
 
 FORCE:

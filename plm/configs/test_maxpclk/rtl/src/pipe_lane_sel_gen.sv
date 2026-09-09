@@ -4,12 +4,13 @@
 // produce the final effective sel_tgt (for clk_mux's feedback clock mux and the data muxes).
 // pclk_tgt_cX is produced by the internal decoder and passed through to pipe_lane_clk_mux
 // for glitch-free switching of controller pclk candidates.
-// Group pipe_lane_sel_sync mode: sync (SYNC=1, safe across clock domains)
+// SEL_SYNC default: sync (1'b1, safe across clock domains)
 import pipe_lane_signal_pkg::*;
 
 module pipe_lane_sel_gen #(
     parameter int NC = 4,
-    parameter int NL = 12
+    parameter int NL = 12,
+    parameter bit SEL_SYNC = 1'b1   // pipe_lane_sel_sync's SYNC for every data-path select in this module
 ) (
     input logic [1:0] mode,
     input logic [11:0] ctrla_pclk,   // CtrlA's own already-divided pclk; bit 0 is this controller's working-clock reference
@@ -54,21 +55,21 @@ module pipe_lane_sel_gen #(
     // other port that lane actually routes to.
     //------------------------------------------------------------
     // G1 lane3~5: CtrlA, CtrlB, per-lane select
-    pipe_lane_sel_sync #(.N(2), .SYNC(1'b1)) u_seltgt_sel_sync_g1_l3 (
+    pipe_lane_sel_sync #(.N(2), .SYNC(SEL_SYNC)) u_seltgt_sel_sync_g1_l3 (
         .branch_clk   ({ctrlb_pclk[0], ctrla_pclk[3]}),
         .branch_rst_n ({ctrl_rst_n[1], ctrl_rst_n[0]}),
         .tgt          (dec_tgt.g1),
         .en           (seltgt_g1_l3)
     );
 
-    pipe_lane_sel_sync #(.N(2), .SYNC(1'b1)) u_seltgt_sel_sync_g1_l4 (
+    pipe_lane_sel_sync #(.N(2), .SYNC(SEL_SYNC)) u_seltgt_sel_sync_g1_l4 (
         .branch_clk   ({ctrlb_pclk[1], ctrla_pclk[4]}),
         .branch_rst_n ({ctrl_rst_n[1], ctrl_rst_n[0]}),
         .tgt          (dec_tgt.g1),
         .en           (seltgt_g1_l4)
     );
 
-    pipe_lane_sel_sync #(.N(2), .SYNC(1'b1)) u_seltgt_sel_sync_g1_l5 (
+    pipe_lane_sel_sync #(.N(2), .SYNC(SEL_SYNC)) u_seltgt_sel_sync_g1_l5 (
         .branch_clk   ({ctrlb_pclk[2], ctrla_pclk[5]}),
         .branch_rst_n ({ctrl_rst_n[1], ctrl_rst_n[0]}),
         .tgt          (dec_tgt.g1),
@@ -76,21 +77,21 @@ module pipe_lane_sel_gen #(
     );
 
     // G2 lane6~8: CtrlA, CtrlC, per-lane select
-    pipe_lane_sel_sync #(.N(2), .SYNC(1'b1)) u_seltgt_sel_sync_g2_l6 (
+    pipe_lane_sel_sync #(.N(2), .SYNC(SEL_SYNC)) u_seltgt_sel_sync_g2_l6 (
         .branch_clk   ({ctrlc_pclk[0], ctrla_pclk[6]}),
         .branch_rst_n ({ctrl_rst_n[2], ctrl_rst_n[0]}),
         .tgt          (dec_tgt.g2),
         .en           (seltgt_g2_l6)
     );
 
-    pipe_lane_sel_sync #(.N(2), .SYNC(1'b1)) u_seltgt_sel_sync_g2_l7 (
+    pipe_lane_sel_sync #(.N(2), .SYNC(SEL_SYNC)) u_seltgt_sel_sync_g2_l7 (
         .branch_clk   ({ctrlc_pclk[1], ctrla_pclk[7]}),
         .branch_rst_n ({ctrl_rst_n[2], ctrl_rst_n[0]}),
         .tgt          (dec_tgt.g2),
         .en           (seltgt_g2_l7)
     );
 
-    pipe_lane_sel_sync #(.N(2), .SYNC(1'b1)) u_seltgt_sel_sync_g2_l8 (
+    pipe_lane_sel_sync #(.N(2), .SYNC(SEL_SYNC)) u_seltgt_sel_sync_g2_l8 (
         .branch_clk   ({ctrlc_pclk[2], ctrla_pclk[8]}),
         .branch_rst_n ({ctrl_rst_n[2], ctrl_rst_n[0]}),
         .tgt          (dec_tgt.g2),
@@ -98,21 +99,21 @@ module pipe_lane_sel_gen #(
     );
 
     // G3 lane9~11: CtrlA, CtrlB, CtrlC, CtrlD, per-lane select
-    pipe_lane_sel_sync #(.N(4), .SYNC(1'b1)) u_seltgt_sel_sync_g3_l9 (
+    pipe_lane_sel_sync #(.N(4), .SYNC(SEL_SYNC)) u_seltgt_sel_sync_g3_l9 (
         .branch_clk   ({ctrld_pclk[0], ctrlc_pclk[3], ctrlb_pclk[3], ctrla_pclk[9]}),
         .branch_rst_n ({ctrl_rst_n[3], ctrl_rst_n[2], ctrl_rst_n[1], ctrl_rst_n[0]}),
         .tgt          (dec_tgt.g3),
         .en           (seltgt_g3_l9)
     );
 
-    pipe_lane_sel_sync #(.N(4), .SYNC(1'b1)) u_seltgt_sel_sync_g3_l10 (
+    pipe_lane_sel_sync #(.N(4), .SYNC(SEL_SYNC)) u_seltgt_sel_sync_g3_l10 (
         .branch_clk   ({ctrld_pclk[1], ctrlc_pclk[4], ctrlb_pclk[4], ctrla_pclk[10]}),
         .branch_rst_n ({ctrl_rst_n[3], ctrl_rst_n[2], ctrl_rst_n[1], ctrl_rst_n[0]}),
         .tgt          (dec_tgt.g3),
         .en           (seltgt_g3_l10)
     );
 
-    pipe_lane_sel_sync #(.N(4), .SYNC(1'b1)) u_seltgt_sel_sync_g3_l11 (
+    pipe_lane_sel_sync #(.N(4), .SYNC(SEL_SYNC)) u_seltgt_sel_sync_g3_l11 (
         .branch_clk   ({ctrld_pclk[2], ctrlc_pclk[5], ctrlb_pclk[5], ctrla_pclk[11]}),
         .branch_rst_n ({ctrl_rst_n[3], ctrl_rst_n[2], ctrl_rst_n[1], ctrl_rst_n[0]}),
         .tgt          (dec_tgt.g3),

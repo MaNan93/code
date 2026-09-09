@@ -63,10 +63,22 @@ class Signal:
     Every signal in the table goes through NOV (the synchronized sel).
     Reset (phy_rst_n / ctrl_rst_n) is a separate port and isn't in this
     table.
+
+    signal_type: "perlane" (default sense of everything in this table --
+    each of a controller's own lanes carries its own independent value) or
+    "shared" (this controller drives/observes one value across all of its
+    own lanes -- e.g. Rate/PowerDown in the real PIPE spec, which a
+    controller changes for its whole link at once, never per-lane). This is
+    purely a pipe_lane_mapper_connection.sv wrapper concern: the mapper
+    core still treats every signal as a per-lane struct field regardless,
+    since which controller owns a given PHY lane still varies by mode --
+    "shared" only lets the connection wrapper collapse a controller's own
+    max_width copies down to one scalar port, not the PHY side.
     """
 
-    def __init__(self, name, direction, width, safe_state, tie_off):
+    def __init__(self, name, signal_type, direction, width, safe_state, tie_off):
         self.name = str(name).strip()
+        self.signal_type = str(signal_type).strip().lower()  # perlane | shared
         self.direction = str(direction).strip()  # mac2phy | phy2mac
         self.width = int(str(width).strip())
         ss = str(safe_state).strip()
@@ -95,6 +107,10 @@ class Signal:
     @property
     def is_m2p(self):
         return self.direction == "mac2phy"
+
+    @property
+    def is_shared(self):
+        return self.signal_type == "shared"
 
     @property
     def tie_is_zero(self):
@@ -196,20 +212,26 @@ class Config:
         for i, r in enumerate(
             _stripped(csv.DictReader(open(path, newline="", encoding="utf-8"))), start=2
         ):
-            for col in ("signal_name", "direction", "width", "safe_state", "tie_off"):
+            for col in ("signal_name", "signal_type", "direction", "width", "safe_state", "tie_off"):
                 if col not in r or not (r[col] or "").strip():
                     raise SystemExit(f"{path} line {i}: missing {col}")
             name = r["signal_name"]
             if name in seen:
                 raise SystemExit(f"{path} line {i}: signal {name} defined twice")
             seen.add(name)
+            st = r["signal_type"].strip().lower()
+            if st not in ("perlane", "shared"):
+                raise SystemExit(
+                    f"{path} line {i}: signal_type='{r['signal_type']}' is invalid, "
+                    f"must be perlane or shared (case-insensitive)"
+                )
             d = r["direction"]
             if d not in ("mac2phy", "phy2mac"):
                 raise SystemExit(
                     f"{path} line {i}: direction='{d}' is invalid, " f"must be mac2phy or phy2mac"
                 )
             try:
-                s = Signal(name, d, r["width"], r["safe_state"], r["tie_off"])
+                s = Signal(name, st, d, r["width"], r["safe_state"], r["tie_off"])
             except ValueError as e:
                 raise SystemExit(f"{path} line {i}: signal attribute validation failed, {e}")
             if s.width < 1:

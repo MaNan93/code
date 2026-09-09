@@ -4,11 +4,12 @@
 // produce the final effective sel_tgt (for clk_mux's feedback clock mux and the data muxes).
 // pclk_tgt_cX is produced by the internal decoder and passed through to pipe_lane_clk_mux
 // for glitch-free switching of controller pclk candidates.
-// Group pipe_lane_sel_sync mode: sync (SYNC=1, safe across clock domains)
+// SEL_SYNC default: sync (1'b1, safe across clock domains)
 import pipe_lane_signal_pkg::*;
 
 module pipe_lane_sel_gen #(
-    parameter int NC = 4
+    parameter int NC = 4,
+    parameter bit SEL_SYNC = 1'b1   // pipe_lane_sel_sync's SYNC for every data-path select in this module
 ) (
     input logic [1:0] mode,
     input logic [NC-1:0] ctrl_pclk,
@@ -25,10 +26,10 @@ module pipe_lane_sel_gen #(
     );
 
     //------------------------------------------------------------
-    // One pipe_lane_sel_sync per non-direct group (SYNC=1'b1).
+    // One pipe_lane_sel_sync per non-direct group (SYNC=SEL_SYNC).
     //------------------------------------------------------------
     // G1 lane3~5: CtrlA, CtrlB
-    pipe_lane_sel_sync #(.N(2), .SYNC(1'b1)) u_sel_sync_g1 (
+    pipe_lane_sel_sync #(.N(2), .SYNC(SEL_SYNC)) u_sel_sync_g1 (
         .branch_clk   ({ctrl_pclk[1], ctrl_pclk[0]}),
         .branch_rst_n ({ctrl_rst_n[1], ctrl_rst_n[0]}),
         .tgt          (dec_tgt.g1),
@@ -36,7 +37,7 @@ module pipe_lane_sel_gen #(
     );
 
     // G2 lane6~8: CtrlA, CtrlC
-    pipe_lane_sel_sync #(.N(2), .SYNC(1'b1)) u_sel_sync_g2 (
+    pipe_lane_sel_sync #(.N(2), .SYNC(SEL_SYNC)) u_sel_sync_g2 (
         .branch_clk   ({ctrl_pclk[2], ctrl_pclk[0]}),
         .branch_rst_n ({ctrl_rst_n[2], ctrl_rst_n[0]}),
         .tgt          (dec_tgt.g2),
@@ -44,7 +45,7 @@ module pipe_lane_sel_gen #(
     );
 
     // G3 lane9~11: CtrlA, CtrlB, CtrlC, CtrlD
-    pipe_lane_sel_sync #(.N(4), .SYNC(1'b1)) u_sel_sync_g3 (
+    pipe_lane_sel_sync #(.N(4), .SYNC(SEL_SYNC)) u_sel_sync_g3 (
         .branch_clk   ({ctrl_pclk[3], ctrl_pclk[2], ctrl_pclk[1], ctrl_pclk[0]}),
         .branch_rst_n ({ctrl_rst_n[3], ctrl_rst_n[2], ctrl_rst_n[1], ctrl_rst_n[0]}),
         .tgt          (dec_tgt.g3),

@@ -16,9 +16,10 @@
 //   G3 lane9~11       CtrlA / CtrlB / CtrlC / CtrlD 4-way NOV
 import pipe_lane_signal_pkg::*;
 
-module pipe_lane_mapper_top #(
+module pipe_lane_mapper #(
     parameter int NL = 12,
-    parameter int NC = 4
+    parameter int NC = 4,
+    parameter bit SEL_SYNC = 1'b1   // pipe_lane_sel_gen's data-path pipe_lane_sel_sync SYNC, see there
 ) (
     input logic test_en,
     input logic [NC-1:0] ctrl_rst_n,   // one per controller, already synchronized externally
@@ -77,7 +78,8 @@ module pipe_lane_mapper_top #(
     //------------------------------------------------------------
     pipe_lane_sel_gen #(
         .NC (NC),
-        .NL (NL)
+        .NL (NL),
+        .SEL_SYNC (SEL_SYNC)
     ) u_sel_gen (
         .mode       (mode),
         .ctrla_pclk (ctrla_pclk),

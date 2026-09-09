@@ -17,9 +17,10 @@
 //   G5 lane5          CtrlGamma / CtrlGamma / CtrlGamma direct
 import pipe_lane_signal_pkg::*;
 
-module pipe_lane_mapper_top #(
+module pipe_lane_mapper #(
     parameter int NL = 6,
-    parameter int NC = 6
+    parameter int NC = 6,
+    parameter bit SEL_SYNC = 1'b1   // pipe_lane_sel_gen's data-path pipe_lane_sel_sync SYNC, see there
 ) (
     input logic [NL-1:0] phy_pclk_out,
     input logic test_en,
@@ -59,7 +60,8 @@ module pipe_lane_mapper_top #(
     // Select-generation submodule: mode decoding + group pipe_lane_sel_sync, produces sel_tgt / dec_tgt
     //------------------------------------------------------------
     pipe_lane_sel_gen #(
-        .NC (NC)
+        .NC (NC),
+        .SEL_SYNC (SEL_SYNC)
     ) u_sel_gen (
         .mode       (mode),
         .ctrl_pclk  (ctrl_pclk),

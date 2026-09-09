@@ -16,4 +16,5 @@ src/pipe_lane_clk_mux.sv
 src/pipe_lane_rst_mux.sv
 src/pipe_lane_data_m2p.sv
 src/pipe_lane_data_p2m.sv
-src/pipe_lane_mapper_top.sv
+src/pipe_lane_mapper.sv
+src/pipe_lane_mapper_connection.sv

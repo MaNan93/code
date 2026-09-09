@@ -39,10 +39,17 @@ from tkinter import filedialog, messagebox, simpledialog, ttk
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(SCRIPT_DIR))
-from plm_common import CONFIGS_ROOT, PLM_ROOT, find_verible, has_csvs, list_configs  # noqa: E402
+from plm_common import (  # noqa: E402
+    CONFIGS_ROOT,
+    PLM_ROOT,
+    _PCLK_MODE_MIGRATION,
+    find_verible,
+    has_csvs,
+    list_configs,
+)
 from plm_config import Config, _stripped  # noqa: E402
 
-PCLK_MODES = ["(default: phy-output)", "phy-output", "phy-input-max-pclk"]
+PCLK_MODES = ["(default: pclk_as_phy_output)", "pclk_as_phy_output", "pclk_as_phy_input"]
 SEL_MODES = ["(default: sync)", "sync", "comb"]
 DIRECTIONS = ["mac2phy", "phy2mac"]
 SIGNAL_TYPES = ["perlane", "shared"]
@@ -1539,7 +1546,8 @@ class PlmGui(tk.Tk):
         )
         pclk_combo.pack(side="left")
         self._register_help(pclk_combo, "Which clock domain the PHY-facing pclk output comes "
-                             "from: normal PHY-output mode, or PCLK-as-PHY-input (max_pclk).")
+                             "from: pclk_as_phy_output (PHY drives it), or pclk_as_phy_input "
+                             "(each controller supplies its own).")
 
         row2 = ttk.Frame(tab)
         row2.pack(anchor="w", pady=2)
@@ -1753,9 +1761,14 @@ class PlmGui(tk.Tk):
                 continue
             k, _, v = line.partition("=")
             flags[k.strip()] = v.strip()
+        # Old gen_flags.txt files may still have pclk-mode's pre-rename value
+        # on disk (phy-output/phy-input-max-pclk) -- migrate it before the
+        # comparison below, so an old config set keeps loading correctly.
+        raw_pclk_mode = flags.get("pclk-mode", "")
+        pclk_mode_val = _PCLK_MODE_MIGRATION.get(raw_pclk_mode, raw_pclk_mode)
         return {
-            "pclk-mode": f"phy-input-max-pclk" if flags.get("pclk-mode") == "phy-input-max-pclk"
-            else ("phy-output" if flags.get("pclk-mode") == "phy-output" else PCLK_MODES[0]),
+            "pclk-mode": pclk_mode_val if pclk_mode_val in ("pclk_as_phy_output", "pclk_as_phy_input")
+            else PCLK_MODES[0],
             "sel-mode": "comb" if flags.get("sel-mode") == "comb"
             else ("sync" if flags.get("sel-mode") == "sync" else SEL_MODES[0]),
             # Same boolean parsing as plm_common.apply_set_flags(), so the
@@ -1858,7 +1871,7 @@ class PlmGui(tk.Tk):
 
     def _write_gen_flags(self, path):
         lines = [
-            "# 支持: pclk-mode = phy-output | phy-input-max-pclk",
+            "# 支持: pclk-mode = pclk_as_phy_output | pclk_as_phy_input",
             "#       sel-mode  = sync | comb",
             "#       dpr       = true | false",
         ]
@@ -1867,7 +1880,7 @@ class PlmGui(tk.Tk):
         sel = self.sel_mode_var.get()
         dpr = self.dpr_var.get()
         verible = self.verible_path_var.get().strip()
-        if pclk in ("phy-output", "phy-input-max-pclk"):
+        if pclk in ("pclk_as_phy_output", "pclk_as_phy_input"):
             lines.append(f"pclk-mode = {pclk}")
         if sel in ("sync", "comb"):
             lines.append(f"sel-mode = {sel}")

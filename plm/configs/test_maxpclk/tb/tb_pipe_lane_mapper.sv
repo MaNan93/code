@@ -17,8 +17,8 @@ module tb_pipe_lane_mapper;
     localparam int NC   = 4;
 
     //------------------------------------------------------------ clocks
-    // Different period + phase offset per controller (max_pclk) and per
-    // lane (rx_clk), to exercise asynchronous CDC.
+    // Different period + phase offset per controller (its own reference
+    // clock) and per lane (rx_clk), to exercise asynchronous CDC.
     localparam int unsigned CTRL_PERIOD_NS [0:3] = '{
         3,
         5,
@@ -40,14 +40,14 @@ module tb_pipe_lane_mapper;
         13
     };
 
-    logic [NC-1:0] max_pclk;
+    logic [NC-1:0] ctrl_ref_clk;
     logic [NL-1:0] rx_clk;
 
     for (genvar c = 0; c < NC; c++) begin : g_ctrl_clk
         initial begin
-            max_pclk[c] = 1'b0;
+            ctrl_ref_clk[c] = 1'b0;
             #(c * 0.7);
-            forever #(CTRL_PERIOD_NS[c] / 2.0) max_pclk[c] = ~max_pclk[c];
+            forever #(CTRL_PERIOD_NS[c] / 2.0) ctrl_ref_clk[c] = ~ctrl_ref_clk[c];
         end
     end
 
@@ -61,16 +61,16 @@ module tb_pipe_lane_mapper;
 
     logic [11:0] ctrla_pclk;
     logic [11:0] ctrla_rx_clk;
-    assign ctrla_pclk = {12{max_pclk[0]}};  // no division modeled -- every port bit is the same undivided clock
+    assign ctrla_pclk = {12{ctrl_ref_clk[0]}};  // no division modeled -- every port bit is the same undivided clock
     logic [5:0] ctrlb_pclk;
     logic [5:0] ctrlb_rx_clk;
-    assign ctrlb_pclk = {6{max_pclk[1]}};  // no division modeled -- every port bit is the same undivided clock
+    assign ctrlb_pclk = {6{ctrl_ref_clk[1]}};  // no division modeled -- every port bit is the same undivided clock
     logic [7:0] ctrlc_pclk;
     logic [7:0] ctrlc_rx_clk;
-    assign ctrlc_pclk = {8{max_pclk[2]}};  // no division modeled -- every port bit is the same undivided clock
+    assign ctrlc_pclk = {8{ctrl_ref_clk[2]}};  // no division modeled -- every port bit is the same undivided clock
     logic [2:0] ctrld_pclk;
     logic [2:0] ctrld_rx_clk;
-    assign ctrld_pclk = {3{max_pclk[3]}};  // no division modeled -- every port bit is the same undivided clock
+    assign ctrld_pclk = {3{ctrl_ref_clk[3]}};  // no division modeled -- every port bit is the same undivided clock
 
     //------------------------------------------------------------ DUT IO
     logic [NL-1:0]      phy_phystatus_stim = '0;

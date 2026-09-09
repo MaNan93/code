@@ -208,6 +208,17 @@ def resolve_set(arg):
 
 SET_FLAGS_FILENAME = "gen_flags.txt"
 
+# pclk-mode's values were renamed (phy-output/phy-input-max-pclk ->
+# pclk_as_phy_output/pclk_as_phy_input) for clearer, more consistent
+# terminology. A gen_flags.txt written before the rename still has the old
+# value on disk -- translate it here so an old config set keeps working
+# without the user having to hand-edit the file; new writes only ever use
+# the new names (see plmConsultant.py's own writer).
+_PCLK_MODE_MIGRATION = {
+    "phy-output": "pclk_as_phy_output",
+    "phy-input-max-pclk": "pclk_as_phy_input",
+}
+
 
 def load_set_flags(csv_dir, filename=SET_FLAGS_FILENAME):
     """Read <csv_dir>/gen_flags.txt if present: one 'key = value' per line
@@ -235,7 +246,10 @@ def load_set_flags(csv_dir, filename=SET_FLAGS_FILENAME):
         key = key.strip().lstrip("-")
         if key == "config":
             raise SystemExit(f"{path}:{lineno}: 'config' can't be set from within a config set's own flags file")
-        flags[key] = value.strip()
+        value = value.strip()
+        if key == "pclk-mode":
+            value = _PCLK_MODE_MIGRATION.get(value, value)
+        flags[key] = value
     return flags
 
 

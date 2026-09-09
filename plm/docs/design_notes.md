@@ -90,15 +90,15 @@ PIPE 规范允许两种截然不同的 PCLK 归属方式，两者互斥，一次
 `gen_data_p2m()` / `gen_top()` / `gen_tb()` 等生成逻辑都按所选方案
 分叉）：
 
-| | `phy-output`（默认方案） | `phy-input-max-pclk` |
+| | `pclk_as_phy_output`（默认方案） | `pclk_as_phy_input` |
 |---|---|---|
-| PCLK 由谁产生 | PHY 产生，驱动给 MAC | 每个 controller 自己有参考时钟（`max_pclk`，一般来自外部 PLL），driving 给 PHY |
-| controller 的工作时钟从哪来 | `pipe_lane_clk_mux` 从当前 owner 所在 lane 的 `phy_pclk_out` 里选一路，即 `ctrl_pclk` | controller 自己用 `max_pclk` 分频得到，按端口输出成 `{c}_pclk[]`，本设计不参与产生 |
+| PCLK 由谁产生 | PHY 产生，驱动给 MAC | 每个 controller 自己有参考时钟（一般来自外部 PLL），driving 给 PHY |
+| controller 的工作时钟从哪来 | `pipe_lane_clk_mux` 从当前 owner 所在 lane 的 `phy_pclk_out` 里选一路，即 `ctrl_pclk` | controller 自己用参考时钟分频得到，按端口输出成 `{c}_pclk[]`，本设计不参与产生 |
 | 有没有 `ctrl_pclk` 信号 | 有（顶层输出） | 没有（详见 3.5.2 节） |
 | 数据路径的同步粒度 | 按 group（`sel_tgt`，group 级信号） | 按物理 lane（`seltgt_gN_lL`，详见 3.5.2 节） |
 
-`phy-output` 是最早支持的方案，实现细节见 3.5.1 节；
-`phy-input-max-pclk` 是后加的第二种方案，实现细节见 3.5.2 节。两者
+`pclk_as_phy_output` 是最早支持的方案，实现细节见 3.5.1 节；
+`pclk_as_phy_input` 是后加的第二种方案，实现细节见 3.5.2 节。两者
 生成的顶层端口列表、内部信号完全不同，不能混用。
 
 ### 2.2 NOV 同步策略：`sync` / `comb` 两种
@@ -203,7 +203,7 @@ group。这个分组规则不是任意选择，而是由 1.3 节约束 A 反推�
 `pipe_lane_mode_dec` 产生的 `dec_tgt` 是纯组合输出，`mode` 变化后同一
 拍就反映新的 owner；这个原始值经过 `pipe_lane_sel_gen` 里的
 `pipe_lane_sel_sync` 同步之后，才变成真正驱动数据通路/时钟切换的信号
-（`phy-output` 模式下是 group 级的 `sel_tgt`，`phy-input-max-pclk`
+（`pclk_as_phy_output` 模式下是 group 级的 `sel_tgt`，`pclk_as_phy_input`
 模式下是按 lane 拆开的 `seltgt_gN_lL`，见 3.5.2 节）。
 
 ![dec_tgt 随 mode 立即翻转，sel_tgt 要等 NOV 窗口走完才跟上](images/dec_tgt_vs_sel_tgt.png)
@@ -247,7 +247,7 @@ owner"的窗口。
 `pipe_lane_clk_mux` 是两套时钟架构方案（2.1 节）差异最大的模块，
 下面分别说明。
 
-#### 3.5.1 `phy-output` 模式：`ctrl_pclk` 生成 + 反馈时钟 mux
+#### 3.5.1 `pclk_as_phy_output` 模式：`ctrl_pclk` 生成 + 反馈时钟 mux
 
 `ctrl_pclk_src()` / `ctrl_pclk_cands()`：每个 controller 的工作时钟
 （`ctrl_pclk`，不是参考时钟）固定使用它在当前 mode 下"组内编号最低的
@@ -269,12 +269,12 @@ owner"的窗口。
 长度 > 1 的代码路径因此在现有配置里从未被真实触发过，只是防御性地
 保留着。
 
-#### 3.5.2 `phy-input-max-pclk` 模式：`phy_pclk` / `rx_clk` 无毛刺切换
+#### 3.5.2 `pclk_as_phy_input` 模式：`phy_pclk` / `rx_clk` 无毛刺切换
 
-![PCLK as PHY input, max_pclk：外部 PLL 给每个 controller 一路 max_pclk，controller 自己分频出 pclk[] 送回 PHY（按 lane 无毛刺切换），PHY 的 rx_clk[] 送回给 controller（同样按 lane 无毛刺切换，只是同步目标换成 rx_clk[l] 自己的域）；没有单独的 ctrl_pclk 信号，sel_gen 按每个候选自己的端口位同步](images/pclk_max_pclk.png)
+![PCLK as PHY input：外部 PLL 给每个 controller 一路参考时钟，controller 自己分频出 pclk[] 送回 PHY（按 lane 无毛刺切换），PHY 的 rx_clk[] 送回给 controller（同样按 lane 无毛刺切换，只是同步目标换成 rx_clk[l] 自己的域）；没有单独的 ctrl_pclk 信号，sel_gen 按每个候选自己的端口位同步](images/pclk_max_pclk.png)
 
-**图 4**：紫色——每个 controller 有自己独立的外部 PLL 时钟
-`max_pclk`（未分频，不是 controller 的真实工作时钟，也不是
+**图 4**：紫色——每个 controller 有自己独立的外部 PLL 参考时钟
+（未分频，不是 controller 的真实工作时钟，也不是
 `pipe_lane_mapper` 的顶层端口——它是外部 PLL 直接给 controller
 的信号，分频这一步发生在 `pipe_lane_mapper` 范围之外）。绿色——
 controller 自己做分频，
@@ -285,10 +285,10 @@ controller 自己做分频，
 controller。蓝色——PHY。
 
 这套架构里**没有** `ctrl_pclk` 信号（既不是顶层端口，也不是内部
-wire）：`phy-output` 模式下 `ctrl_pclk` 是真实存在的一路信号，因为
+wire）：`pclk_as_phy_output` 模式下 `ctrl_pclk` 是真实存在的一路信号，因为
 controller 自己造不出这路时钟，需要 `pipe_lane_clk_mux` 从
 `phy_pclk_out` 候选里选出来再喂给它；这套架构里恰好相反——controller
-自己已经用 `max_pclk` 分频出了工作时钟，并按端口送出来
+自己已经用参考时钟分频出了工作时钟，并按端口送出来
 （`{c}_pclk[]`），`pipe_lane_clk_mux`/`pipe_lane_mapper` 不需要
 再算出一路 `ctrl_pclk` 还给 controller，那只是把某个端口位换个名字
 重新送回去、没有实际作用。`{c}_pclk[]` 才是唯一真实存在的时钟来源，
@@ -296,9 +296,9 @@ controller 自己造不出这路时钟，需要 `pipe_lane_clk_mux` 从
 重要的性质，直接决定了下面几段的实现方式（也是 4.5 节要重点强调的
 关键点）。
 
-**`seltgt_gN_lL`：数据路径的选择信号按物理 lane 拆分。** `phy-output`
+**`seltgt_gN_lL`：数据路径的选择信号按物理 lane 拆分。** `pclk_as_phy_output`
 模式下选择信号是按 group 共用一份（`sel_tgt`），因为 `ctrl_pclk` 天生
-就是"这个 controller 唯一的一根内部时钟"。但 `phy-input-max-pclk`
+就是"这个 controller 唯一的一根内部时钟"。但 `pclk_as_phy_input`
 模式下 `{c}_pclk[]` 本来就是按端口给的（一个 x4/x8/x2 的配置，合计
 就是 4+8+2=14 根，不是 3 根）——"controller 只有一根内部时钟"这个
 前提不成立，选择信号驱动的 `pipe_lane_data_mux` 输出最终会被
@@ -323,12 +323,12 @@ controller 端口）按分支逐位拼：每个候选 `i` 只关心它自己那�
 designated lane 的第 `i` 位（`seltgt_gN_l{它自己的lane}[i]`），拼成
 一个跟原来 `sel_tgt.gN` 形状一样的向量喂给 `pipe_lane_data_mux`。
 group 级的 `sel_tgt`（`lane_sel_t`）在这套架构里因此不存在，
-`pipe_lane_sel_gen` 只在 `phy-output` 模式下才产出它；tb 里的 NOV
+`pipe_lane_sel_gen` 只在 `pclk_as_phy_output` 模式下才产出它；tb 里的 NOV
 监控（one-hot0 检查 + sel==0 时的安全态检查）相应地改成按每条 lane
 各自监控 `dut.seltgt_gN_lL`。
 
 **`phy_pclk`：无毛刺切换按物理 lane 独立进行，但复用同一份同步结果。**
-`phy-output` 模式的反馈时钟切换是按 group 做的一份，因为它选的是
+`pclk_as_phy_output` 模式的反馈时钟切换是按 group 做的一份，因为它选的是
 `ctrl_pclk[c]`——每个 controller 只有一路，同一个候选 controller 在
 同一个 group 里对所有 lane 都是同一路时钟，可以共用一组
 `pipe_lane_clk_gate`。这套架构里 `phy_pclk` 选的是
@@ -361,7 +361,7 @@ cell）——多路已经无毛刺的时钟合成一路，在通用标准单元�
 **`rx_clk`：独立的第三个时钟域，需要自己单独一棵同步树。**
 `{c}_rx_clk[]` 的路由拓扑和 `{c}_pclk[]` 一样（同一个 mode 下、同一个
 owner、同一个端口号），但 `rx_clk[l]` 是这条物理 lane 自己的 PHY CDR
-恢复时钟，跟 `{c}_pclk`/`max_pclk` 没有固定相位关系，是一个完全独立
+恢复时钟，跟 `{c}_pclk` 没有固定相位关系，是一个完全独立
 的时钟域——不能直接拿同步进 `{c}_pclk` 域的 `seltgt_gN_lL` 去门控
 `rx_clk[l]`，那样 `rx_clk[l]` 相对这个使能信号仍然是异步的，
 `pipe_lane_clk_gate` 的锁存器要求 `en` 必须已经同步进 `clk_in`（这里
@@ -555,11 +555,11 @@ controller 逻辑连续工作，性价比低。这条原则被 `validate()` 强�
 | `tie_off` (a) | 仅 p2m | unused lane 的硬 tie，纯 `assign` | 无关——任何策略下都一样生效 |
 | `tie_off` (b) | 仅 p2m | 喂给 `pipe_lane_data_mux.safe()`（端口有时会被映射到） | 有关——只有 `sync` 策略下才会被呈现 |
 
-### 4.5 `phy-input-max-pclk` 架构最容易踩的坑：`{c}_pclk[]` 是按端口的，不是按 controller 的
+### 4.5 `pclk_as_phy_input` 架构最容易踩的坑：`{c}_pclk[]` 是按端口的，不是按 controller 的
 
-`phy-output` 架构里 `ctrl_pclk` 天生是"这个 controller 唯一的一根
+`pclk_as_phy_output` 架构里 `ctrl_pclk` 天生是"这个 controller 唯一的一根
 内部时钟"，很多同步/选择逻辑可以安全地按 group/controller 共用一份。
-`phy-input-max-pclk` 架构里最容易顺着这个惯性错误地复用同一个思路——
+`pclk_as_phy_input` 架构里最容易顺着这个惯性错误地复用同一个思路——
 但 `{c}_pclk[]` 本来就是按端口给的（一个 x4/x8/x2 的配置，合计
 4+8+2=14 根，不是 3 根），任何地方如果拿"某个候选任意一个端口位"
 （比如 `{c}_pclk[0]`）当"这个 controller 的代表时钟"去做同步，都是
@@ -569,7 +569,7 @@ controller 逻辑连续工作，性价比低。这条原则被 `validate()` 强�
 
 ### 4.6 `rx_clk` 是独立时钟域，不能复用其它域已同步好的使能
 
-`rx_clk[l]` 是 PHY 自己的 CDR 恢复时钟，跟 `{c}_pclk`/`max_pclk` 没有
+`rx_clk[l]` 是 PHY 自己的 CDR 恢复时钟，跟 `{c}_pclk` 没有
 固定相位关系——即使 `{c}_rx_clk[]` 的路由拓扑（同一个 mode 下、同一个
 owner、同一个端口号）跟 `{c}_pclk[]` 完全一样，也不能直接复用为
 `{c}_pclk` 域同步好的选择信号去门控 `rx_clk[l]`，必须单独建一棵以

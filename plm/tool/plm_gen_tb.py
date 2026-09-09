@@ -35,7 +35,7 @@ from plm_common import (  # noqa: E402
 )
 
 
-def gen_tb(cfg, pclk_mode="phy-output", dpr=False):
+def gen_tb(cfg, pclk_mode="pclk_as_phy_output", dpr=False):
     """Generate a self-checking testbench for this config set, written to
     <set>/tb/tb_pipe_lane_mapper.sv.
 
@@ -50,16 +50,23 @@ def gen_tb(cfg, pclk_mode="phy-output", dpr=False):
     LC, NC = cfg.lane_count, cfg.num_ctrl
     ctrls = [cfg.controllers[c] for c in sorted(cfg.controllers)]
     muxed = [g for g in cfg.groups if not g.is_direct]
-    max_pclk_mode = pclk_mode == "phy-input-max-pclk"
+    phy_input_mode = pclk_mode == "pclk_as_phy_input"
+    # make_m2p/make_p2m below poke a few well-known real-PIPE signal names
+    # (mac_phy_txdatak, phy_mac_phystatus, ...) to make the stimulus more
+    # than just the one identity-encoding field -- but pipe_signals.csv is
+    # fully user-defined, so a config that doesn't happen to include one of
+    # these under this exact name must not reference it as a struct field
+    # (a hard compile error), it must just skip that extra touch.
+    sig_names = {s.name for s in cfg.signals}
 
-    # Give each lane (or, in max-pclk mode, each controller) a different
-    # clock period + phase offset, to exercise asynchronous CDC. Period
+    # Give each lane (or, in pclk_as_phy_input mode, each controller) a
+    # different clock period + phase offset, to exercise asynchronous CDC. Period
     # range 3..15ns; SETTLE is the slowest period * 20 (>=3 sync stages
     # plus hold margin).
     periods = [3 + (l % 7) * 2 for l in range(LC)]
     ctrl_periods = [3 + (c % 7) * 2 for c in range(NC)]
     lane_periods = [5 + (l % 7) * 2 for l in range(LC)]  # rx_clk, offset from ctrl_periods' phase
-    settle = max(ctrl_periods) * 20 if max_pclk_mode else max(periods) * 20
+    settle = max(ctrl_periods) * 20 if phy_input_mode else max(periods) * 20
 
     L = [
         "`timescale 1ns/1ps",
@@ -85,9 +92,9 @@ def gen_tb(cfg, pclk_mode="phy-output", dpr=False):
 
     # ---- clocks
     L.append("    //------------------------------------------------------------ clocks")
-    if max_pclk_mode:
-        L.append("    // Different period + phase offset per controller (max_pclk) and per")
-        L.append("    // lane (rx_clk), to exercise asynchronous CDC.")
+    if phy_input_mode:
+        L.append("    // Different period + phase offset per controller (its own reference")
+        L.append("    // clock) and per lane (rx_clk), to exercise asynchronous CDC.")
         L.append(f"    localparam int unsigned CTRL_PERIOD_NS [0:{NC-1}] = '{{")
         for i, p in enumerate(ctrl_periods):
             L.append(f"        {p}{',' if i != NC-1 else ''}")
@@ -97,14 +104,14 @@ def gen_tb(cfg, pclk_mode="phy-output", dpr=False):
             L.append(f"        {p}{',' if i != LC-1 else ''}")
         L.append("    };")
         L.append("")
-        L.append("    logic [NC-1:0] max_pclk;")
+        L.append("    logic [NC-1:0] ctrl_ref_clk;")
         L.append("    logic [NL-1:0] rx_clk;")
         L.append("")
         L.append("    for (genvar c = 0; c < NC; c++) begin : g_ctrl_clk")
         L.append("        initial begin")
-        L.append("            max_pclk[c] = 1'b0;")
+        L.append("            ctrl_ref_clk[c] = 1'b0;")
         L.append("            #(c * 0.7);")
-        L.append("            forever #(CTRL_PERIOD_NS[c] / 2.0) max_pclk[c] = ~max_pclk[c];")
+        L.append("            forever #(CTRL_PERIOD_NS[c] / 2.0) ctrl_ref_clk[c] = ~ctrl_ref_clk[c];")
         L.append("        end")
         L.append("    end")
         L.append("")
@@ -120,7 +127,7 @@ def gen_tb(cfg, pclk_mode="phy-output", dpr=False):
             L.append(f"    logic [{c.max_width-1}:0] {c.lname}_pclk;")
             L.append(f"    logic [{c.max_width-1}:0] {c.lname}_rx_clk;")
             L.append(
-                f"    assign {c.lname}_pclk = {{{c.max_width}{{max_pclk[{c.id}]}}}};"
+                f"    assign {c.lname}_pclk = {{{c.max_width}{{ctrl_ref_clk[{c.id}]}}}};"
                 f"  // no division modeled -- every port bit is the same undivided clock"
             )
         L.append("")
@@ -149,9 +156,9 @@ def gen_tb(cfg, pclk_mode="phy-output", dpr=False):
     L.append("    logic [NC-1:0]        ctrl_rst_n = '0;")
     L.append(f"    logic [{mode_width(nm)-1}:0] mode = '0;")
     L.append("")
-    if not max_pclk_mode:
+    if not phy_input_mode:
         L.append("    logic [NC-1:0]        ctrl_pclk;")
-    L.append(f"    logic [NL-1:0]      {'phy_pclk' if max_pclk_mode else 'phy_pclk_in'};")
+    L.append(f"    logic [NL-1:0]      {'phy_pclk' if phy_input_mode else 'phy_pclk_in'};")
     L.append("    logic [NL-1:0]      phy_rst_n;")
     L.append("")
     L.append("    mac2phy_lane_t [NL-1:0] phy_mac2phy;")
@@ -169,11 +176,7 @@ def gen_tb(cfg, pclk_mode="phy-output", dpr=False):
         L.append("    logic dpr_rst_n = 1'b1;")
         L.append("    mac2phy_lane_t [NL-1:0] dpr_mac2phy = '0;")
         L.append("    phy2mac_lane_t [NL-1:0] dpr_phy2mac;")
-        if max_pclk_mode:
-            L.append("    logic [NL-1:0] dpr_pclk = '0;")
-            L.append("    logic [NL-1:0] dpr_rx_clk;")
-        else:
-            L.append("    logic dpr_pclk;")
+        L.append("    logic dpr_pclk;   // DPR's own derived working clock, DUT output")
         L.append("")
 
     # ---- DUT instance
@@ -181,7 +184,7 @@ def gen_tb(cfg, pclk_mode="phy-output", dpr=False):
     L.append("        .NL (NL),")
     L.append("        .NC (NC)")
     L.append("    ) dut (")
-    if max_pclk_mode:
+    if phy_input_mode:
         L.append("        .test_en        (test_en),")
         L.append("        .ctrl_rst_n     (ctrl_rst_n),")
         L.append("        .mode           (mode),")
@@ -196,7 +199,6 @@ def gen_tb(cfg, pclk_mode="phy-output", dpr=False):
             L.append("        .dpr_mac2phy    (dpr_mac2phy),")
             L.append("        .dpr_phy2mac    (dpr_phy2mac),")
             L.append("        .dpr_pclk       (dpr_pclk),")
-            L.append("        .dpr_rx_clk     (dpr_rx_clk),")
         for c in ctrls:
             L.append(f"        .{c.lname}_mac2phy ({c.lname}_mac2phy),")
             L.append(f"        .{c.lname}_phy2mac ({c.lname}_phy2mac),")
@@ -230,30 +232,40 @@ def gen_tb(cfg, pclk_mode="phy-output", dpr=False):
     L.append("    function automatic mac2phy_lane_t make_m2p(input int cid, input int port);")
     L.append("        mac2phy_lane_t v;")
     L.append("        v = SAFE_M2P;")
-    L.append("        v.mac_phy_txdata      = {4'(cid), 20'h0, 8'(port)};")
-    L.append("        v.mac_phy_txdatak     = 4'(port);")
-    L.append("        v.mac_phy_txdatavalid = 1'b1;")
-    L.append(
-        "        v.mac_phy_txelecidle  = 1'b0;   // non-idle (may differ from the signal's safe state)"
-    )
-    L.append(
-        "        v.mac_phy_rxstandby   = 1'b0;   // non-idle (may differ from the signal's safe state)"
-    )
+    if "mac_phy_txdata" in sig_names:
+        L.append("        v.mac_phy_txdata      = {4'(cid), 20'h0, 8'(port)};")
+    if "mac_phy_txdatak" in sig_names:
+        L.append("        v.mac_phy_txdatak     = 4'(port);")
+    if "mac_phy_txdatavalid" in sig_names:
+        L.append("        v.mac_phy_txdatavalid = 1'b1;")
+    if "mac_phy_txelecidle" in sig_names:
+        L.append(
+            "        v.mac_phy_txelecidle  = 1'b0;   // non-idle (may differ from the signal's safe state)"
+        )
+    if "mac_phy_rxstandby" in sig_names:
+        L.append(
+            "        v.mac_phy_rxstandby   = 1'b0;   // non-idle (may differ from the signal's safe state)"
+        )
     L.append("        return v;")
     L.append("    endfunction")
     L.append("")
     L.append("    function automatic phy2mac_lane_t make_p2m(input int lane);")
     L.append("        phy2mac_lane_t v;")
     L.append("        v = SAFE_P2M;")
-    L.append("        v.phy_mac_rxdata      = {8'hA5, 16'h0, 8'(lane)};")
-    L.append("        v.phy_mac_rxdatak     = 4'(lane);")
-    L.append("        v.phy_mac_rxdatavalid = 1'b1;")
-    L.append(
-        "        v.phy_mac_rxelecidle      = 1'b0;  // non-idle (may differ from the signal's safe state)"
-    )
-    L.append(
-        "        v.phy_mac_rxstandbystatus = 1'b0;  // non-idle (may differ from the signal's safe state)"
-    )
+    if "phy_mac_rxdata" in sig_names:
+        L.append("        v.phy_mac_rxdata      = {8'hA5, 16'h0, 8'(lane)};")
+    if "phy_mac_rxdatak" in sig_names:
+        L.append("        v.phy_mac_rxdatak     = 4'(lane);")
+    if "phy_mac_rxdatavalid" in sig_names:
+        L.append("        v.phy_mac_rxdatavalid = 1'b1;")
+    if "phy_mac_rxelecidle" in sig_names:
+        L.append(
+            "        v.phy_mac_rxelecidle      = 1'b0;  // non-idle (may differ from the signal's safe state)"
+        )
+    if "phy_mac_rxstandbystatus" in sig_names:
+        L.append(
+            "        v.phy_mac_rxstandbystatus = 1'b0;  // non-idle (may differ from the signal's safe state)"
+        )
     L.append("        return v;")
     L.append("    endfunction")
     L.append("")
@@ -265,7 +277,8 @@ def gen_tb(cfg, pclk_mode="phy-output", dpr=False):
         )
     L.append(f"        for (int l = 0; l < NL; l++) begin")
     L.append(f"            phy_phy2mac[l] = make_p2m(l);")
-    L.append(f"            phy_phy2mac[l].phy_mac_phystatus = phy_phystatus_stim[l];")
+    if "phy_mac_phystatus" in sig_names:
+        L.append(f"            phy_phy2mac[l].phy_mac_phystatus = phy_phystatus_stim[l];")
     L.append(f"        end")
     L.append("    end")
     L.append("")
@@ -374,7 +387,7 @@ def gen_tb(cfg, pclk_mode="phy-output", dpr=False):
             L.append(f"    }};")
         L.append("")
 
-        if max_pclk_mode:
+        if phy_input_mode:
             # sel_tgt doesn't exist as a group-level signal in this mode --
             # each BBM lane has its own independent seltgt_g{gid}_l{l}, so
             # the monitor is per lane, not per group. Every candidate's own
@@ -591,13 +604,14 @@ def gen_tb(cfg, pclk_mode="phy-output", dpr=False):
     )
     L.append("                end else begin")
     L.append("                    exp_p2m = make_p2m(src_lane);")
-    # make_p2m() alone always leaves phy_mac_phystatus at SAFE_P2M's
-    # static value; the real phy_phy2mac stimulus (see the always_comb
-    # above) overrides it per-lane from phy_phystatus_stim afterwards.
-    # exp_p2m must replicate that same override, or this now-comprehensive
-    # per-field check spuriously fails whenever phy_phystatus_stim[src_lane]
-    # is toggled non-zero during a check_mode() call.
-    L.append("                    exp_p2m.phy_mac_phystatus = phy_phystatus_stim[src_lane];")
+    if "phy_mac_phystatus" in sig_names:
+        # make_p2m() alone always leaves phy_mac_phystatus at SAFE_P2M's
+        # static value; the real phy_phy2mac stimulus (see the always_comb
+        # above) overrides it per-lane from phy_phystatus_stim afterwards.
+        # exp_p2m must replicate that same override, or this now-comprehensive
+        # per-field check spuriously fails whenever phy_phystatus_stim[src_lane]
+        # is toggled non-zero during a check_mode() call.
+        L.append("                    exp_p2m.phy_mac_phystatus = phy_phystatus_stim[src_lane];")
     L.append("                    chk_p2m(got, exp_p2m,")
     L.append(
         '                        $sformatf("mode%0d ctrl%0d[%0d]: expected lane%0d data", m, c, p, src_lane));'
@@ -716,17 +730,17 @@ def main():
     )
     ap.add_argument(
         "--pclk-mode",
-        choices=["phy-output", "phy-input-max-pclk"],
-        default="phy-output",
+        choices=["pclk_as_phy_output", "pclk_as_phy_input"],
+        default="pclk_as_phy_output",
         help="Which clock architecture the DUT (pipe_lane_mapper) uses -- "
         "must match whatever --pclk-mode this config set's RTL was (or "
         "will be) generated with (tool/plm_gen_rtl.py), since this "
         "controls which DUT ports the testbench instantiates. "
-        "phy-output (default) -- each PHY lane generates its own PCLK "
+        "pclk_as_phy_output (default) -- each PHY lane generates its own PCLK "
         "(phy_pclk_out); ctrl_pclk is derived from it, glitch-free, and "
         "echoed back as phy_pclk_in; "
-        "phy-input-max-pclk -- each controller has its own external PLL "
-        "clock (max_pclk) and does its own division into pclk[]/rx_clk[] "
+        "pclk_as_phy_input -- each controller has its own external reference "
+        "clock and does its own division into pclk[]/rx_clk[] "
         "ports (no separate ctrl_pclk signal); phy_pclk/rx_clk are "
         "glitch-free-selected per physical lane.",
     )

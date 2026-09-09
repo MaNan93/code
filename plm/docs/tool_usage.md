@@ -132,13 +132,13 @@ controller 一个）展开成一个个 flat 信号端口，方便不想处理 SV
 ### 2.4 `gen_flags.txt`（可选）：固定这套配置集的生成参数
 
 某套配置集如果本身就是为了演示某个非默认参数（比如 `test_maxpclk` 演示
-`--pclk-mode phy-input-max-pclk`），把这个参数写进它自己的
+`--pclk-mode pclk_as_phy_input`），把这个参数写进它自己的
 `configs/<SET>/config/gen_flags.txt`，两个生成器都会自动读取——不需要
 每次手动在命令行加、也不需要为此去改 Makefile，配置集本身就是自包含的。
 
 ```
 # configs/test_maxpclk/config/gen_flags.txt
-pclk-mode = phy-input-max-pclk
+pclk-mode = pclk_as_phy_input
 ```
 
 格式：每行 `key = value`，`key` 就是某个命令行参数去掉前面 `--` 之后的
@@ -165,7 +165,7 @@ python tool/plm_gen_rtl.py --config <SET> [其它参数]
 | 参数 | 默认值 | 说明 |
 |---|---|---|
 | `--config SET` | 无（必填） | 配置集名字或路径。先按 `configs/<SET>/` 找，找不到再当作直接给的路径（相对/绝对都可）；不给这个参数会列出 `configs/` 下已有的配置集名字然后报错退出 |
-| `--pclk-mode {phy-output,phy-input-max-pclk}` | `phy-output` | 选择哪种 PCLK 归属架构；两者互斥，生成的顶层端口/内部信号完全不同。含义见 design_notes.md 2.1 节。**必须和 `plm_gen_tb.py` 用的值一致** |
+| `--pclk-mode {pclk_as_phy_output,pclk_as_phy_input}` | `pclk_as_phy_output` | 选择哪种 PCLK 归属架构；两者互斥，生成的顶层端口/内部信号完全不同。含义见 design_notes.md 2.1 节。**必须和 `plm_gen_tb.py` 用的值一致** |
 | `--sel-mode {sync,comb}` | `sync` | 顶层 `pipe_lane_mapper` 的 `SEL_SYNC` 参数取什么默认值（也就是数据路径上 `pipe_lane_sel_sync` 的 `SYNC`）；`comb` 只在候选 controller 真的共享时钟域时才安全。这只是设置默认值——`SEL_SYNC` 仍然是个普通的 RTL 参数，例化时不改代码也能覆盖。含义见 design_notes.md 2.2 节。只影响 RTL，`plm_gen_tb.py` 没有这个参数 |
 | `--verible-path PATH` | 无 | `verible-verilog-format` 的路径，用来给生成的 `.sv` 文件自动格式化。查找优先级：`--verible-path` 显式指定 > 当前工作目录下同名文件 > `PATH` 环境变量；三处都找不到就跳过格式化（生成物功能不受影响，只是排版保持生成器原样） |
 | `--quiet` | 关闭 | 不打印每个文件的生成日志和配置报告（`Config.report()`），只在出错时输出 |
@@ -184,11 +184,11 @@ python tool/plm_gen_rtl.py --config <SET> [其它参数]
 python tool/plm_gen_rtl.py --config test_quad
 
 # 生成 test_maxpclk 的 RTL——不用加 --pclk-mode，它自己的
-# config/gen_flags.txt 里已经固定了 phy-input-max-pclk（见 2.4 节）
+# config/gen_flags.txt 里已经固定了 pclk_as_phy_input（见 2.4 节）
 python tool/plm_gen_rtl.py --config test_maxpclk
 
-# 命令行显式传参会覆盖 gen_flags.txt，临时切回默认的 phy-output 试一下：
-python tool/plm_gen_rtl.py --config test_maxpclk --pclk-mode phy-output
+# 命令行显式传参会覆盖 gen_flags.txt，临时切回默认的 pclk_as_phy_output 试一下：
+python tool/plm_gen_rtl.py --config test_maxpclk --pclk-mode pclk_as_phy_output
 
 # 切到组合直通的 NOV 同步，且不打印生成日志
 python tool/plm_gen_rtl.py --config test_quad --sel-mode comb --quiet
@@ -206,7 +206,7 @@ python tool/plm_gen_tb.py --config <SET> [其它参数]
 | 参数 | 默认值 | 说明 |
 |---|---|---|
 | `--config SET` | 无（必填） | 同 `plm_gen_rtl.py` 的 `--config`；testbench 固定写到 `<SET>/tb/` |
-| `--pclk-mode {phy-output,phy-input-max-pclk}` | `phy-output` | 决定 testbench 怎么实例化 DUT（`pipe_lane_mapper`）的端口列表。**必须和这套配置集的 RTL 是用哪个 `--pclk-mode` 生成的一致** |
+| `--pclk-mode {pclk_as_phy_output,pclk_as_phy_input}` | `pclk_as_phy_output` | 决定 testbench 怎么实例化 DUT（`pipe_lane_mapper`）的端口列表。**必须和这套配置集的 RTL 是用哪个 `--pclk-mode` 生成的一致** |
 | `--verible-path PATH` | 无 | 同 `plm_gen_rtl.py` 的 `--verible-path` |
 | `--quiet` | 关闭 | 同 `plm_gen_rtl.py` 的 `--quiet` |
 
@@ -262,7 +262,7 @@ Make on Windows）在把 `@echo` 里的非 ASCII 字符传给 shell 时会出现
 用来临时试一个参数、或者需要所有配置集都统一切换某个参数时用。
 
 ```bash
-make all GENFLAGS="--pclk-mode phy-input-max-pclk"   # 两个工具都收到
+make all GENFLAGS="--pclk-mode pclk_as_phy_input"   # 两个工具都收到
 make all RTL_GENFLAGS="--sel-mode comb"               # 只有 plm_gen_rtl.py 收到
 ```
 
@@ -273,7 +273,7 @@ make all RTL_GENFLAGS="--sel-mode comb"               # 只有 plm_gen_rtl.py �
 | `TB_GENFLAGS` | 只传给 `plm_gen_tb.py` |
 
 如果是某个配置集自己固定要用的参数（比如 `test_maxpclk` 一直都要用
-`--pclk-mode phy-input-max-pclk`），不要写在这里——那种情况写进那套
+`--pclk-mode pclk_as_phy_input`），不要写在这里——那种情况写进那套
 配置集自己的 `config/gen_flags.txt`（见 2.4 节），配置集自己带着走，
 不需要碰 `Makefile`。这里的全局变量地位更高：命令行传的值会覆盖任何
 配置集自带的 `gen_flags.txt`。

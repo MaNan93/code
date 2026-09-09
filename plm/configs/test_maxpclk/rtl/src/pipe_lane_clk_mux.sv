@@ -1,4 +1,4 @@
-// PIPE lane mapper clock-mux submodule (PCLK as PHY input, max_pclk scheme).
+// PIPE lane mapper clock-mux submodule (PCLK as PHY input scheme).
 // Contains: glitch-free phy_pclk switch, glitch-free rx_clk switch.
 // No ctrl_pclk here -- see pipe_lane_sel_gen, which uses {c}_pclk[] directly.
 // The reset mux is in pipe_lane_rst_mux, the data muxes are in

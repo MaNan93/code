@@ -236,7 +236,7 @@ def gen_decoder(cfg, dpr=False):
 # ---------------------------------------------------------------- select-generation submodule
 
 
-def gen_sel_gen(cfg, sel_mode="sync", pclk_mode="phy-output", dpr=False):
+def gen_sel_gen(cfg, sel_mode="sync", pclk_mode="pclk_as_phy_output", dpr=False):
     """Select-generation submodule: mode decoding + group pipe_lane_sel_sync, produces
     sel_tgt and dec_tgt.
 
@@ -250,14 +250,15 @@ def gen_sel_gen(cfg, sel_mode="sync", pclk_mode="phy-output", dpr=False):
       sel_tgt -- the final, effective selection after pipe_lane_sel_sync
                  synchronization, non-overlap; used by clk_mux's
                  feedback clock mux and data_m2p/data_p2m. Only produced
-                 in pclk_mode="phy-output" -- see below for max_pclk.
+                 in pclk_mode="pclk_as_phy_output" -- see below for
+                 pclk_mode="pclk_as_phy_input".
       dec_tgt -- the decoder's raw (unsynchronized) target, purely
                  combinational and changes immediately with mode; used by
                  rst_mux, so the new owner's reset control can follow mode
                  right away without waiting for pipe_lane_sel_sync to finish
                  cross-domain synchronization and the NOV break window.
 
-    In pclk_mode="phy-input-max-pclk", sel_tgt doesn't exist as a single
+    In pclk_mode="pclk_as_phy_input", sel_tgt doesn't exist as a single
     per-group signal: {c.lname}_pclk[] is per-PORT, not per-controller (see
     below), so the same "one clock per candidate" shortcut that was wrong
     for phy_pclk/rx_clk is also wrong here -- a group's sel_tgt gates a
@@ -274,11 +275,11 @@ def gen_sel_gen(cfg, sel_mode="sync", pclk_mode="phy-output", dpr=False):
     pipe_lane_clk_mux's glitch-free controller pclk switching -- this
     module doesn't consume it itself, just passes it through.
 
-    In pclk_mode="phy-input-max-pclk", this module also houses every
+    In pclk_mode="pclk_as_phy_input", this module also houses every
     CDC synchronizer in the design, including ones whose output isn't the
     data-path sel_tgt: rxclk_en_g{gid}_l{l} synchronizes dec_tgt.gN into
     each BBM lane's own rx_clk[l] domain (rx_clk is PHY's per-lane
-    recovered clock, with no fixed phase relation to ctrl_pclk/max_pclk),
+    recovered clock, with no fixed phase relation to ctrl_pclk),
     for pipe_lane_clk_mux's rx_clk routing -- rx_clk flows PHY->controller,
     it is not looped back to the PHY the way phy_pclk is, so it is not
     "feedback" -- pipe_lane_clk_mux
@@ -311,7 +312,7 @@ def gen_sel_gen(cfg, sel_mode="sync", pclk_mode="phy-output", dpr=False):
     off (see design_notes.md 4.1).
 
     This module needs a per-controller working-clock reference as input for
-    pipe_lane_sel_sync's branch_clk. In pclk_mode="phy-output", that's
+    pipe_lane_sel_sync's branch_clk. In pclk_mode="pclk_as_phy_output", that's
     ctrl_pclk (pipe_lane_clk_mux's output) -- so the two submodules form a
     ring connection at the top level, but there's no combinational loop:
     ctrl_pclk only depends on the decoder's pclk_tgt_cX (passed through by
@@ -319,9 +320,9 @@ def gen_sel_gen(cfg, sel_mode="sync", pclk_mode="phy-output", dpr=False):
     produces; and sel_tgt's dependency on ctrl_pclk goes entirely through
     flops inside pipe_lane_sel_sync, so there's no combinational feedback.
 
-    In pclk_mode="phy-input-max-pclk", there's no separate ctrl_pclk signal
+    In pclk_mode="pclk_as_phy_input", there's no separate ctrl_pclk signal
     at all: the controller already has its own working clock (it generated
-    max_pclk's division itself), so this module takes each controller's
+    the division itself), so this module takes each controller's
     {c.lname}_pclk[] directly and uses bit 0 as that reference, instead of
     going through pipe_lane_clk_mux for a redundant single-bit relabeling.
     """
@@ -331,7 +332,7 @@ def gen_sel_gen(cfg, sel_mode="sync", pclk_mode="phy-output", dpr=False):
     cc = cfg.ctrl_pclk_cands()
     muxed_c = [c for c in sorted(cfg.controllers) if len(cc[c]) > 1]
     sync_lit = "1'b1" if sel_mode == "sync" else "1'b0"
-    max_pclk_mode = pclk_mode == "phy-input-max-pclk"
+    phy_input_mode = pclk_mode == "pclk_as_phy_input"
 
     L = [
         "// PIPE lane mapper select-generation submodule.",
@@ -351,7 +352,7 @@ def gen_sel_gen(cfg, sel_mode="sync", pclk_mode="phy-output", dpr=False):
         "module pipe_lane_sel_gen #(",
     ]
     L.append(f"    parameter int NC = {NC},")
-    if max_pclk_mode or dpr:
+    if phy_input_mode or dpr:
         L.append(f"    parameter int NL = {LC},")
     L.append(
         f"    parameter bit SEL_SYNC = {sync_lit}"
@@ -361,7 +362,7 @@ def gen_sel_gen(cfg, sel_mode="sync", pclk_mode="phy-output", dpr=False):
         ") (",
         f"    input logic [{mode_width(nm)-1}:0] mode,",
     ]
-    if max_pclk_mode:
+    if phy_input_mode:
         for cid in sorted(cfg.controllers):
             c = cfg.controllers[cid]
             L.append(
@@ -371,18 +372,12 @@ def gen_sel_gen(cfg, sel_mode="sync", pclk_mode="phy-output", dpr=False):
     else:
         L.append("    input logic [NC-1:0] ctrl_pclk,")
     L.append("    input logic [NC-1:0] ctrl_rst_n,")
-    if max_pclk_mode:
+    if phy_input_mode:
         L.append("    input logic [NL-1:0] rx_clk,   // PHY's per-lane recovered clock")
     if dpr:
         L.append("    input logic [NL-1:0] v_lane_mask,")
         L.append("    input logic dpr_rst_n,")
-        if max_pclk_mode:
-            L.append(
-                "    input logic [NL-1:0] dpr_pclk,"
-                "   // DPR's own already-divided pclk, one bit per its own (1:1 with PHY lane) port"
-            )
-        else:
-            L.append("    input logic dpr_pclk,   // DPR's own working clock, from clk_mux")
+        L.append("    input logic dpr_pclk,   // DPR's own working clock, from clk_mux")
     # Same as gen_decoder: code and comment are assembled separately, comma
     # goes at the end of the code, before the comment.
     ports = [
@@ -392,7 +387,7 @@ def gen_sel_gen(cfg, sel_mode="sync", pclk_mode="phy-output", dpr=False):
             + (", DPR-combined; used by rst_mux" if dpr else "; used by rst_mux"),
         ),
     ]
-    if not max_pclk_mode:
+    if not phy_input_mode:
         ports.insert(
             0,
             (
@@ -407,7 +402,7 @@ def gen_sel_gen(cfg, sel_mode="sync", pclk_mode="phy-output", dpr=False):
                 f"   // pclk candidate for {cfg.controllers[c].name}, passed through to clk_mux",
             )
         )
-    if max_pclk_mode:
+    if phy_input_mode:
         for g in (cfg.groups if dpr else [g for g in cfg.groups if not g.is_direct]):
             eff_n = g.n + 1 if dpr else g.n
             for l in g.lanes:
@@ -467,7 +462,7 @@ def gen_sel_gen(cfg, sel_mode="sync", pclk_mode="phy-output", dpr=False):
             )
         L.append("")
 
-    if max_pclk_mode:
+    if phy_input_mode:
         L.append("    //------------------------------------------------------------")
         L.append("    // Data-path select: one pipe_lane_sel_sync per BBM LANE (not per group),")
         L.append("    // synchronizing dec_tgt.gN into that lane's owning candidate's own port")
@@ -489,7 +484,7 @@ def gen_sel_gen(cfg, sel_mode="sync", pclk_mode="phy-output", dpr=False):
                 )
                 branch_rst_terms = ", ".join(f"ctrl_rst_n[{c}]" for c in reversed(g.cands))
                 if dpr:
-                    branch_clk_terms = f"dpr_pclk[{l}], " + branch_clk_terms
+                    branch_clk_terms = "dpr_pclk, " + branch_clk_terms
                     branch_rst_terms = "dpr_rst_n, " + branch_rst_terms
                 L.append(f"    pipe_lane_sel_sync #(.N({n}), .SYNC(SEL_SYNC)) u_seltgt_sel_sync_g{g.gid}_l{l} (")
                 L.append(f"        .branch_clk   ({{{branch_clk_terms}}}),")
@@ -522,11 +517,11 @@ def gen_sel_gen(cfg, sel_mode="sync", pclk_mode="phy-output", dpr=False):
             L.append(f"    );")
             L.append("")
 
-    if max_pclk_mode:
+    if phy_input_mode:
         L.append("    //------------------------------------------------------------")
         L.append("    // rx_clk routing (PHY->controller, not feedback): one pipe_lane_sel_sync per BBM lane, synchronizing")
         L.append("    // dec_tgt.gN into that lane's own rx_clk[l] domain (rx_clk has no fixed phase")
-        L.append("    // relation to {c}_pclk/max_pclk, unlike the rest of the PIPE-level signals).")
+        L.append("    // relation to {c}_pclk, unlike the rest of the PIPE-level signals).")
         L.append("    // clk_mux does the final pipe_lane_clk_gate + assign with this enable.")
         L.append("    //------------------------------------------------------------")
         for g in cfg.groups:
@@ -553,23 +548,23 @@ def gen_sel_gen(cfg, sel_mode="sync", pclk_mode="phy-output", dpr=False):
 # ---------------------------------------------------------------- clock-mux submodule
 
 
-def gen_clk_mux(cfg, pclk_mode="phy-output", dpr=False):
+def gen_clk_mux(cfg, pclk_mode="pclk_as_phy_output", dpr=False):
     """Controller pclk generation + feedback clock mux.
 
     Two mutually exclusive clock architectures, selected by pclk_mode:
 
-    "phy-output" (default): each PHY lane generates its own PCLK
+    "pclk_as_phy_output" (default): each PHY lane generates its own PCLK
     (phy_pclk_out); this module derives ctrl_pclk from it and echoes the
     result back as phy_pclk_in. See gen_clk_mux_phy_output() below.
 
-    "phy-input-max-pclk": each controller has its own external PLL clock
-    (max_pclk) and does its own division into a per-port pclk[] that this
+    "pclk_as_phy_input": each controller has its own external reference
+    clock and does its own division into a per-port pclk[] that this
     module glitch-free-selects into phy_pclk; PHY's per-lane recovered
     rx_clk is routed the other way into each controller's own rx_clk[].
-    See gen_clk_mux_max_pclk() below.
+    See gen_clk_mux_phy_input() below.
     """
-    if pclk_mode == "phy-input-max-pclk":
-        return gen_clk_mux_max_pclk(cfg, dpr)
+    if pclk_mode == "pclk_as_phy_input":
+        return gen_clk_mux_phy_input(cfg, dpr)
     return gen_clk_mux_phy_output(cfg, dpr)
 
 
@@ -771,10 +766,10 @@ def gen_clk_mux_phy_output(cfg, dpr=False):
     return "\n".join(L) + "\n"
 
 
-def gen_clk_mux_max_pclk(cfg, dpr=False):
-    """Controller pclk generation + feedback clock mux ("PCLK as PHY input, max_pclk").
+def gen_clk_mux_phy_input(cfg, dpr=False):
+    """Controller pclk generation + feedback clock mux ("PCLK as PHY input").
 
-    Each controller owns an external PLL clock (max_pclk) and does its own
+    Each controller owns its own external reference clock and does its own
     division outside this generator's scope, presenting the divided result
     as its own pclk[] (one bit per its own port, same width/routing
     convention as {c.lname}_mac2phy). There's no separate ctrl_pclk signal
@@ -782,7 +777,7 @@ def gen_clk_mux_max_pclk(cfg, dpr=False):
     clock (it generated the division itself), so pipe_lane_sel_gen takes
     each controller's {c.lname}_pclk[] directly for its own CDC sync
     reference instead of this module relabeling one bit of it as a
-    dedicated ctrl_pclk output -- unlike the phy-output scheme, where
+    dedicated ctrl_pclk output -- unlike the pclk_as_phy_output scheme, where
     ctrl_pclk is genuinely derived here (from phy_pclk_out) and has to
     flow back out to the controller.
 
@@ -800,8 +795,8 @@ def gen_clk_mux_max_pclk(cfg, dpr=False):
     rx_clk (PHY's per-lane recovered clock) is routed the other direction
     into each controller port's own rx_clk bit. rx_clk[l] is its own
     independent recovered-clock domain (no fixed phase relation to
-    {c.lname}_pclk/max_pclk, unlike the rest of the PIPE-level signals,
-    which all live in {c.lname}_pclk), so this needs its own separate
+    {c.lname}_pclk, unlike the rest of the PIPE-level signals, which all
+    live in {c.lname}_pclk), so this needs its own separate
     synchronization into rx_clk[l]'s own domain instead -- that's the one
     other domain family dec_tgt gets synchronized into (rxclk_en_g{gid}_l{l},
     also produced by pipe_lane_sel_gen, every CDC synchronizer in the
@@ -811,7 +806,7 @@ def gen_clk_mux_max_pclk(cfg, dpr=False):
     LC, NC = cfg.lane_count, cfg.num_ctrl
 
     L = [
-        "// PIPE lane mapper clock-mux submodule (PCLK as PHY input, max_pclk scheme).",
+        "// PIPE lane mapper clock-mux submodule (PCLK as PHY input scheme).",
         "// Contains: glitch-free phy_pclk switch, glitch-free rx_clk switch.",
         "// No ctrl_pclk here -- see pipe_lane_sel_gen, which uses {c}_pclk[] directly.",
         "// The reset mux is in pipe_lane_rst_mux, the data muxes are in",
@@ -832,12 +827,11 @@ def gen_clk_mux_max_pclk(cfg, dpr=False):
             f"    input logic [{c.max_width-1}:0] {c.lname}_pclk,"
             f"   // {c.name}'s own already-divided pclk, one bit per its own port"
         )
-    for g in cfg.groups:
-        if g.is_direct:
-            continue
+    for g in (cfg.groups if dpr else [g for g in cfg.groups if not g.is_direct]):
+        eff_n = g.n + 1 if dpr else g.n
         for l in g.lanes:
             L.append(
-                f"    input logic [{g.n-1}:0] seltgt_g{g.gid}_l{l},"
+                f"    input logic [{eff_n-1}:0] seltgt_g{g.gid}_l{l},"
                 f"   // dec_tgt.g{g.gid} already synchronized into this lane's owning candidate's own port clock, from sel_gen -- also gates phy_pclk"
             )
     for g in cfg.groups:
@@ -851,13 +845,9 @@ def gen_clk_mux_max_pclk(cfg, dpr=False):
     if dpr:
         L.append("    input logic [NL-1:0] v_lane_mask,")
         L.append("    input logic dpr_rst_n,")
-        L.append(
-            "    input logic [NL-1:0] dpr_pclk,"
-            "   // DPR's own already-divided pclk, one bit per its own (1:1 with PHY lane) port"
-        )
     L.append("    output logic [NL-1:0] phy_pclk,")
     if dpr:
-        L.append("    output logic [NL-1:0] dpr_rx_clk,")
+        L.append("    output logic dpr_pclk,   // DPR's own working clock, derived below")
     for cid in sorted(cfg.controllers):
         c = cfg.controllers[cid]
         L.append(f"    output logic [{c.max_width-1}:0] {c.lname}_rx_clk,")
@@ -865,36 +855,43 @@ def gen_clk_mux_max_pclk(cfg, dpr=False):
     L.append(");")
     L.append("")
 
-    # phy_pclk: glitch-free, per physical lane (not per group)
+    # phy_pclk: glitch-free, per physical lane (not per group). This first
+    # computes each lane's REAL-candidates-only glitch-free clock (exactly
+    # what this section already computed pre-DPR) into real_pclk[l] -- with
+    # --dpr, DPR's own working clock is itself derived from these real_pclk[]
+    # values (see below), and the final phy_pclk[l] is a 2-way overlay
+    # between real_pclk[l] and dpr_pclk, reusing sel_gen's already-
+    # synchronized seltgt_gN_lL (its real-candidate bits and its DPR bit are
+    # already mutually exclusive -- one-hot by construction -- so no extra
+    # synchronizer is needed just for this overlay).
     L.append("    //------------------------------------------------------------")
     L.append("    // phy_pclk: glitch-free per-lane select among the owning group's")
-    L.append(
-        "    // candidate controllers' own port-level pclk"
-        + (" (DPR included as an extra candidate)." if dpr else ".")
-    )
+    L.append("    // candidate controllers' own port-level pclk.")
     L.append("    //------------------------------------------------------------")
+    real_pclk_expr = {}  # lane -> SV expression for that lane's real-candidates-only clock
     for g in cfg.groups:
-        if g.is_direct and not dpr:
+        if g.is_direct:
             c = g.cands[0]
             cname = cfg.controllers[c].lname
             m0 = cfg.modes[0]
             for l in g.lanes:
                 cl = cfg.mapping[m0][l][1]
-                L.append(
-                    f"    assign phy_pclk[{l}] = {cname}_pclk[{cl}];"
-                    f"  // G{g.gid} direct to {cfg.controllers[c].name}"
-                )
+                real_pclk_expr[l] = f"{cname}_pclk[{cl}]"
+                if not dpr:
+                    L.append(
+                        f"    assign phy_pclk[{l}] = {real_pclk_expr[l]};"
+                        f"  // G{g.gid} direct to {cfg.controllers[c].name}"
+                    )
             L.append("")
         else:
-            names = ", ".join(cfg.controllers[c].name for c in g.cands) + (", DPR" if dpr else "")
+            names = ", ".join(cfg.controllers[c].name for c in g.cands)
             L.append(f"    // G{g.gid} lane{g.lanes[0]}~{g.lanes[-1]}: {names}, per-lane glitch-free select")
-            n = g.n + 1 if dpr else g.n
             for l in g.lanes:
                 port_of_cand = {}
                 for c in g.cands:
                     m = next(mm for mm in cfg.modes if g.owners[mm] == c)
                     port_of_cand[c] = cfg.mapping[m][l][1]
-                L.append(f"    logic [{n-1}:0] pclk_gated_g{g.gid}_l{l};")
+                L.append(f"    logic [{g.n-1}:0] pclk_gated_g{g.gid}_l{l};")
                 for i, c in enumerate(g.cands):
                     L.append(
                         f"    pipe_lane_clk_gate u_pclk_gate_g{g.gid}_l{l}_b{i} ("
@@ -903,31 +900,89 @@ def gen_clk_mux_max_pclk(cfg, dpr=False):
                         f".test_en(test_en), .clk_out(pclk_gated_g{g.gid}_l{l}[{i}]));"
                     )
                 if dpr:
+                    L.append(f"    logic real_pclk_g{g.gid}_l{l};")
                     L.append(
-                        f"    pipe_lane_clk_gate u_pclk_gate_g{g.gid}_l{l}_dpr ("
-                        f".clk_in(dpr_pclk[{l}]), .en(seltgt_g{g.gid}_l{l}[{g.n}]), "
-                        f".test_en(test_en), .clk_out(pclk_gated_g{g.gid}_l{l}[{g.n}]));"
+                        f"    pipe_lane_clk_or #(.N({g.n})) u_pclk_or_g{g.gid}_l{l} "
+                        f"(.clk_in(pclk_gated_g{g.gid}_l{l}), .clk_out(real_pclk_g{g.gid}_l{l}));"
                     )
-                L.append(
-                    f"    pipe_lane_clk_or #(.N({n})) u_pclk_or_g{g.gid}_l{l} "
-                    f"(.clk_in(pclk_gated_g{g.gid}_l{l}), .clk_out(phy_pclk[{l}]));"
-                )
+                    real_pclk_expr[l] = f"real_pclk_g{g.gid}_l{l}"
+                else:
+                    L.append(
+                        f"    pipe_lane_clk_or #(.N({g.n})) u_pclk_or_g{g.gid}_l{l} "
+                        f"(.clk_in(pclk_gated_g{g.gid}_l{l}), .clk_out(phy_pclk[{l}]));"
+                    )
                 L.append("")
 
     if dpr:
+        default_lane = cfg.groups[-1].lanes[0]  # last group's lowest lane
         L.append("    //------------------------------------------------------------")
-        L.append("    // DPR -> rx_clk: mask-gated pass-through of PHY's recovered clock. DPR's")
-        L.append("    // own observation-only output, not part of the group NOV above.")
+        L.append("    // DPR's own working clock: from the lowest-numbered currently-masked")
+        L.append("    // lane's own real-candidates-only clock (real_pclk[] above) -- same")
+        L.append("    // glitch-free multi-candidate select pattern a multi-candidate")
+        L.append("    // controller's own pclk generation uses in pclk_as_phy_output mode,")
+        L.append("    // just with real_pclk[] as candidates instead of phy_pclk_out[].")
+        L.append(f"    // Defaults to lane{default_lane} (last group's lowest lane) when idle.")
         L.append("    //------------------------------------------------------------")
+        L.append("    logic [NL-1:0] real_pclk;")
+        for l in range(LC):
+            L.append(f"    assign real_pclk[{l}] = {real_pclk_expr[l]};")
+        L.append("    logic [NL-1:0] dpr_pclk_tgt;")
+        L.append("    logic [NL-1:0] dpr_pclk_tgt_hold;")
+        L.append("    logic [NL-1:0] dpr_pen;")
+        L.append("    logic [NL-1:0] dpr_pgated;")
+        L.append("")
+        L.append("    // isolate the lowest set bit: v_lane_mask & (-v_lane_mask)")
+        L.append("    assign dpr_pclk_tgt = v_lane_mask & (~v_lane_mask + 1'b1);")
+        L.append("")
+        L.append(f"    always_ff @(posedge real_pclk[{default_lane}] or negedge dpr_rst_n)")
+        L.append(
+            f"        if (!dpr_rst_n) dpr_pclk_tgt_hold <= "
+            f"{LC}'b{1 << default_lane:0{LC}b};   // lane{default_lane}"
+        )
+        L.append("        else if (|dpr_pclk_tgt) dpr_pclk_tgt_hold <= dpr_pclk_tgt;")
+        L.append("")
+        L.append("    pipe_lane_sel_sync #(.N(NL), .SYNC(1'b1)) u_dpr_pclk_sel (")
+        L.append("        .branch_clk   (real_pclk),")
+        L.append("        .branch_rst_n ({NL{dpr_rst_n}}),")
+        L.append("        .tgt          (dpr_pclk_tgt_hold),")
+        L.append("        .en           (dpr_pen)")
+        L.append("    );")
         for l in range(LC):
             L.append(
-                f"    pipe_lane_clk_gate u_dpr_rxclk_gate_l{l} (.clk_in(rx_clk[{l}]), "
-                f".en(v_lane_mask[{l}]), .test_en(test_en), .clk_out(dpr_rx_clk[{l}]));"
+                f"    pipe_lane_clk_gate u_dpr_pclk_gate_l{l} (.clk_in(real_pclk[{l}]), "
+                f".en(dpr_pen[{l}]), .test_en(test_en), .clk_out(dpr_pgated[{l}]));"
             )
+        L.append(
+            "    pipe_lane_clk_or #(.N(NL)) u_dpr_pclk_or (.clk_in(dpr_pgated), .clk_out(dpr_pclk));"
+        )
         L.append("")
 
+        L.append("    //------------------------------------------------------------")
+        L.append("    // Final phy_pclk: real_pclk[l] (branch 0) vs dpr_pclk (branch 1),")
+        L.append("    // reusing sel_gen's already-synchronized seltgt_gN_lL directly --")
+        L.append("    // no separate synchronizer needed for this overlay.")
+        L.append("    //------------------------------------------------------------")
+        for g in cfg.groups:
+            for l in g.lanes:
+                L.append(f"    logic [1:0] dpr_pclk_ovl_l{l};")
+                L.append(
+                    f"    pipe_lane_clk_gate u_dpr_pclk_ovl_gate_l{l}_b0 (.clk_in({real_pclk_expr[l]}), "
+                    f".en(|seltgt_g{g.gid}_l{l}[{g.n-1}:0]), .test_en(test_en), "
+                    f".clk_out(dpr_pclk_ovl_l{l}[0]));"
+                )
+                L.append(
+                    f"    pipe_lane_clk_gate u_dpr_pclk_ovl_gate_l{l}_b1 (.clk_in(dpr_pclk), "
+                    f".en(seltgt_g{g.gid}_l{l}[{g.n}]), .test_en(test_en), "
+                    f".clk_out(dpr_pclk_ovl_l{l}[1]));"
+                )
+                L.append(
+                    f"    pipe_lane_clk_or #(.N(2)) u_dpr_pclk_ovl_or_l{l} "
+                    f"(.clk_in(dpr_pclk_ovl_l{l}), .clk_out(phy_pclk[{l}]));"
+                )
+                L.append("")
+
     # rx_clk: glitch-free, per physical lane. rx_clk[l] is its own recovered
-    # clock domain (no fixed phase relation to ctrl_pclk/max_pclk or to any
+    # clock domain (no fixed phase relation to ctrl_pclk or to any
     # other lane), so switching which candidate currently receives it needs
     # dec_tgt synchronized into rx_clk[l]'s own domain -- that synchronizer
     # (rxclk_en_g{gid}_l{l}) lives in pipe_lane_sel_gen, passed in here as
@@ -1052,10 +1107,10 @@ def gen_rst_mux(cfg, dpr=False):
 # ---------------------------------------------------------------- MAC->PHY data
 
 
-def gen_data_m2p(cfg, pclk_mode="phy-output", dpr=False):
+def gen_data_m2p(cfg, pclk_mode="pclk_as_phy_output", dpr=False):
     """mac2phy-direction data mux.
 
-    In pclk_mode="phy-input-max-pclk", each pipe_lane_data_mux's .sel comes
+    In pclk_mode="pclk_as_phy_input", each pipe_lane_data_mux's .sel comes
     from a per-lane seltgt_g{gid}_l{l} input instead of the group-shared
     sel_tgt -- see gen_sel_gen()'s docstring for why a group-shared select
     is the wrong domain once {c.lname}_pclk is per-port.
@@ -1066,7 +1121,7 @@ def gen_data_m2p(cfg, pclk_mode="phy-output", dpr=False):
     DPR existed.
     """
     LC = cfg.lane_count
-    max_pclk_mode = pclk_mode == "phy-input-max-pclk"
+    phy_input_mode = pclk_mode == "pclk_as_phy_input"
     L = [
         "// PIPE lane mapper MAC->PHY data mux.",
         "// pipe_lane_data_mux performs polarity normalization internally; output is SAFE_M2P when sel is all-zero.",
@@ -1076,7 +1131,7 @@ def gen_data_m2p(cfg, pclk_mode="phy-output", dpr=False):
         f"    parameter int NL = {LC}",
         ") (",
     ]
-    if max_pclk_mode:
+    if phy_input_mode:
         for g in (cfg.groups if dpr else [g for g in cfg.groups if not g.is_direct]):
             eff_n = g.n + 1 if dpr else g.n
             for l in g.lanes:
@@ -1114,7 +1169,7 @@ def gen_data_m2p(cfg, pclk_mode="phy-output", dpr=False):
                 L.append(
                     f"    pipe_lane_data_mux #(.WIDTH(MAC2PHY_W), " f".N({n})) u_m2p_l{l} ("
                 )
-                sel_expr = f"seltgt_g{g.gid}_l{l}" if max_pclk_mode else f"sel_tgt.g{g.gid}"
+                sel_expr = f"seltgt_g{g.gid}_l{l}" if phy_input_mode else f"sel_tgt.g{g.gid}"
                 L.append(f"        .sel  ({sel_expr}),")
                 L.append(f"        .din  ({{" + ", ".join(reversed(srcs)) + "}),")
                 L.append(f"        .safe (SAFE_M2P),")
@@ -1128,10 +1183,10 @@ def gen_data_m2p(cfg, pclk_mode="phy-output", dpr=False):
 # ---------------------------------------------------------------- PHY->MAC data
 
 
-def gen_data_p2m(cfg, pclk_mode="phy-output", dpr=False):
+def gen_data_p2m(cfg, pclk_mode="pclk_as_phy_output", dpr=False):
     """phy2mac-direction data mux (converges by controller port).
 
-    In pclk_mode="phy-input-max-pclk", there's no single group-shared select
+    In pclk_mode="pclk_as_phy_input", there's no single group-shared select
     to use per port: a converging port's candidates can each own a
     DIFFERENT physical lane within the group (each with its own per-lane
     seltgt_g{gid}_l{l}), so this mux's .sel is assembled bit-by-bit, one
@@ -1148,7 +1203,7 @@ def gen_data_p2m(cfg, pclk_mode="phy-output", dpr=False):
     contention needing pipe_lane_sel_sync here).
     """
     LC = cfg.lane_count
-    max_pclk_mode = pclk_mode == "phy-input-max-pclk"
+    phy_input_mode = pclk_mode == "pclk_as_phy_input"
     p2m_sigs_all = [s for s in cfg.signals if not s.is_m2p]
     L = [
         "// PIPE lane mapper PHY->MAC data mux (converges by controller port).",
@@ -1159,7 +1214,7 @@ def gen_data_p2m(cfg, pclk_mode="phy-output", dpr=False):
         f"    parameter int NL = {LC}",
         ") (",
     ]
-    if max_pclk_mode:
+    if phy_input_mode:
         for g in cfg.groups:
             if g.is_direct:
                 continue
@@ -1244,7 +1299,7 @@ def gen_data_p2m(cfg, pclk_mode="phy-output", dpr=False):
                 f"    pipe_lane_data_mux #(.WIDTH(PHY2MAC_W), "
                 f".N({g.n})) u_p2m_{c.lname}_{cl} ("
             )
-            if max_pclk_mode:
+            if phy_input_mode:
                 sel_expr = "{" + ", ".join(reversed(sel_bits)) + "}"
             elif dpr:
                 # sel_tgt.g{gid} is g.n+1 bits wide with --dpr (DPR's own bit
@@ -1290,16 +1345,16 @@ def gen_data_p2m(cfg, pclk_mode="phy-output", dpr=False):
 # ---------------------------------------------------------------- top level
 
 
-def gen_top(cfg, pclk_mode="phy-output", sel_mode="sync", dpr=False):
+def gen_top(cfg, pclk_mode="pclk_as_phy_output", sel_mode="sync", dpr=False):
     nm = len(cfg.modes)
     LC, NC = cfg.lane_count, cfg.num_ctrl
-    max_pclk_mode = pclk_mode == "phy-input-max-pclk"
+    phy_input_mode = pclk_mode == "pclk_as_phy_input"
     sync_lit = "1'b1" if sel_mode == "sync" else "1'b0"
 
     L = ["// PIPE lane mapper top level."]
     L.append("//")
     L.append("// Pure instantiation layer:")
-    if max_pclk_mode:
+    if phy_input_mode:
         L.append(
             "//   pipe_lane_sel_gen  -- mode decoding + per-lane pipe_lane_sel_sync, produces"
         )
@@ -1335,7 +1390,7 @@ def gen_top(cfg, pclk_mode="phy-output", sel_mode="sync", dpr=False):
         "   // pipe_lane_sel_gen's data-path pipe_lane_sel_sync SYNC, see there"
     )
     L.append(") (")
-    if max_pclk_mode:
+    if phy_input_mode:
         L.append("    input logic test_en,")
         L.append(
             "    input logic [NC-1:0] ctrl_rst_n,   // one per controller, already synchronized externally"
@@ -1364,18 +1419,14 @@ def gen_top(cfg, pclk_mode="phy-output", sel_mode="sync", dpr=False):
         L.append("    input logic dpr_rst_n,")
         L.append("    input mac2phy_lane_t [NL-1:0] dpr_mac2phy,")
         L.append("    output phy2mac_lane_t [NL-1:0] dpr_phy2mac,")
-        if max_pclk_mode:
-            L.append("    input logic [NL-1:0] dpr_pclk,")
-            L.append("    output logic [NL-1:0] dpr_rx_clk,")
-        else:
-            L.append("    output logic dpr_pclk,")
+        L.append("    output logic dpr_pclk,   // DPR's own working clock, so external logic can sync to it")
     L.append(f"    // Controller side. Each controller's ports are declared at its own real max_width.")
     for cid in sorted(cfg.controllers):
         c = cfg.controllers[cid]
         L.append(f"    // {c.name} x{c.max_width}")
         L.append(f"    input mac2phy_lane_t [{c.max_width-1}:0] {c.lname}_mac2phy,")
         L.append(f"    output phy2mac_lane_t [{c.max_width-1}:0] {c.lname}_phy2mac,")
-        if max_pclk_mode:
+        if phy_input_mode:
             L.append(f"    input logic [{c.max_width-1}:0] {c.lname}_pclk,")
             L.append(f"    output logic [{c.max_width-1}:0] {c.lname}_rx_clk,")
     L[-1] = L[-1].rstrip(",")
@@ -1386,7 +1437,7 @@ def gen_top(cfg, pclk_mode="phy-output", sel_mode="sync", dpr=False):
     muxed_c = [c for c in sorted(cfg.controllers) if len(cc[c]) > 1]
 
     # ---- internal wiring
-    if not max_pclk_mode:
+    if not phy_input_mode:
         L.append(
             "    lane_sel_t sel_tgt;   // each group's currently effective owner selection (after pipe_lane_sel_sync)"
         )
@@ -1401,7 +1452,7 @@ def gen_top(cfg, pclk_mode="phy-output", sel_mode="sync", dpr=False):
         )
     rxclk_lanes = []
     seltgt_lanes = []
-    if max_pclk_mode:
+    if phy_input_mode:
         for g in (cfg.groups if dpr else [g for g in cfg.groups if not g.is_direct]):
             eff_n = g.n + 1 if dpr else g.n
             for l in g.lanes:
@@ -1429,19 +1480,19 @@ def gen_top(cfg, pclk_mode="phy-output", sel_mode="sync", dpr=False):
     L.append("    //------------------------------------------------------------")
     L.append("    pipe_lane_sel_gen #(")
     L.append("        .NC (NC),")
-    if max_pclk_mode or dpr:
+    if phy_input_mode or dpr:
         L.append("        .NL (NL),")
     L.append("        .SEL_SYNC (SEL_SYNC)")
     L.append("    ) u_sel_gen (")
     L.append("        .mode       (mode),")
-    if max_pclk_mode:
+    if phy_input_mode:
         for cid in sorted(cfg.controllers):
             c = cfg.controllers[cid]
             L.append(f"        .{c.lname}_pclk ({c.lname}_pclk),")
     else:
         L.append("        .ctrl_pclk  (ctrl_pclk),")
     L.append("        .ctrl_rst_n (ctrl_rst_n),")
-    if max_pclk_mode:
+    if phy_input_mode:
         L.append("        .rx_clk     (rx_clk),")
     else:
         L.append("        .sel_tgt    (sel_tgt),")
@@ -1466,7 +1517,7 @@ def gen_top(cfg, pclk_mode="phy-output", sel_mode="sync", dpr=False):
 
     # ---- clock-mux submodule
     L.append("    //------------------------------------------------------------")
-    if max_pclk_mode:
+    if phy_input_mode:
         L.append("    // Clock-mux submodule: glitch-free phy_pclk feedback switching + rx_clk routing")
     else:
         L.append("    // Clock-mux submodule: ctrl_pclk generation + feedback clock mux")
@@ -1475,7 +1526,7 @@ def gen_top(cfg, pclk_mode="phy-output", sel_mode="sync", dpr=False):
     L.append("        .NL (NL),")
     L.append("        .NC   (NC)")
     L.append("    ) u_clk_mux (")
-    if max_pclk_mode:
+    if phy_input_mode:
         L.append("        .test_en      (test_en),")
         L.append("        .ctrl_rst_n   (ctrl_rst_n),")
         L.append("        .rx_clk       (rx_clk),")
@@ -1491,8 +1542,6 @@ def gen_top(cfg, pclk_mode="phy-output", sel_mode="sync", dpr=False):
             L.append("        .dpr_rst_n    (dpr_rst_n),")
             L.append("        .dpr_pclk     (dpr_pclk),")
         L.append("        .phy_pclk     (phy_pclk),")
-        if dpr:
-            L.append("        .dpr_rx_clk   (dpr_rx_clk),")
         for cid in sorted(cfg.controllers):
             c = cfg.controllers[cid]
             L.append(f"        .{c.lname}_rx_clk ({c.lname}_rx_clk),")
@@ -1540,7 +1589,7 @@ def gen_top(cfg, pclk_mode="phy-output", sel_mode="sync", dpr=False):
     L.append("    pipe_lane_data_m2p #(")
     L.append("        .NL (NL)")
     L.append("    ) u_data_m2p (")
-    if max_pclk_mode:
+    if phy_input_mode:
         for gid, l, _n in seltgt_lanes:
             L.append(f"        .seltgt_g{gid}_l{l} (seltgt_g{gid}_l{l}),")
     else:
@@ -1562,8 +1611,17 @@ def gen_top(cfg, pclk_mode="phy-output", sel_mode="sync", dpr=False):
     L.append("    pipe_lane_data_p2m #(")
     L.append("        .NL (NL)")
     L.append("    ) u_data_p2m (")
-    if max_pclk_mode:
+    if phy_input_mode:
+        # Unlike sel_gen/clk_mux/data_m2p, data_p2m's own port list is NOT
+        # widened for --dpr: a real controller's phy2mac convergence never
+        # gains DPR as a candidate (DPR doesn't drive into a real
+        # controller's port), so it still only declares seltgt_gN_lL for
+        # non-direct groups, dpr or not -- wiring the full (dpr-widened)
+        # seltgt_lanes here would connect to ports this module never
+        # declared for a group that's direct absent DPR.
         for gid, l, _n in seltgt_lanes:
+            if cfg.groups[gid].is_direct:
+                continue
             L.append(f"        .seltgt_g{gid}_l{l} (seltgt_g{gid}_l{l}),")
     else:
         L.append("        .sel_tgt      (sel_tgt),")
@@ -1582,7 +1640,7 @@ def gen_top(cfg, pclk_mode="phy-output", sel_mode="sync", dpr=False):
     return "\n".join(L) + "\n"
 
 
-def gen_connection(cfg, pclk_mode="phy-output", dpr=False):
+def gen_connection(cfg, pclk_mode="pclk_as_phy_output", dpr=False):
     """pipe_lane_mapper_connection.sv: a pure struct<->flat bridge around
     pipe_lane_mapper. The mapper's two packed-struct-array ports per side
     (PHY, and one per controller) become individual flat ports here, one
@@ -1605,7 +1663,7 @@ def gen_connection(cfg, pclk_mode="phy-output", dpr=False):
     """
     LC, NC = cfg.lane_count, cfg.num_ctrl
     nm = len(cfg.modes)
-    max_pclk_mode = pclk_mode == "phy-input-max-pclk"
+    phy_input_mode = pclk_mode == "pclk_as_phy_input"
     m2p_sigs = [s for s in cfg.signals if s.is_m2p]
     p2m_sigs = [s for s in cfg.signals if not s.is_m2p]
 
@@ -1625,7 +1683,7 @@ def gen_connection(cfg, pclk_mode="phy-output", dpr=False):
     L.append(f"    parameter int NC = {NC},")
     L.append("    parameter bit SEL_SYNC = 1'b1")
     L.append(") (")
-    if max_pclk_mode:
+    if phy_input_mode:
         L.append("    input logic test_en,")
         L.append("    input logic [NC-1:0] ctrl_rst_n,")
         L.append(f"    input logic [{mode_width(nm)-1}:0] mode,")
@@ -1662,11 +1720,7 @@ def gen_connection(cfg, pclk_mode="phy-output", dpr=False):
                 L.append(f"    output logic [{s.width-1}:0] dpr_{s.name},")
             else:
                 L.append(f"    output logic [{s.width-1}:0] dpr_{s.name} [0:NL-1],")
-        if max_pclk_mode:
-            L.append("    input logic [NL-1:0] dpr_pclk,")
-            L.append("    output logic [NL-1:0] dpr_rx_clk,")
-        else:
-            L.append("    output logic dpr_pclk,")
+        L.append("    output logic dpr_pclk,")
     L.append("    // Controller side. Each controller's ports are declared at its own real max_width.")
     for cid in sorted(cfg.controllers):
         c = cfg.controllers[cid]
@@ -1683,7 +1737,7 @@ def gen_connection(cfg, pclk_mode="phy-output", dpr=False):
                 L.append(f"    output logic [{s.width-1}:0] {c.lname}_{s.name},")
             else:
                 L.append(f"    output logic [{s.width-1}:0] {c.lname}_{s.name} [0:{c.max_width-1}],")
-        if max_pclk_mode:
+        if phy_input_mode:
             L.append(f"    input logic [{c.max_width-1}:0] {c.lname}_pclk,")
             L.append(f"    output logic [{c.max_width-1}:0] {c.lname}_rx_clk,")
     L[-1] = L[-1].rstrip(",")
@@ -1763,7 +1817,7 @@ def gen_connection(cfg, pclk_mode="phy-output", dpr=False):
     L.append("        .NC (NC),")
     L.append("        .SEL_SYNC (SEL_SYNC)")
     L.append("    ) u_pipe_lane_mapper (")
-    if max_pclk_mode:
+    if phy_input_mode:
         L.append("        .test_en      (test_en),")
         L.append("        .ctrl_rst_n   (ctrl_rst_n),")
         L.append("        .mode         (mode),")
@@ -1786,13 +1840,11 @@ def gen_connection(cfg, pclk_mode="phy-output", dpr=False):
         L.append("        .dpr_mac2phy  (w_dpr_mac2phy),")
         L.append("        .dpr_phy2mac  (w_dpr_phy2mac),")
         L.append("        .dpr_pclk     (dpr_pclk),")
-        if max_pclk_mode:
-            L.append("        .dpr_rx_clk   (dpr_rx_clk),")
     for cid in sorted(cfg.controllers):
         c = cfg.controllers[cid]
         L.append(f"        .{c.lname}_mac2phy (w_{c.lname}_mac2phy),")
         L.append(f"        .{c.lname}_phy2mac (w_{c.lname}_phy2mac),")
-        if max_pclk_mode:
+        if phy_input_mode:
             L.append(f"        .{c.lname}_pclk ({c.lname}_pclk),")
             L.append(f"        .{c.lname}_rx_clk ({c.lname}_rx_clk),")
     L[-1] = L[-1].rstrip(",")
@@ -1884,14 +1936,14 @@ def main():
     )
     ap.add_argument(
         "--pclk-mode",
-        choices=["phy-output", "phy-input-max-pclk"],
-        default="phy-output",
+        choices=["pclk_as_phy_output", "pclk_as_phy_input"],
+        default="pclk_as_phy_output",
         help="Which clock architecture pipe_lane_clk_mux / the top level use: "
-        "phy-output (default) -- each PHY lane generates its own PCLK "
+        "pclk_as_phy_output (default) -- each PHY lane generates its own PCLK "
         "(phy_pclk_out); ctrl_pclk is derived from it, glitch-free, and "
         "echoed back as phy_pclk_in; "
-        "phy-input-max-pclk -- each controller has its own external PLL "
-        "clock (max_pclk) and does its own division into pclk[]/rx_clk[] "
+        "pclk_as_phy_input -- each controller has its own external reference "
+        "clock and does its own division into pclk[]/rx_clk[] "
         "ports (no separate ctrl_pclk signal; pipe_lane_sel_gen uses each "
         "candidate's own per-lane port clock directly); phy_pclk is "
         "glitch-free-selected per physical lane from the owning "

@@ -26,13 +26,13 @@
 #
 # 透传额外参数（全局，适用于每一次 make 调用，跨所有配置集）：
 #   GENFLAGS      两个工具都会收到，比如切时钟架构：
-#                   make all GENFLAGS="--pclk-mode phy-input-max-pclk"
+#                   make all GENFLAGS="--pclk-mode pclk_as_phy_input"
 #   RTL_GENFLAGS  只传给 plm_gen_rtl.py，比如切到组合直通的 sel_sync：
 #                   make all RTL_GENFLAGS="--sel-mode comb"
 #   TB_GENFLAGS   只传给 plm_gen_tb.py
 #
 # 某个配置集本身就是为了演示某个非默认 flag 存在的（比如 test_maxpclk 演示
-# --pclk-mode phy-input-max-pclk），这种 flag 不在这里配置——写在那套配置集
+# --pclk-mode pclk_as_phy_input），这种 flag 不在这里配置——写在那套配置集
 # 自己的 configs/<SET>/config/gen_flags.txt 里（跟三个 CSV 放一起，两个
 # Python 工具都会读，各自只认自己认识的 key），这样配置集本身就是自包含的，
 # 不需要为了给它固定一个 flag 而回来改这个 Makefile。上面的 GENFLAGS 系列
@@ -74,7 +74,7 @@ help:
 	@echo ""
 	@echo "Pass-through vars (apply to every config set in this invocation, override"
 	@echo "any config set's own gen_flags.txt):"
-	@echo "  GENFLAGS      goes to both tools, e.g. make all GENFLAGS=\"--pclk-mode phy-input-max-pclk\""
+	@echo "  GENFLAGS      goes to both tools, e.g. make all GENFLAGS=\"--pclk-mode pclk_as_phy_input\""
 	@echo "  RTL_GENFLAGS  only to plm_gen_rtl.py"
 	@echo "  TB_GENFLAGS   only to plm_gen_tb.py"
 	@echo ""

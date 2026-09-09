@@ -71,7 +71,7 @@ module tb_pipe_lane_mapper;
     logic dpr_rst_n = 1'b1;
     mac2phy_lane_t [NL-1:0] dpr_mac2phy = '0;
     phy2mac_lane_t [NL-1:0] dpr_phy2mac;
-    logic dpr_pclk;
+    logic dpr_pclk;   // DPR's own derived working clock, DUT output
 
     pipe_lane_mapper #(
         .NL (NL),

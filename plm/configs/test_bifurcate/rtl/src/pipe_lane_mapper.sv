@@ -22,9 +22,7 @@ module pipe_lane_mapper #(
 ) (
     input logic [NL-1:0] phy_pclk_out,
     input logic test_en,
-    input logic [NC-1:0] ctrl_rst_n,   // one per controller, already synchronized externally
     input logic [1:0] mode,
-    output logic [NC-1:0] ctrl_pclk,
     output logic [NL-1:0] phy_pclk_in,
     output logic [NL-1:0] phy_rst_n,
     // PHY-side PIPE data
@@ -32,19 +30,30 @@ module pipe_lane_mapper #(
     input phy2mac_lane_t [NL-1:0] phy_phy2mac,
     // Controller side. Each controller's ports are declared at its own real max_width.
     // CtrlX16 x16
+    input logic ctrlx16_rst_n,   // already synchronized externally
     input mac2phy_lane_t [15:0] ctrlx16_mac2phy,
     output phy2mac_lane_t [15:0] ctrlx16_phy2mac,
+    output logic ctrlx16_pclk,
     // CtrlX8 x8
+    input logic ctrlx8_rst_n,   // already synchronized externally
     input mac2phy_lane_t [7:0] ctrlx8_mac2phy,
     output phy2mac_lane_t [7:0] ctrlx8_phy2mac,
+    output logic ctrlx8_pclk,
     // CtrlX4a x4
+    input logic ctrlx4a_rst_n,   // already synchronized externally
     input mac2phy_lane_t [3:0] ctrlx4a_mac2phy,
     output phy2mac_lane_t [3:0] ctrlx4a_phy2mac,
+    output logic ctrlx4a_pclk,
     // CtrlX4b x4
+    input logic ctrlx4b_rst_n,   // already synchronized externally
     input mac2phy_lane_t [3:0] ctrlx4b_mac2phy,
-    output phy2mac_lane_t [3:0] ctrlx4b_phy2mac
+    output phy2mac_lane_t [3:0] ctrlx4b_phy2mac,
+    output logic ctrlx4b_pclk
 );
 
+    logic [NC-1:0] ctrl_rst_n;   // reconstructed from each controller's own named port above
+    assign ctrl_rst_n = {ctrlx4b_rst_n, ctrlx4a_rst_n, ctrlx8_rst_n, ctrlx16_rst_n};
+    logic [NC-1:0] ctrl_pclk;   // driven by u_clk_mux below, flattened out to each controller's own named port
     lane_sel_t sel_tgt;   // each group's currently effective owner selection (after pipe_lane_sel_sync)
     lane_sel_t dec_tgt;   // each group's raw decoder selection (unsynchronized), used by rst_mux
 
@@ -76,6 +85,11 @@ module pipe_lane_mapper #(
         .ctrl_pclk    (ctrl_pclk),
         .phy_pclk_in  (phy_pclk_in)
     );
+
+    assign ctrlx16_pclk = ctrl_pclk[0];
+    assign ctrlx8_pclk = ctrl_pclk[1];
+    assign ctrlx4a_pclk = ctrl_pclk[2];
+    assign ctrlx4b_pclk = ctrl_pclk[3];
 
     //------------------------------------------------------------
     // Reset-mux submodule: phy_rst_n selects ctrl_rst_n by current owner

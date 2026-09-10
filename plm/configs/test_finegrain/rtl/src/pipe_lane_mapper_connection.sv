@@ -16,9 +16,7 @@ module pipe_lane_mapper_connection #(
 ) (
     input logic [NL-1:0] phy_pclk_out,
     input logic test_en,
-    input logic [NC-1:0] ctrl_rst_n,
     input logic [1:0] mode,
-    output logic [NC-1:0] ctrl_pclk,
     output logic [NL-1:0] phy_pclk_in,
     output logic [NL-1:0] phy_rst_n,
     // PHY-side PIPE data, flattened -- always per-lane regardless of signal_type
@@ -62,6 +60,7 @@ module pipe_lane_mapper_connection #(
     input logic [7:0] phy_phy_mac_fomfeedback [0:NL-1],
     // Controller side. Each controller's ports are declared at its own real max_width.
     // CtrlAlpha x3
+    input logic ctrlalpha_rst_n,
     input logic [31:0] ctrlalpha_mac_phy_txdata [0:2],
     input logic [3:0] ctrlalpha_mac_phy_txdatak [0:2],
     input logic [0:0] ctrlalpha_mac_phy_txdatavalid [0:2],
@@ -100,7 +99,9 @@ module pipe_lane_mapper_connection #(
     output logic [5:0] ctrlalpha_phy_mac_locallf [0:2],
     output logic [5:0] ctrlalpha_phy_mac_dirfeedback [0:2],
     output logic [7:0] ctrlalpha_phy_mac_fomfeedback [0:2],
+    output logic ctrlalpha_pclk,
     // CtrlBeta x2
+    input logic ctrlbeta_rst_n,
     input logic [31:0] ctrlbeta_mac_phy_txdata [0:1],
     input logic [3:0] ctrlbeta_mac_phy_txdatak [0:1],
     input logic [0:0] ctrlbeta_mac_phy_txdatavalid [0:1],
@@ -139,7 +140,9 @@ module pipe_lane_mapper_connection #(
     output logic [5:0] ctrlbeta_phy_mac_locallf [0:1],
     output logic [5:0] ctrlbeta_phy_mac_dirfeedback [0:1],
     output logic [7:0] ctrlbeta_phy_mac_fomfeedback [0:1],
+    output logic ctrlbeta_pclk,
     // CtrlGamma x1
+    input logic ctrlgamma_rst_n,
     input logic [31:0] ctrlgamma_mac_phy_txdata [0:0],
     input logic [3:0] ctrlgamma_mac_phy_txdatak [0:0],
     input logic [0:0] ctrlgamma_mac_phy_txdatavalid [0:0],
@@ -178,7 +181,9 @@ module pipe_lane_mapper_connection #(
     output logic [5:0] ctrlgamma_phy_mac_locallf [0:0],
     output logic [5:0] ctrlgamma_phy_mac_dirfeedback [0:0],
     output logic [7:0] ctrlgamma_phy_mac_fomfeedback [0:0],
+    output logic ctrlgamma_pclk,
     // CtrlDelta x1
+    input logic ctrldelta_rst_n,
     input logic [31:0] ctrldelta_mac_phy_txdata [0:0],
     input logic [3:0] ctrldelta_mac_phy_txdatak [0:0],
     input logic [0:0] ctrldelta_mac_phy_txdatavalid [0:0],
@@ -217,7 +222,9 @@ module pipe_lane_mapper_connection #(
     output logic [5:0] ctrldelta_phy_mac_locallf [0:0],
     output logic [5:0] ctrldelta_phy_mac_dirfeedback [0:0],
     output logic [7:0] ctrldelta_phy_mac_fomfeedback [0:0],
+    output logic ctrldelta_pclk,
     // CtrlEpsilon x1
+    input logic ctrlepsilon_rst_n,
     input logic [31:0] ctrlepsilon_mac_phy_txdata [0:0],
     input logic [3:0] ctrlepsilon_mac_phy_txdatak [0:0],
     input logic [0:0] ctrlepsilon_mac_phy_txdatavalid [0:0],
@@ -256,7 +263,9 @@ module pipe_lane_mapper_connection #(
     output logic [5:0] ctrlepsilon_phy_mac_locallf [0:0],
     output logic [5:0] ctrlepsilon_phy_mac_dirfeedback [0:0],
     output logic [7:0] ctrlepsilon_phy_mac_fomfeedback [0:0],
+    output logic ctrlepsilon_pclk,
     // CtrlZeta x1
+    input logic ctrlzeta_rst_n,
     input logic [31:0] ctrlzeta_mac_phy_txdata [0:0],
     input logic [3:0] ctrlzeta_mac_phy_txdatak [0:0],
     input logic [0:0] ctrlzeta_mac_phy_txdatavalid [0:0],
@@ -294,7 +303,8 @@ module pipe_lane_mapper_connection #(
     output logic [5:0] ctrlzeta_phy_mac_localfs [0:0],
     output logic [5:0] ctrlzeta_phy_mac_locallf [0:0],
     output logic [5:0] ctrlzeta_phy_mac_dirfeedback [0:0],
-    output logic [7:0] ctrlzeta_phy_mac_fomfeedback [0:0]
+    output logic [7:0] ctrlzeta_phy_mac_fomfeedback [0:0],
+    output logic ctrlzeta_pclk
 );
 
     mac2phy_lane_t [NL-1:0] w_phy_mac2phy;
@@ -644,25 +654,35 @@ module pipe_lane_mapper_connection #(
     ) u_pipe_lane_mapper (
         .phy_pclk_out (phy_pclk_out),
         .test_en      (test_en),
-        .ctrl_rst_n   (ctrl_rst_n),
         .mode         (mode),
-        .ctrl_pclk    (ctrl_pclk),
         .phy_pclk_in  (phy_pclk_in),
         .phy_rst_n    (phy_rst_n),
         .phy_mac2phy  (w_phy_mac2phy),
         .phy_phy2mac  (w_phy_phy2mac),
+        .ctrlalpha_rst_n   (ctrlalpha_rst_n),
         .ctrlalpha_mac2phy (w_ctrlalpha_mac2phy),
         .ctrlalpha_phy2mac (w_ctrlalpha_phy2mac),
+        .ctrlalpha_pclk (ctrlalpha_pclk),
+        .ctrlbeta_rst_n   (ctrlbeta_rst_n),
         .ctrlbeta_mac2phy (w_ctrlbeta_mac2phy),
         .ctrlbeta_phy2mac (w_ctrlbeta_phy2mac),
+        .ctrlbeta_pclk (ctrlbeta_pclk),
+        .ctrlgamma_rst_n   (ctrlgamma_rst_n),
         .ctrlgamma_mac2phy (w_ctrlgamma_mac2phy),
         .ctrlgamma_phy2mac (w_ctrlgamma_phy2mac),
+        .ctrlgamma_pclk (ctrlgamma_pclk),
+        .ctrldelta_rst_n   (ctrldelta_rst_n),
         .ctrldelta_mac2phy (w_ctrldelta_mac2phy),
         .ctrldelta_phy2mac (w_ctrldelta_phy2mac),
+        .ctrldelta_pclk (ctrldelta_pclk),
+        .ctrlepsilon_rst_n   (ctrlepsilon_rst_n),
         .ctrlepsilon_mac2phy (w_ctrlepsilon_mac2phy),
         .ctrlepsilon_phy2mac (w_ctrlepsilon_phy2mac),
+        .ctrlepsilon_pclk (ctrlepsilon_pclk),
+        .ctrlzeta_rst_n   (ctrlzeta_rst_n),
         .ctrlzeta_mac2phy (w_ctrlzeta_mac2phy),
-        .ctrlzeta_phy2mac (w_ctrlzeta_phy2mac)
+        .ctrlzeta_phy2mac (w_ctrlzeta_phy2mac),
+        .ctrlzeta_pclk (ctrlzeta_pclk)
     );
 
 endmodule

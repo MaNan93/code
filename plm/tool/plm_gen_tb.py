@@ -32,6 +32,7 @@ from plm_common import (  # noqa: E402
     load_set_flags,
     mode_width,
     resolve_set,
+    validate_arch,
 )
 
 
@@ -62,11 +63,12 @@ def gen_tb(cfg, pclk_mode="pclk_as_phy_output", dpr=False):
     # Give each lane (or, in pclk_as_phy_input mode, each controller) a
     # different clock period + phase offset, to exercise asynchronous CDC. Period
     # range 3..15ns; SETTLE is the slowest period * 20 (>=3 sync stages
-    # plus hold margin).
+    # plus hold margin), floored at 2us so each mode gets a comfortably
+    # long, easy-to-read window between transitions.
     periods = [3 + (l % 7) * 2 for l in range(LC)]
     ctrl_periods = [3 + (c % 7) * 2 for c in range(NC)]
     lane_periods = [5 + (l % 7) * 2 for l in range(LC)]  # rx_clk, offset from ctrl_periods' phase
-    settle = max(ctrl_periods) * 20 if phy_input_mode else max(periods) * 20
+    settle = max(2000, (max(ctrl_periods) if phy_input_mode else max(periods)) * 20)
 
     L = [
         "`timescale 1ns/1ps",
@@ -153,11 +155,13 @@ def gen_tb(cfg, pclk_mode="pclk_as_phy_output", dpr=False):
     L.append("    //------------------------------------------------------------ DUT IO")
     L.append("    logic [NL-1:0]      phy_phystatus_stim = '0;")
     L.append("    logic                       test_en = 1'b0;")
+    # ctrl_rst_n stays one packed stimulus vector here (indexed by ctrl id --
+    # convenient for the reset-pulse loop below), but the DUT's own ports
+    # are per-controller named signals (ctrla_rst_n, ...) now -- see the
+    # DUT instance below, which wires ctrl_rst_n[cid] to each one.
     L.append("    logic [NC-1:0]        ctrl_rst_n = '0;")
     L.append(f"    logic [{mode_width(nm)-1}:0] mode = '0;")
     L.append("")
-    if not phy_input_mode:
-        L.append("    logic [NC-1:0]        ctrl_pclk;")
     L.append(f"    logic [NL-1:0]      {'phy_pclk' if phy_input_mode else 'phy_pclk_in'};")
     L.append("    logic [NL-1:0]      phy_rst_n;")
     L.append("")
@@ -167,6 +171,8 @@ def gen_tb(cfg, pclk_mode="pclk_as_phy_output", dpr=False):
     for c in ctrls:
         L.append(f"    mac2phy_lane_t [{c.max_width-1}:0] {c.lname}_mac2phy;")
         L.append(f"    phy2mac_lane_t [{c.max_width-1}:0] {c.lname}_phy2mac;")
+        if not phy_input_mode:
+            L.append(f"    logic {c.lname}_pclk;   // {c.name}'s own derived working clock, DUT output")
     L.append("")
 
     if dpr:
@@ -186,7 +192,6 @@ def gen_tb(cfg, pclk_mode="pclk_as_phy_output", dpr=False):
     L.append("    ) dut (")
     if phy_input_mode:
         L.append("        .test_en        (test_en),")
-        L.append("        .ctrl_rst_n     (ctrl_rst_n),")
         L.append("        .mode           (mode),")
         L.append("        .rx_clk         (rx_clk),")
         L.append("        .phy_pclk       (phy_pclk),")
@@ -200,6 +205,7 @@ def gen_tb(cfg, pclk_mode="pclk_as_phy_output", dpr=False):
             L.append("        .dpr_phy2mac    (dpr_phy2mac),")
             L.append("        .dpr_pclk       (dpr_pclk),")
         for c in ctrls:
+            L.append(f"        .{c.lname}_rst_n   (ctrl_rst_n[{c.id}]),")
             L.append(f"        .{c.lname}_mac2phy ({c.lname}_mac2phy),")
             L.append(f"        .{c.lname}_phy2mac ({c.lname}_phy2mac),")
             L.append(f"        .{c.lname}_pclk    ({c.lname}_pclk),")
@@ -207,9 +213,7 @@ def gen_tb(cfg, pclk_mode="pclk_as_phy_output", dpr=False):
     else:
         L.append("        .phy_pclk_out   (phy_pclk_out),")
         L.append("        .test_en        (test_en),")
-        L.append("        .ctrl_rst_n     (ctrl_rst_n),")
         L.append("        .mode           (mode),")
-        L.append("        .ctrl_pclk      (ctrl_pclk),")
         L.append("        .phy_pclk_in    (phy_pclk_in),")
         L.append("        .phy_rst_n      (phy_rst_n),")
         L.append("        .phy_mac2phy    (phy_mac2phy),")
@@ -221,8 +225,10 @@ def gen_tb(cfg, pclk_mode="pclk_as_phy_output", dpr=False):
             L.append("        .dpr_phy2mac    (dpr_phy2mac),")
             L.append("        .dpr_pclk       (dpr_pclk),")
         for c in ctrls:
+            L.append(f"        .{c.lname}_rst_n   (ctrl_rst_n[{c.id}]),")
             L.append(f"        .{c.lname}_mac2phy ({c.lname}_mac2phy),")
             L.append(f"        .{c.lname}_phy2mac ({c.lname}_phy2mac),")
+            L.append(f"        .{c.lname}_pclk    ({c.lname}_pclk),")
     L[-1] = L[-1].rstrip(",")
     L.append("    );")
     L.append("")
@@ -411,7 +417,17 @@ def gen_tb(cfg, pclk_mode="pclk_as_phy_output", dpr=False):
                     L.append("            // skip: DUT hasn't come out of its startup X state yet")
                     L.append("        end else begin")
                     L.append(f"            logic [{n-1}:0] sel_snap;")
-                    L.append(f"            sel_snap = dut.seltgt_g{g.gid}_l{l};")
+                    # dut.seltgt_g{gid}_l{l} is DPR-widened when --dpr (g.n+1
+                    # bits: real candidates in the low g.n bits, DPR at bit
+                    # g.n), but this monitor only cares about real-candidate
+                    # ownership -- sel_snap stays at the real width above, so
+                    # slice explicitly here rather than let the assignment
+                    # truncate implicitly. Those low bits are already
+                    # all-zero whenever the sliced-off DPR bit is the one
+                    # set (seltgt is one-hot), so this correctly reads as
+                    # "no real candidate owns this lane" while DPR does.
+                    snap_rhs = f"dut.seltgt_g{g.gid}_l{l}[{n-1}:0]" if dpr else f"dut.seltgt_g{g.gid}_l{l}"
+                    L.append(f"            sel_snap = {snap_rhs};")
                     L.append("            #1;")
                     L.append(
                         f'            chk($onehot0(sel_snap), "seltgt_g{g.gid}_l{l} not one-hot0 (>1 branch enabled)");'
@@ -729,6 +745,16 @@ def main():
         "not found there; omitting --config lists the available set names.",
     )
     ap.add_argument(
+        "--arch",
+        choices=["original_pipe", "serdes"],
+        default="original_pipe",
+        help="Which PHY macro family this config set targets: original_pipe "
+        "(only supports --pclk-mode pclk_as_phy_output) or serdes (only "
+        "supports --pclk-mode pclk_as_phy_input). Purely a cross-check "
+        "against --pclk-mode; must match whatever --arch this config set's "
+        "RTL was (or will be) generated with (tool/plm_gen_rtl.py).",
+    )
+    ap.add_argument(
         "--pclk-mode",
         choices=["pclk_as_phy_output", "pclk_as_phy_input"],
         default="pclk_as_phy_output",
@@ -764,6 +790,7 @@ def main():
     )
     ap.add_argument("--quiet", action="store_true")
     a = ap.parse_args(apply_set_flags(ap, set_flags) + sys.argv[1:])
+    validate_arch(a.arch, a.pclk_mode)
 
     cfg = load(csv_dir)
     tb_dir = out_rtl.parent / "tb"

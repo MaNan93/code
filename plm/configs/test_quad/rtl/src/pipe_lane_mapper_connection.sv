@@ -16,9 +16,7 @@ module pipe_lane_mapper_connection #(
 ) (
     input logic [NL-1:0] phy_pclk_out,
     input logic test_en,
-    input logic [NC-1:0] ctrl_rst_n,
     input logic [1:0] mode,
-    output logic [NC-1:0] ctrl_pclk,
     output logic [NL-1:0] phy_pclk_in,
     output logic [NL-1:0] phy_rst_n,
     // PHY-side PIPE data, flattened -- always per-lane regardless of signal_type
@@ -62,6 +60,7 @@ module pipe_lane_mapper_connection #(
     input logic [7:0] phy_phy_mac_fomfeedback [0:NL-1],
     // Controller side. Each controller's ports are declared at its own real max_width.
     // CtrlA x12
+    input logic ctrla_rst_n,
     input logic [31:0] ctrla_mac_phy_txdata [0:11],
     input logic [3:0] ctrla_mac_phy_txdatak [0:11],
     input logic [0:0] ctrla_mac_phy_txdatavalid [0:11],
@@ -100,7 +99,9 @@ module pipe_lane_mapper_connection #(
     output logic [5:0] ctrla_phy_mac_locallf [0:11],
     output logic [5:0] ctrla_phy_mac_dirfeedback [0:11],
     output logic [7:0] ctrla_phy_mac_fomfeedback [0:11],
+    output logic ctrla_pclk,
     // CtrlB x6
+    input logic ctrlb_rst_n,
     input logic [31:0] ctrlb_mac_phy_txdata [0:5],
     input logic [3:0] ctrlb_mac_phy_txdatak [0:5],
     input logic [0:0] ctrlb_mac_phy_txdatavalid [0:5],
@@ -139,7 +140,9 @@ module pipe_lane_mapper_connection #(
     output logic [5:0] ctrlb_phy_mac_locallf [0:5],
     output logic [5:0] ctrlb_phy_mac_dirfeedback [0:5],
     output logic [7:0] ctrlb_phy_mac_fomfeedback [0:5],
+    output logic ctrlb_pclk,
     // CtrlC x8
+    input logic ctrlc_rst_n,
     input logic [31:0] ctrlc_mac_phy_txdata [0:7],
     input logic [3:0] ctrlc_mac_phy_txdatak [0:7],
     input logic [0:0] ctrlc_mac_phy_txdatavalid [0:7],
@@ -178,7 +181,9 @@ module pipe_lane_mapper_connection #(
     output logic [5:0] ctrlc_phy_mac_locallf [0:7],
     output logic [5:0] ctrlc_phy_mac_dirfeedback [0:7],
     output logic [7:0] ctrlc_phy_mac_fomfeedback [0:7],
+    output logic ctrlc_pclk,
     // CtrlD x3
+    input logic ctrld_rst_n,
     input logic [31:0] ctrld_mac_phy_txdata [0:2],
     input logic [3:0] ctrld_mac_phy_txdatak [0:2],
     input logic [0:0] ctrld_mac_phy_txdatavalid [0:2],
@@ -216,7 +221,8 @@ module pipe_lane_mapper_connection #(
     output logic [5:0] ctrld_phy_mac_localfs [0:2],
     output logic [5:0] ctrld_phy_mac_locallf [0:2],
     output logic [5:0] ctrld_phy_mac_dirfeedback [0:2],
-    output logic [7:0] ctrld_phy_mac_fomfeedback [0:2]
+    output logic [7:0] ctrld_phy_mac_fomfeedback [0:2],
+    output logic ctrld_pclk
 );
 
     mac2phy_lane_t [NL-1:0] w_phy_mac2phy;
@@ -1046,21 +1052,27 @@ module pipe_lane_mapper_connection #(
     ) u_pipe_lane_mapper (
         .phy_pclk_out (phy_pclk_out),
         .test_en      (test_en),
-        .ctrl_rst_n   (ctrl_rst_n),
         .mode         (mode),
-        .ctrl_pclk    (ctrl_pclk),
         .phy_pclk_in  (phy_pclk_in),
         .phy_rst_n    (phy_rst_n),
         .phy_mac2phy  (w_phy_mac2phy),
         .phy_phy2mac  (w_phy_phy2mac),
+        .ctrla_rst_n   (ctrla_rst_n),
         .ctrla_mac2phy (w_ctrla_mac2phy),
         .ctrla_phy2mac (w_ctrla_phy2mac),
+        .ctrla_pclk (ctrla_pclk),
+        .ctrlb_rst_n   (ctrlb_rst_n),
         .ctrlb_mac2phy (w_ctrlb_mac2phy),
         .ctrlb_phy2mac (w_ctrlb_phy2mac),
+        .ctrlb_pclk (ctrlb_pclk),
+        .ctrlc_rst_n   (ctrlc_rst_n),
         .ctrlc_mac2phy (w_ctrlc_mac2phy),
         .ctrlc_phy2mac (w_ctrlc_phy2mac),
+        .ctrlc_pclk (ctrlc_pclk),
+        .ctrld_rst_n   (ctrld_rst_n),
         .ctrld_mac2phy (w_ctrld_mac2phy),
-        .ctrld_phy2mac (w_ctrld_phy2mac)
+        .ctrld_phy2mac (w_ctrld_phy2mac),
+        .ctrld_pclk (ctrld_pclk)
     );
 
 endmodule

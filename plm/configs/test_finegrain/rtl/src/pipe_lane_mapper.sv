@@ -24,9 +24,7 @@ module pipe_lane_mapper #(
 ) (
     input logic [NL-1:0] phy_pclk_out,
     input logic test_en,
-    input logic [NC-1:0] ctrl_rst_n,   // one per controller, already synchronized externally
     input logic [1:0] mode,
-    output logic [NC-1:0] ctrl_pclk,
     output logic [NL-1:0] phy_pclk_in,
     output logic [NL-1:0] phy_rst_n,
     // PHY-side PIPE data
@@ -34,25 +32,40 @@ module pipe_lane_mapper #(
     input phy2mac_lane_t [NL-1:0] phy_phy2mac,
     // Controller side. Each controller's ports are declared at its own real max_width.
     // CtrlAlpha x3
+    input logic ctrlalpha_rst_n,   // already synchronized externally
     input mac2phy_lane_t [2:0] ctrlalpha_mac2phy,
     output phy2mac_lane_t [2:0] ctrlalpha_phy2mac,
+    output logic ctrlalpha_pclk,
     // CtrlBeta x2
+    input logic ctrlbeta_rst_n,   // already synchronized externally
     input mac2phy_lane_t [1:0] ctrlbeta_mac2phy,
     output phy2mac_lane_t [1:0] ctrlbeta_phy2mac,
+    output logic ctrlbeta_pclk,
     // CtrlGamma x1
+    input logic ctrlgamma_rst_n,   // already synchronized externally
     input mac2phy_lane_t [0:0] ctrlgamma_mac2phy,
     output phy2mac_lane_t [0:0] ctrlgamma_phy2mac,
+    output logic ctrlgamma_pclk,
     // CtrlDelta x1
+    input logic ctrldelta_rst_n,   // already synchronized externally
     input mac2phy_lane_t [0:0] ctrldelta_mac2phy,
     output phy2mac_lane_t [0:0] ctrldelta_phy2mac,
+    output logic ctrldelta_pclk,
     // CtrlEpsilon x1
+    input logic ctrlepsilon_rst_n,   // already synchronized externally
     input mac2phy_lane_t [0:0] ctrlepsilon_mac2phy,
     output phy2mac_lane_t [0:0] ctrlepsilon_phy2mac,
+    output logic ctrlepsilon_pclk,
     // CtrlZeta x1
+    input logic ctrlzeta_rst_n,   // already synchronized externally
     input mac2phy_lane_t [0:0] ctrlzeta_mac2phy,
-    output phy2mac_lane_t [0:0] ctrlzeta_phy2mac
+    output phy2mac_lane_t [0:0] ctrlzeta_phy2mac,
+    output logic ctrlzeta_pclk
 );
 
+    logic [NC-1:0] ctrl_rst_n;   // reconstructed from each controller's own named port above
+    assign ctrl_rst_n = {ctrlzeta_rst_n, ctrlepsilon_rst_n, ctrldelta_rst_n, ctrlgamma_rst_n, ctrlbeta_rst_n, ctrlalpha_rst_n};
+    logic [NC-1:0] ctrl_pclk;   // driven by u_clk_mux below, flattened out to each controller's own named port
     lane_sel_t sel_tgt;   // each group's currently effective owner selection (after pipe_lane_sel_sync)
     lane_sel_t dec_tgt;   // each group's raw decoder selection (unsynchronized), used by rst_mux
 
@@ -84,6 +97,13 @@ module pipe_lane_mapper #(
         .ctrl_pclk    (ctrl_pclk),
         .phy_pclk_in  (phy_pclk_in)
     );
+
+    assign ctrlalpha_pclk = ctrl_pclk[0];
+    assign ctrlbeta_pclk = ctrl_pclk[1];
+    assign ctrlgamma_pclk = ctrl_pclk[2];
+    assign ctrldelta_pclk = ctrl_pclk[3];
+    assign ctrlepsilon_pclk = ctrl_pclk[4];
+    assign ctrlzeta_pclk = ctrl_pclk[5];
 
     //------------------------------------------------------------
     // Reset-mux submodule: phy_rst_n selects ctrl_rst_n by current owner

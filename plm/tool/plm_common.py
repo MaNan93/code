@@ -219,6 +219,29 @@ _PCLK_MODE_MIGRATION = {
     "phy-input-max-pclk": "pclk_as_phy_input",
 }
 
+# --arch names the PHY macro family a config set targets; each one only ever
+# works with one --pclk-mode, since that's a property of the macro, not an
+# independent choice -- original_pipe (a classic PIPE PHY) always drives its
+# own PCLK out to the MAC, serdes (a SerDes-style macro) always expects the
+# MAC side to hand it a reference clock instead. Both tools validate a
+# config's --arch/--pclk-mode combination against this table (see
+# validate_arch()) so a mismatched pair is caught at generation time instead
+# of surfacing later as a confusing elaboration/simulation failure.
+ARCH_PCLK_MODE = {
+    "original_pipe": "pclk_as_phy_output",
+    "serdes": "pclk_as_phy_input",
+}
+
+
+def validate_arch(arch, pclk_mode):
+    """Raise SystemExit if --arch and --pclk-mode disagree about which
+    clock architecture is in use. See ARCH_PCLK_MODE above."""
+    required = ARCH_PCLK_MODE[arch]
+    if pclk_mode != required:
+        raise SystemExit(
+            f"--arch {arch} only supports --pclk-mode {required} (got --pclk-mode {pclk_mode})"
+        )
+
 
 def load_set_flags(csv_dir, filename=SET_FLAGS_FILENAME):
     """Read <csv_dir>/gen_flags.txt if present: one 'key = value' per line

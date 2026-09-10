@@ -122,7 +122,8 @@ class Signal:
     def sv_literal(self, val):
         if self.width == 1:
             return f"1'b{val}"
-        return f"{self.width}'d{val}"
+        hex_digits = (self.width + 3) // 4
+        return f"{self.width}'h{val:0{hex_digits}X}"
 
     def tie_expr(self, base_lane_expr):
         """Compute the SV expression for what this signal should tie to

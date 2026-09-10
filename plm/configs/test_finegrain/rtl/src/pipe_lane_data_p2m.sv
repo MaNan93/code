@@ -18,7 +18,7 @@ module pipe_lane_data_p2m #(
     // CtrlAlpha x3
     phy2mac_lane_t ctrlalpha_p2m_tie;
     assign ctrlalpha_p2m_tie = '{
-        phy_mac_messagebus: 8'd80,
+        phy_mac_messagebus: 8'h50,
         phy_mac_phystatus: phy_phy2mac[0].phy_mac_phystatus,
         default: '0
     };
@@ -40,7 +40,7 @@ module pipe_lane_data_p2m #(
     // CtrlBeta x2
     phy2mac_lane_t ctrlbeta_p2m_tie;
     assign ctrlbeta_p2m_tie = '{
-        phy_mac_messagebus: 8'd80,
+        phy_mac_messagebus: 8'h50,
         phy_mac_phystatus: phy_phy2mac[3].phy_mac_phystatus,
         default: '0
     };
@@ -56,7 +56,7 @@ module pipe_lane_data_p2m #(
     // CtrlGamma x1
     phy2mac_lane_t ctrlgamma_p2m_tie;
     assign ctrlgamma_p2m_tie = '{
-        phy_mac_messagebus: 8'd80,
+        phy_mac_messagebus: 8'h50,
         phy_mac_phystatus: phy_phy2mac[5].phy_mac_phystatus,
         default: '0
     };
@@ -66,7 +66,7 @@ module pipe_lane_data_p2m #(
     // CtrlDelta x1
     phy2mac_lane_t ctrldelta_p2m_tie;
     assign ctrldelta_p2m_tie = '{
-        phy_mac_messagebus: 8'd80,
+        phy_mac_messagebus: 8'h50,
         phy_mac_phystatus: phy_phy2mac[1].phy_mac_phystatus,
         default: '0
     };
@@ -81,7 +81,7 @@ module pipe_lane_data_p2m #(
     // CtrlEpsilon x1
     phy2mac_lane_t ctrlepsilon_p2m_tie;
     assign ctrlepsilon_p2m_tie = '{
-        phy_mac_messagebus: 8'd80,
+        phy_mac_messagebus: 8'h50,
         phy_mac_phystatus: phy_phy2mac[2].phy_mac_phystatus,
         default: '0
     };
@@ -96,7 +96,7 @@ module pipe_lane_data_p2m #(
     // CtrlZeta x1
     phy2mac_lane_t ctrlzeta_p2m_tie;
     assign ctrlzeta_p2m_tie = '{
-        phy_mac_messagebus: 8'd80,
+        phy_mac_messagebus: 8'h50,
         phy_mac_phystatus: phy_phy2mac[4].phy_mac_phystatus,
         default: '0
     };

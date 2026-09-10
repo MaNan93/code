@@ -16,7 +16,7 @@ module pipe_lane_data_p2m #(
     // CtrlX16 x16
     phy2mac_lane_t ctrlx16_p2m_tie;
     assign ctrlx16_p2m_tie = '{
-        phy_mac_messagebus: 8'd80,
+        phy_mac_messagebus: 8'h50,
         phy_mac_phystatus: phy_phy2mac[0].phy_mac_phystatus,
         default: '0
     };
@@ -101,7 +101,7 @@ module pipe_lane_data_p2m #(
     // CtrlX8 x8
     phy2mac_lane_t ctrlx8_p2m_tie;
     assign ctrlx8_p2m_tie = '{
-        phy_mac_messagebus: 8'd80,
+        phy_mac_messagebus: 8'h50,
         phy_mac_phystatus: phy_phy2mac[8].phy_mac_phystatus,
         default: '0
     };
@@ -158,7 +158,7 @@ module pipe_lane_data_p2m #(
     // CtrlX4a x4
     phy2mac_lane_t ctrlx4a_p2m_tie;
     assign ctrlx4a_p2m_tie = '{
-        phy_mac_messagebus: 8'd80,
+        phy_mac_messagebus: 8'h50,
         phy_mac_phystatus: phy_phy2mac[12].phy_mac_phystatus,
         default: '0
     };
@@ -191,7 +191,7 @@ module pipe_lane_data_p2m #(
     // CtrlX4b x4
     phy2mac_lane_t ctrlx4b_p2m_tie;
     assign ctrlx4b_p2m_tie = '{
-        phy_mac_messagebus: 8'd80,
+        phy_mac_messagebus: 8'h50,
         phy_mac_phystatus: phy_phy2mac[4].phy_mac_phystatus,
         default: '0
     };

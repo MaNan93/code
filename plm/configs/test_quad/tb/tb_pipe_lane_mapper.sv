@@ -49,7 +49,6 @@ module tb_pipe_lane_mapper;
     logic [NC-1:0]        ctrl_rst_n = '0;
     logic [1:0] mode = '0;
 
-    logic [NC-1:0]        ctrl_pclk;
     logic [NL-1:0]      phy_pclk_in;
     logic [NL-1:0]      phy_rst_n;
 
@@ -58,12 +57,16 @@ module tb_pipe_lane_mapper;
 
     mac2phy_lane_t [11:0] ctrla_mac2phy;
     phy2mac_lane_t [11:0] ctrla_phy2mac;
+    logic ctrla_pclk;   // CtrlA's own derived working clock, DUT output
     mac2phy_lane_t [5:0] ctrlb_mac2phy;
     phy2mac_lane_t [5:0] ctrlb_phy2mac;
+    logic ctrlb_pclk;   // CtrlB's own derived working clock, DUT output
     mac2phy_lane_t [7:0] ctrlc_mac2phy;
     phy2mac_lane_t [7:0] ctrlc_phy2mac;
+    logic ctrlc_pclk;   // CtrlC's own derived working clock, DUT output
     mac2phy_lane_t [2:0] ctrld_mac2phy;
     phy2mac_lane_t [2:0] ctrld_phy2mac;
+    logic ctrld_pclk;   // CtrlD's own derived working clock, DUT output
 
     pipe_lane_mapper #(
         .NL (NL),
@@ -71,21 +74,27 @@ module tb_pipe_lane_mapper;
     ) dut (
         .phy_pclk_out   (phy_pclk_out),
         .test_en        (test_en),
-        .ctrl_rst_n     (ctrl_rst_n),
         .mode           (mode),
-        .ctrl_pclk      (ctrl_pclk),
         .phy_pclk_in    (phy_pclk_in),
         .phy_rst_n      (phy_rst_n),
         .phy_mac2phy    (phy_mac2phy),
         .phy_phy2mac    (phy_phy2mac),
+        .ctrla_rst_n   (ctrl_rst_n[0]),
         .ctrla_mac2phy (ctrla_mac2phy),
         .ctrla_phy2mac (ctrla_phy2mac),
+        .ctrla_pclk    (ctrla_pclk),
+        .ctrlb_rst_n   (ctrl_rst_n[1]),
         .ctrlb_mac2phy (ctrlb_mac2phy),
         .ctrlb_phy2mac (ctrlb_phy2mac),
+        .ctrlb_pclk    (ctrlb_pclk),
+        .ctrlc_rst_n   (ctrl_rst_n[2]),
         .ctrlc_mac2phy (ctrlc_mac2phy),
         .ctrlc_phy2mac (ctrlc_phy2mac),
+        .ctrlc_pclk    (ctrlc_pclk),
+        .ctrld_rst_n   (ctrl_rst_n[3]),
         .ctrld_mac2phy (ctrld_mac2phy),
-        .ctrld_phy2mac (ctrld_phy2mac)
+        .ctrld_phy2mac (ctrld_phy2mac),
+        .ctrld_pclk    (ctrld_pclk)
     );
 
     //------------------------------------------------------------ stimulus patterns
@@ -353,25 +362,25 @@ module tb_pipe_lane_mapper;
 
     phy2mac_lane_t exp_safe_p2m_ctrla;
     assign exp_safe_p2m_ctrla = '{
-        phy_mac_messagebus: 8'd80,
+        phy_mac_messagebus: 8'h50,
         phy_mac_phystatus: phy_phy2mac[0].phy_mac_phystatus,
         default: '0
     };
     phy2mac_lane_t exp_safe_p2m_ctrlb;
     assign exp_safe_p2m_ctrlb = '{
-        phy_mac_messagebus: 8'd80,
+        phy_mac_messagebus: 8'h50,
         phy_mac_phystatus: phy_phy2mac[3].phy_mac_phystatus,
         default: '0
     };
     phy2mac_lane_t exp_safe_p2m_ctrlc;
     assign exp_safe_p2m_ctrlc = '{
-        phy_mac_messagebus: 8'd80,
+        phy_mac_messagebus: 8'h50,
         phy_mac_phystatus: phy_phy2mac[6].phy_mac_phystatus,
         default: '0
     };
     phy2mac_lane_t exp_safe_p2m_ctrld;
     assign exp_safe_p2m_ctrld = '{
-        phy_mac_messagebus: 8'd80,
+        phy_mac_messagebus: 8'h50,
         phy_mac_phystatus: phy_phy2mac[9].phy_mac_phystatus,
         default: '0
     };
@@ -503,41 +512,41 @@ module tb_pipe_lane_mapper;
                         if (owner_of(m, l) == c && active_base == -1) active_base = l;
                     end
                     if (active_base != -1) begin
-                        exp_tie.phy_mac_rxdata = 32'd0;
-                        exp_tie.phy_mac_rxdatak = 4'd0;
+                        exp_tie.phy_mac_rxdata = 32'h00000000;
+                        exp_tie.phy_mac_rxdatak = 4'h0;
                         exp_tie.phy_mac_rxdatavalid = 1'b0;
                         exp_tie.phy_mac_rxstartblock = 1'b0;
-                        exp_tie.phy_mac_rxsyncheader = 2'd0;
+                        exp_tie.phy_mac_rxsyncheader = 2'h0;
                         exp_tie.phy_mac_rxvalid = 1'b0;
-                        exp_tie.phy_mac_rxstatus = 3'd0;
+                        exp_tie.phy_mac_rxstatus = 3'h0;
                         exp_tie.phy_mac_rxelecidle = 1'b0;
                         exp_tie.phy_mac_rxstandbystatus = 1'b0;
-                        exp_tie.phy_mac_messagebus = 8'd80;
+                        exp_tie.phy_mac_messagebus = 8'h50;
                         exp_tie.phy_mac_phystatus = phy_phy2mac[active_base].phy_mac_phystatus;
                         exp_tie.phy_mac_local_tx_coef_valid = 1'b0;
-                        exp_tie.phy_mac_local_tx_pset_coef = 18'd0;
-                        exp_tie.phy_mac_localfs = 6'd0;
-                        exp_tie.phy_mac_locallf = 6'd0;
-                        exp_tie.phy_mac_dirfeedback = 6'd0;
-                        exp_tie.phy_mac_fomfeedback = 8'd0;
+                        exp_tie.phy_mac_local_tx_pset_coef = 18'h00000;
+                        exp_tie.phy_mac_localfs = 6'h00;
+                        exp_tie.phy_mac_locallf = 6'h00;
+                        exp_tie.phy_mac_dirfeedback = 6'h00;
+                        exp_tie.phy_mac_fomfeedback = 8'h00;
                     end else begin
-                        exp_tie.phy_mac_rxdata = 32'd0;
-                        exp_tie.phy_mac_rxdatak = 4'd0;
+                        exp_tie.phy_mac_rxdata = 32'h00000000;
+                        exp_tie.phy_mac_rxdatak = 4'h0;
                         exp_tie.phy_mac_rxdatavalid = 1'b0;
                         exp_tie.phy_mac_rxstartblock = 1'b0;
-                        exp_tie.phy_mac_rxsyncheader = 2'd0;
+                        exp_tie.phy_mac_rxsyncheader = 2'h0;
                         exp_tie.phy_mac_rxvalid = 1'b0;
-                        exp_tie.phy_mac_rxstatus = 3'd0;
+                        exp_tie.phy_mac_rxstatus = 3'h0;
                         exp_tie.phy_mac_rxelecidle = 1'b0;
                         exp_tie.phy_mac_rxstandbystatus = 1'b0;
-                        exp_tie.phy_mac_messagebus = 8'd80;
+                        exp_tie.phy_mac_messagebus = 8'h50;
                         exp_tie.phy_mac_phystatus = '0;
                         exp_tie.phy_mac_local_tx_coef_valid = 1'b0;
-                        exp_tie.phy_mac_local_tx_pset_coef = 18'd0;
-                        exp_tie.phy_mac_localfs = 6'd0;
-                        exp_tie.phy_mac_locallf = 6'd0;
-                        exp_tie.phy_mac_dirfeedback = 6'd0;
-                        exp_tie.phy_mac_fomfeedback = 8'd0;
+                        exp_tie.phy_mac_local_tx_pset_coef = 18'h00000;
+                        exp_tie.phy_mac_localfs = 6'h00;
+                        exp_tie.phy_mac_locallf = 6'h00;
+                        exp_tie.phy_mac_dirfeedback = 6'h00;
+                        exp_tie.phy_mac_fomfeedback = 8'h00;
                     end
                     chk_p2m(got, exp_tie,
                         $sformatf("mode%0d ctrl%0d[%0d]: unmapped tie-off", m, c, p));
@@ -554,7 +563,7 @@ module tb_pipe_lane_mapper;
     endtask
 
     //------------------------------------------------------------ sequencing
-    localparam realtime SETTLE = 300;
+    localparam realtime SETTLE = 2000;
 
     initial begin
 `ifdef DUMP_FSDB

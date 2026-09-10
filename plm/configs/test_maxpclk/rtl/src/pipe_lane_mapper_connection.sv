@@ -15,7 +15,6 @@ module pipe_lane_mapper_connection #(
     parameter bit SEL_SYNC = 1'b1
 ) (
     input logic test_en,
-    input logic [NC-1:0] ctrl_rst_n,
     input logic [1:0] mode,
     input logic [NL-1:0] rx_clk,
     output logic [NL-1:0] phy_pclk,
@@ -61,6 +60,7 @@ module pipe_lane_mapper_connection #(
     input logic [7:0] phy_phy_mac_fomfeedback [0:NL-1],
     // Controller side. Each controller's ports are declared at its own real max_width.
     // CtrlA x12
+    input logic ctrla_rst_n,
     input logic [31:0] ctrla_mac_phy_txdata [0:11],
     input logic [3:0] ctrla_mac_phy_txdatak [0:11],
     input logic [0:0] ctrla_mac_phy_txdatavalid [0:11],
@@ -102,6 +102,7 @@ module pipe_lane_mapper_connection #(
     input logic [11:0] ctrla_pclk,
     output logic [11:0] ctrla_rx_clk,
     // CtrlB x6
+    input logic ctrlb_rst_n,
     input logic [31:0] ctrlb_mac_phy_txdata [0:5],
     input logic [3:0] ctrlb_mac_phy_txdatak [0:5],
     input logic [0:0] ctrlb_mac_phy_txdatavalid [0:5],
@@ -143,6 +144,7 @@ module pipe_lane_mapper_connection #(
     input logic [5:0] ctrlb_pclk,
     output logic [5:0] ctrlb_rx_clk,
     // CtrlC x8
+    input logic ctrlc_rst_n,
     input logic [31:0] ctrlc_mac_phy_txdata [0:7],
     input logic [3:0] ctrlc_mac_phy_txdatak [0:7],
     input logic [0:0] ctrlc_mac_phy_txdatavalid [0:7],
@@ -184,6 +186,7 @@ module pipe_lane_mapper_connection #(
     input logic [7:0] ctrlc_pclk,
     output logic [7:0] ctrlc_rx_clk,
     // CtrlD x3
+    input logic ctrld_rst_n,
     input logic [31:0] ctrld_mac_phy_txdata [0:2],
     input logic [3:0] ctrld_mac_phy_txdatak [0:2],
     input logic [0:0] ctrld_mac_phy_txdatavalid [0:2],
@@ -1052,25 +1055,28 @@ module pipe_lane_mapper_connection #(
         .SEL_SYNC (SEL_SYNC)
     ) u_pipe_lane_mapper (
         .test_en      (test_en),
-        .ctrl_rst_n   (ctrl_rst_n),
         .mode         (mode),
         .rx_clk       (rx_clk),
         .phy_pclk     (phy_pclk),
         .phy_rst_n    (phy_rst_n),
         .phy_mac2phy  (w_phy_mac2phy),
         .phy_phy2mac  (w_phy_phy2mac),
+        .ctrla_rst_n   (ctrla_rst_n),
         .ctrla_mac2phy (w_ctrla_mac2phy),
         .ctrla_phy2mac (w_ctrla_phy2mac),
         .ctrla_pclk (ctrla_pclk),
         .ctrla_rx_clk (ctrla_rx_clk),
+        .ctrlb_rst_n   (ctrlb_rst_n),
         .ctrlb_mac2phy (w_ctrlb_mac2phy),
         .ctrlb_phy2mac (w_ctrlb_phy2mac),
         .ctrlb_pclk (ctrlb_pclk),
         .ctrlb_rx_clk (ctrlb_rx_clk),
+        .ctrlc_rst_n   (ctrlc_rst_n),
         .ctrlc_mac2phy (w_ctrlc_mac2phy),
         .ctrlc_phy2mac (w_ctrlc_phy2mac),
         .ctrlc_pclk (ctrlc_pclk),
         .ctrlc_rx_clk (ctrlc_rx_clk),
+        .ctrld_rst_n   (ctrld_rst_n),
         .ctrld_mac2phy (w_ctrld_mac2phy),
         .ctrld_phy2mac (w_ctrld_phy2mac),
         .ctrld_pclk (ctrld_pclk),

@@ -51,25 +51,25 @@ package pipe_lane_signal_pkg;
     // Value to present when there's no owner (the NOV handoff window).
     // pipe_lane_data_mux uses this for polarity normalization, so sel==0 naturally lands on the safe state.
     localparam mac2phy_lane_t SAFE_M2P = '{
-        mac_phy_txdata: 32'd0,
-        mac_phy_txdatak: 4'd0,
+        mac_phy_txdata: 32'h00000000,
+        mac_phy_txdatak: 4'h0,
         mac_phy_txdatavalid: 1'b0,
         mac_phy_txstartblock: 1'b0,
-        mac_phy_txsyncheader: 2'd0,
+        mac_phy_txsyncheader: 2'h0,
         mac_phy_txdetectrx_loopback: 1'b0,
         mac_phy_txelecidle: 1'b1,
         mac_phy_txcompliance: 1'b0,
-        mac_phy_txdeemph: 18'd0,
+        mac_phy_txdeemph: 18'h00000,
         mac_phy_rxpolarity: 1'b0,
         mac_phy_rxstandby: 1'b0,
-        mac_phy_messagebus: 8'd0,
-        mac_phy_rxpresethint: 3'd0,
-        mac_phy_local_pset_index: 5'd0,
+        mac_phy_messagebus: 8'h00,
+        mac_phy_rxpresethint: 3'h0,
+        mac_phy_local_pset_index: 5'h00,
         mac_phy_getlocal_pset_coef: 1'b0,
         mac_phy_invalid_req: 1'b0,
         mac_phy_rxeqeval: 1'b0,
-        mac_phy_fs: 6'd0,
-        mac_phy_lf: 6'd0,
+        mac_phy_fs: 6'h00,
+        mac_phy_lf: 6'h00,
         mac_phy_dirchange: 1'b0,
         mac_phy_rxeqinprogress: 1'b0
     };
@@ -77,23 +77,23 @@ package pipe_lane_signal_pkg;
     // Value to present when there's no owner (the NOV handoff window).
     // pipe_lane_data_mux uses this for polarity normalization, so sel==0 naturally lands on the safe state.
     localparam phy2mac_lane_t SAFE_P2M = '{
-        phy_mac_rxdata: 32'd0,
-        phy_mac_rxdatak: 4'd0,
+        phy_mac_rxdata: 32'h00000000,
+        phy_mac_rxdatak: 4'h0,
         phy_mac_rxdatavalid: 1'b0,
         phy_mac_rxstartblock: 1'b0,
-        phy_mac_rxsyncheader: 2'd0,
+        phy_mac_rxsyncheader: 2'h0,
         phy_mac_rxvalid: 1'b0,
-        phy_mac_rxstatus: 3'd0,
+        phy_mac_rxstatus: 3'h0,
         phy_mac_rxelecidle: 1'b1,
         phy_mac_rxstandbystatus: 1'b1,
-        phy_mac_messagebus: 8'd80,
+        phy_mac_messagebus: 8'h50,
         phy_mac_phystatus: 1'b0,
         phy_mac_local_tx_coef_valid: 1'b0,
-        phy_mac_local_tx_pset_coef: 18'd0,
-        phy_mac_localfs: 6'd0,
-        phy_mac_locallf: 6'd0,
-        phy_mac_dirfeedback: 6'd0,
-        phy_mac_fomfeedback: 8'd0
+        phy_mac_local_tx_pset_coef: 18'h00000,
+        phy_mac_localfs: 6'h00,
+        phy_mac_locallf: 6'h00,
+        phy_mac_dirfeedback: 6'h00,
+        phy_mac_fomfeedback: 8'h00
     };
 
     // One one-hot select vector per lane group that needs NOV.

@@ -45,6 +45,7 @@ from plm_common import (  # noqa: E402
     load_set_flags,
     mode_width,
     resolve_set,
+    validate_arch,
 )
 
 
@@ -536,7 +537,17 @@ def gen_sel_gen(cfg, sel_mode="sync", pclk_mode="pclk_as_phy_output", dpr=False)
                     + ", ".join(f"ctrl_rst_n[{c}]" for c in reversed(g.cands))
                     + "}),"
                 )
-                L.append(f"        .tgt          (dec_tgt.g{g.gid}),")
+                # dec_tgt.gN is DPR-combined when --dpr (g.n+1 bits: real
+                # candidates in the low g.n bits, DPR at bit g.n), but rx_clk
+                # is never routed to DPR (no dpr_rx_clk port), so this
+                # instance stays at the real, non-widened N(n) above -- slice
+                # to the low n bits explicitly, rather than let the port
+                # connection truncate implicitly. Those low bits are already
+                # all-zero whenever the sliced-off DPR bit is the one set
+                # (dec_tgt.gN is one-hot), so this correctly gates every real
+                # candidate's rxclk_en off while DPR owns the lane.
+                tgt_expr = f"dec_tgt.g{g.gid}[{g.n-1}:0]" if dpr else f"dec_tgt.g{g.gid}"
+                L.append(f"        .tgt          ({tgt_expr}),")
                 L.append(f"        .en           (rxclk_en_g{g.gid}_l{l})")
                 L.append(f"    );")
                 L.append("")
@@ -566,6 +577,50 @@ def gen_clk_mux(cfg, pclk_mode="pclk_as_phy_output", dpr=False):
     if pclk_mode == "pclk_as_phy_input":
         return gen_clk_mux_phy_input(cfg, dpr)
     return gen_clk_mux_phy_output(cfg, dpr)
+
+
+def gen_glitch_free_clk_select(L, prefix, cand_clks, rst_n_expr, tgt_expr, default_bit, out_expr, test_en="test_en"):
+    """Emit a glitch-free N-way clock select: a hold-until-valid register,
+    one pipe_lane_sel_sync, one pipe_lane_clk_gate per candidate, and a
+    final pipe_lane_clk_or -- appended to L in place, nothing returned.
+
+    This is the one shape every "pick exactly one of N candidate clocks,
+    glitch-free" site in the generator needs: a real multi-candidate
+    controller's own pclk (pclk_as_phy_output's ctrl_pclk) and DPR's own
+    working clock (either pclk mode) are architecturally the same circuit
+    -- DPR is nothing but one more N-candidate glitch-free clock select,
+    just with every PHY lane (or every lane's real_pclk[]) as its candidate
+    set instead of one controller's own handful of ports. Sharing this one
+    function keeps that true in the generator's own code, instead of DPR's
+    version being a hand-duplicated near-copy of the real-controller one.
+
+    cand_clks: candidate clock SV expressions, in bit order (index i is tgt
+               bit i / candidate i).
+    rst_n_expr: single reset expression, broadcast to every branch.
+    tgt_expr: the raw (possibly momentarily-all-zero) target bus to hold --
+              already declared/assigned by the caller.
+    default_bit: which candidate index the hold register resets to.
+    out_expr: the final single-clock signal/expression this assigns.
+    """
+    n = len(cand_clks)
+    L.append(f"    logic [{n-1}:0] {prefix}_tgt_hold;")
+    L.append(f"    logic [{n-1}:0] {prefix}_pen;")
+    L.append(f"    logic [{n-1}:0] {prefix}_pgated;")
+    L.append(f"    always_ff @(posedge {cand_clks[default_bit]} or negedge {rst_n_expr})")
+    L.append(f"        if (!{rst_n_expr}) {prefix}_tgt_hold <= {n}'b{1 << default_bit:0{n}b};")
+    L.append(f"        else if (|{tgt_expr}) {prefix}_tgt_hold <= {tgt_expr};")
+    L.append(f"    pipe_lane_sel_sync #(.N({n}), .SYNC(1'b1)) u_{prefix}_sel (")
+    L.append(f"        .branch_clk   ({{" + ", ".join(reversed(cand_clks)) + "}),")
+    L.append(f"        .branch_rst_n ({{{n}{{{rst_n_expr}}}}}),")
+    L.append(f"        .tgt          ({prefix}_tgt_hold),")
+    L.append(f"        .en           ({prefix}_pen)")
+    L.append(f"    );")
+    for i, clk in enumerate(cand_clks):
+        L.append(
+            f"    pipe_lane_clk_gate u_{prefix}_gate_b{i} (.clk_in({clk}), .en({prefix}_pen[{i}]), "
+            f".test_en({test_en}), .clk_out({prefix}_pgated[{i}]));"
+        )
+    L.append(f"    pipe_lane_clk_or #(.N({n})) u_{prefix}_or (.clk_in({prefix}_pgated), .clk_out({out_expr}));")
 
 
 def gen_clk_mux_phy_output(cfg, dpr=False):
@@ -641,35 +696,14 @@ def gen_clk_mux_phy_output(cfg, dpr=False):
                 f"    // {c.name}: {n}-way select, candidates "
                 f"{', '.join(f'phy_pclk[{v}]' for v in cand)}"
             )
-            L.append(f"    logic [{n-1}:0] pclk_tgt_hold_c{cid};")
-            L.append(f"    logic [{n-1}:0] pen_c{cid};")
-            L.append(f"    logic [{n-1}:0] pgated_c{cid};")
-            L.append(
-                f"    always_ff @(posedge phy_pclk_out[{cand[0]}] " f"or negedge ctrl_rst_n[{cid}])"
-            )
-            L.append(f"        if (!ctrl_rst_n[{cid}]) pclk_tgt_hold_c{cid} <= " f"{n}'b{1:0{n}b};")
-            L.append(
-                f"        else if (|pclk_tgt_c{cid}) pclk_tgt_hold_c{cid} <= " f"pclk_tgt_c{cid};"
-            )
-            L.append(f"    pipe_lane_sel_sync #(.N({n}), .SYNC(1'b1)) u_pclk_sel_sync_c{cid} (")
-            L.append(
-                f"        .branch_clk   ({{"
-                + ", ".join(f"phy_pclk_out[{v}]" for v in reversed(cand))
-                + "}),"
-            )
-            L.append(f"        .branch_rst_n ({{{n}{{ctrl_rst_n[{cid}]}}}}),")
-            L.append(f"        .tgt          (pclk_tgt_hold_c{cid}),")
-            L.append(f"        .en           (pen_c{cid})")
-            L.append(f"    );")
-            for i, v in enumerate(cand):
-                L.append(
-                    f"    pipe_lane_clk_gate u_pclk_gate_c{cid}_b{i} ("
-                    f".clk_in(phy_pclk_out[{v}]), .en(pen_c{cid}[{i}]), "
-                    f".test_en(test_en), .clk_out(pgated_c{cid}[{i}]));"
-                )
-            L.append(
-                f"    pipe_lane_clk_or #(.N({n})) u_pclk_or_c{cid} "
-                f"(.clk_in(pgated_c{cid}), .clk_out(ctrl_pclk[{cid}]));"
+            gen_glitch_free_clk_select(
+                L,
+                f"pclk_c{cid}",
+                [f"phy_pclk_out[{v}]" for v in cand],
+                f"ctrl_rst_n[{cid}]",
+                f"pclk_tgt_c{cid}",
+                0,
+                f"ctrl_pclk[{cid}]",
             )
         L.append("")
 
@@ -678,38 +712,23 @@ def gen_clk_mux_phy_output(cfg, dpr=False):
         L.append("    //------------------------------------------------------------")
         L.append("    // DPR's own working clock: from the lowest-numbered currently-masked")
         L.append("    // lane (isolate v_lane_mask's lowest set bit), glitch-free multi-candidate")
-        L.append("    // select, same pattern as a real multi-candidate controller's ctrl_pclk")
-        L.append(f"    // above, just with all NL lanes as candidates. Defaults to lane{default_lane}")
-        L.append("    // (last group's lowest lane) when idle (v_lane_mask all-zero).")
+        L.append("    // select -- architecturally the exact same circuit as a real multi-")
+        L.append(f"    // candidate controller's ctrl_pclk above, just with all NL lanes as")
+        L.append(f"    // candidates. Defaults to lane{default_lane} (last group's lowest lane) when")
+        L.append("    // idle (v_lane_mask all-zero).")
         L.append("    //------------------------------------------------------------")
         L.append("    logic [NL-1:0] dpr_pclk_tgt;")
-        L.append("    logic [NL-1:0] dpr_pclk_tgt_hold;")
-        L.append("    logic [NL-1:0] dpr_pen;")
-        L.append("    logic [NL-1:0] dpr_pgated;")
-        L.append("")
         L.append("    // isolate the lowest set bit: v_lane_mask & (-v_lane_mask)")
         L.append("    assign dpr_pclk_tgt = v_lane_mask & (~v_lane_mask + 1'b1);")
         L.append("")
-        L.append(f"    always_ff @(posedge phy_pclk_out[{default_lane}] or negedge dpr_rst_n)")
-        L.append(
-            f"        if (!dpr_rst_n) dpr_pclk_tgt_hold <= "
-            f"{LC}'b{1 << default_lane:0{LC}b};   // lane{default_lane}"
-        )
-        L.append("        else if (|dpr_pclk_tgt) dpr_pclk_tgt_hold <= dpr_pclk_tgt;")
-        L.append("")
-        L.append("    pipe_lane_sel_sync #(.N(NL), .SYNC(1'b1)) u_dpr_pclk_sel (")
-        L.append("        .branch_clk   (phy_pclk_out),")
-        L.append("        .branch_rst_n ({NL{dpr_rst_n}}),")
-        L.append("        .tgt          (dpr_pclk_tgt_hold),")
-        L.append("        .en           (dpr_pen)")
-        L.append("    );")
-        for l in range(LC):
-            L.append(
-                f"    pipe_lane_clk_gate u_dpr_pclk_gate_l{l} (.clk_in(phy_pclk_out[{l}]), "
-                f".en(dpr_pen[{l}]), .test_en(test_en), .clk_out(dpr_pgated[{l}]));"
-            )
-        L.append(
-            "    pipe_lane_clk_or #(.N(NL)) u_dpr_pclk_or (.clk_in(dpr_pgated), .clk_out(dpr_pclk));"
+        gen_glitch_free_clk_select(
+            L,
+            "dpr_pclk",
+            [f"phy_pclk_out[{l}]" for l in range(LC)],
+            "dpr_rst_n",
+            "dpr_pclk_tgt",
+            default_lane,
+            "dpr_pclk",
         )
         L.append("")
 
@@ -927,33 +946,17 @@ def gen_clk_mux_phy_input(cfg, dpr=False):
         for l in range(LC):
             L.append(f"    assign real_pclk[{l}] = {real_pclk_expr[l]};")
         L.append("    logic [NL-1:0] dpr_pclk_tgt;")
-        L.append("    logic [NL-1:0] dpr_pclk_tgt_hold;")
-        L.append("    logic [NL-1:0] dpr_pen;")
-        L.append("    logic [NL-1:0] dpr_pgated;")
-        L.append("")
         L.append("    // isolate the lowest set bit: v_lane_mask & (-v_lane_mask)")
         L.append("    assign dpr_pclk_tgt = v_lane_mask & (~v_lane_mask + 1'b1);")
         L.append("")
-        L.append(f"    always_ff @(posedge real_pclk[{default_lane}] or negedge dpr_rst_n)")
-        L.append(
-            f"        if (!dpr_rst_n) dpr_pclk_tgt_hold <= "
-            f"{LC}'b{1 << default_lane:0{LC}b};   // lane{default_lane}"
-        )
-        L.append("        else if (|dpr_pclk_tgt) dpr_pclk_tgt_hold <= dpr_pclk_tgt;")
-        L.append("")
-        L.append("    pipe_lane_sel_sync #(.N(NL), .SYNC(1'b1)) u_dpr_pclk_sel (")
-        L.append("        .branch_clk   (real_pclk),")
-        L.append("        .branch_rst_n ({NL{dpr_rst_n}}),")
-        L.append("        .tgt          (dpr_pclk_tgt_hold),")
-        L.append("        .en           (dpr_pen)")
-        L.append("    );")
-        for l in range(LC):
-            L.append(
-                f"    pipe_lane_clk_gate u_dpr_pclk_gate_l{l} (.clk_in(real_pclk[{l}]), "
-                f".en(dpr_pen[{l}]), .test_en(test_en), .clk_out(dpr_pgated[{l}]));"
-            )
-        L.append(
-            "    pipe_lane_clk_or #(.N(NL)) u_dpr_pclk_or (.clk_in(dpr_pgated), .clk_out(dpr_pclk));"
+        gen_glitch_free_clk_select(
+            L,
+            "dpr_pclk",
+            [f"real_pclk[{l}]" for l in range(LC)],
+            "dpr_rst_n",
+            "dpr_pclk_tgt",
+            default_lane,
+            "dpr_pclk",
         )
         L.append("")
 
@@ -1196,11 +1199,35 @@ def gen_data_p2m(cfg, pclk_mode="pclk_as_phy_output", dpr=False):
 
     Real controllers' own converge logic here is otherwise untouched by
     --dpr: which lanes feed a given controller port is purely a
-    lane_mapping.csv/mode fact, DPR is never in it. The only DPR-specific
-    addition is dpr_phy2mac -- a separate, mask-gated read-only tap DPR
-    uses to observe the raw PHY signal, not a mux branch (DPR never
-    competes to drive any of these controller ports, so there's no
-    contention needing pipe_lane_sel_sync here).
+    lane_mapping.csv/mode fact, DPR is never in it -- there's no driver
+    contention to arbitrate (DPR never competes to drive any of these
+    controller ports), so the real candidates' own muxes don't need an
+    extra DPR branch: sel_tgt.gN/seltgt_gN_lL's real-candidate bits are
+    already all 0 whenever DPR currently owns the group (one-hot), which
+    already resolves to each mux's own safe/tie value for free.
+
+    dpr_phy2mac IS new with --dpr: a separate read-only tap DPR uses to
+    observe the raw PHY signal for whichever lanes it currently owns. It
+    still isn't a mux branch (no driver contention, so no
+    pipe_lane_data_mux needed for it either) -- but it does need to gate on
+    the SAME synchronized "DPR owns this lane" bit that already gates
+    phy_mac2phy/phy_pclk_in for that lane (sel_tgt.gN[g.n] here, the top
+    bit pipe_lane_sel_gen appends when --dpr), not the raw v_lane_mask
+    input directly. v_lane_mask is a live, asynchronous, un-gapped signal;
+    reading it straight would let dpr_phy2mac flip the instant v_lane_mask
+    does, while the write side only actually hands the lane over after the
+    NOV gap + synchronizer finish -- DPR would then appear to already own
+    (or have already released) a lane whose data path hasn't caught up
+    yet. Gating on the same synchronized bit keeps dpr_phy2mac's view of
+    ownership in lockstep with what's actually happening on the wire,
+    which is the entire reason that bit gets synchronized in the first
+    place.
+
+    When --dpr, every group needs its per-lane/group select input here
+    (including groups that were a direct, unmuxed connection before DPR
+    existed) purely so dpr_phy2mac has that bit to read -- see
+    gen_data_m2p()'s docstring for the parallel reasoning on the write
+    side, where those same now-2-candidate groups need a real mux too.
     """
     LC = cfg.lane_count
     phy_input_mode = pclk_mode == "pclk_as_phy_input"
@@ -1215,16 +1242,14 @@ def gen_data_p2m(cfg, pclk_mode="pclk_as_phy_output", dpr=False):
         ") (",
     ]
     if phy_input_mode:
-        for g in cfg.groups:
-            if g.is_direct:
-                continue
+        for g in (cfg.groups if dpr else [g for g in cfg.groups if not g.is_direct]):
+            eff_n = g.n + 1 if dpr else g.n
             for l in g.lanes:
-                L.append(f"    input logic [{g.n-1}:0] seltgt_g{g.gid}_l{l},")
+                L.append(f"    input logic [{eff_n-1}:0] seltgt_g{g.gid}_l{l},")
     else:
         L.append("    input lane_sel_t sel_tgt,")
     L.append("    input phy2mac_lane_t [NL-1:0] phy_phy2mac,")
     if dpr:
-        L.append("    input logic [NL-1:0] v_lane_mask,")
         L.append("    output phy2mac_lane_t [NL-1:0] dpr_phy2mac,")
     for cid in sorted(cfg.controllers):
         c = cfg.controllers[cid]
@@ -1276,7 +1301,7 @@ def gen_data_p2m(cfg, pclk_mode="pclk_as_phy_output", dpr=False):
                     f"  // never driven in any mode"
                 )
                 continue
-            if len(srcs) == 1 and cfg.groups[srcs[0][1]].is_direct:
+            if len(srcs) == 1 and cfg.groups[srcs[0][1]].is_direct and not dpr:
                 l = srcs[0][0]
                 L.append(
                     f"    assign {c.lname}_phy2mac[{cl}] = phy_phy2mac[{l}];"
@@ -1319,12 +1344,15 @@ def gen_data_p2m(cfg, pclk_mode="pclk_as_phy_output", dpr=False):
 
     if dpr:
         L.append("    //------------------------------------------------------------")
-        L.append("    // PHY -> DPR: mask-gated read-only tap. Not a driven/contended wire, so")
-        L.append("    // no pipe_lane_sel_sync needed here -- just each signal's safe/tie value")
-        L.append("    // (same tie_off convention as an unowned controller port) when unmasked.")
-        L.append("    // tie_off=lane0 has no meaningful \"DPR's own base lane\" to fall back to")
-        L.append("    // (DPR's masked set is a live runtime value, not fixed), so it resolves")
-        L.append("    // to '0 for DPR specifically.")
+        L.append("    // PHY -> DPR: read-only tap, no pipe_lane_data_mux needed (no driver")
+        L.append("    // contention) -- but gated on the SAME synchronized \"DPR owns this")
+        L.append("    // lane\" bit that already gates phy_mac2phy/phy_pclk_in for it, not raw")
+        L.append("    // v_lane_mask, so this tap's view of ownership stays in lockstep with")
+        L.append("    // what the write side is actually doing (see this module's docstring).")
+        L.append("    // Each signal's safe/tie value (same tie_off convention as an unowned")
+        L.append("    // controller port) when not owned. tie_off=lane0 has no meaningful")
+        L.append("    // \"DPR's own base lane\" to fall back to (DPR's owned set is a live")
+        L.append("    // runtime value, not fixed), so it resolves to '0 for DPR specifically.")
         L.append("    //------------------------------------------------------------")
         dpr_tie_parts = [f"{s.name}: {s.tie_expr(None)}" for s in p2m_sigs_all if not s.tie_is_zero]
         dpr_tie_parts.append("default: '0")
@@ -1335,7 +1363,20 @@ def gen_data_p2m(cfg, pclk_mode="pclk_as_phy_output", dpr=False):
         L.append(f"        {dpr_tie_parts[-1]}")
         L.append("    };")
         for l in range(LC):
-            L.append(f"    assign dpr_phy2mac[{l}] = v_lane_mask[{l}] ? phy_phy2mac[{l}] : dpr_p2m_tie;")
+            g = cfg.group_of_lane(l)
+            own_expr = f"seltgt_g{g.gid}_l{l}[{g.n}:{g.n}]" if phy_input_mode else f"sel_tgt.g{g.gid}[{g.n}:{g.n}]"
+            # Same pipe_lane_data_mux shape as every real single-candidate
+            # port above (e.g. a direct group's own u_p2m_{c.lname}_{cl}
+            # with .N(1)) -- DPR's own p2m tap is architecturally nothing
+            # but a single-candidate port converging from exactly one
+            # source (this lane), so it reuses that exact same
+            # instantiation instead of a bespoke ternary assign.
+            L.append(f"    pipe_lane_data_mux #(.WIDTH(PHY2MAC_W), .N(1)) u_p2m_dpr_{l} (")
+            L.append(f"        .sel  ({own_expr}),")
+            L.append(f"        .din  ({{phy_phy2mac[{l}]}}),")
+            L.append(f"        .safe (dpr_p2m_tie),")
+            L.append(f"        .dout (dpr_phy2mac[{l}])")
+            L.append(f"    );")
         L.append("")
 
     L.append("endmodule")
@@ -1392,9 +1433,6 @@ def gen_top(cfg, pclk_mode="pclk_as_phy_output", sel_mode="sync", dpr=False):
     L.append(") (")
     if phy_input_mode:
         L.append("    input logic test_en,")
-        L.append(
-            "    input logic [NC-1:0] ctrl_rst_n,   // one per controller, already synchronized externally"
-        )
         L.append(f"    input logic [{mode_width(nm)-1}:0] mode,")
         L.append("    input logic [NL-1:0] rx_clk,     // PHY's per-lane recovered clock")
         L.append("    output logic [NL-1:0] phy_pclk,")
@@ -1402,11 +1440,7 @@ def gen_top(cfg, pclk_mode="pclk_as_phy_output", sel_mode="sync", dpr=False):
     else:
         L.append("    input logic [NL-1:0] phy_pclk_out,")
         L.append("    input logic test_en,")
-        L.append(
-            "    input logic [NC-1:0] ctrl_rst_n,   // one per controller, already synchronized externally"
-        )
         L.append(f"    input logic [{mode_width(nm)-1}:0] mode,")
-        L.append("    output logic [NC-1:0] ctrl_pclk,")
         L.append("    output logic [NL-1:0] phy_pclk_in,")
         L.append("    output logic [NL-1:0] phy_rst_n,")
     L.append("    // PHY-side PIPE data")
@@ -1424,11 +1458,14 @@ def gen_top(cfg, pclk_mode="pclk_as_phy_output", sel_mode="sync", dpr=False):
     for cid in sorted(cfg.controllers):
         c = cfg.controllers[cid]
         L.append(f"    // {c.name} x{c.max_width}")
+        L.append(f"    input logic {c.lname}_rst_n,   // already synchronized externally")
         L.append(f"    input mac2phy_lane_t [{c.max_width-1}:0] {c.lname}_mac2phy,")
         L.append(f"    output phy2mac_lane_t [{c.max_width-1}:0] {c.lname}_phy2mac,")
         if phy_input_mode:
             L.append(f"    input logic [{c.max_width-1}:0] {c.lname}_pclk,")
             L.append(f"    output logic [{c.max_width-1}:0] {c.lname}_rx_clk,")
+        else:
+            L.append(f"    output logic {c.lname}_pclk,")
     L[-1] = L[-1].rstrip(",")
     L.append(");")
     L.append("")
@@ -1437,6 +1474,18 @@ def gen_top(cfg, pclk_mode="pclk_as_phy_output", sel_mode="sync", dpr=False):
     muxed_c = [c for c in sorted(cfg.controllers) if len(cc[c]) > 1]
 
     # ---- internal wiring
+    L.append(
+        "    logic [NC-1:0] ctrl_rst_n;   // reconstructed from each controller's own named port above"
+    )
+    L.append(
+        "    assign ctrl_rst_n = {"
+        + ", ".join(f"{cfg.controllers[cid].lname}_rst_n" for cid in sorted(cfg.controllers, reverse=True))
+        + "};"
+    )
+    if not phy_input_mode:
+        L.append(
+            "    logic [NC-1:0] ctrl_pclk;   // driven by u_clk_mux below, flattened out to each controller's own named port"
+        )
     if not phy_input_mode:
         L.append(
             "    lane_sel_t sel_tgt;   // each group's currently effective owner selection (after pipe_lane_sel_sync)"
@@ -1563,6 +1612,12 @@ def gen_top(cfg, pclk_mode="pclk_as_phy_output", sel_mode="sync", dpr=False):
     L.append("    );")
     L.append("")
 
+    if not phy_input_mode:
+        for cid in sorted(cfg.controllers):
+            c = cfg.controllers[cid]
+            L.append(f"    assign {c.lname}_pclk = ctrl_pclk[{cid}];")
+        L.append("")
+
     # ---- reset-mux submodule
     L.append("    //------------------------------------------------------------")
     L.append("    // Reset-mux submodule: phy_rst_n selects ctrl_rst_n by current owner")
@@ -1612,22 +1667,19 @@ def gen_top(cfg, pclk_mode="pclk_as_phy_output", sel_mode="sync", dpr=False):
     L.append("        .NL (NL)")
     L.append("    ) u_data_p2m (")
     if phy_input_mode:
-        # Unlike sel_gen/clk_mux/data_m2p, data_p2m's own port list is NOT
-        # widened for --dpr: a real controller's phy2mac convergence never
-        # gains DPR as a candidate (DPR doesn't drive into a real
-        # controller's port), so it still only declares seltgt_gN_lL for
-        # non-direct groups, dpr or not -- wiring the full (dpr-widened)
-        # seltgt_lanes here would connect to ports this module never
-        # declared for a group that's direct absent DPR.
+        # data_p2m's own seltgt_gN_lL ports are at the same width as
+        # everywhere else now (g.n, or g.n+1 with --dpr) -- it needs the top
+        # (DPR) bit itself now, to gate dpr_phy2mac (see that module's
+        # docstring), so this wires the same seltgt wire straight through
+        # with no slicing, for every group seltgt_lanes covers (which
+        # already includes previously-direct groups once --dpr widens them
+        # into 2-candidate NOV groups).
         for gid, l, _n in seltgt_lanes:
-            if cfg.groups[gid].is_direct:
-                continue
             L.append(f"        .seltgt_g{gid}_l{l} (seltgt_g{gid}_l{l}),")
     else:
         L.append("        .sel_tgt      (sel_tgt),")
     L.append("        .phy_phy2mac  (phy_phy2mac),")
     if dpr:
-        L.append("        .v_lane_mask  (v_lane_mask),")
         L.append("        .dpr_phy2mac  (dpr_phy2mac),")
     for cid in sorted(cfg.controllers):
         c = cfg.controllers[cid]
@@ -1685,7 +1737,6 @@ def gen_connection(cfg, pclk_mode="pclk_as_phy_output", dpr=False):
     L.append(") (")
     if phy_input_mode:
         L.append("    input logic test_en,")
-        L.append("    input logic [NC-1:0] ctrl_rst_n,")
         L.append(f"    input logic [{mode_width(nm)-1}:0] mode,")
         L.append("    input logic [NL-1:0] rx_clk,")
         L.append("    output logic [NL-1:0] phy_pclk,")
@@ -1693,9 +1744,7 @@ def gen_connection(cfg, pclk_mode="pclk_as_phy_output", dpr=False):
     else:
         L.append("    input logic [NL-1:0] phy_pclk_out,")
         L.append("    input logic test_en,")
-        L.append("    input logic [NC-1:0] ctrl_rst_n,")
         L.append(f"    input logic [{mode_width(nm)-1}:0] mode,")
-        L.append("    output logic [NC-1:0] ctrl_pclk,")
         L.append("    output logic [NL-1:0] phy_pclk_in,")
         L.append("    output logic [NL-1:0] phy_rst_n,")
     L.append("    // PHY-side PIPE data, flattened -- always per-lane regardless of signal_type")
@@ -1725,6 +1774,7 @@ def gen_connection(cfg, pclk_mode="pclk_as_phy_output", dpr=False):
     for cid in sorted(cfg.controllers):
         c = cfg.controllers[cid]
         L.append(f"    // {c.name} x{c.max_width}")
+        L.append(f"    input logic {c.lname}_rst_n,")
         for s in m2p_sigs:
             if s.is_shared:
                 L.append(f"    // {s.name}: shared across {c.name}'s own lanes")
@@ -1740,6 +1790,8 @@ def gen_connection(cfg, pclk_mode="pclk_as_phy_output", dpr=False):
         if phy_input_mode:
             L.append(f"    input logic [{c.max_width-1}:0] {c.lname}_pclk,")
             L.append(f"    output logic [{c.max_width-1}:0] {c.lname}_rx_clk,")
+        else:
+            L.append(f"    output logic {c.lname}_pclk,")
     L[-1] = L[-1].rstrip(",")
     L.append(");")
     L.append("")
@@ -1819,7 +1871,6 @@ def gen_connection(cfg, pclk_mode="pclk_as_phy_output", dpr=False):
     L.append("    ) u_pipe_lane_mapper (")
     if phy_input_mode:
         L.append("        .test_en      (test_en),")
-        L.append("        .ctrl_rst_n   (ctrl_rst_n),")
         L.append("        .mode         (mode),")
         L.append("        .rx_clk       (rx_clk),")
         L.append("        .phy_pclk     (phy_pclk),")
@@ -1827,9 +1878,7 @@ def gen_connection(cfg, pclk_mode="pclk_as_phy_output", dpr=False):
     else:
         L.append("        .phy_pclk_out (phy_pclk_out),")
         L.append("        .test_en      (test_en),")
-        L.append("        .ctrl_rst_n   (ctrl_rst_n),")
         L.append("        .mode         (mode),")
-        L.append("        .ctrl_pclk    (ctrl_pclk),")
         L.append("        .phy_pclk_in  (phy_pclk_in),")
         L.append("        .phy_rst_n    (phy_rst_n),")
     L.append("        .phy_mac2phy  (w_phy_mac2phy),")
@@ -1842,11 +1891,14 @@ def gen_connection(cfg, pclk_mode="pclk_as_phy_output", dpr=False):
         L.append("        .dpr_pclk     (dpr_pclk),")
     for cid in sorted(cfg.controllers):
         c = cfg.controllers[cid]
+        L.append(f"        .{c.lname}_rst_n   ({c.lname}_rst_n),")
         L.append(f"        .{c.lname}_mac2phy (w_{c.lname}_mac2phy),")
         L.append(f"        .{c.lname}_phy2mac (w_{c.lname}_phy2mac),")
         if phy_input_mode:
             L.append(f"        .{c.lname}_pclk ({c.lname}_pclk),")
             L.append(f"        .{c.lname}_rx_clk ({c.lname}_rx_clk),")
+        else:
+            L.append(f"        .{c.lname}_pclk ({c.lname}_pclk),")
     L[-1] = L[-1].rstrip(",")
     L.append("    );")
     L.append("")
@@ -1935,6 +1987,18 @@ def main():
         "the candidate controllers share one clock domain)",
     )
     ap.add_argument(
+        "--arch",
+        choices=["original_pipe", "serdes"],
+        default="original_pipe",
+        help="Which PHY macro family this config set targets: original_pipe "
+        "(a classic PIPE PHY, only supports --pclk-mode pclk_as_phy_output) "
+        "or serdes (a SerDes-style macro, only supports --pclk-mode "
+        "pclk_as_phy_input). Purely a cross-check against --pclk-mode, "
+        "documenting at generation time which macro family a mismatched "
+        "combination would otherwise fail to elaborate/simulate against "
+        "later.",
+    )
+    ap.add_argument(
         "--pclk-mode",
         choices=["pclk_as_phy_output", "pclk_as_phy_input"],
         default="pclk_as_phy_output",
@@ -1974,6 +2038,17 @@ def main():
     )
     ap.add_argument("--quiet", action="store_true")
     a = ap.parse_args(apply_set_flags(ap, set_flags) + sys.argv[1:])
+    validate_arch(a.arch, a.pclk_mode)
+    if a.dpr and a.sel_mode != "sync":
+        # DPR is merged into each group's own pipe_lane_sel_sync as one more
+        # candidate branch (see gen_sel_gen), gated by the SAME SEL_SYNC
+        # parameter --sel-mode drives for the group's real candidates --
+        # --sel-mode comb (SYNC=1'b0) is only safe when every branch shares
+        # one clock domain, which DPR (v_lane_mask driven independently of
+        # mode, from wherever the probe access itself lives) can't
+        # guarantee. Reject the combination here instead of silently
+        # generating a real CDC hazard.
+        raise SystemExit("--dpr requires --sel-mode sync (got --sel-mode comb)")
 
     cfg = load(csv_dir)
     src = out_rtl / "src"

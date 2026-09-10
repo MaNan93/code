@@ -40,6 +40,7 @@ from tkinter import filedialog, messagebox, simpledialog, ttk
 SCRIPT_DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(SCRIPT_DIR))
 from plm_common import (  # noqa: E402
+    ARCH_PCLK_MODE,
     CONFIGS_ROOT,
     PLM_ROOT,
     _PCLK_MODE_MIGRATION,
@@ -51,6 +52,12 @@ from plm_config import Config, _stripped  # noqa: E402
 
 PCLK_MODES = ["(default: pclk_as_phy_output)", "pclk_as_phy_output", "pclk_as_phy_input"]
 SEL_MODES = ["(default: sync)", "sync", "comb"]
+ARCH_MODES = ["(default: original_pipe)", "original_pipe", "serdes"]
+# arch and pclk-mode are two views of the same one choice (see
+# ARCH_PCLK_MODE) -- each dropdown's own trace keeps the other in sync (see
+# _build_gen_flags_tab / wherever the two combos are created), so the GUI
+# can never produce a mismatched pair the CLI tools would reject.
+PCLK_MODE_ARCH = {v: k for k, v in ARCH_PCLK_MODE.items()}
 DIRECTIONS = ["mac2phy", "phy2mac"]
 SIGNAL_TYPES = ["perlane", "shared"]
 LANE_COUNTS = ["1", "2", "4", "8", "16", "32"]
@@ -1537,6 +1544,23 @@ class PlmGui(tk.Tk):
             justify="left",
         ).pack(anchor="w", pady=(0, 8))
 
+        row_arch = ttk.Frame(tab)
+        row_arch.pack(anchor="w", pady=2)
+        ttk.Label(row_arch, text="arch:", width=14).pack(side="left")
+        self.arch_var = tk.StringVar(value=ARCH_MODES[0])
+        arch_combo = ttk.Combobox(
+            row_arch, textvariable=self.arch_var, values=ARCH_MODES, state="readonly", width=28
+        )
+        arch_combo.pack(side="left")
+        self._register_help(
+            arch_combo,
+            "Which PHY macro family this config set targets: original_pipe (a classic "
+            "PIPE PHY) only supports pclk-mode pclk_as_phy_output; serdes (a SerDes-style "
+            "macro) only supports pclk-mode pclk_as_phy_input. Changing this keeps "
+            "pclk-mode in sync automatically (and vice versa) -- they're two views of the "
+            "same one choice.",
+        )
+
         row1 = ttk.Frame(tab)
         row1.pack(anchor="w", pady=2)
         ttk.Label(row1, text="pclk-mode:", width=14).pack(side="left")
@@ -1548,6 +1572,37 @@ class PlmGui(tk.Tk):
         self._register_help(pclk_combo, "Which clock domain the PHY-facing pclk output comes "
                              "from: pclk_as_phy_output (PHY drives it), or pclk_as_phy_input "
                              "(each controller supplies its own).")
+
+        # arch and pclk-mode are two views of the same one choice (see
+        # ARCH_PCLK_MODE) -- keep them in sync in both directions, guarded
+        # against the recursive re-trigger a .set() inside a trace would
+        # otherwise cause.
+        _arch_pclk_sync = {"active": False}
+
+        def _on_arch_change(*_args):
+            if _arch_pclk_sync["active"]:
+                return
+            arch = self.arch_var.get()
+            if arch in ARCH_PCLK_MODE:
+                _arch_pclk_sync["active"] = True
+                try:
+                    self.pclk_mode_var.set(ARCH_PCLK_MODE[arch])
+                finally:
+                    _arch_pclk_sync["active"] = False
+
+        def _on_pclk_change(*_args):
+            if _arch_pclk_sync["active"]:
+                return
+            pclk = self.pclk_mode_var.get()
+            if pclk in PCLK_MODE_ARCH:
+                _arch_pclk_sync["active"] = True
+                try:
+                    self.arch_var.set(PCLK_MODE_ARCH[pclk])
+                finally:
+                    _arch_pclk_sync["active"] = False
+
+        self.arch_var.trace_add("write", _on_arch_change)
+        self.pclk_mode_var.trace_add("write", _on_pclk_change)
 
         row2 = ttk.Frame(tab)
         row2.pack(anchor="w", pady=2)
@@ -1574,6 +1629,24 @@ class PlmGui(tk.Tk):
             "ports (v_lane_mask, dpr_rst_n, dpr_mac2phy, dpr_phy2mac, dpr_pclk, ...) to the "
             "generated RTL and testbench. Off by default.",
         )
+
+        def _on_dpr_toggle(*_args):
+            # DPR is merged into each group's own pipe_lane_sel_sync as one
+            # more candidate branch, gated by the same SEL_SYNC parameter
+            # sel-mode drives for the real candidates -- comb mode is only
+            # safe when every branch shares one clock domain, which DPR
+            # (v_lane_mask driven independently of mode) can't guarantee.
+            # Force sync and lock the control while dpr is checked, rather
+            # than let the user pick an unsafe combination and only find
+            # out at generation time (plm_gen_rtl.py's own --dpr/--sel-mode
+            # check would reject it there too).
+            if self.dpr_var.get():
+                self.sel_mode_var.set("sync")
+                sel_combo.configure(state="disabled")
+            else:
+                sel_combo.configure(state="readonly")
+
+        self.dpr_var.trace_add("write", _on_dpr_toggle)
 
         row3 = ttk.Frame(tab)
         row3.pack(anchor="w", pady=(10, 2))
@@ -1615,6 +1688,7 @@ class PlmGui(tk.Tk):
         self.mapping_table.set_controllers([])
         self._set_lane_count_display(4)
         self.signals_table.set_rows([])
+        self.arch_var.set(ARCH_MODES[0])
         self.pclk_mode_var.set(PCLK_MODES[0])
         self.sel_mode_var.set(SEL_MODES[0])
         self.dpr_var.set(False)
@@ -1628,6 +1702,7 @@ class PlmGui(tk.Tk):
         self.mapping_table.set_controllers(self.controllers_table.get_rows())
         self._set_lane_count_display(4)
         self._load_default_signals(silent=True)
+        self.arch_var.set(ARCH_MODES[0])
         self.pclk_mode_var.set(PCLK_MODES[0])
         self.sel_mode_var.set(SEL_MODES[0])
         self.dpr_var.set(False)
@@ -1671,6 +1746,7 @@ class PlmGui(tk.Tk):
         self.mapping_table.set_controllers(self.controllers_table.get_rows())
 
         flags = self._read_gen_flags(cfg_dir / "gen_flags.txt")
+        self.arch_var.set(flags.get("arch", ARCH_MODES[0]))
         self.pclk_mode_var.set(flags.get("pclk-mode", PCLK_MODES[0]))
         self.sel_mode_var.set(flags.get("sel-mode", SEL_MODES[0]))
         self.dpr_var.set(flags.get("dpr", False))
@@ -1766,9 +1842,15 @@ class PlmGui(tk.Tk):
         # comparison below, so an old config set keeps loading correctly.
         raw_pclk_mode = flags.get("pclk-mode", "")
         pclk_mode_val = _PCLK_MODE_MIGRATION.get(raw_pclk_mode, raw_pclk_mode)
+        pclk_mode_val = pclk_mode_val if pclk_mode_val in ("pclk_as_phy_output", "pclk_as_phy_input") else None
         return {
-            "pclk-mode": pclk_mode_val if pclk_mode_val in ("pclk_as_phy_output", "pclk_as_phy_input")
-            else PCLK_MODES[0],
+            # arch is derived from pclk-mode, not read from its own "arch ="
+            # line -- the two are validated to always agree (see
+            # ARCH_PCLK_MODE), so deriving from whichever pclk-mode value
+            # this file actually resolves to (including "unset") sidesteps
+            # ever trusting a hand-edited arch line that could disagree.
+            "arch": PCLK_MODE_ARCH.get(pclk_mode_val, ARCH_MODES[0]),
+            "pclk-mode": pclk_mode_val or PCLK_MODES[0],
             "sel-mode": "comb" if flags.get("sel-mode") == "comb"
             else ("sync" if flags.get("sel-mode") == "sync" else SEL_MODES[0]),
             # Same boolean parsing as plm_common.apply_set_flags(), so the
@@ -1871,15 +1953,19 @@ class PlmGui(tk.Tk):
 
     def _write_gen_flags(self, path):
         lines = [
-            "# 支持: pclk-mode = pclk_as_phy_output | pclk_as_phy_input",
+            "# 支持: arch      = original_pipe | serdes",
+            "#       pclk-mode = pclk_as_phy_output | pclk_as_phy_input",
             "#       sel-mode  = sync | comb",
-            "#       dpr       = true | false",
+            "#       dpr       = true | false (dpr=true requires sel-mode=sync)",
         ]
         header_lines = len(lines)
+        arch = self.arch_var.get()
         pclk = self.pclk_mode_var.get()
         sel = self.sel_mode_var.get()
         dpr = self.dpr_var.get()
         verible = self.verible_path_var.get().strip()
+        if arch in ("original_pipe", "serdes"):
+            lines.append(f"arch = {arch}")
         if pclk in ("pclk_as_phy_output", "pclk_as_phy_input"):
             lines.append(f"pclk-mode = {pclk}")
         if sel in ("sync", "comb"):

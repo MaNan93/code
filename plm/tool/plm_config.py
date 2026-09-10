@@ -94,11 +94,11 @@ class Signal:
             # (e.g. a messagebus idle code), not just all-zero/all-one.
             try:
                 self.tie_value = int(self.tie_off, 0)
-            except ValueError:
+            except ValueError as e:
                 raise ValueError(
                     f"tie_off must be 'lane0' or an integer literal "
                     f"(e.g. 0, 1, 0x50), got '{self.tie_off}'"
-                )
+                ) from e
             if not (0 <= self.tie_value < (1 << self.width)):
                 raise ValueError(
                     f"tie_off value {self.tie_value} is out of range for " f"width={self.width}"
@@ -191,16 +191,16 @@ class Config:
     @staticmethod
     def _load_ctrl(path):
         out = {}
-        for i, r in enumerate(
-            _stripped(csv.DictReader(open(path, newline="", encoding="utf-8"))), start=2
-        ):
-            for col in ("ctrl_id", "ctrl_name", "max_width"):
-                if col not in r or not (r[col] or "").strip():
-                    raise SystemExit(f"{path} line {i}: missing {col}")
-            c = Controller(r["ctrl_id"], r["ctrl_name"], r["max_width"])
-            if c.id in out:
-                raise SystemExit(f"{path} line {i}: duplicate ctrl_id {c.id}")
-            out[c.id] = c
+        with open(path, newline="", encoding="utf-8") as f:
+            rows = enumerate(_stripped(csv.DictReader(f)), start=2)
+            for i, r in rows:
+                for col in ("ctrl_id", "ctrl_name", "max_width"):
+                    if col not in r or not (r[col] or "").strip():
+                        raise SystemExit(f"{path} line {i}: missing {col}")
+                c = Controller(r["ctrl_id"], r["ctrl_name"], r["max_width"])
+                if c.id in out:
+                    raise SystemExit(f"{path} line {i}: duplicate ctrl_id {c.id}")
+                out[c.id] = c
         if not out:
             raise SystemExit(f"{path}: no controllers defined")
         return out
@@ -210,39 +210,39 @@ class Config:
     def _load_sig(path):
         out = []
         seen = set()
-        for i, r in enumerate(
-            _stripped(csv.DictReader(open(path, newline="", encoding="utf-8"))), start=2
-        ):
-            for col in ("signal_name", "signal_type", "direction", "width", "safe_state", "tie_off"):
-                if col not in r or not (r[col] or "").strip():
-                    raise SystemExit(f"{path} line {i}: missing {col}")
-            name = r["signal_name"]
-            if name in seen:
-                raise SystemExit(f"{path} line {i}: signal {name} defined twice")
-            seen.add(name)
-            st = r["signal_type"].strip().lower()
-            if st not in ("perlane", "shared"):
-                raise SystemExit(
-                    f"{path} line {i}: signal_type='{r['signal_type']}' is invalid, "
-                    f"must be perlane or shared (case-insensitive)"
-                )
-            d = r["direction"]
-            if d not in ("mac2phy", "phy2mac"):
-                raise SystemExit(
-                    f"{path} line {i}: direction='{d}' is invalid, " f"must be mac2phy or phy2mac"
-                )
-            try:
-                s = Signal(name, st, d, r["width"], r["safe_state"], r["tie_off"])
-            except ValueError as e:
-                raise SystemExit(f"{path} line {i}: signal attribute validation failed, {e}")
-            if s.width < 1:
-                raise SystemExit(f"{path} line {i}: width must be >= 1")
-            if s.safe_state >= (1 << s.width):
-                raise SystemExit(
-                    f"{path} line {i}: signal {name} has safe_state="
-                    f"{s.safe_state}, out of range for width={s.width}"
-                )
-            out.append(s)
+        with open(path, newline="", encoding="utf-8") as f:
+            rows = enumerate(_stripped(csv.DictReader(f)), start=2)
+            for i, r in rows:
+                for col in ("signal_name", "signal_type", "direction", "width", "safe_state", "tie_off"):
+                    if col not in r or not (r[col] or "").strip():
+                        raise SystemExit(f"{path} line {i}: missing {col}")
+                name = r["signal_name"]
+                if name in seen:
+                    raise SystemExit(f"{path} line {i}: signal {name} defined twice")
+                seen.add(name)
+                st = r["signal_type"].strip().lower()
+                if st not in ("perlane", "shared"):
+                    raise SystemExit(
+                        f"{path} line {i}: signal_type='{r['signal_type']}' is invalid, "
+                        f"must be perlane or shared (case-insensitive)"
+                    )
+                d = r["direction"]
+                if d not in ("mac2phy", "phy2mac"):
+                    raise SystemExit(
+                        f"{path} line {i}: direction='{d}' is invalid, must be mac2phy or phy2mac"
+                    )
+                try:
+                    s = Signal(name, st, d, r["width"], r["safe_state"], r["tie_off"])
+                except ValueError as e:
+                    raise SystemExit(f"{path} line {i}: signal attribute validation failed, {e}") from e
+                if s.width < 1:
+                    raise SystemExit(f"{path} line {i}: width must be >= 1")
+                if s.safe_state >= (1 << s.width):
+                    raise SystemExit(
+                        f"{path} line {i}: signal {name} has safe_state="
+                        f"{s.safe_state}, out of range for width={s.width}"
+                    )
+                out.append(s)
         if not out:
             raise SystemExit(f"{path}: no signals defined")
         return out
@@ -250,70 +250,71 @@ class Config:
     # -- lane_mapping.csv
     @staticmethod
     def _load_map(path):
-        rd = csv.DictReader(open(path, newline="", encoding="utf-8"))
-        if rd.fieldnames is None:
-            raise SystemExit(f"{path}: file is empty")
-        # Strip the header: users sometimes accidentally add spaces to
-        # column names.
-        rd.fieldnames = [f.strip() if f else f for f in rd.fieldnames]
-        if "mode" not in rd.fieldnames:
-            raise SystemExit(f"{path}: header is missing the mode column")
-        cols = [c for c in rd.fieldnames if c != "mode"]
-        if not cols:
-            raise SystemExit(f"{path}: header has no lane columns besides mode")
-        lane_count = len(cols)
+        with open(path, newline="", encoding="utf-8") as f:
+            rd = csv.DictReader(f)
+            if rd.fieldnames is None:
+                raise SystemExit(f"{path}: file is empty")
+            # Strip the header: users sometimes accidentally add spaces to
+            # column names.
+            rd.fieldnames = [f.strip() if f else f for f in rd.fieldnames]
+            if "mode" not in rd.fieldnames:
+                raise SystemExit(f"{path}: header is missing the mode column")
+            cols = [c for c in rd.fieldnames if c != "mode"]
+            if not cols:
+                raise SystemExit(f"{path}: header has no lane columns besides mode")
+            lane_count = len(cols)
 
-        modes, mapping = [], {}
-        for i, r in enumerate(_stripped(rd), start=2):
-            # DictReader stuffs columns beyond the header into the None key.
-            # The typical scenario is copying from another config and
-            # forgetting to widen the header (an 8-lane template edited into
-            # 16 lanes) -- the extra data would silently get dropped,
-            # producing RTL with "half the lanes missing". This must be
-            # caught.
-            extra = r.get(None)
-            if extra:
-                raise SystemExit(
-                    f"{path} line {i}: row has {lane_count + len(extra)} lanes, "
-                    f"but the header only defines {lane_count} "
-                    f"({cols[0]}..{cols[-1]}).\n"
-                    f"  extra: {', '.join(extra)}\n"
-                    f"  Please extend the header to lane{lane_count + len(extra) - 1}."
-                )
-            miss = [c for c in cols if r.get(c) is None]
-            if miss:
-                raise SystemExit(f"{path} line {i}: missing {', '.join(miss)}")
-
-            mv = r["mode"] or ""
-            if not mv:
-                raise SystemExit(f"{path} line {i}: mode is empty")
-            try:
-                m = int(mv)
-            except ValueError:
-                raise SystemExit(f"{path} line {i}: mode='{mv}' is not an integer")
-            if m in mapping:
-                raise SystemExit(f"{path} line {i}: mode {m} defined twice")
-
-            per = {}
-            for idx, col in enumerate(cols):
-                cell = r[col]
-                if not cell:
+            modes, mapping = [], {}
+            for i, r in enumerate(_stripped(rd), start=2):
+                # DictReader stuffs columns beyond the header into the None
+                # key. The typical scenario is copying from another config
+                # and forgetting to widen the header (an 8-lane template
+                # edited into 16 lanes) -- the extra data would silently
+                # get dropped, producing RTL with "half the lanes missing".
+                # This must be caught.
+                extra = r.get(None)
+                if extra:
                     raise SystemExit(
-                        f"{path} line {i} {col}: cell is empty. "
-                        f"Every phy lane must have an owner in every mode."
+                        f"{path} line {i}: row has {lane_count + len(extra)} lanes, "
+                        f"but the header only defines {lane_count} "
+                        f"({cols[0]}..{cols[-1]}).\n"
+                        f"  extra: {', '.join(extra)}\n"
+                        f"  Please extend the header to lane{lane_count + len(extra) - 1}."
                     )
-                if cell.count("-") != 1:
-                    raise SystemExit(
-                        f"{path} line {i} {col}: '{cell}' has the wrong format, "
-                        f"expected ctrl_id-ctrl_lane (e.g. 0-5)"
-                    )
-                a, b = cell.split("-")
+                miss = [c for c in cols if r.get(c) is None]
+                if miss:
+                    raise SystemExit(f"{path} line {i}: missing {', '.join(miss)}")
+
+                mv = r["mode"] or ""
+                if not mv:
+                    raise SystemExit(f"{path} line {i}: mode is empty")
                 try:
-                    per[idx] = (int(a), int(b))
-                except ValueError:
-                    raise SystemExit(f"{path} line {i} {col}: '{cell}' contains a non-integer")
-            modes.append(m)
-            mapping[m] = per
+                    m = int(mv)
+                except ValueError as e:
+                    raise SystemExit(f"{path} line {i}: mode='{mv}' is not an integer") from e
+                if m in mapping:
+                    raise SystemExit(f"{path} line {i}: mode {m} defined twice")
+
+                per = {}
+                for idx, col in enumerate(cols):
+                    cell = r[col]
+                    if not cell:
+                        raise SystemExit(
+                            f"{path} line {i} {col}: cell is empty. "
+                            f"Every phy lane must have an owner in every mode."
+                        )
+                    if cell.count("-") != 1:
+                        raise SystemExit(
+                            f"{path} line {i} {col}: '{cell}' has the wrong format, "
+                            f"expected ctrl_id-ctrl_lane (e.g. 0-5)"
+                        )
+                    a, b = cell.split("-")
+                    try:
+                        per[idx] = (int(a), int(b))
+                    except ValueError as e:
+                        raise SystemExit(f"{path} line {i} {col}: '{cell}' contains a non-integer") from e
+                modes.append(m)
+                mapping[m] = per
 
         if not mapping:
             raise SystemExit(f"{path}: no mode data rows")

@@ -295,6 +295,7 @@ module tb_pipe_lane_mapper;
 
     //------------------------------------------------------------ NOV one-hot / safe-state monitor
     int unsigned err_count = 0;
+    int unsigned err_clock = 0, err_reset = 0, err_m2p = 0, err_p2m = 0, err_tie_off = 0, err_safe_state = 0;
 
     task automatic chk(input bit ok, input string msg);
         if (!ok) begin
@@ -423,8 +424,10 @@ module tb_pipe_lane_mapper;
             // skip: DUT hasn't come out of its startup X state yet
         end else begin
             logic [1:0] sel_snap;
+            int unsigned err_before;
             sel_snap = dut.seltgt_g1_l3;
             #1;
+            err_before = err_count;
             chk($onehot0(sel_snap), "seltgt_g1_l3 not one-hot0 (>1 branch enabled)");
 
             if (sel_snap == '0 && dut.seltgt_g1_l3 == '0)
@@ -437,6 +440,7 @@ module tb_pipe_lane_mapper;
             if (sel_snap[1] == 1'b0 && dut.seltgt_g1_l3[1] == 1'b0)
                 chk_p2m(ctrlb_phy2mac[0], exp_safe_p2m_ctrlb,
                     "G1 CtrlB[0]: not owner");
+            err_safe_state += (err_count - err_before);
         end
     end
 
@@ -445,8 +449,10 @@ module tb_pipe_lane_mapper;
             // skip: DUT hasn't come out of its startup X state yet
         end else begin
             logic [1:0] sel_snap;
+            int unsigned err_before;
             sel_snap = dut.seltgt_g1_l4;
             #1;
+            err_before = err_count;
             chk($onehot0(sel_snap), "seltgt_g1_l4 not one-hot0 (>1 branch enabled)");
 
             if (sel_snap == '0 && dut.seltgt_g1_l4 == '0)
@@ -459,6 +465,7 @@ module tb_pipe_lane_mapper;
             if (sel_snap[1] == 1'b0 && dut.seltgt_g1_l4[1] == 1'b0)
                 chk_p2m(ctrlb_phy2mac[1], exp_safe_p2m_ctrlb,
                     "G1 CtrlB[1]: not owner");
+            err_safe_state += (err_count - err_before);
         end
     end
 
@@ -467,8 +474,10 @@ module tb_pipe_lane_mapper;
             // skip: DUT hasn't come out of its startup X state yet
         end else begin
             logic [1:0] sel_snap;
+            int unsigned err_before;
             sel_snap = dut.seltgt_g1_l5;
             #1;
+            err_before = err_count;
             chk($onehot0(sel_snap), "seltgt_g1_l5 not one-hot0 (>1 branch enabled)");
 
             if (sel_snap == '0 && dut.seltgt_g1_l5 == '0)
@@ -481,6 +490,7 @@ module tb_pipe_lane_mapper;
             if (sel_snap[1] == 1'b0 && dut.seltgt_g1_l5[1] == 1'b0)
                 chk_p2m(ctrlb_phy2mac[2], exp_safe_p2m_ctrlb,
                     "G1 CtrlB[2]: not owner");
+            err_safe_state += (err_count - err_before);
         end
     end
 
@@ -489,8 +499,10 @@ module tb_pipe_lane_mapper;
             // skip: DUT hasn't come out of its startup X state yet
         end else begin
             logic [1:0] sel_snap;
+            int unsigned err_before;
             sel_snap = dut.seltgt_g2_l6;
             #1;
+            err_before = err_count;
             chk($onehot0(sel_snap), "seltgt_g2_l6 not one-hot0 (>1 branch enabled)");
 
             if (sel_snap == '0 && dut.seltgt_g2_l6 == '0)
@@ -503,6 +515,7 @@ module tb_pipe_lane_mapper;
             if (sel_snap[1] == 1'b0 && dut.seltgt_g2_l6[1] == 1'b0)
                 chk_p2m(ctrlc_phy2mac[0], exp_safe_p2m_ctrlc,
                     "G2 CtrlC[0]: not owner");
+            err_safe_state += (err_count - err_before);
         end
     end
 
@@ -511,8 +524,10 @@ module tb_pipe_lane_mapper;
             // skip: DUT hasn't come out of its startup X state yet
         end else begin
             logic [1:0] sel_snap;
+            int unsigned err_before;
             sel_snap = dut.seltgt_g2_l7;
             #1;
+            err_before = err_count;
             chk($onehot0(sel_snap), "seltgt_g2_l7 not one-hot0 (>1 branch enabled)");
 
             if (sel_snap == '0 && dut.seltgt_g2_l7 == '0)
@@ -525,6 +540,7 @@ module tb_pipe_lane_mapper;
             if (sel_snap[1] == 1'b0 && dut.seltgt_g2_l7[1] == 1'b0)
                 chk_p2m(ctrlc_phy2mac[1], exp_safe_p2m_ctrlc,
                     "G2 CtrlC[1]: not owner");
+            err_safe_state += (err_count - err_before);
         end
     end
 
@@ -533,8 +549,10 @@ module tb_pipe_lane_mapper;
             // skip: DUT hasn't come out of its startup X state yet
         end else begin
             logic [1:0] sel_snap;
+            int unsigned err_before;
             sel_snap = dut.seltgt_g2_l8;
             #1;
+            err_before = err_count;
             chk($onehot0(sel_snap), "seltgt_g2_l8 not one-hot0 (>1 branch enabled)");
 
             if (sel_snap == '0 && dut.seltgt_g2_l8 == '0)
@@ -547,6 +565,7 @@ module tb_pipe_lane_mapper;
             if (sel_snap[1] == 1'b0 && dut.seltgt_g2_l8[1] == 1'b0)
                 chk_p2m(ctrlc_phy2mac[2], exp_safe_p2m_ctrlc,
                     "G2 CtrlC[2]: not owner");
+            err_safe_state += (err_count - err_before);
         end
     end
 
@@ -555,8 +574,10 @@ module tb_pipe_lane_mapper;
             // skip: DUT hasn't come out of its startup X state yet
         end else begin
             logic [3:0] sel_snap;
+            int unsigned err_before;
             sel_snap = dut.seltgt_g3_l9;
             #1;
+            err_before = err_count;
             chk($onehot0(sel_snap), "seltgt_g3_l9 not one-hot0 (>1 branch enabled)");
 
             if (sel_snap == '0 && dut.seltgt_g3_l9 == '0)
@@ -575,6 +596,7 @@ module tb_pipe_lane_mapper;
             if (sel_snap[3] == 1'b0 && dut.seltgt_g3_l9[3] == 1'b0)
                 chk_p2m(ctrld_phy2mac[0], exp_safe_p2m_ctrld,
                     "G3 CtrlD[0]: not owner");
+            err_safe_state += (err_count - err_before);
         end
     end
 
@@ -583,8 +605,10 @@ module tb_pipe_lane_mapper;
             // skip: DUT hasn't come out of its startup X state yet
         end else begin
             logic [3:0] sel_snap;
+            int unsigned err_before;
             sel_snap = dut.seltgt_g3_l10;
             #1;
+            err_before = err_count;
             chk($onehot0(sel_snap), "seltgt_g3_l10 not one-hot0 (>1 branch enabled)");
 
             if (sel_snap == '0 && dut.seltgt_g3_l10 == '0)
@@ -603,6 +627,7 @@ module tb_pipe_lane_mapper;
             if (sel_snap[3] == 1'b0 && dut.seltgt_g3_l10[3] == 1'b0)
                 chk_p2m(ctrld_phy2mac[1], exp_safe_p2m_ctrld,
                     "G3 CtrlD[1]: not owner");
+            err_safe_state += (err_count - err_before);
         end
     end
 
@@ -611,8 +636,10 @@ module tb_pipe_lane_mapper;
             // skip: DUT hasn't come out of its startup X state yet
         end else begin
             logic [3:0] sel_snap;
+            int unsigned err_before;
             sel_snap = dut.seltgt_g3_l11;
             #1;
+            err_before = err_count;
             chk($onehot0(sel_snap), "seltgt_g3_l11 not one-hot0 (>1 branch enabled)");
 
             if (sel_snap == '0 && dut.seltgt_g3_l11 == '0)
@@ -631,6 +658,7 @@ module tb_pipe_lane_mapper;
             if (sel_snap[3] == 1'b0 && dut.seltgt_g3_l11[3] == 1'b0)
                 chk_p2m(ctrld_phy2mac[2], exp_safe_p2m_ctrld,
                     "G3 CtrlD[2]: not owner");
+            err_safe_state += (err_count - err_before);
         end
     end
 
@@ -641,26 +669,34 @@ module tb_pipe_lane_mapper;
         mac2phy_lane_t exp_m2p;
         phy2mac_lane_t exp_p2m;
         int cid, port;
+        int unsigned err_before;
 
         for (int l = 0; l < NL; l++) begin
             cid  = owner_of(m, l);
             port = port_of(m, l);
             exp_m2p = make_m2p(cid, port);
+            err_before = err_count;
             chk_m2p(phy_mac2phy[l], exp_m2p,
                 $sformatf("mode%0d lane%0d: expected ctrl%0d port%0d", m, l, cid, port));
+            err_m2p += (err_count - err_before);
 
+            err_before = err_count;
             chk(phy_rst_n[l] == ctrl_rst_n[cid],
                 $sformatf("mode%0d lane%0d: phy_rst_n=%0b does not follow owner ctrl%0d",
                           m, l, phy_rst_n[l], cid));
+            err_reset += (err_count - err_before);
 
             begin
                 time t0;
                 real got_ns, exp_ns;
+                int unsigned err_before;
                 exp_ns = CTRL_PERIOD_NS[cid];
                 @(posedge phy_pclk[l]); t0 = $time;
                 @(posedge phy_pclk[l]); got_ns = $time - t0;
+                err_before = err_count;
                 chk((got_ns > exp_ns * 0.8) && (got_ns < exp_ns * 1.2),
                     $sformatf("%s: measured period %0.2fns, expected ~%0.2fns", $sformatf("mode%0d lane%0d phy_pclk", m, l), got_ns, exp_ns));
+                err_clock += (err_count - err_before);
             end
         end
 
@@ -673,44 +709,56 @@ module tb_pipe_lane_mapper;
                     begin
                         time t0;
                         real got_ns, exp_ns;
+                        int unsigned err_before;
                         exp_ns = LANE_PERIOD_NS[l];
                         @(posedge ctrla_rx_clk[port]); t0 = $time;
                         @(posedge ctrla_rx_clk[port]); got_ns = $time - t0;
+                        err_before = err_count;
                         chk((got_ns > exp_ns * 0.8) && (got_ns < exp_ns * 1.2),
                             $sformatf("%s: measured period %0.2fns, expected ~%0.2fns", $sformatf("mode%0d ctrla_rx_clk[%0d]", m, port), got_ns, exp_ns));
+                        err_clock += (err_count - err_before);
                     end
                 end
                 1: begin
                     begin
                         time t0;
                         real got_ns, exp_ns;
+                        int unsigned err_before;
                         exp_ns = LANE_PERIOD_NS[l];
                         @(posedge ctrlb_rx_clk[port]); t0 = $time;
                         @(posedge ctrlb_rx_clk[port]); got_ns = $time - t0;
+                        err_before = err_count;
                         chk((got_ns > exp_ns * 0.8) && (got_ns < exp_ns * 1.2),
                             $sformatf("%s: measured period %0.2fns, expected ~%0.2fns", $sformatf("mode%0d ctrlb_rx_clk[%0d]", m, port), got_ns, exp_ns));
+                        err_clock += (err_count - err_before);
                     end
                 end
                 2: begin
                     begin
                         time t0;
                         real got_ns, exp_ns;
+                        int unsigned err_before;
                         exp_ns = LANE_PERIOD_NS[l];
                         @(posedge ctrlc_rx_clk[port]); t0 = $time;
                         @(posedge ctrlc_rx_clk[port]); got_ns = $time - t0;
+                        err_before = err_count;
                         chk((got_ns > exp_ns * 0.8) && (got_ns < exp_ns * 1.2),
                             $sformatf("%s: measured period %0.2fns, expected ~%0.2fns", $sformatf("mode%0d ctrlc_rx_clk[%0d]", m, port), got_ns, exp_ns));
+                        err_clock += (err_count - err_before);
                     end
                 end
                 3: begin
                     begin
                         time t0;
                         real got_ns, exp_ns;
+                        int unsigned err_before;
                         exp_ns = LANE_PERIOD_NS[l];
                         @(posedge ctrld_rx_clk[port]); t0 = $time;
                         @(posedge ctrld_rx_clk[port]); got_ns = $time - t0;
+                        err_before = err_count;
                         chk((got_ns > exp_ns * 0.8) && (got_ns < exp_ns * 1.2),
                             $sformatf("%s: measured period %0.2fns, expected ~%0.2fns", $sformatf("mode%0d ctrld_rx_clk[%0d]", m, port), got_ns, exp_ns));
+                        err_clock += (err_count - err_before);
                     end
                 end
             endcase
@@ -784,13 +832,17 @@ module tb_pipe_lane_mapper;
                         exp_tie.phy_mac_dirfeedback = 6'h00;
                         exp_tie.phy_mac_fomfeedback = 8'h00;
                     end
+                    err_before = err_count;
                     chk_p2m(got, exp_tie,
                         $sformatf("mode%0d ctrl%0d[%0d]: unmapped tie-off", m, c, p));
+                    err_tie_off += (err_count - err_before);
                 end else begin
                     exp_p2m = make_p2m(src_lane);
                     exp_p2m.phy_mac_phystatus = phy_phystatus_stim[src_lane];
+                    err_before = err_count;
                     chk_p2m(got, exp_p2m,
                         $sformatf("mode%0d ctrl%0d[%0d]: expected lane%0d data", m, c, p, src_lane));
+                    err_p2m += (err_count - err_before);
                 end
             end
         end
@@ -851,46 +903,73 @@ module tb_pipe_lane_mapper;
         // reset pulse checks in mode3
         // pulse each controller: its owner lanes' phy_rst_n should follow low, non-owner lanes stay high.
         ctrl_rst_n[0] = 1'b0; #SETTLE;
-        for (int l = 0; l < NL; l++) begin
-            bit expect_low;
-            expect_low = (owner_of(3, l) == 0);
-            chk(phy_rst_n[l] == (expect_low ? 1'b0 : 1'b1),
-                $sformatf("mode3 lane%0d: ctrl_rst_n[0]=0 pulse, expected phy_rst_n=%0b", l, expect_low ? 1'b0 : 1'b1));
+        begin
+            int unsigned err_before;
+            err_before = err_count;
+            for (int l = 0; l < NL; l++) begin
+                bit expect_low;
+                expect_low = (owner_of(3, l) == 0);
+                chk(phy_rst_n[l] == (expect_low ? 1'b0 : 1'b1),
+                    $sformatf("mode3 lane%0d: ctrl_rst_n[0]=0 pulse, expected phy_rst_n=%0b", l, expect_low ? 1'b0 : 1'b1));
+            end
+            err_reset += (err_count - err_before);
         end
         $display("%0t: ctrl_rst_n[0] pulse checked (%0d cumulative errors)", $time, err_count);
         ctrl_rst_n[0] = 1'b1; #SETTLE;
         check_mode(3);
         ctrl_rst_n[1] = 1'b0; #SETTLE;
-        for (int l = 0; l < NL; l++) begin
-            bit expect_low;
-            expect_low = (owner_of(3, l) == 1);
-            chk(phy_rst_n[l] == (expect_low ? 1'b0 : 1'b1),
-                $sformatf("mode3 lane%0d: ctrl_rst_n[1]=0 pulse, expected phy_rst_n=%0b", l, expect_low ? 1'b0 : 1'b1));
+        begin
+            int unsigned err_before;
+            err_before = err_count;
+            for (int l = 0; l < NL; l++) begin
+                bit expect_low;
+                expect_low = (owner_of(3, l) == 1);
+                chk(phy_rst_n[l] == (expect_low ? 1'b0 : 1'b1),
+                    $sformatf("mode3 lane%0d: ctrl_rst_n[1]=0 pulse, expected phy_rst_n=%0b", l, expect_low ? 1'b0 : 1'b1));
+            end
+            err_reset += (err_count - err_before);
         end
         $display("%0t: ctrl_rst_n[1] pulse checked (%0d cumulative errors)", $time, err_count);
         ctrl_rst_n[1] = 1'b1; #SETTLE;
         check_mode(3);
         ctrl_rst_n[2] = 1'b0; #SETTLE;
-        for (int l = 0; l < NL; l++) begin
-            bit expect_low;
-            expect_low = (owner_of(3, l) == 2);
-            chk(phy_rst_n[l] == (expect_low ? 1'b0 : 1'b1),
-                $sformatf("mode3 lane%0d: ctrl_rst_n[2]=0 pulse, expected phy_rst_n=%0b", l, expect_low ? 1'b0 : 1'b1));
+        begin
+            int unsigned err_before;
+            err_before = err_count;
+            for (int l = 0; l < NL; l++) begin
+                bit expect_low;
+                expect_low = (owner_of(3, l) == 2);
+                chk(phy_rst_n[l] == (expect_low ? 1'b0 : 1'b1),
+                    $sformatf("mode3 lane%0d: ctrl_rst_n[2]=0 pulse, expected phy_rst_n=%0b", l, expect_low ? 1'b0 : 1'b1));
+            end
+            err_reset += (err_count - err_before);
         end
         $display("%0t: ctrl_rst_n[2] pulse checked (%0d cumulative errors)", $time, err_count);
         ctrl_rst_n[2] = 1'b1; #SETTLE;
         check_mode(3);
         ctrl_rst_n[3] = 1'b0; #SETTLE;
-        for (int l = 0; l < NL; l++) begin
-            bit expect_low;
-            expect_low = (owner_of(3, l) == 3);
-            chk(phy_rst_n[l] == (expect_low ? 1'b0 : 1'b1),
-                $sformatf("mode3 lane%0d: ctrl_rst_n[3]=0 pulse, expected phy_rst_n=%0b", l, expect_low ? 1'b0 : 1'b1));
+        begin
+            int unsigned err_before;
+            err_before = err_count;
+            for (int l = 0; l < NL; l++) begin
+                bit expect_low;
+                expect_low = (owner_of(3, l) == 3);
+                chk(phy_rst_n[l] == (expect_low ? 1'b0 : 1'b1),
+                    $sformatf("mode3 lane%0d: ctrl_rst_n[3]=0 pulse, expected phy_rst_n=%0b", l, expect_low ? 1'b0 : 1'b1));
+            end
+            err_reset += (err_count - err_before);
         end
         $display("%0t: ctrl_rst_n[3] pulse checked (%0d cumulative errors)", $time, err_count);
         ctrl_rst_n[3] = 1'b1; #SETTLE;
         check_mode(3);
 
+        $display("=== test case summary ===");
+        $display("  clock     : %s (%0d errors)", err_clock == 0 ? "PASS" : "FAIL", err_clock);
+        $display("  reset     : %s (%0d errors)", err_reset == 0 ? "PASS" : "FAIL", err_reset);
+        $display("  m2p       : %s (%0d errors)", err_m2p == 0 ? "PASS" : "FAIL", err_m2p);
+        $display("  p2m       : %s (%0d errors)", err_p2m == 0 ? "PASS" : "FAIL", err_p2m);
+        $display("  tie_off   : %s (%0d errors)", err_tie_off == 0 ? "PASS" : "FAIL", err_tie_off);
+        $display("  safe_state: %s (%0d errors)", err_safe_state == 0 ? "PASS" : "FAIL", err_safe_state);
         if (err_count == 0) $display("TB_RESULT: PASS");
         else                 $display("TB_RESULT: FAIL (%0d errors)", err_count);
         $finish;

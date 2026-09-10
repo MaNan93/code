@@ -72,9 +72,9 @@ def gen_pkg(cfg, dpr=False):
         ("phy2mac", "phy2mac_lane_t", "SAFE_P2M"),
     ):
         sigs = [s for s in cfg.signals if s.direction == d]
-        L.append(f"    // Value to present when there's no owner (the NOV handoff window).")
+        L.append("    // Value to present when there's no owner (the NOV handoff window).")
         L.append(
-            f"    // pipe_lane_data_mux uses this for polarity normalization, so sel==0 naturally lands on the safe state."
+            "    // pipe_lane_data_mux uses this for polarity normalization, so sel==0 naturally lands on the safe state."
         )
         L.append(f"    localparam {tname} {cname} = '{{")
         for i, s in enumerate(sigs):
@@ -213,7 +213,7 @@ def gen_decoder(cfg, dpr=False):
                     f"                // {cfg.controllers[c].name} isn't assigned a lane in this mode,"
                 )
                 L.append(
-                    f"                // pclk_tgt stays 0; the downstream hold logic keeps the previous selection"
+                    "                // pclk_tgt stays 0; the downstream hold logic keeps the previous selection"
                 )
             else:
                 b = cc[c].index(v)
@@ -492,7 +492,7 @@ def gen_sel_gen(cfg, sel_mode="sync", pclk_mode="pclk_as_phy_output", dpr=False)
                 L.append(f"        .branch_rst_n ({{{branch_rst_terms}}}),")
                 L.append(f"        .tgt          (dec_tgt.g{g.gid}),")
                 L.append(f"        .en           (seltgt_g{g.gid}_l{l})")
-                L.append(f"    );")
+                L.append("    );")
                 L.append("")
     else:
         L.append("    //------------------------------------------------------------")
@@ -515,7 +515,7 @@ def gen_sel_gen(cfg, sel_mode="sync", pclk_mode="pclk_as_phy_output", dpr=False)
             L.append(f"        .branch_rst_n ({{{branch_rst_terms}}}),")
             L.append(f"        .tgt          (dec_tgt.g{g.gid}),")
             L.append(f"        .en           (sel_tgt.g{g.gid})")
-            L.append(f"    );")
+            L.append("    );")
             L.append("")
 
     if phy_input_mode:
@@ -533,7 +533,7 @@ def gen_sel_gen(cfg, sel_mode="sync", pclk_mode="pclk_as_phy_output", dpr=False)
                 L.append(f"    pipe_lane_sel_sync #(.N({n}), .SYNC(1'b1)) u_rxclk_sel_sync_g{g.gid}_l{l} (")
                 L.append(f"        .branch_clk   ({{{n}{{rx_clk[{l}]}}}}),")
                 L.append(
-                    f"        .branch_rst_n ({{"
+                    "        .branch_rst_n ({"
                     + ", ".join(f"ctrl_rst_n[{c}]" for c in reversed(g.cands))
                     + "}),"
                 )
@@ -549,7 +549,7 @@ def gen_sel_gen(cfg, sel_mode="sync", pclk_mode="pclk_as_phy_output", dpr=False)
                 tgt_expr = f"dec_tgt.g{g.gid}[{g.n-1}:0]" if dpr else f"dec_tgt.g{g.gid}"
                 L.append(f"        .tgt          ({tgt_expr}),")
                 L.append(f"        .en           (rxclk_en_g{g.gid}_l{l})")
-                L.append(f"    );")
+                L.append("    );")
                 L.append("")
 
     L.append("endmodule")
@@ -610,11 +610,11 @@ def gen_glitch_free_clk_select(L, prefix, cand_clks, rst_n_expr, tgt_expr, defau
     L.append(f"        if (!{rst_n_expr}) {prefix}_tgt_hold <= {n}'b{1 << default_bit:0{n}b};")
     L.append(f"        else if (|{tgt_expr}) {prefix}_tgt_hold <= {tgt_expr};")
     L.append(f"    pipe_lane_sel_sync #(.N({n}), .SYNC(1'b1)) u_{prefix}_sel (")
-    L.append(f"        .branch_clk   ({{" + ", ".join(reversed(cand_clks)) + "}),")
+    L.append("        .branch_clk   ({" + ", ".join(reversed(cand_clks)) + "}),")
     L.append(f"        .branch_rst_n ({{{n}{{{rst_n_expr}}}}}),")
     L.append(f"        .tgt          ({prefix}_tgt_hold),")
     L.append(f"        .en           ({prefix}_pen)")
-    L.append(f"    );")
+    L.append("    );")
     for i, clk in enumerate(cand_clks):
         L.append(
             f"    pipe_lane_clk_gate u_{prefix}_gate_b{i} (.clk_in({clk}), .en({prefix}_pen[{i}]), "
@@ -653,7 +653,7 @@ def gen_clk_mux_phy_output(cfg, dpr=False):
         "// pipe_lane_data_m2p / pipe_lane_data_p2m.",
         "import pipe_lane_signal_pkg::*;",
         "",
-        f"module pipe_lane_clk_mux #(",
+        "module pipe_lane_clk_mux #(",
         f"    parameter int NL = {LC},",
         f"    parameter int NC = {NC}",
         ") (",
@@ -713,7 +713,7 @@ def gen_clk_mux_phy_output(cfg, dpr=False):
         L.append("    // DPR's own working clock: from the lowest-numbered currently-masked")
         L.append("    // lane (isolate v_lane_mask's lowest set bit), glitch-free multi-candidate")
         L.append("    // select -- architecturally the exact same circuit as a real multi-")
-        L.append(f"    // candidate controller's ctrl_pclk above, just with all NL lanes as")
+        L.append("    // candidate controller's ctrl_pclk above, just with all NL lanes as")
         L.append(f"    // candidates. Defaults to lane{default_lane} (last group's lowest lane) when")
         L.append("    // idle (v_lane_mask all-zero).")
         L.append("    //------------------------------------------------------------")
@@ -832,7 +832,7 @@ def gen_clk_mux_phy_input(cfg, dpr=False):
         "// pipe_lane_data_m2p / pipe_lane_data_p2m.",
         "import pipe_lane_signal_pkg::*;",
         "",
-        f"module pipe_lane_clk_mux #(",
+        "module pipe_lane_clk_mux #(",
         f"    parameter int NL = {LC},",
         f"    parameter int NC = {NC}",
         ") (",
@@ -1065,7 +1065,7 @@ def gen_rst_mux(cfg, dpr=False):
         "// no owner), the safe state is to hold reset (0), not float or hold the previous owner.",
         "import pipe_lane_signal_pkg::*;",
         "",
-        f"module pipe_lane_rst_mux #(",
+        "module pipe_lane_rst_mux #(",
         f"    parameter int NL = {LC},",
         f"    parameter int NC = {NC}",
         ") (",
@@ -1097,9 +1097,9 @@ def gen_rst_mux(cfg, dpr=False):
             if dpr:
                 din_terms = "dpr_rst_n, " + din_terms
             L.append(f"        .din  ({{{din_terms}}}),")
-            L.append(f"        .safe (1'b0),")
+            L.append("        .safe (1'b0),")
             L.append(f"        .dout (rst_n_g{g.gid})")
-            L.append(f"    );")
+            L.append("    );")
             for l in g.lanes:
                 L.append(f"    assign phy_rst_n[{l}] = rst_n_g{g.gid};")
     L.append("")
@@ -1130,7 +1130,7 @@ def gen_data_m2p(cfg, pclk_mode="pclk_as_phy_output", dpr=False):
         "// pipe_lane_data_mux performs polarity normalization internally; output is SAFE_M2P when sel is all-zero.",
         "import pipe_lane_signal_pkg::*;",
         "",
-        f"module pipe_lane_data_m2p #(",
+        "module pipe_lane_data_m2p #(",
         f"    parameter int NL = {LC}",
         ") (",
     ]
@@ -1174,10 +1174,10 @@ def gen_data_m2p(cfg, pclk_mode="pclk_as_phy_output", dpr=False):
                 )
                 sel_expr = f"seltgt_g{g.gid}_l{l}" if phy_input_mode else f"sel_tgt.g{g.gid}"
                 L.append(f"        .sel  ({sel_expr}),")
-                L.append(f"        .din  ({{" + ", ".join(reversed(srcs)) + "}),")
-                L.append(f"        .safe (SAFE_M2P),")
+                L.append("        .din  ({" + ", ".join(reversed(srcs)) + "}),")
+                L.append("        .safe (SAFE_M2P),")
                 L.append(f"        .dout (phy_mac2phy[{l}])")
-                L.append(f"    );")
+                L.append("    );")
     L.append("")
     L.append("endmodule")
     return "\n".join(L) + "\n"
@@ -1237,7 +1237,7 @@ def gen_data_p2m(cfg, pclk_mode="pclk_as_phy_output", dpr=False):
         "// sel_tgt's mutual exclusivity is guaranteed by pipe_lane_sel_sync. Undriven ports are tied to the safe state.",
         "import pipe_lane_signal_pkg::*;",
         "",
-        f"module pipe_lane_data_p2m #(",
+        "module pipe_lane_data_p2m #(",
         f"    parameter int NL = {LC}",
         ") (",
     ]
@@ -1290,7 +1290,7 @@ def gen_data_p2m(cfg, pclk_mode="pclk_as_phy_output", dpr=False):
         for part in assign_parts[:-1]:
             L.append(f"        {part},")
         L.append(f"        {assign_parts[-1]}")
-        L.append(f"    }};")
+        L.append("    };")
         L.append("")
 
         for cl in range(c.max_width):
@@ -1336,10 +1336,10 @@ def gen_data_p2m(cfg, pclk_mode="pclk_as_phy_output", dpr=False):
             else:
                 sel_expr = f"sel_tgt.g{gid}"
             L.append(f"        .sel  ({sel_expr}),")
-            L.append(f"        .din  ({{" + ", ".join(reversed(din)) + "}),")
+            L.append("        .din  ({" + ", ".join(reversed(din)) + "}),")
             L.append(f"        .safe ({c.lname}_p2m_tie),")
             L.append(f"        .dout ({c.lname}_phy2mac[{cl}])")
-            L.append(f"    );")
+            L.append("    );")
         L.append("")
 
     if dpr:
@@ -1374,9 +1374,9 @@ def gen_data_p2m(cfg, pclk_mode="pclk_as_phy_output", dpr=False):
             L.append(f"    pipe_lane_data_mux #(.WIDTH(PHY2MAC_W), .N(1)) u_p2m_dpr_{l} (")
             L.append(f"        .sel  ({own_expr}),")
             L.append(f"        .din  ({{phy_phy2mac[{l}]}}),")
-            L.append(f"        .safe (dpr_p2m_tie),")
+            L.append("        .safe (dpr_p2m_tie),")
             L.append(f"        .dout (dpr_phy2mac[{l}])")
-            L.append(f"    );")
+            L.append("    );")
         L.append("")
 
     L.append("endmodule")
@@ -1454,7 +1454,7 @@ def gen_top(cfg, pclk_mode="pclk_as_phy_output", sel_mode="sync", dpr=False):
         L.append("    input mac2phy_lane_t [NL-1:0] dpr_mac2phy,")
         L.append("    output phy2mac_lane_t [NL-1:0] dpr_phy2mac,")
         L.append("    output logic dpr_pclk,   // DPR's own working clock, so external logic can sync to it")
-    L.append(f"    // Controller side. Each controller's ports are declared at its own real max_width.")
+    L.append("    // Controller side. Each controller's ports are declared at its own real max_width.")
     for cid in sorted(cfg.controllers):
         c = cfg.controllers[cid]
         L.append(f"    // {c.name} x{c.max_width}")

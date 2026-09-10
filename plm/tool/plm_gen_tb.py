@@ -50,13 +50,16 @@ def _emit_clk_period_chk(L, indent, sig_expr, exp_ns_expr, ctx_expr):
     L.append(f"{ind}begin")
     L.append(f"{ind}    time t0;")
     L.append(f"{ind}    real got_ns, exp_ns;")
+    L.append(f"{ind}    int unsigned err_before;")
     L.append(f"{ind}    exp_ns = {exp_ns_expr};")
     L.append(f"{ind}    @(posedge {sig_expr}); t0 = $time;")
     L.append(f"{ind}    @(posedge {sig_expr}); got_ns = $time - t0;")
+    L.append(f"{ind}    err_before = err_count;")
     L.append(f"{ind}    chk((got_ns > exp_ns * 0.8) && (got_ns < exp_ns * 1.2),")
     L.append(
         f'{ind}        $sformatf("%s: measured period %0.2fns, expected ~%0.2fns", {ctx_expr}, got_ns, exp_ns));'
     )
+    L.append(f"{ind}    err_clock += (err_count - err_before);")
     L.append(f"{ind}end")
 
 
@@ -305,11 +308,11 @@ def gen_tb(cfg, pclk_mode="pclk_as_phy_output", dpr=False):
             f"        for (int p = 0; p < {c.max_width}; p++) "
             f"{c.lname}_mac2phy[p] = make_m2p({c.id}, p);"
         )
-    L.append(f"        for (int l = 0; l < NL; l++) begin")
-    L.append(f"            phy_phy2mac[l] = make_p2m(l);")
+    L.append("        for (int l = 0; l < NL; l++) begin")
+    L.append("            phy_phy2mac[l] = make_p2m(l);")
     if "phy_mac_phystatus" in sig_names:
-        L.append(f"            phy_phy2mac[l].phy_mac_phystatus = phy_phystatus_stim[l];")
-    L.append(f"        end")
+        L.append("            phy_phy2mac[l].phy_mac_phystatus = phy_phystatus_stim[l];")
+    L.append("        end")
     L.append("    end")
     L.append("")
 
@@ -361,7 +364,26 @@ def gen_tb(cfg, pclk_mode="pclk_as_phy_output", dpr=False):
     L.append(
         "    //------------------------------------------------------------ NOV one-hot / safe-state monitor"
     )
+    # err_count is the aggregate used for the final TB_RESULT; each test
+    # case below (clock/reset/m2p/p2m/tie_off/safe_state[/dpr]) also gets
+    # its own counter, so the summary at the end can report each case's
+    # own PASS/FAIL instead of one undifferentiated error count.
+    # chk/chk_m2p/chk_p2m themselves are completely untouched from before
+    # this per-case breakdown existed (same signatures, same bodies) --
+    # every category-tracking mechanism that touched them in any way (a
+    # `ref int unsigned` argument, a plain `input string` argument, a
+    # module-level `string`/`int` "current category" variable chk() reads
+    # internally) segfaulted verilator's own runtime once actually run
+    # against this file's real scale, even though every one of them lints
+    # clean and a small isolated repro of the same pattern runs fine in
+    # isolation. Instead, each call site below reads err_count itself
+    # (snapshot before, diff after) and bumps its own category's counter
+    # by the delta -- chk() never knows or cares which category called it.
     L.append("    int unsigned err_count = 0;")
+    case_names = ["clock", "reset", "m2p", "p2m", "tie_off", "safe_state"]
+    if dpr:
+        case_names.append("dpr")
+    L.append("    int unsigned " + ", ".join(f"err_{n} = 0" for n in case_names) + ";")
     L.append("")
     L.append("    task automatic chk(input bit ok, input string msg);")
     L.append("        if (!ok) begin")
@@ -397,7 +419,7 @@ def gen_tb(cfg, pclk_mode="pclk_as_phy_output", dpr=False):
         )
     L.append("    endtask")
     L.append("")
-    if muxed:
+    if muxed or dpr:
         for g in muxed:
             lanes_str = ", ".join(str(l) for l in g.lanes)
             L.append(f"    localparam int G{g.gid}_LANES[{len(g.lanes)}] = " f"'{{{lanes_str}}};")
@@ -409,8 +431,15 @@ def gen_tb(cfg, pclk_mode="pclk_as_phy_output", dpr=False):
         # *_p2m_tie in gen_data_p2m(), built from the same
         # Signal.tie_expr(), but kept as a separate tb-side computation so
         # this is a real external check of the DUT's behavior, not a
-        # tautology against its own internal signal.
-        muxed_ctrl_ids = sorted({c for g in muxed for c in g.cands})
+        # tautology against its own internal signal. With --dpr, every
+        # group is at least a 2-candidate one (real + DPR, see
+        # gen_data_p2m) even if it was a direct (single-candidate) group
+        # before DPR existed -- the dpr test below needs "should this
+        # candidate read SAFE_P2M while DPR owns its lane" for every
+        # controller, not just the ones already muxed absent DPR, so this
+        # covers every controller in that case instead of just
+        # muxed_ctrl_ids.
+        muxed_ctrl_ids = sorted({c for g in muxed for c in g.cands} | (set(cfg.controllers) if dpr else set()))
         cc = cfg.ctrl_pclk_cands()
         p2m_signals = [s for s in cfg.signals if not s.is_m2p]
         for cid in muxed_ctrl_ids:
@@ -427,8 +456,25 @@ def gen_tb(cfg, pclk_mode="pclk_as_phy_output", dpr=False):
             for part in assign_parts[:-1]:
                 L.append(f"        {part},")
             L.append(f"        {assign_parts[-1]}")
-            L.append(f"    }};")
+            L.append("    };")
         L.append("")
+
+        if dpr:
+            # DPR's own tie value when it doesn't own a lane -- same
+            # tie_expr(None) used by gen_data_p2m()'s own dpr_p2m_tie
+            # (tie_off=lane0 has no meaningful "DPR's own base lane", so
+            # it resolves to '0 there too), computed independently here so
+            # the dpr test below is a real external check, not a
+            # tautology against the DUT's own internal tie constant.
+            dpr_tie_parts = [f"{s.name}: {s.tie_expr(None)}" for s in p2m_signals if not s.tie_is_zero]
+            dpr_tie_parts.append("default: '0")
+            L.append("    phy2mac_lane_t exp_dpr_tie;")
+            L.append("    assign exp_dpr_tie = '{")
+            for part in dpr_tie_parts[:-1]:
+                L.append(f"        {part},")
+            L.append(f"        {dpr_tie_parts[-1]}")
+            L.append("    };")
+            L.append("")
 
         if phy_input_mode:
             # sel_tgt doesn't exist as a group-level signal in this mode --
@@ -454,6 +500,7 @@ def gen_tb(cfg, pclk_mode="pclk_as_phy_output", dpr=False):
                     L.append("            // skip: DUT hasn't come out of its startup X state yet")
                     L.append("        end else begin")
                     L.append(f"            logic [{n-1}:0] sel_snap;")
+                    L.append("            int unsigned err_before;")
                     # dut.seltgt_g{gid}_l{l} is DPR-widened when --dpr (g.n+1
                     # bits: real candidates in the low g.n bits, DPR at bit
                     # g.n), but this monitor only cares about real-candidate
@@ -466,6 +513,7 @@ def gen_tb(cfg, pclk_mode="pclk_as_phy_output", dpr=False):
                     snap_rhs = f"dut.seltgt_g{g.gid}_l{l}[{n-1}:0]" if dpr else f"dut.seltgt_g{g.gid}_l{l}"
                     L.append(f"            sel_snap = {snap_rhs};")
                     L.append("            #1;")
+                    L.append("            err_before = err_count;")
                     L.append(
                         f'            chk($onehot0(sel_snap), "seltgt_g{g.gid}_l{l} not one-hot0 (>1 branch enabled)");'
                     )
@@ -484,6 +532,7 @@ def gen_tb(cfg, pclk_mode="pclk_as_phy_output", dpr=False):
                             f"                chk_p2m({cc_.lname}_phy2mac[{cl}], exp_safe_p2m_{cc_.lname},"
                         )
                         L.append(f'                    "G{g.gid} {cc_.name}[{cl}]: not owner");')
+                    L.append("            err_safe_state += (err_count - err_before);")
                     L.append("        end")
                     L.append("    end")
                     L.append("")
@@ -539,8 +588,10 @@ def gen_tb(cfg, pclk_mode="pclk_as_phy_output", dpr=False):
             # next dut.sel_tgt edge (already guaranteed, since it just changed)
             # will re-enter this block and check the new state correctly.
             L.append("            lane_sel_t sel_snap;")
+            L.append("            int unsigned err_before;")
             L.append("            sel_snap = dut.sel_tgt;")
             L.append("            #1;")
+            L.append("            err_before = err_count;")
             for g in muxed:
                 L.append(
                     f"            chk($onehot0(sel_snap.g{g.gid}), "
@@ -564,7 +615,8 @@ def gen_tb(cfg, pclk_mode="pclk_as_phy_output", dpr=False):
                         f"                chk_p2m({c.lname}_phy2mac[{cl}], exp_safe_p2m_{c.lname},"
                     )
                     L.append(f'                    "G{g.gid} {c.name}[{cl}]: sel==0 NOV gap");')
-                L.append(f"            end")
+                L.append("            end")
+            L.append("            err_safe_state += (err_count - err_before);")
             L.append("        end")
             L.append("    end")
     else:
@@ -573,7 +625,17 @@ def gen_tb(cfg, pclk_mode="pclk_as_phy_output", dpr=False):
         )
     L.append("")
 
-    # ---- check_mode
+    # ---- check_mode: one task covering every per-mode test case
+    # (m2p/reset/clocks/p2m/tie_off), each still counted separately via
+    # chk()'s category argument. This used to be five separate tasks, one
+    # per case, called in sequence from here -- but that structure
+    # segfaulted verilator's own runtime on this file's actual scale (the
+    # DUT's real port/struct width, not reproducible in a small isolated
+    # test case); a single task, same shape this file used before this
+    # test-case reporting was added, doesn't. The per-case PASS/FAIL
+    # breakdown the categories give at the end doesn't need five separate
+    # SV tasks to work -- chk()'s own category dispatch is what actually
+    # provides it.
     L.append(
         "    //------------------------------------------------------------ steady-state data-routing check"
     )
@@ -581,21 +643,26 @@ def gen_tb(cfg, pclk_mode="pclk_as_phy_output", dpr=False):
     L.append("        mac2phy_lane_t exp_m2p;")
     L.append("        phy2mac_lane_t exp_p2m;")
     L.append("        int cid, port;")
+    L.append("        int unsigned err_before;")
     L.append("")
     L.append("        for (int l = 0; l < NL; l++) begin")
     L.append("            cid  = owner_of(m, l);")
     L.append("            port = port_of(m, l);")
     L.append("            exp_m2p = make_m2p(cid, port);")
+    L.append("            err_before = err_count;")
     L.append("            chk_m2p(phy_mac2phy[l], exp_m2p,")
     L.append(
         '                $sformatf("mode%0d lane%0d: expected ctrl%0d port%0d", m, l, cid, port));'
     )
+    L.append("            err_m2p += (err_count - err_before);")
     L.append("")
+    L.append("            err_before = err_count;")
     L.append("            chk(phy_rst_n[l] == ctrl_rst_n[cid],")
     L.append(
         '                $sformatf("mode%0d lane%0d: phy_rst_n=%0b does not follow owner ctrl%0d",'
     )
     L.append("                          m, l, phy_rst_n[l], cid));")
+    L.append("            err_reset += (err_count - err_before);")
     L.append("")
     if phy_input_mode:
         _emit_clk_period_chk(
@@ -717,10 +784,12 @@ def gen_tb(cfg, pclk_mode="pclk_as_phy_output", dpr=False):
         L.append(f"                        exp_tie.{s.name} = {s.tie_expr(None)};")
     L.append("                    end")
 
+    L.append("                    err_before = err_count;")
     L.append("                    chk_p2m(got, exp_tie,")
     L.append(
         '                        $sformatf("mode%0d ctrl%0d[%0d]: unmapped tie-off", m, c, p));'
     )
+    L.append("                    err_tie_off += (err_count - err_before);")
     L.append("                end else begin")
     L.append("                    exp_p2m = make_p2m(src_lane);")
     if "phy_mac_phystatus" in sig_names:
@@ -731,10 +800,12 @@ def gen_tb(cfg, pclk_mode="pclk_as_phy_output", dpr=False):
         # per-field check spuriously fails whenever phy_phystatus_stim[src_lane]
         # is toggled non-zero during a check_mode() call.
         L.append("                    exp_p2m.phy_mac_phystatus = phy_phystatus_stim[src_lane];")
+    L.append("                    err_before = err_count;")
     L.append("                    chk_p2m(got, exp_p2m,")
     L.append(
         '                        $sformatf("mode%0d ctrl%0d[%0d]: expected lane%0d data", m, c, p, src_lane));'
     )
+    L.append("                    err_p2m += (err_count - err_before);")
     L.append("                end")
     L.append("            end")
     L.append("        end")
@@ -745,6 +816,57 @@ def gen_tb(cfg, pclk_mode="pclk_as_phy_output", dpr=False):
     L.append("    endtask")
     L.append("")
 
+    if dpr:
+        # DPR is idle by construction until this task actively drives
+        # v_lane_mask -- one representative lane per group (a group's own
+        # lowest lane), covering a direct (single real candidate) group,
+        # a 2-candidate group, and an N-candidate group whenever the
+        # config set has them, generalizing to any config instead of
+        # hardcoding specific lane numbers.
+        L.append(
+            "    //------------------------------------------------------------ dpr test: DPR claims/releases a lane per group"
+        )
+        L.append("    task automatic check_dpr();")
+        test_lanes = [g.lanes[0] for g in cfg.groups]
+        L.append(f"        int test_lanes[{len(test_lanes)}] = '{{{', '.join(str(l) for l in test_lanes)}}};")
+        L.append("        foreach (test_lanes[k]) begin")
+        L.append("            automatic int l = test_lanes[k];")
+        L.append("            automatic int oid = owner_of(mode, l);")
+        L.append("            automatic int op = port_of(mode, l);")
+        L.append("            automatic int unsigned err_before;")
+        L.append("            v_lane_mask = '0;")
+        L.append("            v_lane_mask[l] = 1'b1;")
+        L.append("            #SETTLE;")
+        L.append("            err_before = err_count;")
+        L.append("            case (oid)")
+        for c in ctrls:
+            L.append(f"                {c.id}: chk_p2m({c.lname}_phy2mac[op], exp_safe_p2m_{c.lname},")
+            L.append(
+                f'                    $sformatf("dpr claimed lane%0d: real owner {c.name}[%0d] should read SAFE_P2M", l, op));'
+            )
+        L.append("                default: ;")
+        L.append("            endcase")
+        L.append("            chk(dpr_phy2mac[l] == phy_phy2mac[l],")
+        L.append(
+            '                $sformatf("dpr claimed lane%0d: dpr_phy2mac should mirror live phy_phy2mac", l));'
+        )
+        L.append(
+            '            $display("%0t: dpr claimed lane%0d (%0d cumulative errors)", $time, l, err_count);'
+        )
+        L.append("            v_lane_mask = '0;")
+        L.append("            #SETTLE;")
+        L.append("            chk(dpr_phy2mac[l] == exp_dpr_tie,")
+        L.append(
+            '                $sformatf("dpr released lane%0d: dpr_phy2mac should revert to tie", l));'
+        )
+        L.append(
+            '            $display("%0t: dpr released lane%0d (%0d cumulative errors)", $time, l, err_count);'
+        )
+        L.append("            err_dpr += (err_count - err_before);")
+        L.append("        end")
+        L.append("    endtask")
+        L.append("")
+
     # ---- sequencing
     L.append("    //------------------------------------------------------------ sequencing")
     L.append(f"    localparam realtime SETTLE = {settle};")
@@ -753,12 +875,13 @@ def gen_tb(cfg, pclk_mode="pclk_as_phy_output", dpr=False):
     # number -- it needs to comfortably outlast every #SETTLE wait the
     # sequencing below actually does: 1 (initial reset) + (nm-1) mode
     # transitions + 2 for the non-adjacent jump (if nm>=2) + 2 per
-    # controller for the reset-pulse checks. 3x that (plus a fixed pad
-    # for the small non-SETTLE delays: #100, #20 phystatus toggles, and
+    # controller for the reset-pulse checks + 2 per group for the dpr
+    # test (claim + release), if --dpr. 3x that (plus a fixed pad for the
+    # small non-SETTLE delays: #100, #20 phystatus toggles, and
     # check_mode()'s own per-lane/per-controller clock-period checks,
     # which each block for a couple of clock edges) keeps this from
     # nuisance-timing-out just because SETTLE (or NC) changes later.
-    n_settle_waits = 1 + (nm - 1) + (2 if nm >= 2 else 0) + 2 * NC
+    n_settle_waits = 1 + (nm - 1) + (2 if nm >= 2 else 0) + 2 * NC + (2 * len(cfg.groups) if dpr else 0)
     watchdog_ns = n_settle_waits * settle * 3 + 10000
     L.append("    initial begin")
     L.append("`ifdef DUMP_FSDB")
@@ -778,18 +901,18 @@ def gen_tb(cfg, pclk_mode="pclk_as_phy_output", dpr=False):
     for i, m in enumerate(cfg.modes):
         L.append(f"        check_mode({m});")
         L.append(
-            f"        // toggle physical lane 0's phystatus and dynamically verify it's followed correctly"
+            "        // toggle physical lane 0's phystatus and dynamically verify it's followed correctly"
         )
-        L.append(f"        phy_phystatus_stim[0] = 1'b1; #20;")
+        L.append("        phy_phystatus_stim[0] = 1'b1; #20;")
         L.append(f"        check_mode({m});")
-        L.append(f"        phy_phystatus_stim[0] = 1'b0; #20;")
+        L.append("        phy_phystatus_stim[0] = 1'b0; #20;")
         L.append(f"        check_mode({m});")
         if i < len(cfg.modes) - 1:
             L.append(f"        mode = {cfg.modes[i+1]}; #SETTLE;")
     # Switch back after the last mode, to exercise a non-adjacent jump
     if nm >= 2:
         L.append("")
-        L.append(f"        // non-adjacent jump")
+        L.append("        // non-adjacent jump")
         L.append(f"        mode = {cfg.modes[0]}; #SETTLE; check_mode({cfg.modes[0]});")
         L.append(f"        mode = {cfg.modes[-1]}; #SETTLE; check_mode({cfg.modes[-1]});")
     L.append("")
@@ -798,20 +921,25 @@ def gen_tb(cfg, pclk_mode="pclk_as_phy_output", dpr=False):
     last_m = cfg.modes[-1]
     L.append(f"        // reset pulse checks in mode{last_m}")
     L.append(
-        f"        // pulse each controller: its owner lanes' phy_rst_n should follow low,"
-        f" non-owner lanes stay high."
+        "        // pulse each controller: its owner lanes' phy_rst_n should follow low,"
+        " non-owner lanes stay high."
     )
     for c in ctrls:
         L.append(f"        ctrl_rst_n[{c.id}] = 1'b0; #SETTLE;")
-        L.append(f"        for (int l = 0; l < NL; l++) begin")
-        L.append(f"            bit expect_low;")
-        L.append(f"            expect_low = (owner_of({last_m}, l) == {c.id});")
-        L.append(f"            chk(phy_rst_n[l] == (expect_low ? 1'b0 : 1'b1),")
+        L.append("        begin")
+        L.append("            int unsigned err_before;")
+        L.append("            err_before = err_count;")
+        L.append("            for (int l = 0; l < NL; l++) begin")
+        L.append("                bit expect_low;")
+        L.append(f"                expect_low = (owner_of({last_m}, l) == {c.id});")
+        L.append('                chk(phy_rst_n[l] == (expect_low ? 1\'b0 : 1\'b1),')
         L.append(
-            f'                $sformatf("mode{last_m} lane%0d: ctrl_rst_n[{c.id}]=0 pulse, '
+            f'                    $sformatf("mode{last_m} lane%0d: ctrl_rst_n[{c.id}]=0 pulse, '
             f"expected phy_rst_n=%0b\", l, expect_low ? 1'b0 : 1'b1));"
         )
-        L.append(f"        end")
+        L.append("            end")
+        L.append("            err_reset += (err_count - err_before);")
+        L.append("        end")
         L.append(
             f'        $display("%0t: ctrl_rst_n[{c.id}] pulse checked (%0d cumulative errors)", '
             f"$time, err_count);"
@@ -819,6 +947,17 @@ def gen_tb(cfg, pclk_mode="pclk_as_phy_output", dpr=False):
         L.append(f"        ctrl_rst_n[{c.id}] = 1'b1; #SETTLE;")
         L.append(f"        check_mode({last_m});")
     L.append("")
+    if dpr:
+        L.append(f"        // dpr test, in mode{last_m}")
+        L.append("        check_dpr();")
+        L.append("")
+
+    L.append('        $display("=== test case summary ===");')
+    for name in case_names:
+        L.append(
+            f'        $display("  {name:<10}: %s (%0d errors)", '
+            f'err_{name} == 0 ? "PASS" : "FAIL", err_{name});'
+        )
     L.append('        if (err_count == 0) $display("TB_RESULT: PASS");')
     L.append('        else                 $display("TB_RESULT: FAIL (%0d errors)", err_count);')
     L.append("        $finish;")

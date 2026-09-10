@@ -30,6 +30,7 @@ each config can be viewed/simulated independently):
 """
 
 import argparse
+import json
 import shutil
 import sys
 from pathlib import Path
@@ -2026,6 +2027,15 @@ def main():
         "files are left unformatted (this is cosmetic, not required).",
     )
     ap.add_argument(
+        "--verible-flags",
+        default=None,
+        metavar="JSON",
+        help="JSON object of verible-verilog-format flags (e.g. "
+        '\'{"column_limit": "100", "wrap_end_else_clauses": "false"}\'), replacing '
+        "this tool's own default flag set entirely. Advanced; normally left unset "
+        "(plm_web.py's Settings panel is the usual way to change these).",
+    )
+    ap.add_argument(
         "--dpr",
         action="store_true",
         help="Also generate the DPR (diagnostic probe) overlay: a virtual controller "
@@ -2038,6 +2048,7 @@ def main():
     )
     ap.add_argument("--quiet", action="store_true")
     a = ap.parse_args(apply_set_flags(ap, set_flags) + sys.argv[1:])
+    verible_flags = json.loads(a.verible_flags) if a.verible_flags else None
     validate_arch(a.arch, a.pclk_mode)
     if a.dpr and a.sel_mode != "sync":
         # DPR is merged into each group's own pipe_lane_sel_sync as one more
@@ -2073,7 +2084,7 @@ def main():
         if f.is_file():
             if f.suffix == ".sv":
                 (common_dst / f.name).write_text(
-                    format_sv(f.read_text(encoding="utf-8"), a.verible_path), encoding="utf-8"
+                    format_sv(f.read_text(encoding="utf-8"), a.verible_path, verible_flags), encoding="utf-8"
                 )
             else:
                 shutil.copy2(f, common_dst / f.name)
@@ -2094,7 +2105,7 @@ def main():
     }
     for p, c in files.items():
         if p.suffix == ".sv":
-            c = format_sv(c, a.verible_path)
+            c = format_sv(c, a.verible_path, verible_flags)
         p.write_text(c, encoding="utf-8")
         print(f"  generated {p}")
 

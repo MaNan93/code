@@ -17,6 +17,7 @@ layout; this tool only touches <SET>/tb/.
 """
 
 import argparse
+import json
 import shutil
 import sys
 from pathlib import Path
@@ -1033,6 +1034,15 @@ def main():
         "file is left unformatted (this is cosmetic, not required).",
     )
     ap.add_argument(
+        "--verible-flags",
+        default=None,
+        metavar="JSON",
+        help="JSON object of verible-verilog-format flags (e.g. "
+        '\'{"column_limit": "100", "wrap_end_else_clauses": "false"}\'), replacing '
+        "this tool's own default flag set entirely. Advanced; normally left unset "
+        "(plm_web.py's Settings panel is the usual way to change these).",
+    )
+    ap.add_argument(
         "--dpr",
         action="store_true",
         help="Instantiate the DUT with DPR (diagnostic probe) ports too -- must "
@@ -1043,6 +1053,7 @@ def main():
     )
     ap.add_argument("--quiet", action="store_true")
     a = ap.parse_args(apply_set_flags(ap, set_flags) + sys.argv[1:])
+    verible_flags = json.loads(a.verible_flags) if a.verible_flags else None
     validate_arch(a.arch, a.pclk_mode)
 
     cfg = load(csv_dir)
@@ -1059,7 +1070,7 @@ def main():
     print(f"Config: {csv_dir}")
     print(f"TB    : {tb_dir}")
     tb_file = tb_dir / "tb_pipe_lane_mapper.sv"
-    tb_file.write_text(format_sv(gen_tb(cfg, a.pclk_mode, a.dpr), a.verible_path), encoding="utf-8")
+    tb_file.write_text(format_sv(gen_tb(cfg, a.pclk_mode, a.dpr), a.verible_path, verible_flags), encoding="utf-8")
     print(f"  generated {tb_file}")
 
     if not a.quiet:

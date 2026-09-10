@@ -208,6 +208,12 @@ module tb_pipe_lane_mapper;
         endcase
     endfunction
 
+    function automatic int ctrl_pclk_src_lane(input int m, input int cid);
+        for (int l = 0; l < NL; l++)
+            if (owner_of(m, l) == cid) return l;
+        return -1;
+    endfunction
+
     //------------------------------------------------------------ NOV one-hot / safe-state monitor
     int unsigned err_count = 0;
 
@@ -392,6 +398,96 @@ module tb_pipe_lane_mapper;
             chk(phy_rst_n[l] == ctrl_rst_n[cid],
                 $sformatf("mode%0d lane%0d: phy_rst_n=%0b does not follow owner ctrl%0d",
                           m, l, phy_rst_n[l], cid));
+
+            begin
+                int src_lane;
+                src_lane = ctrl_pclk_src_lane(m, cid);
+                if (src_lane != -1)
+                    begin
+                        time t0;
+                        real got_ns, exp_ns;
+                        exp_ns = PERIOD_NS[src_lane];
+                        @(posedge phy_pclk_in[l]); t0 = $time;
+                        @(posedge phy_pclk_in[l]); got_ns = $time - t0;
+                        chk((got_ns > exp_ns * 0.8) && (got_ns < exp_ns * 1.2),
+                            $sformatf("%s: measured period %0.2fns, expected ~%0.2fns", $sformatf("mode%0d lane%0d phy_pclk_in", m, l), got_ns, exp_ns));
+                    end
+            end
+        end
+
+        for (int c = 0; c < NC; c++) begin
+            int src_lane;
+            src_lane = ctrl_pclk_src_lane(m, c);
+            if (src_lane != -1) begin
+                case (c)
+                    0: begin
+                        begin
+                            time t0;
+                            real got_ns, exp_ns;
+                            exp_ns = PERIOD_NS[src_lane];
+                            @(posedge ctrlalpha_pclk); t0 = $time;
+                            @(posedge ctrlalpha_pclk); got_ns = $time - t0;
+                            chk((got_ns > exp_ns * 0.8) && (got_ns < exp_ns * 1.2),
+                                $sformatf("%s: measured period %0.2fns, expected ~%0.2fns", $sformatf("mode%0d ctrlalpha_pclk", m), got_ns, exp_ns));
+                        end
+                    end
+                    1: begin
+                        begin
+                            time t0;
+                            real got_ns, exp_ns;
+                            exp_ns = PERIOD_NS[src_lane];
+                            @(posedge ctrlbeta_pclk); t0 = $time;
+                            @(posedge ctrlbeta_pclk); got_ns = $time - t0;
+                            chk((got_ns > exp_ns * 0.8) && (got_ns < exp_ns * 1.2),
+                                $sformatf("%s: measured period %0.2fns, expected ~%0.2fns", $sformatf("mode%0d ctrlbeta_pclk", m), got_ns, exp_ns));
+                        end
+                    end
+                    2: begin
+                        begin
+                            time t0;
+                            real got_ns, exp_ns;
+                            exp_ns = PERIOD_NS[src_lane];
+                            @(posedge ctrlgamma_pclk); t0 = $time;
+                            @(posedge ctrlgamma_pclk); got_ns = $time - t0;
+                            chk((got_ns > exp_ns * 0.8) && (got_ns < exp_ns * 1.2),
+                                $sformatf("%s: measured period %0.2fns, expected ~%0.2fns", $sformatf("mode%0d ctrlgamma_pclk", m), got_ns, exp_ns));
+                        end
+                    end
+                    3: begin
+                        begin
+                            time t0;
+                            real got_ns, exp_ns;
+                            exp_ns = PERIOD_NS[src_lane];
+                            @(posedge ctrldelta_pclk); t0 = $time;
+                            @(posedge ctrldelta_pclk); got_ns = $time - t0;
+                            chk((got_ns > exp_ns * 0.8) && (got_ns < exp_ns * 1.2),
+                                $sformatf("%s: measured period %0.2fns, expected ~%0.2fns", $sformatf("mode%0d ctrldelta_pclk", m), got_ns, exp_ns));
+                        end
+                    end
+                    4: begin
+                        begin
+                            time t0;
+                            real got_ns, exp_ns;
+                            exp_ns = PERIOD_NS[src_lane];
+                            @(posedge ctrlepsilon_pclk); t0 = $time;
+                            @(posedge ctrlepsilon_pclk); got_ns = $time - t0;
+                            chk((got_ns > exp_ns * 0.8) && (got_ns < exp_ns * 1.2),
+                                $sformatf("%s: measured period %0.2fns, expected ~%0.2fns", $sformatf("mode%0d ctrlepsilon_pclk", m), got_ns, exp_ns));
+                        end
+                    end
+                    5: begin
+                        begin
+                            time t0;
+                            real got_ns, exp_ns;
+                            exp_ns = PERIOD_NS[src_lane];
+                            @(posedge ctrlzeta_pclk); t0 = $time;
+                            @(posedge ctrlzeta_pclk); got_ns = $time - t0;
+                            chk((got_ns > exp_ns * 0.8) && (got_ns < exp_ns * 1.2),
+                                $sformatf("%s: measured period %0.2fns, expected ~%0.2fns", $sformatf("mode%0d ctrlzeta_pclk", m), got_ns, exp_ns));
+                        end
+                    end
+                endcase
+            end
         end
 
         for (int c = 0; c < NC; c++) begin
@@ -592,7 +688,7 @@ module tb_pipe_lane_mapper;
     end
 
     initial begin
-        #20000;
+        #112000;
         $error("TB_RESULT: FAIL (timeout, simulation did not finish)");
         $finish;
     end

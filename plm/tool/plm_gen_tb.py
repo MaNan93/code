@@ -36,6 +36,30 @@ from plm_common import (  # noqa: E402
 )
 
 
+def _emit_clk_period_chk(L, indent, sig_expr, exp_ns_expr, ctx_expr):
+    """Append a self-contained block measuring sig_expr's period (two
+    consecutive posedges) and checking it against exp_ns_expr, +-20%
+    tolerance -- enough to catch a wrong candidate clock (this tb's
+    simulated periods differ by >=2ns by construction) without
+    false-failing on jitter from whichever edge of two candidate clocks a
+    glitch-free switch happens to land on. Self-contained (own begin/end,
+    own locals) so it can be dropped inside any loop/case without name
+    clashes with a sibling block's own t0/got_ns/exp_ns.
+    """
+    ind = " " * indent
+    L.append(f"{ind}begin")
+    L.append(f"{ind}    time t0;")
+    L.append(f"{ind}    real got_ns, exp_ns;")
+    L.append(f"{ind}    exp_ns = {exp_ns_expr};")
+    L.append(f"{ind}    @(posedge {sig_expr}); t0 = $time;")
+    L.append(f"{ind}    @(posedge {sig_expr}); got_ns = $time - t0;")
+    L.append(f"{ind}    chk((got_ns > exp_ns * 0.8) && (got_ns < exp_ns * 1.2),")
+    L.append(
+        f'{ind}        $sformatf("%s: measured period %0.2fns, expected ~%0.2fns", {ctx_expr}, got_ns, exp_ns));'
+    )
+    L.append(f"{ind}end")
+
+
 def gen_tb(cfg, pclk_mode="pclk_as_phy_output", dpr=False):
     """Generate a self-checking testbench for this config set, written to
     <set>/tb/tb_pipe_lane_mapper.sv.
@@ -320,6 +344,19 @@ def gen_tb(cfg, pclk_mode="pclk_as_phy_output", dpr=False):
     L.append("    endfunction")
     L.append("")
 
+    if not phy_input_mode:
+        # ctrl_pclk always takes its candidate from "the lowest-numbered
+        # lane in its group" (see gen_clk_mux_phy_output's own comment) --
+        # this mirrors that exact rule, so the clock-frequency check below
+        # knows which phy_pclk_out[] lane {c}_pclk/phy_pclk_in should
+        # currently be tracking.
+        L.append("    function automatic int ctrl_pclk_src_lane(input int m, input int cid);")
+        L.append("        for (int l = 0; l < NL; l++)")
+        L.append("            if (owner_of(m, l) == cid) return l;")
+        L.append("        return -1;")
+        L.append("    endfunction")
+        L.append("")
+
     # ---- NOV monitor
     L.append(
         "    //------------------------------------------------------------ NOV one-hot / safe-state monitor"
@@ -559,8 +596,74 @@ def gen_tb(cfg, pclk_mode="pclk_as_phy_output", dpr=False):
         '                $sformatf("mode%0d lane%0d: phy_rst_n=%0b does not follow owner ctrl%0d",'
     )
     L.append("                          m, l, phy_rst_n[l], cid));")
+    L.append("")
+    if phy_input_mode:
+        _emit_clk_period_chk(
+            L,
+            12,
+            "phy_pclk[l]",
+            "CTRL_PERIOD_NS[cid]",
+            '$sformatf("mode%0d lane%0d phy_pclk", m, l)',
+        )
+    else:
+        L.append("            begin")
+        L.append("                int src_lane;")
+        L.append("                src_lane = ctrl_pclk_src_lane(m, cid);")
+        L.append("                if (src_lane != -1)")
+        _emit_clk_period_chk(
+            L,
+            20,
+            "phy_pclk_in[l]",
+            "PERIOD_NS[src_lane]",
+            '$sformatf("mode%0d lane%0d phy_pclk_in", m, l)',
+        )
+        L.append("            end")
     L.append("        end")
     L.append("")
+    if phy_input_mode:
+        # rx_clk: one shallow pass over lanes (not nested inside the
+        # per-controller/per-port data loop below) -- a blocking @(posedge
+        # ...) inside that loop's double for-nesting (c, then p) segfaulted
+        # verilator's own runtime; a single for-loop here, same shape as
+        # the per-controller pclk check below, doesn't.
+        L.append("        for (int l = 0; l < NL; l++) begin")
+        L.append("            int cid, port;")
+        L.append("            cid  = owner_of(m, l);")
+        L.append("            port = port_of(m, l);")
+        L.append("            case (cid)")
+        for c in ctrls:
+            L.append(f"                {c.id}: begin")
+            _emit_clk_period_chk(
+                L,
+                20,
+                f"{c.lname}_rx_clk[port]",
+                "LANE_PERIOD_NS[l]",
+                f'$sformatf("mode%0d {c.lname}_rx_clk[%0d]", m, port)',
+            )
+            L.append("                end")
+        L.append("            endcase")
+        L.append("        end")
+        L.append("")
+    if not phy_input_mode:
+        L.append("        for (int c = 0; c < NC; c++) begin")
+        L.append("            int src_lane;")
+        L.append("            src_lane = ctrl_pclk_src_lane(m, c);")
+        L.append("            if (src_lane != -1) begin")
+        L.append("                case (c)")
+        for c in ctrls:
+            L.append(f"                    {c.id}: begin")
+            _emit_clk_period_chk(
+                L,
+                24,
+                f"{c.lname}_pclk",
+                "PERIOD_NS[src_lane]",
+                f'$sformatf("mode%0d {c.lname}_pclk", m)',
+            )
+            L.append("                    end")
+        L.append("                endcase")
+        L.append("            end")
+        L.append("        end")
+        L.append("")
     L.append("        for (int c = 0; c < NC; c++) begin")
     # Each controller's port array is declared at its own real max_width
     # (no padding), so this loop bound is per-controller too -- resolved
@@ -646,6 +749,17 @@ def gen_tb(cfg, pclk_mode="pclk_as_phy_output", dpr=False):
     L.append("    //------------------------------------------------------------ sequencing")
     L.append(f"    localparam realtime SETTLE = {settle};")
     L.append("")
+    # The watchdog below has to scale with SETTLE, not just be some fixed
+    # number -- it needs to comfortably outlast every #SETTLE wait the
+    # sequencing below actually does: 1 (initial reset) + (nm-1) mode
+    # transitions + 2 for the non-adjacent jump (if nm>=2) + 2 per
+    # controller for the reset-pulse checks. 3x that (plus a fixed pad
+    # for the small non-SETTLE delays: #100, #20 phystatus toggles, and
+    # check_mode()'s own per-lane/per-controller clock-period checks,
+    # which each block for a couple of clock edges) keeps this from
+    # nuisance-timing-out just because SETTLE (or NC) changes later.
+    n_settle_waits = 1 + (nm - 1) + (2 if nm >= 2 else 0) + 2 * NC
+    watchdog_ns = n_settle_waits * settle * 3 + 10000
     L.append("    initial begin")
     L.append("`ifdef DUMP_FSDB")
     L.append('        $fsdbDumpfile("waves.fsdb");')
@@ -711,7 +825,7 @@ def gen_tb(cfg, pclk_mode="pclk_as_phy_output", dpr=False):
     L.append("    end")
     L.append("")
     L.append("    initial begin")
-    L.append("        #20000;")
+    L.append(f"        #{watchdog_ns};")
     L.append('        $error("TB_RESULT: FAIL (timeout, simulation did not finish)");')
     L.append("        $finish;")
     L.append("    end")

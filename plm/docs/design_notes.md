@@ -188,6 +188,99 @@ lane 之间是共享的，PHY 侧仍然需要每条 lane 各自的值。`shared`
 （出 mapper）取 lane0 的值作为这个标量输出，前提是这个 controller 自己
 的所有 lane 在这个信号上本来就该一致——这个前提不由生成器校验。
 
+### 3.1.1 各模块端口一览
+
+`{c}` 代表某个 controller 的 `lname`（比如 `ctrla`）；标 dpr 的端口只在
+`--dpr` 时才存在，标 phy_as_phy_output/phy_as_phy_input 的端口只在对应
+`--pclk-mode` 下才存在，两者互斥。宽度里的 `NL`/`NC` 是模块 parameter，
+每个 controller 自己的端口按它在 `controllers.csv` 里的 `max_width`
+各自定宽（不同 controller 可以不同宽）。
+
+**`pipe_lane_mapper`**（顶层 DUT）——parameter `NL`、`NC`、`SEL_SYNC`
+
+| 端口 | 方向 | 存在条件 | 说明 |
+|---|---|---|---|
+| `phy_pclk_out[NL]` | in | pclk_as_phy_output | PHY 每条 lane 自己的 PCLK |
+| `rx_clk[NL]` | in | pclk_as_phy_input | PHY 每条 lane 的恢复时钟 |
+| `test_en` | in | 总是 | 时钟门控测试旁路 |
+| `mode` | in | 总是 | 位宽按 `$clog2(模式数)` |
+| `phy_pclk_in[NL]` | out | pclk_as_phy_output | 回灌给 PHY 的反馈时钟 |
+| `phy_pclk[NL]` | out | pclk_as_phy_input | 无毛刺选出的每 lane 工作时钟 |
+| `phy_rst_n[NL]` | out | 总是 | 每条 lane 当前 owner 的复位 |
+| `phy_mac2phy[NL]` / `phy_phy2mac[NL]` | out/in | 总是 | PHY 侧数据，struct 数组 |
+| `v_lane_mask[NL]` / `dpr_rst_n` | in | dpr | DPR 的实时掩码、复位 |
+| `dpr_mac2phy[NL]` / `dpr_phy2mac[NL]` | in/out | dpr | DPR 自己的数据端口，1:1 对应 lane |
+| `dpr_pclk` | out | dpr | DPR 内部派生出的工作时钟 |
+| `{c}_rst_n` | in | 每个 controller | 已在外部同步好 |
+| `{c}_mac2phy[max_width]` / `{c}_phy2mac[max_width]` | in/out | 每个 controller | struct 数组，按它自己端口数定宽 |
+| `{c}_pclk[max_width]` | in | 每个 controller + phy_as_phy_input | 每端口一位，controller 自己分频好送进来 |
+| `{c}_rx_clk[max_width]` | out | 每个 controller + phy_as_phy_input | 无毛刺路由回给它的 rx_clk |
+| `{c}_pclk` | out | 每个 controller + phy_as_phy_output | controller 自己的单一工作时钟，标量 |
+
+**`pipe_lane_mapper_connection`**（可选 flat 包装层）——parameter 同上
+
+跟 `pipe_lane_mapper` 端口形状一致，只有两处不同：PHY 侧和每个
+controller 的 `mac2phy`/`phy2mac` struct 数组按 `pipe_signals.csv` 逐行拆
+成独立的 flat 信号（`phy_{signal}[NL]`、`{c}_{signal}`，`signal_type=shared`
+的收缩成标量，见 3.1 节）；其余端口（`{c}_rst_n`/`{c}_pclk`/`{c}_rx_clk`/
+`mode`/`test_en`/时钟/复位/DPR）原样透传，命名和方向都不变。
+
+**`pipe_lane_sel_gen`**——parameter `NC`，`NL`（phy_as_phy_input 或 dpr 时才有）、`SEL_SYNC`
+
+| 端口 | 方向 | 存在条件 | 说明 |
+|---|---|---|---|
+| `mode` | in | 总是 | |
+| `ctrl_pclk[NC]` | in | phy_as_phy_output | 各 controller 当前工作时钟，来自 clk_mux |
+| `{c}_pclk[max_width]` | in | 每个 controller + phy_as_phy_input | 同 pipe_lane_mapper 里那个 |
+| `ctrl_rst_n[NC]` | in | 总是 | |
+| `rx_clk[NL]` | in | phy_as_phy_input | |
+| `v_lane_mask[NL]` / `dpr_rst_n` / `dpr_pclk` | in | dpr | |
+| `sel_tgt` (`lane_sel_t`) | out | phy_as_phy_output | 每 group 同步后的有效选择 |
+| `dec_tgt` (`lane_sel_t`) | out | 总是 | 译码器原始（未同步）选择，dpr 时已经把 DPR 合成进去 |
+| `pclk_tgt_c{cid}` | out | 每个多候选 controller | 传给 clk_mux 做自己时钟的无毛刺切换 |
+| `seltgt_g{gid}_l{l}` | out | phy_as_phy_input，每条非 direct（或 dpr 时全部）group 的每条 lane | 同步进该 lane 当前候选自己端口时钟域的选择位 |
+| `rxclk_en_g{gid}_l{l}` | out | phy_as_phy_input，每条非 direct group 的每条 lane | 同步进 `rx_clk[l]` 域的选择位 |
+
+**`pipe_lane_clk_mux`**——parameter `NL`、`NC`；两种模式端口完全不同
+
+phy_as_phy_output：`phy_pclk_out[NL]`、`test_en`、`ctrl_rst_n[NC]`、每个多
+候选 controller 的 `pclk_tgt_c{cid}`、`sel_tgt`、（dpr：`v_lane_mask[NL]`、
+`dpr_rst_n`）→ `ctrl_pclk[NC]`、（dpr：`dpr_pclk`）、`phy_pclk_in[NL]`。
+
+phy_as_phy_input：`test_en`、`ctrl_rst_n[NC]`、`rx_clk[NL]`、每个
+controller 的 `{c}_pclk[max_width]`、每条非 direct（或 dpr 时全部）group
+每条 lane 的 `seltgt_g{gid}_l{l}`、每条非 direct group 每条 lane 的
+`rxclk_en_g{gid}_l{l}`、（dpr：`v_lane_mask[NL]`、`dpr_rst_n`）→
+`phy_pclk[NL]`、（dpr：`dpr_pclk`）、每个 controller 的
+`{c}_rx_clk[max_width]`。
+
+**`pipe_lane_rst_mux`**——parameter `NL`、`NC`
+
+`ctrl_rst_n[NC]`、（dpr：`dpr_rst_n`）、`sel_tgt`（顶层实际接的是
+`dec_tgt`，见 3.1 节）→ `phy_rst_n[NL]`。
+
+**`pipe_lane_data_m2p`**（MAC→PHY 数据 mux）——parameter `NL`
+
+phy_as_phy_input 时用每条 group 每条 lane 的 `seltgt_g{gid}_l{l}`，否则
+用 `sel_tgt`；`phy_mac2phy[NL]` 输出；（dpr：`dpr_mac2phy[NL]` 输入）；
+每个 controller 的 `{c}_mac2phy[max_width]` 输入。
+
+**`pipe_lane_data_p2m`**（PHY→MAC 数据 mux）——parameter `NL`
+
+同样按模式用 `seltgt_g{gid}_l{l}` 或 `sel_tgt`；`phy_phy2mac[NL]` 输入；
+（dpr：`dpr_phy2mac[NL]` 输出——在这个模块（以及顶层 `pipe_lane_mapper`）
+这一层，`dpr_phy2mac` 就是普通的按 lane 的 struct 数组，`signal_type=shared`
+在这里不起作用，因为 shared/perlane 的区分只在 `pipe_lane_mapper_connection`
+拉平 struct 的那一步才存在；如果套了这层包装，DPR 自己的 shared 信号也会
+按 3.1 节同款规则收缩成一个标量——取 lane0 的值，前提同样是"DPR 当前
+mask 住的所有 lane 本该一致"，同样不由生成器校验）；
+每个 controller 的 `{c}_phy2mac[max_width]` 输出。
+
+**`pipe_lane_signal_pkg`**——不是模块，是 package：`mac2phy_lane_t`/
+`phy2mac_lane_t`（PIPE 数据 struct）、`SAFE_M2P`/`SAFE_P2M`（safe_state
+常量，16 进制字面量）、`mode_sel_t`/`lane_sel_t`（dec_tgt/sel_tgt 用的
+per-group 选择 struct，dpr 时 `lane_sel_t` 每个字段多一位给 DPR）。
+
 ### 3.2 Lane 分组算法
 
 `Config._build_groups()` 按"每条 lane 在所有 mode 下的 owner 序列"

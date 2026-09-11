@@ -90,8 +90,7 @@ module pipe_lane_mapper_connection #(
     output logic [0:0] ctrlalpha_phy_mac_rxelecidle [0:2],
     output logic [0:0] ctrlalpha_phy_mac_rxstandbystatus [0:2],
     output logic [7:0] ctrlalpha_phy_mac_messagebus [0:2],
-    // phy_mac_phystatus: shared across CtrlAlpha's own lanes
-    output logic [0:0] ctrlalpha_phy_mac_phystatus,
+    output logic [0:0] ctrlalpha_phy_mac_phystatus [0:2],
     output logic [0:0] ctrlalpha_phy_mac_local_tx_coef_valid [0:2],
     output logic [17:0] ctrlalpha_phy_mac_local_tx_pset_coef [0:2],
     output logic [5:0] ctrlalpha_phy_mac_localfs [0:2],
@@ -131,8 +130,7 @@ module pipe_lane_mapper_connection #(
     output logic [0:0] ctrlbeta_phy_mac_rxelecidle [0:1],
     output logic [0:0] ctrlbeta_phy_mac_rxstandbystatus [0:1],
     output logic [7:0] ctrlbeta_phy_mac_messagebus [0:1],
-    // phy_mac_phystatus: shared across CtrlBeta's own lanes
-    output logic [0:0] ctrlbeta_phy_mac_phystatus,
+    output logic [0:0] ctrlbeta_phy_mac_phystatus [0:1],
     output logic [0:0] ctrlbeta_phy_mac_local_tx_coef_valid [0:1],
     output logic [17:0] ctrlbeta_phy_mac_local_tx_pset_coef [0:1],
     output logic [5:0] ctrlbeta_phy_mac_localfs [0:1],
@@ -172,8 +170,7 @@ module pipe_lane_mapper_connection #(
     output logic [0:0] ctrlgamma_phy_mac_rxelecidle [0:0],
     output logic [0:0] ctrlgamma_phy_mac_rxstandbystatus [0:0],
     output logic [7:0] ctrlgamma_phy_mac_messagebus [0:0],
-    // phy_mac_phystatus: shared across CtrlGamma's own lanes
-    output logic [0:0] ctrlgamma_phy_mac_phystatus,
+    output logic [0:0] ctrlgamma_phy_mac_phystatus [0:0],
     output logic [0:0] ctrlgamma_phy_mac_local_tx_coef_valid [0:0],
     output logic [17:0] ctrlgamma_phy_mac_local_tx_pset_coef [0:0],
     output logic [5:0] ctrlgamma_phy_mac_localfs [0:0],
@@ -213,8 +210,7 @@ module pipe_lane_mapper_connection #(
     output logic [0:0] ctrldelta_phy_mac_rxelecidle [0:0],
     output logic [0:0] ctrldelta_phy_mac_rxstandbystatus [0:0],
     output logic [7:0] ctrldelta_phy_mac_messagebus [0:0],
-    // phy_mac_phystatus: shared across CtrlDelta's own lanes
-    output logic [0:0] ctrldelta_phy_mac_phystatus,
+    output logic [0:0] ctrldelta_phy_mac_phystatus [0:0],
     output logic [0:0] ctrldelta_phy_mac_local_tx_coef_valid [0:0],
     output logic [17:0] ctrldelta_phy_mac_local_tx_pset_coef [0:0],
     output logic [5:0] ctrldelta_phy_mac_localfs [0:0],
@@ -254,8 +250,7 @@ module pipe_lane_mapper_connection #(
     output logic [0:0] ctrlepsilon_phy_mac_rxelecidle [0:0],
     output logic [0:0] ctrlepsilon_phy_mac_rxstandbystatus [0:0],
     output logic [7:0] ctrlepsilon_phy_mac_messagebus [0:0],
-    // phy_mac_phystatus: shared across CtrlEpsilon's own lanes
-    output logic [0:0] ctrlepsilon_phy_mac_phystatus,
+    output logic [0:0] ctrlepsilon_phy_mac_phystatus [0:0],
     output logic [0:0] ctrlepsilon_phy_mac_local_tx_coef_valid [0:0],
     output logic [17:0] ctrlepsilon_phy_mac_local_tx_pset_coef [0:0],
     output logic [5:0] ctrlepsilon_phy_mac_localfs [0:0],
@@ -295,8 +290,7 @@ module pipe_lane_mapper_connection #(
     output logic [0:0] ctrlzeta_phy_mac_rxelecidle [0:0],
     output logic [0:0] ctrlzeta_phy_mac_rxstandbystatus [0:0],
     output logic [7:0] ctrlzeta_phy_mac_messagebus [0:0],
-    // phy_mac_phystatus: shared across CtrlZeta's own lanes
-    output logic [0:0] ctrlzeta_phy_mac_phystatus,
+    output logic [0:0] ctrlzeta_phy_mac_phystatus [0:0],
     output logic [0:0] ctrlzeta_phy_mac_local_tx_coef_valid [0:0],
     output logic [17:0] ctrlzeta_phy_mac_local_tx_pset_coef [0:0],
     output logic [5:0] ctrlzeta_phy_mac_localfs [0:0],
@@ -487,7 +481,9 @@ module pipe_lane_mapper_connection #(
     assign ctrlalpha_phy_mac_messagebus[0] = w_ctrlalpha_phy2mac[0].phy_mac_messagebus;
     assign ctrlalpha_phy_mac_messagebus[1] = w_ctrlalpha_phy2mac[1].phy_mac_messagebus;
     assign ctrlalpha_phy_mac_messagebus[2] = w_ctrlalpha_phy2mac[2].phy_mac_messagebus;
-    assign ctrlalpha_phy_mac_phystatus = w_ctrlalpha_phy2mac[0].phy_mac_phystatus;
+    assign ctrlalpha_phy_mac_phystatus[0] = w_ctrlalpha_phy2mac[0].phy_mac_phystatus;
+    assign ctrlalpha_phy_mac_phystatus[1] = w_ctrlalpha_phy2mac[1].phy_mac_phystatus;
+    assign ctrlalpha_phy_mac_phystatus[2] = w_ctrlalpha_phy2mac[2].phy_mac_phystatus;
     assign ctrlalpha_phy_mac_local_tx_coef_valid[0] = w_ctrlalpha_phy2mac[0].phy_mac_local_tx_coef_valid;
     assign ctrlalpha_phy_mac_local_tx_coef_valid[1] = w_ctrlalpha_phy2mac[1].phy_mac_local_tx_coef_valid;
     assign ctrlalpha_phy_mac_local_tx_coef_valid[2] = w_ctrlalpha_phy2mac[2].phy_mac_local_tx_coef_valid;
@@ -532,7 +528,8 @@ module pipe_lane_mapper_connection #(
     assign ctrlbeta_phy_mac_rxstandbystatus[1] = w_ctrlbeta_phy2mac[1].phy_mac_rxstandbystatus;
     assign ctrlbeta_phy_mac_messagebus[0] = w_ctrlbeta_phy2mac[0].phy_mac_messagebus;
     assign ctrlbeta_phy_mac_messagebus[1] = w_ctrlbeta_phy2mac[1].phy_mac_messagebus;
-    assign ctrlbeta_phy_mac_phystatus = w_ctrlbeta_phy2mac[0].phy_mac_phystatus;
+    assign ctrlbeta_phy_mac_phystatus[0] = w_ctrlbeta_phy2mac[0].phy_mac_phystatus;
+    assign ctrlbeta_phy_mac_phystatus[1] = w_ctrlbeta_phy2mac[1].phy_mac_phystatus;
     assign ctrlbeta_phy_mac_local_tx_coef_valid[0] = w_ctrlbeta_phy2mac[0].phy_mac_local_tx_coef_valid;
     assign ctrlbeta_phy_mac_local_tx_coef_valid[1] = w_ctrlbeta_phy2mac[1].phy_mac_local_tx_coef_valid;
     assign ctrlbeta_phy_mac_local_tx_pset_coef[0] = w_ctrlbeta_phy2mac[0].phy_mac_local_tx_pset_coef;
@@ -560,7 +557,7 @@ module pipe_lane_mapper_connection #(
     assign ctrlgamma_phy_mac_rxelecidle[0] = w_ctrlgamma_phy2mac[0].phy_mac_rxelecidle;
     assign ctrlgamma_phy_mac_rxstandbystatus[0] = w_ctrlgamma_phy2mac[0].phy_mac_rxstandbystatus;
     assign ctrlgamma_phy_mac_messagebus[0] = w_ctrlgamma_phy2mac[0].phy_mac_messagebus;
-    assign ctrlgamma_phy_mac_phystatus = w_ctrlgamma_phy2mac[0].phy_mac_phystatus;
+    assign ctrlgamma_phy_mac_phystatus[0] = w_ctrlgamma_phy2mac[0].phy_mac_phystatus;
     assign ctrlgamma_phy_mac_local_tx_coef_valid[0] = w_ctrlgamma_phy2mac[0].phy_mac_local_tx_coef_valid;
     assign ctrlgamma_phy_mac_local_tx_pset_coef[0] = w_ctrlgamma_phy2mac[0].phy_mac_local_tx_pset_coef;
     assign ctrlgamma_phy_mac_localfs[0] = w_ctrlgamma_phy2mac[0].phy_mac_localfs;
@@ -582,7 +579,7 @@ module pipe_lane_mapper_connection #(
     assign ctrldelta_phy_mac_rxelecidle[0] = w_ctrldelta_phy2mac[0].phy_mac_rxelecidle;
     assign ctrldelta_phy_mac_rxstandbystatus[0] = w_ctrldelta_phy2mac[0].phy_mac_rxstandbystatus;
     assign ctrldelta_phy_mac_messagebus[0] = w_ctrldelta_phy2mac[0].phy_mac_messagebus;
-    assign ctrldelta_phy_mac_phystatus = w_ctrldelta_phy2mac[0].phy_mac_phystatus;
+    assign ctrldelta_phy_mac_phystatus[0] = w_ctrldelta_phy2mac[0].phy_mac_phystatus;
     assign ctrldelta_phy_mac_local_tx_coef_valid[0] = w_ctrldelta_phy2mac[0].phy_mac_local_tx_coef_valid;
     assign ctrldelta_phy_mac_local_tx_pset_coef[0] = w_ctrldelta_phy2mac[0].phy_mac_local_tx_pset_coef;
     assign ctrldelta_phy_mac_localfs[0] = w_ctrldelta_phy2mac[0].phy_mac_localfs;
@@ -604,7 +601,7 @@ module pipe_lane_mapper_connection #(
     assign ctrlepsilon_phy_mac_rxelecidle[0] = w_ctrlepsilon_phy2mac[0].phy_mac_rxelecidle;
     assign ctrlepsilon_phy_mac_rxstandbystatus[0] = w_ctrlepsilon_phy2mac[0].phy_mac_rxstandbystatus;
     assign ctrlepsilon_phy_mac_messagebus[0] = w_ctrlepsilon_phy2mac[0].phy_mac_messagebus;
-    assign ctrlepsilon_phy_mac_phystatus = w_ctrlepsilon_phy2mac[0].phy_mac_phystatus;
+    assign ctrlepsilon_phy_mac_phystatus[0] = w_ctrlepsilon_phy2mac[0].phy_mac_phystatus;
     assign ctrlepsilon_phy_mac_local_tx_coef_valid[0] = w_ctrlepsilon_phy2mac[0].phy_mac_local_tx_coef_valid;
     assign ctrlepsilon_phy_mac_local_tx_pset_coef[0] = w_ctrlepsilon_phy2mac[0].phy_mac_local_tx_pset_coef;
     assign ctrlepsilon_phy_mac_localfs[0] = w_ctrlepsilon_phy2mac[0].phy_mac_localfs;
@@ -626,7 +623,7 @@ module pipe_lane_mapper_connection #(
     assign ctrlzeta_phy_mac_rxelecidle[0] = w_ctrlzeta_phy2mac[0].phy_mac_rxelecidle;
     assign ctrlzeta_phy_mac_rxstandbystatus[0] = w_ctrlzeta_phy2mac[0].phy_mac_rxstandbystatus;
     assign ctrlzeta_phy_mac_messagebus[0] = w_ctrlzeta_phy2mac[0].phy_mac_messagebus;
-    assign ctrlzeta_phy_mac_phystatus = w_ctrlzeta_phy2mac[0].phy_mac_phystatus;
+    assign ctrlzeta_phy_mac_phystatus[0] = w_ctrlzeta_phy2mac[0].phy_mac_phystatus;
     assign ctrlzeta_phy_mac_local_tx_coef_valid[0] = w_ctrlzeta_phy2mac[0].phy_mac_local_tx_coef_valid;
     assign ctrlzeta_phy_mac_local_tx_pset_coef[0] = w_ctrlzeta_phy2mac[0].phy_mac_local_tx_pset_coef;
     assign ctrlzeta_phy_mac_localfs[0] = w_ctrlzeta_phy2mac[0].phy_mac_localfs;

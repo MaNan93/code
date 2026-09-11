@@ -287,4 +287,54 @@ QPlainTextEdit#logConsole {{
 QDialog {{
     background: {BG};
 }}
+/* -- desktop polish ----------------------------------------------------- */
+QTableWidget {{
+    alternate-background-color: #fbfbfb;
+    selection-background-color: #dff4ee;
+    selection-color: {TEXT};
+}}
+QToolButton#rowPlusBtn, QToolButton#rowMinusBtn {{
+    border: 1px solid {BORDER};
+    border-radius: 6px;
+    background: {BG};
+    color: {TEXT_SECONDARY};
+    min-width: 24px;
+    min-height: 24px;
+    max-width: 24px;
+    max-height: 24px;
+    font-size: 15px;
+}}
+QToolButton#rowPlusBtn:hover {{ color: {ACCENT}; border-color: {ACCENT}; }}
+QToolButton#rowMinusBtn:hover {{ color: {DANGER}; border-color: {DANGER}; }}
+QPushButton:disabled, QToolButton:disabled, QComboBox:disabled {{
+    color: {TEXT_TERTIARY};
+    background: {BG_ELEVATED};
+    border-color: {BORDER};
+}}
+QMenu {{
+    background: {BG};
+    border: 1px solid {BORDER};
+    padding: 5px;
+}}
+QMenu::item {{ padding: 7px 24px 7px 10px; border-radius: 6px; }}
+QMenu::item:selected {{ background: {BG_HOVER}; }}
+QScrollBar:vertical {{ background: transparent; width: 10px; margin: 2px; }}
+QScrollBar::handle:vertical {{
+    background: #c9c9c9;
+    border-radius: 4px;
+    min-height: 28px;
+}}
+QScrollBar::handle:vertical:hover {{ background: #aaaaaa; }}
+QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical,
+QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {{
+    background: transparent;
+    border: none;
+    height: 0;
+}}
+QToolTip {{
+    background: {TEXT};
+    color: white;
+    border: none;
+    padding: 5px 7px;
+}}
 """

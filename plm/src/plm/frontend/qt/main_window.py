@@ -241,7 +241,11 @@ class MainWindow(QtWidgets.QMainWindow):
         for button, label in self.sidebar_action_buttons + self.sidebar_bottom_buttons:
             button.setText("" if collapsed else f" {label}")
             button.setToolTip(label)
-            button.setFixedWidth(42 if collapsed else 16777215)
+            if collapsed:
+                button.setFixedWidth(42)
+            else:
+                button.setMinimumWidth(0)
+                button.setMaximumWidth(16777215)
         self._refresh_recent()
         self.sidebar_toggle.setText("›" if collapsed else "‹")
         self._position_sidebar_toggle()

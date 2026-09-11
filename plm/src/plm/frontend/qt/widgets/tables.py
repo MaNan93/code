@@ -40,14 +40,24 @@ class EditableTable(QtWidgets.QWidget):
         self.table.setColumnCount(len(columns) + 1)  # + one actions column
         self.table.setHorizontalHeaderLabels([c.get("heading", c["key"]) for c in columns] + [""])
         header = self.table.horizontalHeader()
+        header.setMinimumSectionSize(72)
+        header.setTextElideMode(QtCore.Qt.ElideRight)
+        metrics = header.fontMetrics()
         for index, column in enumerate(columns):
             if column.get("width"):
                 header.setSectionResizeMode(index, QtWidgets.QHeaderView.Fixed)
-                self.table.setColumnWidth(index, int(column["width"]))
+                heading = column.get("heading", column["key"])
+                text_width = (
+                    metrics.horizontalAdvance(heading)
+                    if hasattr(metrics, "horizontalAdvance")
+                    else metrics.width(heading)
+                )
+                self.table.setColumnWidth(index, max(int(column["width"]), text_width + 28))
             else:
                 header.setSectionResizeMode(index, QtWidgets.QHeaderView.Stretch)
         header.setSectionResizeMode(len(columns), QtWidgets.QHeaderView.Fixed)
-        self.table.setColumnWidth(len(columns), 68)
+        self.table.setColumnWidth(len(columns), 72)
+        self.table.setHorizontalScrollMode(QtWidgets.QAbstractItemView.ScrollPerPixel)
         self.table.verticalHeader().setDefaultSectionSize(38)
         self.table.verticalHeader().setMinimumSectionSize(34)
         self.table.setAlternatingRowColors(True)

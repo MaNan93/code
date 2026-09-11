@@ -83,6 +83,22 @@ _SVG_SETTINGS = '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 
 _SVG_DOC = '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M16 13H8"/><path d="M16 17H8"/><path d="M10 9H8"/>'
 
 
+class _StableTabBar(QtWidgets.QTabBar):
+    """Keep tab labels separated under Windows DPI/font scaling."""
+
+    def tabSizeHint(self, index):
+        hint = super().tabSizeHint(index)
+        metrics = self.fontMetrics()
+        text = self.tabText(index)
+        text_width = (
+            metrics.horizontalAdvance(text)
+            if hasattr(metrics, "horizontalAdvance")
+            else metrics.width(text)
+        )
+        # 32 px for the QSS padding plus a small allowance for DPI rounding.
+        return QtCore.QSize(max(hint.width(), text_width + 40), max(hint.height(), 38))
+
+
 # ---------------------------------------------------------------- state file
 # An independent copy of the web front end's own state-file helpers (see
 # plm.frontend.web.workspace_state) -- own state file, own copy of the
@@ -365,6 +381,11 @@ class MainWindow(QtWidgets.QMainWindow):
 
         self.tabs = QtWidgets.QTabWidget()
         self.tabs.setObjectName("tabs")
+        tab_bar = _StableTabBar(self.tabs)
+        tab_bar.setExpanding(False)
+        tab_bar.setUsesScrollButtons(True)
+        tab_bar.setElideMode(QtCore.Qt.ElideNone)
+        self.tabs.setTabBar(tab_bar)
         self.tabs.addTab(self._build_controllers_tab(), "Controllers")
         self._lane_mapping_page = self._build_lane_mapping_tab()
         self.tabs.addTab(self._lane_mapping_page, "Lane Mapping")

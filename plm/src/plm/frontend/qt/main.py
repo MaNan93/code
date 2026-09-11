@@ -9,7 +9,7 @@ Run: python3 -m plm.frontend.qt.main
 import sys
 
 try:
-    from PyQt5 import QtGui, QtWidgets
+    from PyQt5 import QtCore, QtGui, QtWidgets
 except ImportError:
     sys.exit(
         "plm-qt needs PyQt5. Install it with:\n"
@@ -22,7 +22,12 @@ from plm.frontend.qt.widgets.theme import STYLESHEET
 
 
 def main():
+    if hasattr(QtCore.Qt, "AA_EnableHighDpiScaling"):
+        QtWidgets.QApplication.setAttribute(QtCore.Qt.AA_EnableHighDpiScaling, True)
+    if hasattr(QtCore.Qt, "AA_UseHighDpiPixmaps"):
+        QtWidgets.QApplication.setAttribute(QtCore.Qt.AA_UseHighDpiPixmaps, True)
     app = QtWidgets.QApplication(sys.argv)
+    app.setApplicationName("plmConsultant")
     # Custom QSS on QTabBar/QPushButton/etc. renders inconsistently (tabs
     # overlapping, buttons losing their box) under whichever native style
     # (windowsvista, GTK, ...) is active by default -- each native style

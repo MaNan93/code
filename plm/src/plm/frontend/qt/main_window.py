@@ -51,7 +51,7 @@ SIGNAL_TYPES = ["perlane", "shared"]
 ARCH_MODES = ["(default: original_pipe)", "original_pipe", "serdes"]
 PCLK_MODES = ["(default: pclk_as_phy_output)", "pclk_as_phy_output", "pclk_as_phy_input"]
 SEL_MODES = ["(default: sync)", "sync", "comb"]
-LANE_COUNTS = ["x1", "x2", "x4", "x8", "x16", "x32"]
+LANE_COUNTS = ["x2", "x4", "x8", "x16", "x32"]
 DOC_PATH = PLM_ROOT / "docs" / "tool_usage.md"
 
 
@@ -140,6 +140,12 @@ def save_last_workspace(path):
     _write_state_file(data)
 
 
+def clear_last_workspace():
+    data = _read_state_file()
+    data.pop("workspace", None)
+    _write_state_file(data)
+
+
 def load_last_workspace():
     raw = _read_state_file().get("workspace")
     if not raw:
@@ -171,6 +177,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.current_workspace = None  # Path | None
         self.setWindowTitle("plmConsultant")
         self.resize(1200, 780)
+        self.setMinimumSize(900, 620)
         self._build_ui()
         self._apply_font(load_settings())
         self._refresh_recent()
@@ -223,8 +230,20 @@ class MainWindow(QtWidgets.QMainWindow):
         _write_state_file(data)
 
     def _apply_sidebar_collapsed(self):
-        self.sidebar.setVisible(not self._sidebar_collapsed)
-        self.sidebar_toggle.setText("›" if self._sidebar_collapsed else "‹")
+        """Collapse to the same icon rail used by the web front end."""
+        collapsed = self._sidebar_collapsed
+        self.sidebar.setFixedWidth(58 if collapsed else 260)
+        self.brand_name.setVisible(not collapsed)
+        self.section_header.setVisible(not collapsed)
+        self.recent_list.setHorizontalScrollBarPolicy(
+            QtCore.Qt.ScrollBarAlwaysOff if collapsed else QtCore.Qt.ScrollBarAsNeeded
+        )
+        for button, label in self.sidebar_action_buttons + self.sidebar_bottom_buttons:
+            button.setText("" if collapsed else f" {label}")
+            button.setToolTip(label)
+            button.setFixedWidth(42 if collapsed else 16777215)
+        self._refresh_recent()
+        self.sidebar_toggle.setText("›" if collapsed else "‹")
         self._position_sidebar_toggle()
 
     def _build_sidebar(self):
@@ -247,9 +266,9 @@ class MainWindow(QtWidgets.QMainWindow):
             brand_mark.setPixmap(pix)
         brand_mark.setFixedSize(28, 28)
         hl.addWidget(brand_mark)
-        brand_name = QtWidgets.QLabel("plmConsultant")
-        brand_name.setObjectName("brandName")
-        hl.addWidget(brand_name)
+        self.brand_name = QtWidgets.QLabel("plmConsultant")
+        self.brand_name.setObjectName("brandName")
+        hl.addWidget(self.brand_name)
         hl.addStretch(1)
         sb.addWidget(header)
 
@@ -260,6 +279,9 @@ class MainWindow(QtWidgets.QMainWindow):
         btn_new = QtWidgets.QPushButton(" New")
         btn_save = QtWidgets.QPushButton(" Save")
         btn_open = QtWidgets.QPushButton(" Open")
+        self.sidebar_action_buttons = [
+            (btn_new, "New"), (btn_save, "Save"), (btn_open, "Open")
+        ]
         for b, icon_svg, handler in (
             (btn_new, _SVG_NEW, self._on_new),
             (btn_save, _SVG_SAVE, self._on_save),
@@ -279,10 +301,10 @@ class MainWindow(QtWidgets.QMainWindow):
         section = QtWidgets.QWidget()
         sl = QtWidgets.QVBoxLayout(section)
         sl.setContentsMargins(8, 8, 8, 16)
-        header_lbl = QtWidgets.QLabel("最近")
-        header_lbl.setObjectName("sectionHeader")
-        header_lbl.setContentsMargins(2, 0, 0, 6)
-        sl.addWidget(header_lbl)
+        self.section_header = QtWidgets.QLabel("最近")
+        self.section_header.setObjectName("sectionHeader")
+        self.section_header.setContentsMargins(2, 0, 0, 6)
+        sl.addWidget(self.section_header)
         self.recent_list = QtWidgets.QListWidget()
         self.recent_list.setObjectName("recentList")
         self.recent_list.setFrameShape(QtWidgets.QFrame.NoFrame)
@@ -293,10 +315,14 @@ class MainWindow(QtWidgets.QMainWindow):
         sb.addWidget(section, stretch=1)
 
         bottom = QtWidgets.QWidget()
-        bl = QtWidgets.QHBoxLayout(bottom)
+        bl = QtWidgets.QVBoxLayout(bottom)
         bl.setContentsMargins(8, 8, 8, 8)
+        bl.setSpacing(4)
         btn_settings = QtWidgets.QPushButton(" Settings")
         btn_doc = QtWidgets.QPushButton(" Doc")
+        self.sidebar_bottom_buttons = [
+            (btn_settings, "Settings"), (btn_doc, "Doc")
+        ]
         for b, icon_svg, handler in (
             (btn_settings, _SVG_SETTINGS, self._on_settings),
             (btn_doc, _SVG_DOC, self._on_doc),
@@ -409,11 +435,11 @@ class MainWindow(QtWidgets.QMainWindow):
         self.signals_table = EditableTable(
             columns=[
                 {"key": "signal_name", "heading": "signal_name"},
-                {"key": "signal_type", "heading": "signal_type", "options": SIGNAL_TYPES},
-                {"key": "direction", "heading": "direction", "options": DIRECTIONS},
-                {"key": "width", "heading": "width"},
-                {"key": "safe_state", "heading": "safe_state"},
-                {"key": "tie_off", "heading": "tie_off"},
+                {"key": "signal_type", "heading": "signal_type", "options": SIGNAL_TYPES, "width": 108},
+                {"key": "direction", "heading": "direction", "options": DIRECTIONS, "width": 128},
+                {"key": "width", "heading": "width", "width": 66},
+                {"key": "safe_state", "heading": "safe_state", "width": 84},
+                {"key": "tie_off", "heading": "tie_off", "width": 66},
             ],
         )
         layout.addWidget(self.signals_table)
@@ -563,11 +589,21 @@ class MainWindow(QtWidgets.QMainWindow):
     # ------------------------------------------------------------ recent list
     def _refresh_recent(self):
         self.recent_list.clear()
+        collapsed = getattr(self, "_sidebar_collapsed", False)
+        current = str(self.current_workspace) if self.current_workspace else None
         for p in load_recent_workspaces():
-            item = QtWidgets.QListWidgetItem(p.name)
+            parts = [part for part in p.name.replace("-", "_").split("_") if part]
+            initials = (
+                "".join(part[0] for part in parts[:2]).upper()
+                if len(parts) > 1 else p.name[:2].upper()
+            )
+            item = QtWidgets.QListWidgetItem(initials if collapsed else p.name)
+            item.setTextAlignment(QtCore.Qt.AlignCenter if collapsed else QtCore.Qt.AlignLeft)
             item.setToolTip(str(p))
             item.setData(QtCore.Qt.UserRole, str(p))
             self.recent_list.addItem(item)
+            if str(p) == current:
+                item.setSelected(True)
 
     def _on_recent_clicked(self, item):
         self._open_workspace(Path(item.data(QtCore.Qt.UserRole)))
@@ -600,11 +636,24 @@ class MainWindow(QtWidgets.QMainWindow):
         )
         if resp != QtWidgets.QMessageBox.Yes:
             return
-        shutil.rmtree(path)
+        try:
+            shutil.rmtree(path)
+        except OSError as e:
+            QtWidgets.QMessageBox.critical(self, "Delete failed", str(e))
+            self._log(f"Delete failed: {e}")
+            return
         remove_recent_workspace(path)
         self._log(f"Deleted workspace {path}.")
-        if str(self.current_workspace) == str(path):
+        if self.current_workspace and str(self.current_workspace) == str(path):
             self.current_workspace = None
+            clear_last_workspace()
+            self.controllers_table.set_rows([])
+            self.signals_table.set_rows([])
+            self._load_gen_flags({})
+            self._set_lane_count_display(4)
+            self.lane_grid.set_columns(4)
+            self.lane_grid.set_rows([])
+            self.lane_grid.set_controllers([])
             self._update_workspace_label()
         self._refresh_recent()
 
@@ -705,8 +754,13 @@ class MainWindow(QtWidgets.QMainWindow):
         if ws.exists():
             QtWidgets.QMessageBox.warning(self, "New workspace", f"{ws} already exists.")
             return
-        ws.mkdir(parents=True)
-        scaffold_default_content(ws)
+        try:
+            ws.mkdir(parents=True)
+            scaffold_default_content(ws)
+        except OSError as e:
+            QtWidgets.QMessageBox.critical(self, "New workspace failed", str(e))
+            self._log(f"New workspace failed: {e}")
+            return
         self._open_workspace(ws)
 
     def _on_save(self):
@@ -715,8 +769,9 @@ class MainWindow(QtWidgets.QMainWindow):
             return
         try:
             save_workspace_content(self.current_workspace, self._gather_payload())
-        except ValueError as e:
+        except (ValueError, OSError) as e:
             QtWidgets.QMessageBox.critical(self, "Save failed", str(e))
+            self._log(f"Save failed: {e}")
             return
         self._log(f"Saved {self.current_workspace}/config/*.")
 
@@ -818,8 +873,9 @@ class MainWindow(QtWidgets.QMainWindow):
             return False
         try:
             save_workspace_content(self.current_workspace, self._gather_payload())
-        except ValueError as e:
+        except (ValueError, OSError) as e:
             QtWidgets.QMessageBox.critical(self, "Save failed", str(e))
+            self._log(f"Save failed: {e}")
             return False
         return True
 
@@ -848,7 +904,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self._run_tool("tb")
 
     def _on_gen_all(self):
-        self._run_tool("rtl", then=lambda: self._run_tool("tb"))
+        self._run_tool("all")
 
     def _run_tool(self, target, then=None):
         """QProcess runs `python -m plm.cli.main generate <target>`
@@ -885,13 +941,13 @@ class MainWindow(QtWidgets.QMainWindow):
                 self._log(line)
 
         def on_finished(exit_code, _exit_status):
-            # 0/1 are the ordinary success/failure outcomes and the
-            # surrounding output already makes that clear -- only an
-            # unusual code (e.g. a native crash) is worth calling out.
-            if exit_code not in (0, 1):
-                self._log(f"[exit code {exit_code}]")
-            self._active_processes.remove(proc)
-            if then:
+            if exit_code == 0:
+                self._log("[generate finished]")
+            else:
+                self._log(f"[generate finished, exit code {exit_code}]")
+            if proc in self._active_processes:
+                self._active_processes.remove(proc)
+            if then and exit_code == 0:
                 then()
 
         def on_error(_error):

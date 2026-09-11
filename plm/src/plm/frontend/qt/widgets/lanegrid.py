@@ -69,6 +69,13 @@ LANE_MODE_W = 64
 LANE_ACTIONS_W = 68
 LANE_MIN_CELL = 26
 
+
+def _ui_scale():
+    """Scaling factor relative to the 13 px design baseline."""
+    app = QtWidgets.QApplication.instance()
+    px = app.font().pixelSize() if app else 13
+    return max(px, 11) / 13.0
+
 # Paint stroke opacity constants -- match style.css's color-mix values:
 #   .lg-painted::before  -> color-mix(in srgb, var(--paint) 58%, transparent)
 #   .lg-preview::before  -> color-mix(in srgb, var(--paint) 78%, transparent)
@@ -234,6 +241,80 @@ class _LaneCellDelegate(QtWidgets.QStyledItemDelegate):
         painter.fillPath(path, c)
 
 
+class _FlowLayout(QtWidgets.QLayout):
+    """A left-to-right, top-to-bottom wrapping layout for the palette
+    bar so controller swatches reflow instead of overflowing the lane
+    mapping page at narrow widths or larger font sizes."""
+
+    def __init__(self, parent=None, margin=0, h_spacing=6, v_spacing=6):
+        super().__init__(parent)
+        if parent is not None:
+            self.setContentsMargins(margin, margin, margin, margin)
+        self._h_spacing = h_spacing
+        self._v_spacing = v_spacing
+        self._items = []
+
+    def addItem(self, item):
+        self._items.append(item)
+
+    def count(self):
+        return len(self._items)
+
+    def itemAt(self, index):
+        if 0 <= index < len(self._items):
+            return self._items[index]
+        return None
+
+    def takeAt(self, index):
+        if 0 <= index < len(self._items):
+            return self._items.pop(index)
+        return None
+
+    def expandingDirections(self):
+        return QtCore.Qt.Orientations(0)
+
+    def hasHeightForWidth(self):
+        return True
+
+    def heightForWidth(self, width):
+        return self._do_layout(QtCore.QRect(0, 0, width, 0), True)
+
+    def setGeometry(self, rect):
+        super().setGeometry(rect)
+        self._do_layout(rect, False)
+
+    def sizeHint(self):
+        return self.minimumSize()
+
+    def minimumSize(self):
+        size = QtCore.QSize()
+        for item in self._items:
+            size = size.expandedTo(item.minimumSize())
+        margin = self.contentsMargins()
+        size += QtCore.QSize(margin.left() + margin.right(), margin.top() + margin.bottom())
+        return size
+
+    def _do_layout(self, rect, test_only):
+        x = rect.x()
+        y = rect.y()
+        line_height = 0
+        for item in self._items:
+            wid = item.widget()
+            space_x = self._h_spacing
+            space_y = self._v_spacing
+            next_x = x + item.sizeHint().width() + space_x
+            if next_x - space_x > rect.right() and line_height > 0:
+                x = rect.x()
+                y += line_height + space_y
+                next_x = x + item.sizeHint().width() + space_x
+                line_height = 0
+            if not test_only:
+                item.setGeometry(QtCore.QRect(QtCore.QPoint(x, y), item.sizeHint()))
+            x = next_x
+            line_height = max(line_height, item.sizeHint().height())
+        return y + line_height - rect.y()
+
+
 class LaneGrid(QtWidgets.QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -260,12 +341,11 @@ class LaneGrid(QtWidgets.QWidget):
         self.palette_bar = QtWidgets.QWidget()
         self.palette_bar.setObjectName("lgPaletteBar")
         palette_outer = QtWidgets.QVBoxLayout(self.palette_bar)
-        palette_outer.setContentsMargins(0, 0, 0, 8)
-        palette_outer.setSpacing(6)
-        # Use a flow layout: we add swatches in a horizontal row that wraps
-        self._palette_flow = QtWidgets.QHBoxLayout()
-        self._palette_flow.setContentsMargins(0, 0, 0, 0)
-        self._palette_flow.setSpacing(6)
+        palette_outer.setContentsMargins(0, 0, 0, int(8 * _ui_scale()))
+        palette_outer.setSpacing(int(6 * _ui_scale()))
+        # Use a flow layout so swatches wrap to multiple rows instead of
+        # overflowing the lane mapping page at narrow widths.
+        self._palette_flow = _FlowLayout(h_spacing=int(6 * _ui_scale()), v_spacing=int(6 * _ui_scale()))
         palette_outer.addLayout(self._palette_flow)
         layout.addWidget(self.palette_bar)
 
@@ -334,6 +414,7 @@ class LaneGrid(QtWidgets.QWidget):
 
     # ------------------------------------------------------------ palette
     def _render_palette(self):
+        scale = _ui_scale()
         # Clear existing swatches
         while self._palette_flow.count():
             item = self._palette_flow.takeAt(0)
@@ -350,20 +431,21 @@ class LaneGrid(QtWidgets.QWidget):
             btn.setCheckable(True)
             btn.setChecked(is_active)
             text_color = _contrast_text_color(color)
-            # Pill shape: fully rounded ends, border, active gets inner ring
+            # Pill shape: fully rounded ends, border, active gets inner ring.
+            # Scale padding/radius/font from the 13 px baseline.
             border_color = "#0d0d0d" if is_active else "#e5e5e5"
             outline = (
-                f"border: 2px solid {border_color};" if is_active
-                else f"border: 1px solid {border_color};"
+                f"border: {int(2 * scale)}px solid {border_color};" if is_active
+                else f"border: {int(1 * scale)}px solid {border_color};"
             )
             btn.setStyleSheet(
                 f"QPushButton#lgSwatch {{"
                 f"  background-color: {color};"
                 f"  color: {text_color};"
-                f"  font-size: 12.5px;"
+                f"  font-size: {12.5 * scale:.1f}px;"
                 f"  font-weight: 600;"
-                f"  border-radius: 14px;"
-                f"  padding: 5px 13px;"
+                f"  border-radius: {int(14 * scale)}px;"
+                f"  padding: {int(5 * scale)}px {int(13 * scale)}px;"
                 f"  {outline}"
                 f"}}"
                 f"QPushButton#lgSwatch:hover {{"
@@ -373,7 +455,6 @@ class LaneGrid(QtWidgets.QWidget):
             btn.setCursor(QtCore.Qt.PointingHandCursor)
             btn.clicked.connect(lambda _checked=False, cid=cid: self._set_active_controller(cid))
             self._palette_flow.addWidget(btn)
-        self._palette_flow.addStretch(1)
 
     def _set_active_controller(self, cid):
         self.active_ctrl_id = cid
@@ -420,15 +501,19 @@ class LaneGrid(QtWidgets.QWidget):
         column auto-sizing."""
         if self.lane_count <= 0 or self.table.columnCount() < self.lane_count + 2:
             return
-        avail = self.table.viewport().width() - LANE_MODE_W - LANE_ACTIONS_W
+        scale = _ui_scale()
+        mode_w = int(LANE_MODE_W * scale)
+        actions_w = int(LANE_ACTIONS_W * scale)
+        min_cell = int(LANE_MIN_CELL * scale)
+        avail = self.table.viewport().width() - mode_w - actions_w
         n = max(1, self.lane_count)
         w32 = avail / 32 if avail > 0 else 0
         w = w32 * (LANE_W_RATIO ** math.log2(32 / n))
-        min_w = max(int(w), LANE_MIN_CELL)
-        self.table.setColumnWidth(0, LANE_MODE_W)
+        min_w = max(int(w), min_cell)
+        self.table.setColumnWidth(0, mode_w)
         for l in range(self.lane_count):
             self.table.setColumnWidth(l + 1, min_w)
-        self.table.setColumnWidth(self.lane_count + 1, LANE_ACTIONS_W)
+        self.table.setColumnWidth(self.lane_count + 1, actions_w)
 
     def _render_body(self):
         self._building = True

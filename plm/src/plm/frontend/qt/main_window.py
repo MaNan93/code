@@ -56,6 +56,14 @@ DOC_PATH = DOCS_DIR / "tool_usage.md"
 
 
 
+def _ui_scale():
+    """Return a scaling factor relative to the 13 px design baseline so
+    fixed-size UI chrome (sidebar, topbar, table columns, lane grid)
+    stays proportional when the user changes the app font."""
+    app = QtWidgets.QApplication.instance()
+    px = app.font().pixelSize() if app else 13
+    return max(px, 11) / 13.0
+
 
 def _svg_icon(svg_path, color="#5d5d5d", size=16):
     """Build a small QIcon from an inline SVG path string, stroked with
@@ -95,8 +103,10 @@ class _StableTabBar(QtWidgets.QTabBar):
             if hasattr(metrics, "horizontalAdvance")
             else metrics.width(text)
         )
-        # 32 px for the QSS padding plus a small allowance for DPI rounding.
-        return QtCore.QSize(max(hint.width(), text_width + 40), max(hint.height(), 38))
+        # Scale the 32 px padding allowance with the current font size so tab
+        # labels stay separated under larger fonts / higher DPI.
+        pad = int(40 * _ui_scale())
+        return QtCore.QSize(max(hint.width(), text_width + pad), max(hint.height(), int(38 * _ui_scale())))
 
 
 # ---------------------------------------------------------------- state file
@@ -248,7 +258,10 @@ class MainWindow(QtWidgets.QMainWindow):
     def _apply_sidebar_collapsed(self):
         """Collapse to the same icon rail used by the web front end."""
         collapsed = self._sidebar_collapsed
-        self.sidebar.setFixedWidth(58 if collapsed else 260)
+        scale = _ui_scale()
+        # Scale sidebar widths from their 13 px baseline so larger fonts still
+        # fit button labels and the brand name.
+        self.sidebar.setFixedWidth(int(58 * scale) if collapsed else int(260 * scale))
         self.brand_name.setVisible(not collapsed)
         self.section_header.setVisible(not collapsed)
         self.recent_list.setHorizontalScrollBarPolicy(
@@ -258,7 +271,7 @@ class MainWindow(QtWidgets.QMainWindow):
             button.setText("" if collapsed else f" {label}")
             button.setToolTip(label)
             if collapsed:
-                button.setFixedWidth(42)
+                button.setFixedWidth(int(42 * scale))
             else:
                 button.setMinimumWidth(0)
                 button.setMaximumWidth(16777215)
@@ -364,16 +377,16 @@ class MainWindow(QtWidgets.QMainWindow):
         mv.setContentsMargins(0, 0, 0, 0)
         mv.setSpacing(0)
 
-        topbar = QtWidgets.QWidget()
-        topbar.setObjectName("topbar")
-        topbar.setFixedHeight(56)
-        tl = QtWidgets.QHBoxLayout(topbar)
+        self.topbar = QtWidgets.QWidget()
+        self.topbar.setObjectName("topbar")
+        self.topbar.setFixedHeight(int(56 * _ui_scale()))
+        tl = QtWidgets.QHBoxLayout(self.topbar)
         tl.setContentsMargins(18, 0, 18, 0)
         self.workspace_label = QtWidgets.QLabel("No workspace open")
         self.workspace_label.setObjectName("workspaceTitle")
         tl.addWidget(self.workspace_label)
         tl.addStretch(1)
-        mv.addWidget(topbar)
+        mv.addWidget(self.topbar)
 
         content = QtWidgets.QWidget()
         cv = QtWidgets.QVBoxLayout(content)
@@ -822,6 +835,10 @@ class MainWindow(QtWidgets.QMainWindow):
     def _apply_font(self, settings):
         family = settings.get("fontFamily")
         size = settings.get("fontSize") or DEFAULT_SETTINGS["fontSize"]
+        # Clamp to the same range the Settings dialog exposes. Sizes above
+        # ~16 px blow up fixed-width UI parts (sidebar, lane grid, tables)
+        # that are sized against a 13 px baseline.
+        size = max(11, min(size, 16))
         # QApplication.font()'s own untouched default is locale-dependent,
         # not "the system UI font" -- on a Chinese-locale Windows install
         # it can resolve to SimSun (a legacy bitmap CJK font) even for an
@@ -841,6 +858,11 @@ class MainWindow(QtWidgets.QMainWindow):
         # font-size in the first place.
         font.setPixelSize(round(size))
         QtWidgets.QApplication.instance().setFont(font)
+        # Resize fixed UI chrome whose hardcoded pixel sizes were chosen at
+        # the 13 px baseline, so a larger font doesn't clip text.
+        if getattr(self, "topbar", None) is not None:
+            self.topbar.setFixedHeight(int(56 * _ui_scale()))
+        self._apply_sidebar_collapsed()
 
     def _on_doc(self):
         dlg = QtWidgets.QDialog(self)

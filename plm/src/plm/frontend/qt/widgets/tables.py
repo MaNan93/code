@@ -20,6 +20,13 @@ compound on top of the last one's now-stale visual/logical mapping.
 from PyQt5 import QtCore, QtWidgets
 
 
+def _ui_scale():
+    """Scaling factor relative to the 13 px design baseline."""
+    app = QtWidgets.QApplication.instance()
+    px = app.font().pixelSize() if app else 13
+    return max(px, 11) / 13.0
+
+
 class EditableTable(QtWidgets.QWidget):
     # columns: [{"key", "heading"?, "options"?: [...]}] -- options makes
     #          that column a QComboBox instead of a free-text cell.
@@ -40,7 +47,8 @@ class EditableTable(QtWidgets.QWidget):
         self.table.setColumnCount(len(columns) + 1)  # + one actions column
         self.table.setHorizontalHeaderLabels([c.get("heading", c["key"]) for c in columns] + [""])
         header = self.table.horizontalHeader()
-        header.setMinimumSectionSize(72)
+        scale = _ui_scale()
+        header.setMinimumSectionSize(int(72 * scale))
         header.setTextElideMode(QtCore.Qt.ElideRight)
         metrics = header.fontMetrics()
         for index, column in enumerate(columns):
@@ -52,14 +60,17 @@ class EditableTable(QtWidgets.QWidget):
                     if hasattr(metrics, "horizontalAdvance")
                     else metrics.width(heading)
                 )
-                self.table.setColumnWidth(index, max(int(column["width"]), text_width + 28))
+                # Scale the design width and the heading padding from 13 px baseline.
+                target = max(int(column["width"] * scale), text_width + int(28 * scale))
+                self.table.setColumnWidth(index, target)
             else:
                 header.setSectionResizeMode(index, QtWidgets.QHeaderView.Stretch)
         header.setSectionResizeMode(len(columns), QtWidgets.QHeaderView.Fixed)
-        self.table.setColumnWidth(len(columns), 72)
+        # Action column needs room for +/- buttons at the current font size.
+        self.table.setColumnWidth(len(columns), int(72 * scale))
         self.table.setHorizontalScrollMode(QtWidgets.QAbstractItemView.ScrollPerPixel)
-        self.table.verticalHeader().setDefaultSectionSize(38)
-        self.table.verticalHeader().setMinimumSectionSize(34)
+        self.table.verticalHeader().setDefaultSectionSize(int(38 * scale))
+        self.table.verticalHeader().setMinimumSectionSize(int(34 * scale))
         self.table.setAlternatingRowColors(True)
         self.table.setSelectionBehavior(QtWidgets.QAbstractItemView.SelectItems)
         self.table.setSelectionMode(QtWidgets.QAbstractItemView.ExtendedSelection)

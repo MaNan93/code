@@ -62,7 +62,8 @@ class SettingsDialog(QtWidgets.QDialog):
         form.addRow("Font:", self.font_family_edit)
 
         self.font_size_spin = QtWidgets.QDoubleSpinBox()
-        self.font_size_spin.setRange(11, 20)
+        self.font_size_spin.setRange(11, 16)
+        self.font_size_spin.setDecimals(1)
         self.font_size_spin.setValue(self._settings.get("fontSize") or DEFAULT_SETTINGS["fontSize"])
         form.addRow("Font size:", self.font_size_spin)
 

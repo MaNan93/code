@@ -24,7 +24,6 @@ Run: python3 tool/plm_web.py [--port N] [--no-browser]
 """
 
 import argparse
-import csv
 import json
 import shutil
 import subprocess
@@ -48,6 +47,7 @@ sys.path.insert(0, str(SCRIPT_DIR))
 from plm_common import (  # noqa: E402
     CONFIGS_ROOT,
     DEFAULT_VERIBLE_FLAGS,
+    PLM_ROOT,
     VERIBLE_ALIGN_PARAMS,
     VERIBLE_BOOL_PARAMS,
     VERIBLE_INDENT_PARAMS,
@@ -55,17 +55,15 @@ from plm_common import (  # noqa: E402
     VERIBLE_STR_PARAMS,
     find_verible,
     has_csvs,
-    list_configs,
+    load_default_signals,
+    save_workspace_content,
+    scaffold_default_content,
+    workspace_content,
 )
-from plm_config import Config, _stripped  # noqa: E402
+from plm_config import Config  # noqa: E402
 
 STATE_FILE = Path.home() / ".plm_web_workspace.json"
 MAX_RECENT_WORKSPACES = 10
-ARCH_VALUES = ("original_pipe", "serdes")
-PCLK_MODE_VALUES = ("pclk_as_phy_output", "pclk_as_phy_input")
-SEL_MODE_VALUES = ("sync", "comb")
-ARCH_PCLK_MODE = {"original_pipe": "pclk_as_phy_output", "serdes": "pclk_as_phy_input"}
-PCLK_MODE_ARCH = {v: k for k, v in ARCH_PCLK_MODE.items()}
 
 # The only server-side session state this tool keeps -- see module docstring.
 current_workspace = None  # Path | None
@@ -146,253 +144,10 @@ def valid_name(name):
     return name
 
 
-# ---------------------------------------------------------------- CSV / gen_flags IO
-# Ported from plmConsultant.py's own file IO helpers
-# (plmConsultant.py:1757-1989) -- same read/write semantics (comma-aligned
-# CSVs, existing-line-ending preservation, same required-column checks),
-# just reading from / writing to JSON request bodies instead of Tk widget
-# state.
-
-
-def existing_line_ending(path):
-    path = Path(path)
-    if path.is_file():
-        with open(path, "rb") as f:
-            head = f.read(65536)
-        if b"\r\n" in head:
-            return "\r\n"
-        if b"\n" in head:
-            return "\n"
-    return "\n"
-
-
-def read_csv_rows(path, required_cols=None):
-    if not path.is_file():
-        return []
-    with open(path, newline="", encoding="utf-8") as f:
-        rd = csv.DictReader(f)
-        rd.fieldnames = [c.strip() if c else c for c in (rd.fieldnames or [])]
-        if required_cols and not set(required_cols) <= set(rd.fieldnames):
-            missing = sorted(set(required_cols) - set(rd.fieldnames))
-            raise ValueError(
-                f"{path}: header is missing {', '.join(missing)} "
-                f"(found: {', '.join(rd.fieldnames) or '(no header)'})"
-            )
-        return [dict(r) for r in _stripped(rd)]
-
-
-def read_mapping_csv(path):
-    if not path.is_file():
-        return [], 4
-    with open(path, newline="", encoding="utf-8") as f:
-        rd = csv.DictReader(f)
-        fieldnames = [c.strip() if c else c for c in (rd.fieldnames or [])]
-        rd.fieldnames = fieldnames
-        if "mode" not in fieldnames:
-            raise ValueError(
-                f"{path}: header is missing 'mode' (found: {', '.join(fieldnames) or '(no header)'})"
-            )
-        lane_cols = [c for c in fieldnames if c != "mode"]
-        rows = [dict(r) for r in _stripped(rd)]
-    return rows, max(1, len(lane_cols))
-
-
-_PCLK_MODE_MIGRATION = {
-    "phy-output": "pclk_as_phy_output",
-    "phy-input-max-pclk": "pclk_as_phy_input",
-}
-
-
-def read_gen_flags(path):
-    flags = {}
-    if path.is_file():
-        for raw in path.read_text(encoding="utf-8").splitlines():
-            line = raw.split("#", 1)[0].strip()
-            if not line or "=" not in line:
-                continue
-            k, _, v = line.partition("=")
-            flags[k.strip()] = v.strip()
-    raw_pclk_mode = flags.get("pclk-mode", "")
-    pclk_mode_val = _PCLK_MODE_MIGRATION.get(raw_pclk_mode, raw_pclk_mode)
-    pclk_mode_val = pclk_mode_val if pclk_mode_val in PCLK_MODE_VALUES else None
-    arch_val = PCLK_MODE_ARCH.get(pclk_mode_val)
-    sel_val = flags.get("sel-mode")
-    sel_val = sel_val if sel_val in SEL_MODE_VALUES else None
-    return {
-        "arch": arch_val,
-        "pclk-mode": pclk_mode_val,
-        "sel-mode": sel_val,
-        "dpr": flags.get("dpr", "").strip().lower() in ("1", "true", "yes", "on"),
-        "verible-path": flags.get("verible-path", ""),
-    }
-
-
-def write_aligned_csv(path, header, rows, eol):
-    all_rows = [list(header)] + [list(r) for r in rows]
-    ncols = len(header)
-    widths = [max(len(str(row[i])) for row in all_rows) for i in range(ncols)]
-    with open(path, "w", newline="", encoding="utf-8") as f:
-        for row in all_rows:
-            cells = []
-            for i, v in enumerate(row):
-                v = str(v)
-                cells.append((v + ",").ljust(widths[i] + 2) if i < ncols - 1 else v)
-            f.write("".join(cells) + eol)
-
-
-def write_controllers_csv(path, rows):
-    if not rows:
-        raise ApiError("Controllers table is empty -- at least one controller is required.")
-    eol = existing_line_ending(path)
-    write_aligned_csv(
-        path,
-        ["ctrl_id", "ctrl_name", "max_width"],
-        [[r.get("ctrl_id", ""), r.get("ctrl_name", ""), r.get("max_width", "")] for r in rows],
-        eol,
-    )
-
-
-def write_signals_csv(path, rows):
-    if not rows:
-        raise ApiError("Pipe Signals table is empty -- at least one signal is required.")
-    eol = existing_line_ending(path)
-    write_aligned_csv(
-        path,
-        ["signal_name", "signal_type", "direction", "width", "safe_state", "tie_off"],
-        [
-            [
-                r.get("signal_name", ""),
-                r.get("signal_type", "") or "perlane",
-                r.get("direction", ""),
-                r.get("width", ""),
-                r.get("safe_state", ""),
-                r.get("tie_off", ""),
-            ]
-            for r in rows
-        ],
-        eol,
-    )
-
-
-def write_mapping_csv(path, lane_count, rows):
-    if not rows:
-        raise ApiError("Lane Mapping table is empty -- at least one mode row is required.")
-    cols = ["mode"] + [f"lane{l}" for l in range(lane_count)]
-    eol = existing_line_ending(path)
-    write_aligned_csv(path, cols, [[r.get(c, "") for c in cols] for r in rows], eol)
-
-
-def write_gen_flags(path, flags):
-    lines = [
-        "# 支持: arch      = original_pipe | serdes",
-        "#       pclk-mode = pclk_as_phy_output | pclk_as_phy_input",
-        "#       sel-mode  = sync | comb",
-        "#       dpr       = true | false (dpr=true requires sel-mode=sync)",
-    ]
-    header_lines = len(lines)
-    arch = flags.get("arch")
-    pclk = flags.get("pclk-mode")
-    sel = flags.get("sel-mode")
-    dpr = bool(flags.get("dpr"))
-    verible = (flags.get("verible-path") or "").strip()
-    if arch in ARCH_VALUES:
-        lines.append(f"arch = {arch}")
-    if pclk in PCLK_MODE_VALUES:
-        lines.append(f"pclk-mode = {pclk}")
-    if sel in SEL_MODE_VALUES:
-        lines.append(f"sel-mode = {sel}")
-    if dpr:
-        lines.append("dpr = true")
-    if verible:
-        lines.append(f"verible-path = {verible}")
-    if len(lines) == header_lines:
-        if path.is_file():
-            path.unlink()
-        return
-    eol = existing_line_ending(path)
-    with open(path, "w", newline="", encoding="utf-8") as f:
-        f.write(eol.join(lines) + eol)
-
-
-def default_verible_path(explicit=""):
-    return explicit or find_verible() or ""
-
-
-def load_default_signals():
-    """Copy an existing bundled sample workspace's pipe_signals.csv as a
-    ready-made starting point, the same template source
-    plmConsultant.py's own _load_default_signals uses
-    (plmConsultant.py:1991-2008)."""
-    for name in list_configs():
-        src = CONFIGS_ROOT / name / "config" / "pipe_signals.csv"
-        if src.is_file():
-            return read_csv_rows(src)
-    return []
-
-
-# ---------------------------------------------------------------- workspace load/save
-
-
-def workspace_content(ws_root):
-    """Load the four config files under ws_root/config into the same JSON
-    shape /api/workspace/save expects, mirroring
-    plmConsultant.py's _load_workspace_content (plmConsultant.py:1711-1755).
-    Raises ApiError on a genuine parse failure; a workspace with no config
-    yet returns an empty-but-valid shape (mirrors the "_clear_tabs()" branch)."""
-    cfg_dir = ws_root / "config"
-    if not has_csvs(cfg_dir):
-        return {
-            "controllers": [],
-            "signals": [],
-            "mapping": {"lane_count": 4, "rows": []},
-            "gen_flags": {"arch": None, "pclk-mode": None, "sel-mode": None,
-                          "dpr": False, "verible-path": default_verible_path()},
-            "empty": True,
-        }
-    try:
-        ctrls = read_csv_rows(cfg_dir / "controllers.csv", ("ctrl_id", "ctrl_name", "max_width"))
-        sigs = read_csv_rows(
-            cfg_dir / "pipe_signals.csv",
-            ("signal_name", "signal_type", "direction", "width", "safe_state", "tie_off"),
-        )
-        mapping_rows, lane_count = read_mapping_csv(cfg_dir / "lane_mapping.csv")
-    except (ValueError, OSError) as e:
-        raise ApiError(f"Could not load {cfg_dir}: {e}") from e
-    flags = read_gen_flags(cfg_dir / "gen_flags.txt")
-    flags["verible-path"] = default_verible_path(flags.get("verible-path", ""))
-    return {
-        "controllers": ctrls,
-        "signals": sigs,
-        "mapping": {"lane_count": lane_count, "rows": mapping_rows},
-        "gen_flags": flags,
-        "empty": False,
-    }
-
-
-def save_workspace_content(ws_root, payload):
-    cfg_dir = ws_root / "config"
-    cfg_dir.mkdir(parents=True, exist_ok=True)
-    mapping = payload.get("mapping") or {}
-    write_controllers_csv(cfg_dir / "controllers.csv", payload.get("controllers") or [])
-    write_signals_csv(cfg_dir / "pipe_signals.csv", payload.get("signals") or [])
-    write_mapping_csv(cfg_dir / "lane_mapping.csv", int(mapping.get("lane_count") or 4), mapping.get("rows") or [])
-    write_gen_flags(cfg_dir / "gen_flags.txt", payload.get("gen_flags") or {})
-
-
-def scaffold_default_content(ws_root):
-    """Seed sensible starting content for a brand-new, empty workspace,
-    mirroring plmConsultant.py's _scaffold_default_content
-    (plmConsultant.py:1697-1709)."""
-    payload = {
-        "controllers": [{"ctrl_id": "0", "ctrl_name": "CtrlA", "max_width": "4"}],
-        "signals": load_default_signals(),
-        "mapping": {"lane_count": 4, "rows": [{"mode": "0", "lane0": "0-0", "lane1": "0-1",
-                                                "lane2": "0-2", "lane3": "0-3"}]},
-        "gen_flags": {"arch": None, "pclk-mode": None, "sel-mode": None,
-                      "dpr": False, "verible-path": default_verible_path()},
-    }
-    save_workspace_content(ws_root, payload)
-    return payload
+# CSV / gen_flags read-write, and the workspace_content/save_workspace_content/
+# scaffold_default_content helpers built on top of them, now live in
+# plm_common.py (shared with plmConsultant.py and plm_qt.py) -- see the
+# import block above.
 
 
 # ---------------------------------------------------------------- API route handlers
@@ -444,7 +199,7 @@ def api_workspace_open(query, body):
     ws = Path(raw)
     if not ws.is_dir():
         raise ApiError(f"Not a directory: {ws}")
-    content = workspace_content(ws)  # raises ApiError on real parse failure -- leaves current_workspace untouched
+    content = workspace_content(ws)  # raises ValueError on real parse failure -- leaves current_workspace untouched
     current_workspace = ws
     add_recent_workspace(ws)
     save_last_workspace(ws)  # auto-reopen this workspace next time plm_web starts
@@ -453,10 +208,13 @@ def api_workspace_open(query, body):
 
 def api_workspace_new(query, body):
     global current_workspace
-    parent = (body or {}).get("parent")
+    # parent is optional -- "New" is a naming action, not a "browse to a
+    # location" one (see app.js's openNewWorkspaceFlow): the frontend
+    # sends the currently-open workspace's own parent dir when one is
+    # open, and nothing at all otherwise, in which case this falls back
+    # to the same default api_browse itself starts from.
+    parent = (body or {}).get("parent") or (CONFIGS_ROOT if CONFIGS_ROOT.is_dir() else Path.home())
     name = (body or {}).get("name")
-    if not parent:
-        raise ApiError("parent is required")
     name = valid_name(name)
     ws = Path(parent) / name
     if ws.exists():
@@ -647,6 +405,22 @@ def _query():
 @app.route("/")
 def route_index():
     return send_from_directory(WEB_DIR, "index.html")
+
+
+@app.route("/docs/<path:name>")
+def route_docs(name):
+    """Serve the project's own docs/ files (read-only) so the in-app Doc
+    button can open them -- mirrors plmConsultant.py's _open_docs
+    (plmConsultant.py:1243), which opened docs/tool_usage.md in a browser.
+    Restricted to plain .md files directly under docs/, so this can't be
+    used to read arbitrary paths."""
+    docs_dir = (PLM_ROOT / "docs").resolve()
+    target = (docs_dir / name).resolve()
+    if docs_dir not in target.parents or target.suffix.lower() != ".md":
+        return jsonify({"error": "invalid docs path"}), 400
+    if not target.is_file():
+        return jsonify({"error": f"no such doc: {name}"}), 404
+    return send_from_directory(docs_dir, name, mimetype="text/plain; charset=utf-8")
 
 
 @app.route("/<path:filename>")

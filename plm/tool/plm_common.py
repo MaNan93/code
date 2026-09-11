@@ -10,9 +10,12 @@ verible-verilog-format auto-formatting pass, are identical in both tools,
 so they're defined once and imported by each.
 """
 
+import csv
 import shutil
 import subprocess
 from pathlib import Path
+
+from plm_config import _stripped
 
 SCRIPT_DIR = Path(__file__).resolve().parent  # .../plm/tool
 PLM_ROOT = SCRIPT_DIR.parent  # .../plm
@@ -276,6 +279,15 @@ ARCH_PCLK_MODE = {
     "original_pipe": "pclk_as_phy_output",
     "serdes": "pclk_as_phy_input",
 }
+PCLK_MODE_ARCH = {v: k for k, v in ARCH_PCLK_MODE.items()}
+
+# Plain value tuples (no "(default: ...)"/placeholder entries -- that's a
+# Tk-combobox-specific display concern, see plmConsultant.py's ARCH_MODES
+# etc.) shared by every front end's gen_flags.txt read/write and by their
+# arch/pclk-mode/sel-mode selection widgets.
+ARCH_VALUES = ("original_pipe", "serdes")
+PCLK_MODE_VALUES = ("pclk_as_phy_output", "pclk_as_phy_input")
+SEL_MODE_VALUES = ("sync", "comb")
 
 
 def validate_arch(arch, pclk_mode):
@@ -353,3 +365,292 @@ def apply_set_flags(ap, set_flags):
         else:
             tokens += [f"--{key}", value]
     return tokens
+
+
+# ---------------------------------------------------------------- CSV / gen_flags IO
+# Shared by every front end (plmConsultant.py, plm_web.py, plm_qt.py) that
+# edits the three config CSVs + gen_flags.txt: comma-aligned CSV writing,
+# existing-line-ending preservation, and the same required-column checks,
+# so all three tools read and write byte-identical files. Each front end
+# is responsible for translating its own widget/request state into the
+# plain rows/flags shapes these functions take, and back.
+
+
+def existing_line_ending(path):
+    """Detect the line ending already used by path, so writing back to it
+    doesn't silently rewrite every single line just from an untouched
+    load-then-save round trip. Falls back to plain "\\n" for a file that
+    doesn't exist yet -- these configs are meant to be Linux-readable
+    regardless of which OS a given front end runs on, so a brand-new file
+    shouldn't default to the local OS's convention (os.linesep is CRLF on
+    Windows)."""
+    path = Path(path)
+    if path.is_file():
+        with open(path, "rb") as f:
+            head = f.read(65536)
+        if b"\r\n" in head:
+            return "\r\n"
+        if b"\n" in head:
+            return "\n"
+    return "\n"
+
+
+def read_csv_rows(path, required_cols=None):
+    """required_cols, if given, is checked against the file's actual
+    header before any row is accepted -- a header that's missing, blank,
+    or just doesn't match must be treated as a load failure, not silently
+    accepted as "0 useful columns, every field defaults to blank": the
+    latter is how a garbled file on disk turns into a table full of blank
+    rows that then look empty in the GUI with no error shown at all -- and
+    the very next Save/Validate (which always writes the tables back out
+    first) overwrites the original file with those blanks, destroying
+    whatever was actually in it.
+
+    Header and values are both whitespace-stripped (same _stripped()
+    plm_config.py itself uses) -- a comma-aligned CSV padded with spaces
+    for readability is a legitimate, common style, not a malformed file.
+    """
+    path = Path(path)
+    if not path.is_file():
+        return []
+    with open(path, newline="", encoding="utf-8") as f:
+        rd = csv.DictReader(f)
+        rd.fieldnames = [c.strip() if c else c for c in (rd.fieldnames or [])]
+        if required_cols and not set(required_cols) <= set(rd.fieldnames):
+            missing = sorted(set(required_cols) - set(rd.fieldnames))
+            raise ValueError(
+                f"{path}: header is missing {', '.join(missing)} "
+                f"(found: {', '.join(rd.fieldnames) or '(no header)'})"
+            )
+        return [dict(r) for r in _stripped(rd)]
+
+
+def read_mapping_csv(path):
+    path = Path(path)
+    if not path.is_file():
+        return [], 4
+    with open(path, newline="", encoding="utf-8") as f:
+        rd = csv.DictReader(f)
+        fieldnames = [c.strip() if c else c for c in (rd.fieldnames or [])]
+        rd.fieldnames = fieldnames
+        if "mode" not in fieldnames:
+            raise ValueError(
+                f"{path}: header is missing 'mode' (found: {', '.join(fieldnames) or '(no header)'})"
+            )
+        lane_cols = [c for c in fieldnames if c != "mode"]
+        rows = [dict(r) for r in _stripped(rd)]
+    return rows, max(1, len(lane_cols))
+
+
+def read_gen_flags(path):
+    """Read <config>/gen_flags.txt into {"arch", "pclk-mode", "sel-mode",
+    "dpr", "verible-path"}. Unlike load_set_flags() (which returns raw
+    key/value strings for argparse to consume), this returns the front
+    ends' own shape: unset/unrecognized arch/pclk-mode/sel-mode come back
+    as None (not a placeholder string -- each front end maps that to
+    whatever its own "unset" widget value is), dpr is already a bool.
+    """
+    path = Path(path)
+    flags = {}
+    if path.is_file():
+        for raw in path.read_text(encoding="utf-8").splitlines():
+            line = raw.split("#", 1)[0].strip()
+            if not line or "=" not in line:
+                continue
+            k, _, v = line.partition("=")
+            flags[k.strip()] = v.strip()
+    raw_pclk_mode = flags.get("pclk-mode", "")
+    pclk_mode_val = _PCLK_MODE_MIGRATION.get(raw_pclk_mode, raw_pclk_mode)
+    pclk_mode_val = pclk_mode_val if pclk_mode_val in PCLK_MODE_VALUES else None
+    arch_val = PCLK_MODE_ARCH.get(pclk_mode_val)
+    sel_val = flags.get("sel-mode")
+    sel_val = sel_val if sel_val in SEL_MODE_VALUES else None
+    return {
+        "arch": arch_val,
+        "pclk-mode": pclk_mode_val,
+        "sel-mode": sel_val,
+        "dpr": flags.get("dpr", "").strip().lower() in ("1", "true", "yes", "on"),
+        "verible-path": flags.get("verible-path", ""),
+    }
+
+
+def write_aligned_csv(path, header, rows, eol):
+    """Write a CSV with every column comma-aligned (each field padded with
+    spaces after its comma so the next column lines up), for hand-editing
+    readability. header/rows entries are plain values (not yet
+    comma-escaped) -- this domain (signal/controller names, small
+    integers, mode indices) never needs CSV quoting, so this skips the csv
+    module entirely rather than fighting it over inserted alignment spaces.
+    """
+    all_rows = [list(header)] + [list(r) for r in rows]
+    ncols = len(header)
+    widths = [max(len(str(row[i])) for row in all_rows) for i in range(ncols)]
+    with open(path, "w", newline="", encoding="utf-8") as f:
+        for row in all_rows:
+            cells = []
+            for i, v in enumerate(row):
+                v = str(v)
+                cells.append((v + ",").ljust(widths[i] + 2) if i < ncols - 1 else v)
+            f.write("".join(cells) + eol)
+
+
+def write_controllers_csv(path, rows):
+    if not rows:
+        raise ValueError("Controllers table is empty -- at least one controller is required.")
+    path = Path(path)
+    eol = existing_line_ending(path)  # must read this *before* opening "w" truncates the file
+    write_aligned_csv(
+        path,
+        ["ctrl_id", "ctrl_name", "max_width"],
+        [[r.get("ctrl_id", ""), r.get("ctrl_name", ""), r.get("max_width", "")] for r in rows],
+        eol,
+    )
+
+
+def write_signals_csv(path, rows):
+    if not rows:
+        raise ValueError("Pipe Signals table is empty -- at least one signal is required.")
+    path = Path(path)
+    eol = existing_line_ending(path)  # must read this *before* opening "w" truncates the file
+    write_aligned_csv(
+        path,
+        ["signal_name", "signal_type", "direction", "width", "safe_state", "tie_off"],
+        [
+            [
+                r.get("signal_name", ""),
+                r.get("signal_type", "") or "perlane",
+                r.get("direction", ""),
+                r.get("width", ""),
+                r.get("safe_state", ""),
+                r.get("tie_off", ""),
+            ]
+            for r in rows
+        ],
+        eol,
+    )
+
+
+def write_mapping_csv(path, lane_count, rows):
+    if not rows:
+        raise ValueError("Lane Mapping table is empty -- at least one mode row is required.")
+    path = Path(path)
+    cols = ["mode"] + [f"lane{l}" for l in range(lane_count)]
+    eol = existing_line_ending(path)  # must read this *before* opening "w" truncates the file
+    write_aligned_csv(path, cols, [[r.get(c, "") for c in cols] for r in rows], eol)
+
+
+def write_gen_flags(path, flags):
+    path = Path(path)
+    lines = [
+        "# 支持: arch      = original_pipe | serdes",
+        "#       pclk-mode = pclk_as_phy_output | pclk_as_phy_input",
+        "#       sel-mode  = sync | comb",
+        "#       dpr       = true | false (dpr=true requires sel-mode=sync)",
+    ]
+    header_lines = len(lines)
+    arch = flags.get("arch")
+    pclk = flags.get("pclk-mode")
+    sel = flags.get("sel-mode")
+    dpr = bool(flags.get("dpr"))
+    verible = (flags.get("verible-path") or "").strip()
+    if arch in ARCH_VALUES:
+        lines.append(f"arch = {arch}")
+    if pclk in PCLK_MODE_VALUES:
+        lines.append(f"pclk-mode = {pclk}")
+    if sel in SEL_MODE_VALUES:
+        lines.append(f"sel-mode = {sel}")
+    if dpr:
+        lines.append("dpr = true")
+    if verible:
+        lines.append(f"verible-path = {verible}")
+    if len(lines) == header_lines:
+        # nothing but the header comment lines -- no point writing a file
+        # that would set no keys at all.
+        if path.is_file():
+            path.unlink()
+        return
+    eol = existing_line_ending(path)  # must read this *before* truncating the file
+    # newline="" (like the CSV writers) so the \n's already joined into the
+    # text below are written as-is, not translated to os.linesep --
+    # write_text()'s default newline=None would silently flip an existing
+    # LF file to CRLF (or vice versa) on every save.
+    with open(path, "w", newline="", encoding="utf-8") as f:
+        f.write(eol.join(lines) + eol)
+
+
+def default_verible_path(explicit=""):
+    """explicit (e.g. from gen_flags.txt) always wins; otherwise fall back
+    to whatever find_verible() locates on PATH, if anything."""
+    return explicit or find_verible() or ""
+
+
+def load_default_signals():
+    """Copy an existing bundled sample workspace's pipe_signals.csv as a
+    ready-made starting point for a brand-new, still-empty workspace --
+    this project's own bundled sample workspaces (configs/test_quad, etc.)
+    always exist regardless of which workspace is currently open, so
+    they're a reliable template source."""
+    for name in list_configs():
+        src = CONFIGS_ROOT / name / "config" / "pipe_signals.csv"
+        if src.is_file():
+            return read_csv_rows(src)
+    return []
+
+
+def workspace_content(ws_root):
+    """Load the four config files under ws_root/config into a plain JSON-
+    serializable dict shape: {"controllers", "signals", "mapping": {...},
+    "gen_flags": {...}, "empty"}. Raises ValueError on a genuine parse
+    failure; a workspace with no config yet returns an empty-but-valid
+    shape instead of raising."""
+    ws_root = Path(ws_root)
+    cfg_dir = ws_root / "config"
+    if not has_csvs(cfg_dir):
+        return {
+            "controllers": [],
+            "signals": [],
+            "mapping": {"lane_count": 4, "rows": []},
+            "gen_flags": {"arch": None, "pclk-mode": None, "sel-mode": None,
+                          "dpr": False, "verible-path": default_verible_path()},
+            "empty": True,
+        }
+    ctrls = read_csv_rows(cfg_dir / "controllers.csv", ("ctrl_id", "ctrl_name", "max_width"))
+    sigs = read_csv_rows(
+        cfg_dir / "pipe_signals.csv",
+        ("signal_name", "signal_type", "direction", "width", "safe_state", "tie_off"),
+    )
+    mapping_rows, lane_count = read_mapping_csv(cfg_dir / "lane_mapping.csv")
+    flags = read_gen_flags(cfg_dir / "gen_flags.txt")
+    flags["verible-path"] = default_verible_path(flags.get("verible-path", ""))
+    return {
+        "controllers": ctrls,
+        "signals": sigs,
+        "mapping": {"lane_count": lane_count, "rows": mapping_rows},
+        "gen_flags": flags,
+        "empty": False,
+    }
+
+
+def save_workspace_content(ws_root, payload):
+    ws_root = Path(ws_root)
+    cfg_dir = ws_root / "config"
+    cfg_dir.mkdir(parents=True, exist_ok=True)
+    mapping = payload.get("mapping") or {}
+    write_controllers_csv(cfg_dir / "controllers.csv", payload.get("controllers") or [])
+    write_signals_csv(cfg_dir / "pipe_signals.csv", payload.get("signals") or [])
+    write_mapping_csv(cfg_dir / "lane_mapping.csv", int(mapping.get("lane_count") or 4), mapping.get("rows") or [])
+    write_gen_flags(cfg_dir / "gen_flags.txt", payload.get("gen_flags") or {})
+
+
+def scaffold_default_content(ws_root):
+    """Seed sensible starting content for a brand-new, empty workspace."""
+    payload = {
+        "controllers": [{"ctrl_id": "0", "ctrl_name": "CtrlA", "max_width": "4"}],
+        "signals": load_default_signals(),
+        "mapping": {"lane_count": 4, "rows": [{"mode": "0", "lane0": "0-0", "lane1": "0-1",
+                                                "lane2": "0-2", "lane3": "0-3"}]},
+        "gen_flags": {"arch": None, "pclk-mode": None, "sel-mode": None,
+                      "dpr": False, "verible-path": default_verible_path()},
+    }
+    save_workspace_content(ws_root, payload)
+    return payload

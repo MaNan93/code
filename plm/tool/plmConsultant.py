@@ -23,7 +23,6 @@ of named sets.
 Run: python tool/plmConsultant.py
 """
 
-import csv
 import json
 import math
 import queue
@@ -42,13 +41,20 @@ sys.path.insert(0, str(SCRIPT_DIR))
 from plm_common import (  # noqa: E402
     ARCH_PCLK_MODE,
     CONFIGS_ROOT,
+    PCLK_MODE_ARCH,
     PLM_ROOT,
-    _PCLK_MODE_MIGRATION,
-    find_verible,
+    default_verible_path,
     has_csvs,
-    list_configs,
+    load_default_signals,
+    read_csv_rows,
+    read_gen_flags,
+    read_mapping_csv,
+    write_controllers_csv,
+    write_gen_flags,
+    write_mapping_csv,
+    write_signals_csv,
 )
-from plm_config import Config, _stripped  # noqa: E402
+from plm_config import Config  # noqa: E402
 
 PCLK_MODES = ["(default: pclk_as_phy_output)", "pclk_as_phy_output", "pclk_as_phy_input"]
 SEL_MODES = ["(default: sync)", "sync", "comb"]
@@ -57,7 +63,6 @@ ARCH_MODES = ["(default: original_pipe)", "original_pipe", "serdes"]
 # ARCH_PCLK_MODE) -- each dropdown's own trace keeps the other in sync (see
 # _build_gen_flags_tab / wherever the two combos are created), so the GUI
 # can never produce a mismatched pair the CLI tools would reject.
-PCLK_MODE_ARCH = {v: k for k, v in ARCH_PCLK_MODE.items()}
 DIRECTIONS = ["mac2phy", "phy2mac"]
 SIGNAL_TYPES = ["perlane", "shared"]
 LANE_COUNTS = ["1", "2", "4", "8", "16", "32"]
@@ -1674,9 +1679,7 @@ class PlmGui(tk.Tk):
             self.verible_path_var.set(path)
 
     def _default_verible_path(self, explicit=""):
-        """explicit (e.g. from gen_flags.txt) always wins; otherwise fall
-        back to whatever find_verible() locates on PATH, if anything."""
-        return explicit or find_verible() or ""
+        return default_verible_path(explicit)
 
     # ------------------------------------------------------------ workspace content
     def _clear_tabs(self):
@@ -1728,12 +1731,12 @@ class PlmGui(tk.Tk):
             self._log(f"No config found under {cfg_dir} yet -- fill in the tabs and Save Workspace.\n")
             return True
         try:
-            ctrls = self._read_csv(cfg_dir / "controllers.csv", ("ctrl_id", "ctrl_name", "max_width"))
-            sigs = self._read_csv(
+            ctrls = read_csv_rows(cfg_dir / "controllers.csv", ("ctrl_id", "ctrl_name", "max_width"))
+            sigs = read_csv_rows(
                 cfg_dir / "pipe_signals.csv",
                 ("signal_name", "signal_type", "direction", "width", "safe_state", "tie_off"),
             )
-            mapping_rows, lane_count = self._read_mapping_csv(cfg_dir / "lane_mapping.csv")
+            mapping_rows, lane_count = read_mapping_csv(cfg_dir / "lane_mapping.csv")
         except Exception as e:  # noqa: BLE001 -- surface any parse issue to the user, not just SystemExit
             messagebox.showerror("Load failed", f"Could not load {cfg_dir}:\n{e}")
             return False
@@ -1745,119 +1748,24 @@ class PlmGui(tk.Tk):
         self.mapping_table.set_rows(mapping_rows)
         self.mapping_table.set_controllers(self.controllers_table.get_rows())
 
-        flags = self._read_gen_flags(cfg_dir / "gen_flags.txt")
-        self.arch_var.set(flags.get("arch", ARCH_MODES[0]))
-        self.pclk_mode_var.set(flags.get("pclk-mode", PCLK_MODES[0]))
-        self.sel_mode_var.set(flags.get("sel-mode", SEL_MODES[0]))
+        # read_gen_flags() returns None for an unset/unrecognized
+        # arch/pclk-mode/sel-mode (its shared, front-end-agnostic shape) --
+        # translate that to this GUI's own "(default: ...)" placeholder
+        # option, which the old Tk-only _read_gen_flags used to bake in
+        # directly.
+        flags = read_gen_flags(cfg_dir / "gen_flags.txt")
+        self.arch_var.set(flags.get("arch") or ARCH_MODES[0])
+        self.pclk_mode_var.set(flags.get("pclk-mode") or PCLK_MODES[0])
+        self.sel_mode_var.set(flags.get("sel-mode") or SEL_MODES[0])
         self.dpr_var.set(flags.get("dpr", False))
         self.verible_path_var.set(self._default_verible_path(flags.get("verible-path", "")))
         self._log(f"Loaded {cfg_dir}.\n")
         return True
 
     # ------------------------------------------------------------ file IO helpers
-    @staticmethod
-    def _existing_line_ending(path):
-        """Detect the line ending already used by path, so writing back to
-        it doesn't silently rewrite every single line just from an
-        untouched load-then-save round trip. Falls back to plain "\\n" for
-        a file that doesn't exist yet -- these configs are meant to be
-        Linux-readable regardless of which OS the GUI itself runs on, so a
-        brand-new file shouldn't default to the local OS's convention
-        (os.linesep is CRLF on Windows)."""
-        path = Path(path)
-        if path.is_file():
-            with open(path, "rb") as f:
-                head = f.read(65536)
-            if b"\r\n" in head:
-                return "\r\n"
-            if b"\n" in head:
-                return "\n"
-        return "\n"
-
-    @staticmethod
-    def _read_csv(path, required_cols=None):
-        """required_cols, if given, is checked against the file's actual
-        header before any row is accepted -- a header that's missing,
-        blank (e.g. a stray leading blank line pushes csv.DictReader's
-        real header down into a bogus "extra" data row, per Python's own
-        documented restkey behavior), or just doesn't match must be
-        treated as a load failure, not silently accepted as "0 useful
-        columns, every field defaults to blank": the latter is how a
-        garbled file on disk turns into a table full of blank rows that
-        then look empty in the GUI with no error shown at all -- and the
-        very next Save/Validate (which always writes the tables back out
-        first) overwrites the original file with those blanks, destroying
-        whatever was actually in it.
-
-        Header and values are both whitespace-stripped (same _stripped()
-        plm_config.py already uses for the real CLI tools) -- a
-        comma-aligned CSV padded with spaces for readability is a
-        legitimate, common style, not a malformed file, so it must parse
-        identically to an unpadded one rather than failing the
-        required_cols check on "signal_type" != "  signal_type".
-        """
-        if not path.is_file():
-            return []
-        with open(path, newline="", encoding="utf-8") as f:
-            rd = csv.DictReader(f)
-            rd.fieldnames = [c.strip() if c else c for c in (rd.fieldnames or [])]
-            if required_cols and not set(required_cols) <= set(rd.fieldnames):
-                missing = sorted(set(required_cols) - set(rd.fieldnames))
-                raise ValueError(
-                    f"{path}: header is missing {', '.join(missing)} "
-                    f"(found: {', '.join(rd.fieldnames) or '(no header)'})"
-                )
-            return [dict(r) for r in _stripped(rd)]
-
-    @staticmethod
-    def _read_mapping_csv(path):
-        if not path.is_file():
-            return [], 4
-        with open(path, newline="", encoding="utf-8") as f:
-            rd = csv.DictReader(f)
-            fieldnames = [c.strip() if c else c for c in (rd.fieldnames or [])]
-            rd.fieldnames = fieldnames
-            if "mode" not in fieldnames:
-                raise ValueError(
-                    f"{path}: header is missing 'mode' "
-                    f"(found: {', '.join(fieldnames) or '(no header)'})"
-                )
-            lane_cols = [c for c in fieldnames if c != "mode"]
-            rows = [dict(r) for r in _stripped(rd)]
-        return rows, max(1, len(lane_cols))
-
-    @staticmethod
-    def _read_gen_flags(path):
-        flags = {}
-        if not path.is_file():
-            return flags
-        for raw in path.read_text(encoding="utf-8").splitlines():
-            line = raw.split("#", 1)[0].strip()
-            if not line or "=" not in line:
-                continue
-            k, _, v = line.partition("=")
-            flags[k.strip()] = v.strip()
-        # Old gen_flags.txt files may still have pclk-mode's pre-rename value
-        # on disk (phy-output/phy-input-max-pclk) -- migrate it before the
-        # comparison below, so an old config set keeps loading correctly.
-        raw_pclk_mode = flags.get("pclk-mode", "")
-        pclk_mode_val = _PCLK_MODE_MIGRATION.get(raw_pclk_mode, raw_pclk_mode)
-        pclk_mode_val = pclk_mode_val if pclk_mode_val in ("pclk_as_phy_output", "pclk_as_phy_input") else None
-        return {
-            # arch is derived from pclk-mode, not read from its own "arch ="
-            # line -- the two are validated to always agree (see
-            # ARCH_PCLK_MODE), so deriving from whichever pclk-mode value
-            # this file actually resolves to (including "unset") sidesteps
-            # ever trusting a hand-edited arch line that could disagree.
-            "arch": PCLK_MODE_ARCH.get(pclk_mode_val, ARCH_MODES[0]),
-            "pclk-mode": pclk_mode_val or PCLK_MODES[0],
-            "sel-mode": "comb" if flags.get("sel-mode") == "comb"
-            else ("sync" if flags.get("sel-mode") == "sync" else SEL_MODES[0]),
-            # Same boolean parsing as plm_common.apply_set_flags(), so the
-            # GUI and the CLI tools agree on what counts as "true" in this file.
-            "dpr": flags.get("dpr", "").strip().lower() in ("1", "true", "yes", "on"),
-            "verible-path": flags.get("verible-path", ""),
-        }
+    # Reading is delegated straight to plm_common's shared functions (used
+    # at the two call sites above and in _load_default_signals below) --
+    # see the "saving" section just below for the write side.
 
     # ------------------------------------------------------------ saving
     def _save_all(self):
@@ -1883,125 +1791,45 @@ class PlmGui(tk.Tk):
         self._write_mapping_csv(cfg_dir / "lane_mapping.csv")
         self._write_gen_flags(cfg_dir / "gen_flags.txt")
 
-    @staticmethod
-    def _write_aligned_csv(path, header, rows, eol):
-        """Write a CSV with every column comma-aligned (each field padded
-        with spaces after its comma so the next column lines up), for
-        hand-editing readability. This is a legitimate, common CSV style --
-        _read_csv/_read_mapping_csv (and plm_config.py's own readers)
-        already strip whitespace around every field, so a round trip
-        through the GUI keeps looking the way a hand-aligned file did,
-        instead of collapsing back to comma-with-no-spaces.
-
-        header/rows entries are plain values (not yet comma-escaped) --
-        this domain (signal/controller names, small integers, mode
-        indices) never needs CSV quoting, so this skips the csv module
-        entirely rather than fighting it over inserted alignment spaces.
-        """
-        all_rows = [list(header)] + [list(r) for r in rows]
-        ncols = len(header)
-        widths = [max(len(str(row[i])) for row in all_rows) for i in range(ncols)]
-        with open(path, "w", newline="", encoding="utf-8") as f:
-            for row in all_rows:
-                cells = []
-                for i, v in enumerate(row):
-                    v = str(v)
-                    cells.append((v + ",").ljust(widths[i] + 2) if i < ncols - 1 else v)
-                f.write("".join(cells) + eol)
-
     def _write_controllers_csv(self, path):
-        rows = self.controllers_table.get_rows()
-        if not rows:
-            raise ValueError("Controllers table is empty -- at least one controller is required.")
-        eol = self._existing_line_ending(path)  # must read this *before* opening "w" truncates the file
-        self._write_aligned_csv(
-            path,
-            ["ctrl_id", "ctrl_name", "max_width"],
-            [[r.get("ctrl_id", ""), r.get("ctrl_name", ""), r.get("max_width", "")] for r in rows],
-            eol,
-        )
+        write_controllers_csv(path, self.controllers_table.get_rows())
 
     def _write_signals_csv(self, path):
-        rows = self.signals_table.get_rows()
-        if not rows:
-            raise ValueError("Pipe Signals table is empty -- at least one signal is required.")
-        eol = self._existing_line_ending(path)  # must read this *before* opening "w" truncates the file
-        self._write_aligned_csv(
-            path,
-            ["signal_name", "signal_type", "direction", "width", "safe_state", "tie_off"],
-            [
-                [
-                    r.get("signal_name", ""),
-                    r.get("signal_type", "") or "perlane",
-                    r.get("direction", ""),
-                    r.get("width", ""),
-                    r.get("safe_state", ""),
-                    r.get("tie_off", ""),
-                ]
-                for r in rows
-            ],
-            eol,
-        )
+        write_signals_csv(path, self.signals_table.get_rows())
 
     def _write_mapping_csv(self, path):
         rows = self.mapping_table.get_rows()
-        if not rows:
-            raise ValueError("Lane Mapping table is empty -- at least one mode row is required.")
-        cols = self.mapping_table.col_keys
-        eol = self._existing_line_ending(path)  # must read this *before* opening "w" truncates the file
-        self._write_aligned_csv(path, cols, [[r.get(c, "") for c in cols] for r in rows], eol)
+        cols = self.mapping_table.col_keys  # ["mode", "lane0", "lane1", ...]
+        write_mapping_csv(path, len(cols) - 1, rows)
 
     def _write_gen_flags(self, path):
-        lines = [
-            "# 支持: arch      = original_pipe | serdes",
-            "#       pclk-mode = pclk_as_phy_output | pclk_as_phy_input",
-            "#       sel-mode  = sync | comb",
-            "#       dpr       = true | false (dpr=true requires sel-mode=sync)",
-        ]
-        header_lines = len(lines)
-        arch = self.arch_var.get()
-        pclk = self.pclk_mode_var.get()
-        sel = self.sel_mode_var.get()
-        dpr = self.dpr_var.get()
-        verible = self.verible_path_var.get().strip()
-        if arch in ("original_pipe", "serdes"):
-            lines.append(f"arch = {arch}")
-        if pclk in ("pclk_as_phy_output", "pclk_as_phy_input"):
-            lines.append(f"pclk-mode = {pclk}")
-        if sel in ("sync", "comb"):
-            lines.append(f"sel-mode = {sel}")
-        if dpr:
-            lines.append("dpr = true")
-        if verible:
-            lines.append(f"verible-path = {verible}")
-        if len(lines) == header_lines:
-            # nothing but the header comment lines -- no point writing a
-            # file that would set no keys at all.
-            if path.is_file():
-                path.unlink()
-            return
-        eol = self._existing_line_ending(path)  # must read this *before* truncating the file
-        # newline="" (like the CSV writers) so the \n's already joined into
-        # the text below are written as-is, not translated to os.linesep --
-        # write_text()'s default newline=None would silently flip an
-        # existing LF file to CRLF (or vice versa) on every save.
-        with open(path, "w", newline="", encoding="utf-8") as f:
-            f.write(eol.join(lines) + eol)
+        # write_gen_flags() itself filters out any value that isn't a real
+        # arch/pclk-mode/sel-mode choice, so passing the raw Tk var value
+        # straight through is safe even while a combo still shows its own
+        # "(default: ...)" placeholder option (that string just never
+        # matches ARCH_VALUES/PCLK_MODE_VALUES/SEL_MODE_VALUES, so no line
+        # gets written for it -- the same outcome the old inline
+        # arch in ("original_pipe", "serdes") checks used to produce here).
+        write_gen_flags(path, {
+            "arch": self.arch_var.get(),
+            "pclk-mode": self.pclk_mode_var.get(),
+            "sel-mode": self.sel_mode_var.get(),
+            "dpr": self.dpr_var.get(),
+            "verible-path": self.verible_path_var.get().strip(),
+        })
 
     def _load_default_signals(self, silent=False):
         # Prefer copying an existing config's signal list as a ready-made,
         # already-valid starting point over hand-authoring PIPE's ~35
-        # signals from scratch -- this project's own bundled sample
-        # workspaces (configs/test_quad, etc.) always exist regardless of
-        # which workspace is currently open, so they're a reliable template
-        # source for a brand-new, still-empty workspace.
-        for name in list_configs():
-            src = CONFIGS_ROOT / name / "config" / "pipe_signals.csv"
-            if src.is_file():
-                self.signals_table.set_rows(self._read_csv(src))
-                if not silent:
-                    self._log(f"Loaded pipe_signals.csv from {CONFIGS_ROOT / name} as a starting point.\n")
-                return
+        # signals from scratch -- load_default_signals() finds and reads
+        # it from whichever bundled sample workspace (configs/test_quad,
+        # etc.) has one first.
+        rows = load_default_signals()
+        if rows:
+            self.signals_table.set_rows(rows)
+            if not silent:
+                self._log("Loaded pipe_signals.csv from a bundled sample workspace as a starting point.\n")
+            return
         if not silent:
             messagebox.showinfo(
                 "No template found", "No bundled sample workspace has a pipe_signals.csv to copy from."

@@ -9,10 +9,11 @@ mac_phy_txelecidle,          perlane,     mac2phy,   1,     1,          1
 mac_phy_txcompliance,        perlane,     mac2phy,   1,     0,          0
 mac_phy_txdeemph,            perlane,     mac2phy,   18,    0,          0
 mac_phy_rxpolarity,          perlane,     mac2phy,   1,     0,          0
+mac_phy_rxstandby,           perlane,     mac2phy,   1,     0,          0
 mac_phy_messagebus,          perlane,     mac2phy,   8,     0,          0
 mac_phy_rxpresethint,        perlane,     mac2phy,   3,     0,          0
 mac_phy_local_pset_index,    perlane,     mac2phy,   5,     0,          0
-mac_phy_getlocal_pset_coef,  perlane,     mac2phy,   18,    0,          0
+mac_phy_getlocal_pset_coef,  perlane,     mac2phy,   1,     0,          0
 mac_phy_invalid_req,         perlane,     mac2phy,   1,     0,          0
 mac_phy_rxeqeval,            perlane,     mac2phy,   1,     0,          0
 mac_phy_fs,                  perlane,     mac2phy,   6,     0,          0

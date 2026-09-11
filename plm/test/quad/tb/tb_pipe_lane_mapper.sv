@@ -105,6 +105,7 @@ module tb_pipe_lane_mapper;
         v.mac_phy_txdatak     = 4'(port);
         v.mac_phy_txdatavalid = 1'b1;
         v.mac_phy_txelecidle  = 1'b0;   // non-idle (may differ from the signal's safe state)
+        v.mac_phy_rxstandby   = 1'b0;   // non-idle (may differ from the signal's safe state)
         return v;
     endfunction
 
@@ -301,6 +302,8 @@ module tb_pipe_lane_mapper;
             $sformatf("%s: mac_phy_txdeemph mismatch, got=%0h expected=%0h", ctx, got.mac_phy_txdeemph, exp.mac_phy_txdeemph));
         chk(got.mac_phy_rxpolarity == exp.mac_phy_rxpolarity,
             $sformatf("%s: mac_phy_rxpolarity mismatch, got=%0h expected=%0h", ctx, got.mac_phy_rxpolarity, exp.mac_phy_rxpolarity));
+        chk(got.mac_phy_rxstandby == exp.mac_phy_rxstandby,
+            $sformatf("%s: mac_phy_rxstandby mismatch, got=%0h expected=%0h", ctx, got.mac_phy_rxstandby, exp.mac_phy_rxstandby));
         chk(got.mac_phy_messagebus == exp.mac_phy_messagebus,
             $sformatf("%s: mac_phy_messagebus mismatch, got=%0h expected=%0h", ctx, got.mac_phy_messagebus, exp.mac_phy_messagebus));
         chk(got.mac_phy_rxpresethint == exp.mac_phy_rxpresethint,

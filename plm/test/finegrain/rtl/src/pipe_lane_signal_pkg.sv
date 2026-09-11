@@ -12,11 +12,10 @@ package pipe_lane_signal_pkg;
         logic mac_phy_txcompliance;
         logic [17:0] mac_phy_txdeemph;
         logic mac_phy_rxpolarity;
-        logic mac_phy_rxstandby;
         logic [7:0] mac_phy_messagebus;
         logic [2:0] mac_phy_rxpresethint;
         logic [4:0] mac_phy_local_pset_index;
-        logic mac_phy_getlocal_pset_coef;
+        logic [17:0] mac_phy_getlocal_pset_coef;
         logic mac_phy_invalid_req;
         logic mac_phy_rxeqeval;
         logic [5:0] mac_phy_fs;
@@ -61,11 +60,10 @@ package pipe_lane_signal_pkg;
         mac_phy_txcompliance: 1'b0,
         mac_phy_txdeemph: 18'h00000,
         mac_phy_rxpolarity: 1'b0,
-        mac_phy_rxstandby: 1'b0,
         mac_phy_messagebus: 8'h00,
         mac_phy_rxpresethint: 3'h0,
         mac_phy_local_pset_index: 5'h00,
-        mac_phy_getlocal_pset_coef: 1'b0,
+        mac_phy_getlocal_pset_coef: 18'h00000,
         mac_phy_invalid_req: 1'b0,
         mac_phy_rxeqeval: 1'b0,
         mac_phy_fs: 6'h00,

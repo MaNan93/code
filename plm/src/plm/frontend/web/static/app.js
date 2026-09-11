@@ -212,6 +212,7 @@ async function newWorkspace(parent, name) {
 
 function gatherPayload() {
   return {
+    workspace: currentWorkspace,
     controllers: controllersTable.getRows(),
     signals: signalsTable.getRows(),
     mapping: {lane_count: mappingLaneCount, rows: mappingTable.getRows()},
@@ -416,7 +417,8 @@ function runGenerate(target) {
       // all, use verible's own raw defaults" -- see loadSettings/commitSettings.
       const veribleFlags = settings.veribleFlags != null
         ? `&verible_flags=${encodeURIComponent(JSON.stringify(settings.veribleFlags))}` : "";
-      const es = new EventSource(`/api/generate/stream?target=${target}${veriblePath}${veribleFlags}`);
+      const workspace = `&workspace=${encodeURIComponent(currentWorkspace)}`;
+      const es = new EventSource(`/api/generate/stream?target=${target}${workspace}${veriblePath}${veribleFlags}`);
       es.addEventListener("log", (ev) => {
         const data = JSON.parse(ev.data);
         logLine(data.line);

@@ -110,6 +110,18 @@ def _parse_subcommand(ap, argv, set_flags):
     return ap.parse_args(apply_set_flags(ap, set_flags) + argv)
 
 
+def _parse_verible_flags(raw):
+    if not raw:
+        return None
+    try:
+        value = json.loads(raw)
+    except json.JSONDecodeError as e:
+        raise SystemExit(f"--verible-flags must be valid JSON: {e.msg}") from e
+    if not isinstance(value, dict):
+        raise SystemExit("--verible-flags must be a JSON object")
+    return value
+
+
 def cmd_generate_rtl(argv):
     pre_ap = argparse.ArgumentParser(add_help=False)
     _add_config_arg(pre_ap)
@@ -121,7 +133,7 @@ def cmd_generate_rtl(argv):
     _add_shared_gen_args(ap, sel_mode=True)
     a = _parse_subcommand(ap, argv, set_flags)
 
-    verible_flags = json.loads(a.verible_flags) if a.verible_flags else None
+    verible_flags = _parse_verible_flags(a.verible_flags)
     validate_arch(a.arch, a.pclk_mode)
     if a.dpr and a.sel_mode != "sync":
         # DPR is merged into each group's own pipe_lane_sel_sync as one more
@@ -151,7 +163,7 @@ def cmd_generate_tb(argv):
     _add_shared_gen_args(ap, sel_mode=False)
     a = _parse_subcommand(ap, argv, set_flags)
 
-    verible_flags = json.loads(a.verible_flags) if a.verible_flags else None
+    verible_flags = _parse_verible_flags(a.verible_flags)
     validate_arch(a.arch, a.pclk_mode)
 
     cfg = load(csv_dir)
@@ -174,7 +186,7 @@ def cmd_generate_all(argv):
     _add_shared_gen_args(ap, sel_mode=True)
     a = _parse_subcommand(ap, argv, set_flags)
 
-    verible_flags = json.loads(a.verible_flags) if a.verible_flags else None
+    verible_flags = _parse_verible_flags(a.verible_flags)
     validate_arch(a.arch, a.pclk_mode)
     if a.dpr and a.sel_mode != "sync":
         raise SystemExit("--dpr requires --sel-mode sync (got --sel-mode comb)")

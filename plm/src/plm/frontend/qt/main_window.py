@@ -34,7 +34,7 @@ from PyQt5 import QtCore, QtGui, QtWidgets
 
 from plm.core.gen_flags import ARCH_PCLK_MODE, PCLK_MODE_ARCH
 from plm.core.model import Config
-from plm.core.paths import CONFIGS_ROOT, PLM_ROOT
+from plm.core.paths import CONFIGS_ROOT, DOCS_DIR, PLM_ROOT, is_deletable_workspace, is_workspace_root
 from plm.core.workspace import save_workspace_content, scaffold_default_content, workspace_content
 from plm.frontend.qt.widgets.lanegrid import LaneGrid
 from plm.frontend.qt.widgets.settings import DEFAULT_SETTINGS, SettingsDialog
@@ -52,7 +52,7 @@ ARCH_MODES = ["(default: original_pipe)", "original_pipe", "serdes"]
 PCLK_MODES = ["(default: pclk_as_phy_output)", "pclk_as_phy_output", "pclk_as_phy_input"]
 SEL_MODES = ["(default: sync)", "sync", "comb"]
 LANE_COUNTS = ["x2", "x4", "x8", "x16", "x32"]
-DOC_PATH = PLM_ROOT / "docs" / "tool_usage.md"
+DOC_PATH = DOCS_DIR / "tool_usage.md"
 
 
 
@@ -111,7 +111,7 @@ def _write_state_file(data):
 
 def load_recent_workspaces():
     raw = _read_state_file().get("recent", [])
-    return [p for p in (Path(r) for r in raw) if p.is_dir()]
+    return [p for p in (Path(r) for r in raw) if is_workspace_root(p)]
 
 
 def add_recent_workspace(path):
@@ -151,7 +151,7 @@ def load_last_workspace():
     if not raw:
         return None
     path = Path(raw)
-    return path if path.is_dir() else None
+    return path if is_workspace_root(path) else None
 
 
 def load_settings():
@@ -632,6 +632,15 @@ class MainWindow(QtWidgets.QMainWindow):
         self._refresh_recent()
 
     def _delete_workspace_at(self, path):
+        path = Path(path).resolve()
+        if not is_deletable_workspace(path):
+            QtWidgets.QMessageBox.warning(
+                self,
+                "Delete refused",
+                "This directory is not a marked PLM workspace. Open and Save a "
+                "legacy workspace once before deleting it.",
+            )
+            return
         resp = QtWidgets.QMessageBox.question(
             self,
             "Delete workspace",
@@ -671,9 +680,11 @@ class MainWindow(QtWidgets.QMainWindow):
 
     # ------------------------------------------------------------ workspace lifecycle
     def _open_workspace(self, path):
-        path = Path(path)
-        if not path.is_dir():
-            QtWidgets.QMessageBox.warning(self, "Open failed", f"Not a directory: {path}")
+        path = Path(path).resolve()
+        if not is_workspace_root(path):
+            QtWidgets.QMessageBox.warning(
+                self, "Open failed", f"Not a PLM workspace (missing config CSVs): {path}"
+            )
             return
         try:
             content = workspace_content(path)
@@ -761,7 +772,8 @@ class MainWindow(QtWidgets.QMainWindow):
         try:
             ws.mkdir(parents=True)
             scaffold_default_content(ws)
-        except OSError as e:
+        except (ValueError, OSError) as e:
+            shutil.rmtree(ws, ignore_errors=True)
             QtWidgets.QMessageBox.critical(self, "New workspace failed", str(e))
             self._log(f"New workspace failed: {e}")
             return

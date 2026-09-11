@@ -9,11 +9,10 @@ mac_phy_txelecidle,perlane,mac2phy,1,1,1
 mac_phy_txcompliance,perlane,mac2phy,1,0,0
 mac_phy_txdeemph,perlane,mac2phy,18,0,0
 mac_phy_rxpolarity,perlane,mac2phy,1,0,0
-mac_phy_rxstandby,perlane,mac2phy,1,0,0
 mac_phy_messagebus,perlane,mac2phy,8,0,0
 mac_phy_rxpresethint,perlane,mac2phy,3,0,0
 mac_phy_local_pset_index,perlane,mac2phy,5,0,0
-mac_phy_getlocal_pset_coef,perlane,mac2phy,1,0,0
+mac_phy_getlocal_pset_coef,perlane,mac2phy,18,0,0
 mac_phy_invalid_req,perlane,mac2phy,1,0,0
 mac_phy_rxeqeval,perlane,mac2phy,1,0,0
 mac_phy_fs,perlane,mac2phy,6,0,0
@@ -30,7 +29,7 @@ phy_mac_rxstatus,perlane,phy2mac,3,0,0
 phy_mac_rxelecidle,perlane,phy2mac,1,1,0
 phy_mac_rxstandbystatus,perlane,phy2mac,1,1,0
 phy_mac_messagebus,perlane,phy2mac,8,0x50,0x50
-phy_mac_phystatus,perlane,phy2mac,1,0,lane0
+phy_mac_phystatus,shared,phy2mac,1,0,lane0
 phy_mac_local_tx_coef_valid,perlane,phy2mac,1,0,0
 phy_mac_local_tx_pset_coef,perlane,phy2mac,18,0,0
 phy_mac_localfs,perlane,phy2mac,6,0,0

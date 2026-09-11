@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "plm"
+version = "0.1.0"
+description = "PIPE Lane Mapper RTL/testbench generator and config editors"
+requires-python = ">=3.9"
+dependencies = []
+
+[project.optional-dependencies]
+web = ["flask>=2.0"]
+qt = ["PyQt5>=5.15"]
+
+[project.scripts]
+plm = "plm.cli.main:main"
+plm-web = "plm.frontend.web.app:main"
+plm-qt = "plm.frontend.qt.main:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+"plm.core" = ["common/*.sv", "tb_makefile.mk"]
+"plm.frontend.web" = ["static/*"]

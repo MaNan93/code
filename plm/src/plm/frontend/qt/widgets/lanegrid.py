@@ -1,0 +1,686 @@
+"""
+plm_qt_lanegrid -- LaneGrid, the paint-drag Lane Mapping grid widget for
+plm_qt.py.
+
+Port of the web front end's lanegrid.js (tool/web/lanegrid.js), itself a
+port of plmConsultant.py's Tkinter LaneMappingGrid (tool/plmConsultant.py:512):
+click a controller swatch to make it the "active paint controller", then
+click-and-drag across a block of lane cells to paint them that controller's
+color (repainted from a snapshot on every step, so backtracking un-paints
+cleanly) -- a plain click with no movement still paints one cell. Rows are
+modes, columns are lanes; each cell holds the raw "ctrl_id-ctrl_lane"
+string the CSV already uses.
+
+Three visual features ported from the web front end's lanegrid.js +
+style.css:
+
+  1. Pen cursor: the table cursor becomes an SVG brush loaded with the
+     active controller's colour, hotspot at the nib (3, 24) -- same SVG
+     data URI as lanegrid.js's _penCursorUrl.
+
+  2. Hover preview: while the mouse is over a lane cell (and not mid-
+     drag), the cell shows a faded preview of what a click would paint --
+     same as the web's .lg-preview class.
+
+  3. Parallelogram paint stroke: painted cells render a slanted band
+     (clip-path: polygon equivalent) at 58% opacity instead of a flat
+     solid fill -- same as the web's .lg-painted::before pseudo-element.
+     Implemented via a custom QStyledItemDelegate (_LaneCellDelegate) since
+     QTableWidget items can't do clip-path natively.
+
+Two things are simpler here than in either older port, taking advantage of
+native Qt behavior:
+  - Double-click-to-edit uses the cell's own text (the raw "ctrl_id-port"
+    string) via QTableWidget's native item editing -- no custom overlay
+    input like lanegrid.js's needed. Qt naturally delivers a double-click
+    as mousePressEvent + mouseReleaseEvent + mouseDoubleClickEvent (not a
+    second mousePressEvent the way a browser's `event.detail` does), so
+    the roll-back-before-editing behavior (undoing the first click's own
+    paint stroke before opening the editor on the clean value) is simpler
+    to express: the single mousePressEvent for the first click has already
+    snapshotted and painted, so mouseDoubleClickEvent just restores that
+    same snapshot before calling editItem().
+  - Mode-row reorder reuses QHeaderView.setSectionsMovable(True), the same
+    approach plm_qt_tables.EditableTable uses for Controllers/Pipe
+    Signals, instead of lanegrid.js's native HTML5 drag-and-drop.
+"""
+
+import copy
+import math
+
+from PyQt5 import QtCore, QtGui, QtWidgets
+
+LANE_GRID_PALETTE = [
+    "#4C78A8", "#F58518", "#54A24B", "#E45756", "#72B7B2",
+    "#EECA3B", "#B279A2", "#FF9DA6", "#9D755D", "#17BECF",
+    "#B5B02B", "#7B6FD1",
+]
+LANE_GRID_UNASSIGNED_BG = "#e6e6e6"
+
+# Lane column widths step up geometrically as the lane count drops, same
+# rule as lanegrid.js's _applyLaneWidth (tool/web/lanegrid.js:126): x32 is
+# the reference (fills the available width) and each halving of the lane
+# count makes every lane column LANE_W_RATIO times wider -- x16 = 1.68x
+# x32's width, x8 = 1.68x x16's, and so on -- recomputed on every resize
+# and every lane-count change so the grid stays proportional at any window
+# size instead of just using whatever QTableWidget's own auto-sizing picks.
+LANE_W_RATIO = 1.68
+LANE_MODE_W = 64
+LANE_ACTIONS_W = 68
+LANE_MIN_CELL = 26
+
+# Paint stroke opacity constants -- match style.css's color-mix values:
+#   .lg-painted::before  -> color-mix(in srgb, var(--paint) 58%, transparent)
+#   .lg-preview::before  -> color-mix(in srgb, var(--paint) 78%, transparent)
+PAINT_OPACITY = 0.58
+PREVIEW_OPACITY = 0.78
+
+# Parallelogram shear: the web clamps the slant to min(18%, 12px) of the
+# stroke width. We pre-compute the shear as a fraction of cell width, but
+# cap the pixel offset so wide cells (x2/x4) don't get a huge wedge.
+SHEAR_FRAC = 0.18
+SHEAR_MAX_PX = 12
+
+
+def _contrast_text_color(hex_color):
+    hex_color = hex_color.lstrip("#")
+    r, g, b = (int(hex_color[i:i + 2], 16) for i in (0, 2, 4))
+    luminance = 0.299 * r + 0.587 * g + 0.114 * b
+    return "#000000" if luminance > 140 else "#ffffff"
+
+
+def _darken_color(hex_color, factor=0.82):
+    """Darken a hex colour toward black by the given factor (0-1, where 1
+    = unchanged, 0 = black). Matches the web's:
+      color: color-mix(in srgb, var(--paint) 82%, #1a1a1a)
+    """
+    hex_color = hex_color.lstrip("#")
+    r, g, b = (int(hex_color[i:i + 2], 16) for i in (0, 2, 4))
+    target = 0x1a
+    r = int(r * factor + target * (1 - factor))
+    g = int(g * factor + target * (1 - factor))
+    b = int(b * factor + target * (1 - factor))
+    return f"#{r:02x}{g:02x}{b:02x}"
+
+
+def _make_pen_cursor(color):
+    """Build a QCursor from the same SVG data URI as lanegrid.js's
+    _penCursorUrl -- a brush nib filled with the active controller's
+    colour, hotspot at the tip (3, 24)."""
+    svg = (
+        '<svg xmlns="http://www.w3.org/2000/svg" width="26" height="26" viewBox="0 0 26 26">'
+        f'<path d="M2.4 23.6l1.5-5.9L16.5 5.1l4.4 4.4L8.3 22.1 2.4 23.6z" '
+        f'fill="{color}" stroke="#1f1f1f" stroke-width="1.3" stroke-linejoin="round"/>'
+        '<path d="M14.9 6.8l4.4 4.4" stroke="#ffffff" stroke-opacity="0.85" stroke-width="1.2"/>'
+        '</svg>'
+    )
+    # Load from the SVG source via QImage's SVG support
+    img = QtGui.QImage()
+    img.loadFromData(svg.encode('utf-8'))
+    if img.isNull():
+        # Fallback: use a simple crosshair cursor if SVG loading fails
+        return None
+    pixmap = QtGui.QPixmap.fromImage(img)
+    return QtGui.QCursor(pixmap, 3, 24)
+
+
+class _LaneCellDelegate(QtWidgets.QStyledItemDelegate):
+    """Custom delegate that paints each lane cell with the parallelogram
+    brush-stroke effect from the web's .lg-painted / .lg-preview CSS.
+
+    For painted cells: a slanted band at PAINT_OPACITY (58%) fills the
+    cell, with the cell text drawn in a darkened version of the paint
+    colour. For preview cells: the same slanted band at PREVIEW_OPACITY
+    (78%). Unpainted cells get a flat #e6e6e6 background.
+
+    The parallelogram is drawn as a QPainterPath with a polygon clip,
+    matching the web's clip-path: polygon(min(18%,12px) 0, 100% 0,
+    calc(100%-min(18%,12px)) 100%, 0 100%). The band is inset top/bottom
+    by 14% and extended left/right by -2px so adjacent same-colour cells
+    stitch into one continuous slanted band."""
+
+    def __init__(self, grid, parent=None):
+        super().__init__(parent)
+        self._grid = grid
+
+    def paint(self, painter, option, index):
+        grid = self._grid
+        r, c = index.row(), index.column()
+        if c < 1 or c > grid.lane_count:
+            super().paint(painter, option, index)
+            return
+        l = c - 1
+        val = index.data(QtCore.Qt.DisplayRole) or ""
+        has_dash = "-" in val
+        cid = val.split("-", 1)[0] if has_dash else None
+        port = val[val.index("-") + 1:] if has_dash else val
+        paint_color = grid.color_by_id.get(cid) if cid else None
+
+        is_hover = (not grid._drag_active and grid._hover_cell is not None
+                    and grid._hover_cell[0] == r and grid._hover_cell[1] == l)
+        active_color = grid.color_by_id.get(grid.active_ctrl_id) if grid.active_ctrl_id else None
+
+        rect = option.rect
+        painter.save()
+
+        # Background
+        if paint_color:
+            painter.fillRect(rect, QtGui.QColor(grid._bg_color))
+        else:
+            painter.fillRect(rect, QtGui.QColor(LANE_GRID_UNASSIGNED_BG))
+
+        # Draw the parallelogram paint stroke for painted cells
+        if paint_color:
+            self._draw_parallelogram(painter, rect, paint_color, PAINT_OPACITY)
+
+        # Draw the preview parallelogram for the hovered cell
+        if is_hover and active_color and not paint_color:
+            # Preview on unpainted cell: show what would be painted
+            self._draw_parallelogram(painter, rect, active_color, PREVIEW_OPACITY)
+        elif is_hover and active_color and paint_color != active_color:
+            # Preview over a cell painted with a different colour:
+            # overlay the preview at higher opacity so it stands out
+            self._draw_parallelogram(painter, rect, active_color, PREVIEW_OPACITY)
+
+        # Draw text
+        if paint_color:
+            text_color = QtGui.QColor(_darken_color(paint_color, 0.82))
+            painter.setPen(text_color)
+            font = painter.font()
+            font.setBold(True)
+            painter.setFont(font)
+        elif is_hover and active_color:
+            text_color = QtGui.QColor(_darken_color(active_color, 0.84))
+            painter.setPen(text_color)
+            font = painter.font()
+            font.setBold(True)
+            painter.setFont(font)
+        else:
+            painter.setPen(QtGui.QColor("#333333"))
+
+        painter.drawText(rect, QtCore.Qt.AlignCenter, port)
+
+        # Draw border for painted cells (hairline of full colour)
+        if paint_color:
+            painter.setPen(QtGui.QPen(QtGui.QColor(paint_color), 1))
+            painter.drawRect(rect.adjusted(0, 0, -1, -1))
+
+        painter.restore()
+
+    def _draw_parallelogram(self, painter, rect, color, opacity):
+        """Draw the slanted parallelogram band inside the cell, matching
+        the web's clip-path: polygon(min(18%,12px) 0, 100% 0,
+        calc(100%-min(18%,12px)) 100%, 0 100%) with top/bottom inset of 14%
+        and left/right extension of -2px."""
+        # Inset top/bottom by 14%
+        top_inset = int(rect.height() * 0.14)
+        band_rect = rect.adjusted(-2, top_inset, 2, -top_inset)
+
+        # Compute shear in pixels, clamped to SHEAR_MAX_PX
+        shear_px = min(band_rect.width() * SHEAR_FRAC, SHEAR_MAX_PX)
+        shear_px = int(shear_px)
+
+        # Build the parallelogram polygon
+        path = QtGui.QPainterPath()
+        path.moveTo(band_rect.left() + shear_px, band_rect.top())
+        path.lineTo(band_rect.right(), band_rect.top())
+        path.lineTo(band_rect.right() - shear_px, band_rect.bottom())
+        path.lineTo(band_rect.left(), band_rect.bottom())
+        path.closeSubpath()
+
+        # Fill with the colour at the given opacity
+        c = QtGui.QColor(color)
+        c.setAlphaF(opacity)
+        painter.fillPath(path, c)
+
+
+class LaneGrid(QtWidgets.QWidget):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.lane_count = 0
+        self.data = []  # [{"mode": "0", "lane0": "0-0", ...}, ...]
+        self.controllers = []  # [{"ctrl_id":..., "ctrl_name":...}, ...]
+        self.color_by_id = {}
+        self.active_ctrl_id = None
+
+        self._building = False  # guards signal handlers against our own re-renders
+        self._drag_active = False
+        self._drag_anchor = None
+        self._drag_current = None
+        self._drag_snapshot = None
+        self._hover_cell = None  # (row, lane) under the cursor, for pen preview
+        self._pen_cursor = None  # cached QCursor for the active controller
+        self._bg_color = "#ffffff"  # card background, set from theme
+
+        layout = QtWidgets.QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+
+        # Palette bar: holds pill-style swatch buttons
+        self.palette_bar = QtWidgets.QWidget()
+        self.palette_bar.setObjectName("lgPaletteBar")
+        palette_outer = QtWidgets.QVBoxLayout(self.palette_bar)
+        palette_outer.setContentsMargins(0, 0, 0, 8)
+        palette_outer.setSpacing(6)
+        # Use a flow layout: we add swatches in a horizontal row that wraps
+        self._palette_flow = QtWidgets.QHBoxLayout()
+        self._palette_flow.setContentsMargins(0, 0, 0, 0)
+        self._palette_flow.setSpacing(6)
+        palette_outer.addLayout(self._palette_flow)
+        layout.addWidget(self.palette_bar)
+
+        self.table = _LaneTable(self)
+        self.table.setObjectName("laneGrid")
+        self.table.setEditTriggers(QtWidgets.QAbstractItemView.NoEditTriggers)
+        self.table.verticalHeader().setSectionsMovable(True)
+        self.table.verticalHeader().sectionMoved.connect(self._on_row_moved)
+        self.table.verticalHeader().setContextMenuPolicy(QtCore.Qt.CustomContextMenu)
+        self.table.verticalHeader().customContextMenuRequested.connect(self._on_header_context_menu)
+        self.table.itemChanged.connect(self._on_item_changed)
+        # Enable mouse tracking so we get mouseMoveEvent even without a button held
+        self.table.setMouseTracking(True)
+        self.table.viewport().setMouseTracking(True)
+        # Install the custom delegate for lane cells (columns 1..lane_count)
+        self._delegate = _LaneCellDelegate(self, self.table)
+        self.table.setItemDelegate(self._delegate)
+        layout.addWidget(self.table)
+
+    # ------------------------------------------------------------ public data interface
+    def get_rows(self):
+        return [dict(r) for r in self.data]
+
+    def set_rows(self, rows):
+        self.data = [dict(r) for r in (rows or [])]
+        self._renumber()
+        self._render_body()
+
+    def set_columns(self, lane_count):
+        """lane_count: total number of lanes. Only needed when the column
+        structure itself changes -- row edits (set_rows, insert/delete/
+        reorder) reuse the existing columns via _render_body() alone."""
+        self.lane_count = max(0, lane_count)
+        self._render()
+
+    def set_controllers(self, rows):
+        self.controllers = [r for r in (rows or []) if (r.get("ctrl_id") or "").strip() != ""]
+        self.color_by_id = {}
+        for i, c in enumerate(self.controllers):
+            self.color_by_id[c["ctrl_id"]] = LANE_GRID_PALETTE[i % len(LANE_GRID_PALETTE)]
+        if self.active_ctrl_id not in self.color_by_id:
+            self.active_ctrl_id = self.controllers[0]["ctrl_id"] if self.controllers else None
+        self._render_palette()
+        self._apply_paint_cursor()
+        self._refresh_cell_styles()
+
+    def _delete_row(self, idx):
+        if len(self.data) <= 1 or not (0 <= idx < len(self.data)):
+            return  # always keep at least one mode row -- an empty table can't be saved anyway
+        del self.data[idx]
+        self._renumber()
+        self._render_body()
+
+    def _insert_row_below(self, idx):
+        row = {"mode": "0"}
+        for l in range(self.lane_count):
+            row[f"lane{l}"] = "0-0"
+        pos = idx + 1 if 0 <= idx < len(self.data) else len(self.data)
+        self.data.insert(pos, row)
+        self._renumber()
+        self._render_body()
+
+    def _renumber(self):
+        for i, r in enumerate(self.data):
+            r["mode"] = str(i)
+
+    # ------------------------------------------------------------ palette
+    def _render_palette(self):
+        # Clear existing swatches
+        while self._palette_flow.count():
+            item = self._palette_flow.takeAt(0)
+            w = item.widget()
+            if w:
+                w.deleteLater()
+
+        for c in self.controllers:
+            cid = c["ctrl_id"]
+            color = self.color_by_id[cid]
+            is_active = (cid == self.active_ctrl_id)
+            btn = QtWidgets.QPushButton(c.get("ctrl_name") or cid)
+            btn.setObjectName("lgSwatch")
+            btn.setCheckable(True)
+            btn.setChecked(is_active)
+            text_color = _contrast_text_color(color)
+            # Pill shape: fully rounded ends, border, active gets inner ring
+            border_color = "#0d0d0d" if is_active else "#e5e5e5"
+            outline = (
+                f"border: 2px solid {border_color};" if is_active
+                else f"border: 1px solid {border_color};"
+            )
+            btn.setStyleSheet(
+                f"QPushButton#lgSwatch {{"
+                f"  background-color: {color};"
+                f"  color: {text_color};"
+                f"  font-size: 12.5px;"
+                f"  font-weight: 600;"
+                f"  border-radius: 14px;"
+                f"  padding: 5px 13px;"
+                f"  {outline}"
+                f"}}"
+                f"QPushButton#lgSwatch:hover {{"
+                f"  border-color: #d4d4d4;"
+                f"}}"
+            )
+            btn.setCursor(QtCore.Qt.PointingHandCursor)
+            btn.clicked.connect(lambda _checked=False, cid=cid: self._set_active_controller(cid))
+            self._palette_flow.addWidget(btn)
+        self._palette_flow.addStretch(1)
+
+    def _set_active_controller(self, cid):
+        self.active_ctrl_id = cid
+        self._render_palette()
+        self._apply_paint_cursor()
+        self._refresh_cell_styles()
+
+    # ------------------------------------------------------------ pen cursor
+    def _apply_paint_cursor(self):
+        """Set the table viewport's cursor to an SVG brush nib filled
+        with the active controller's colour -- same as lanegrid.js's
+        _applyPaintCursor + _penCursorUrl."""
+        if self.active_ctrl_id and self.active_ctrl_id in self.color_by_id:
+            color = self.color_by_id[self.active_ctrl_id]
+            cursor = _make_pen_cursor(color)
+            if cursor is not None:
+                self._pen_cursor = cursor
+                self.table.viewport().setCursor(cursor)
+                return
+        # Fallback: crosshair cursor
+        self._pen_cursor = None
+        self.table.viewport().setCursor(QtCore.Qt.CrossCursor)
+
+    # ------------------------------------------------------------ grid construction
+    def _render(self):
+        self._building = True
+        self.table.blockSignals(True)
+        self.table.clear()
+        self.table.setColumnCount(self.lane_count + 2)  # mode + lanes + actions
+        self.table.setHorizontalHeaderLabels(["mode"] + [f"L{l}" for l in range(self.lane_count)] + [""])
+        self.table.blockSignals(False)
+        self._building = False
+        self._render_body()
+        self._apply_lane_width()
+        self._apply_paint_cursor()
+
+    def _apply_lane_width(self):
+        """Recompute every lane column's width from the table's own
+        viewport width and the current lane count -- same geometric rule
+        as lanegrid.js's _applyLaneWidth (see LANE_W_RATIO above). Called
+        on every resize (_LaneTable.resizeEvent) and every column-
+        structure change (_render), so the grid stays proportional at any
+        window size instead of just falling back on Qt's own default
+        column auto-sizing."""
+        if self.lane_count <= 0 or self.table.columnCount() < self.lane_count + 2:
+            return
+        avail = self.table.viewport().width() - LANE_MODE_W - LANE_ACTIONS_W
+        n = max(1, self.lane_count)
+        w32 = avail / 32 if avail > 0 else 0
+        w = w32 * (LANE_W_RATIO ** math.log2(32 / n))
+        min_w = max(int(w), LANE_MIN_CELL)
+        self.table.setColumnWidth(0, LANE_MODE_W)
+        for l in range(self.lane_count):
+            self.table.setColumnWidth(l + 1, min_w)
+        self.table.setColumnWidth(self.lane_count + 1, LANE_ACTIONS_W)
+
+    def _render_body(self):
+        self._building = True
+        self.table.blockSignals(True)
+        self.table.setRowCount(0)
+        self.table.setRowCount(len(self.data))
+        for r, row in enumerate(self.data):
+            mode_item = QtWidgets.QTableWidgetItem(row.get("mode", ""))
+            mode_item.setFlags(mode_item.flags() & ~QtCore.Qt.ItemIsEditable)
+            self.table.setItem(r, 0, mode_item)
+            for l in range(self.lane_count):
+                item = QtWidgets.QTableWidgetItem(row.get(f"lane{l}", ""))
+                self.table.setItem(r, l + 1, item)
+            self.table.setCellWidget(r, self.lane_count + 1, self._make_actions_widget(r))
+        self.table.blockSignals(False)
+        self._building = False
+        self._refresh_cell_styles()
+
+    def _make_actions_widget(self, row_idx):
+        widget = QtWidgets.QWidget()
+        widget.setObjectName("lgRowActions")
+        hl = QtWidgets.QHBoxLayout(widget)
+        hl.setContentsMargins(2, 0, 2, 0)
+        hl.setSpacing(4)
+        plus = QtWidgets.QToolButton()
+        plus.setText("+")
+        plus.setToolTip("Insert mode row below")
+        plus.setObjectName("lgPlusBtn")
+        plus.clicked.connect(lambda _checked=False, i=row_idx: self._insert_row_below(i))
+        minus = QtWidgets.QToolButton()
+        minus.setText("\u2212")  # −
+        minus.setToolTip("Delete this mode row")
+        minus.setObjectName("lgMinusBtn")
+        minus.clicked.connect(lambda _checked=False, i=row_idx: self._delete_row(i))
+        hl.addWidget(plus)
+        hl.addWidget(minus)
+        return widget
+
+    def _refresh_cell_styles(self):
+        """Trigger a repaint of the table viewport so the delegate redraws
+        all cells with current paint/preview state. The actual painting
+        happens in _LaneCellDelegate.paint()."""
+        # Clear the hover cell when refreshing during a drag
+        if self._drag_active:
+            self._hover_cell = None
+        self.table.viewport().update()
+
+    # ------------------------------------------------------------ native item edits
+    def _on_item_changed(self, item):
+        """Fires when the user commits a hand-typed edit (native
+        double-click-to-edit path) -- paint-drag updates go through
+        _sync_table_from_data() instead, with signals blocked, so this
+        never double-applies a paint stroke."""
+        if self._building:
+            return
+        r, c = item.row(), item.column()
+        if c < 1 or c > self.lane_count:
+            return
+        self.data[r][f"lane{c - 1}"] = item.text()
+        self._refresh_cell_styles()
+
+    # ------------------------------------------------------------ paint-drag
+    # Called by _LaneTable's mouse event overrides below.
+    def _cell_at(self, pos):
+        item = self.table.itemAt(pos)
+        if item is None:
+            return None
+        r, c = item.row(), item.column()
+        if c < 1 or c > self.lane_count:
+            return None
+        return r, c - 1
+
+    def _begin_paint(self, r, l):
+        self._drag_active = True
+        self._drag_anchor = (r, l)
+        self._drag_current = (r, l)
+        self._drag_snapshot = copy.deepcopy(self.data)
+        self._hover_cell = None  # suppress preview during drag
+        # Lay the stroke down on press so a plain click (press + release,
+        # no movement) still paints one cell.
+        self._paint_current_rect()
+
+    def _continue_paint(self, r, l):
+        if not self._drag_active:
+            return
+        if (r, l) != self._drag_current:
+            self._drag_current = (r, l)
+            self._paint_current_rect()
+
+    def _end_paint(self):
+        self._drag_active = False
+        # Refresh so the hover preview comes back after the stroke finishes
+        self._refresh_cell_styles()
+
+    def _paint_current_rect(self):
+        if self._drag_snapshot is None:
+            return
+        self.data = copy.deepcopy(self._drag_snapshot)
+        r0, l0 = self._drag_anchor
+        r1, l1 = self._drag_current
+        row_lo, row_hi = min(r0, r1), max(r0, r1)
+        lane_lo, lane_hi = min(l0, l1), max(l0, l1)
+        if self.active_ctrl_id is not None:
+            for r in range(row_lo, row_hi + 1):
+                if r >= len(self.data):
+                    continue
+                i = 0
+                for l in range(lane_lo, lane_hi + 1):
+                    self.data[r][f"lane{l}"] = f"{self.active_ctrl_id}-{i}"
+                    i += 1
+        self._sync_table_from_data()
+
+    def _sync_table_from_data(self):
+        self._building = True
+        self.table.blockSignals(True)
+        for r, row in enumerate(self.data):
+            for l in range(self.lane_count):
+                item = self.table.item(r, l + 1)
+                if item is not None:
+                    item.setText(row.get(f"lane{l}", ""))
+        self.table.blockSignals(False)
+        self._building = False
+        self._refresh_cell_styles()
+
+    def _rollback_to_snapshot(self):
+        """Undo the just-completed first click's own paint stroke before a
+        double-click opens the cell for editing -- otherwise the value the
+        user meant to hand-type over would already have been overwritten
+        by that first click's paint."""
+        if self._drag_snapshot is not None:
+            self.data = copy.deepcopy(self._drag_snapshot)
+            self._sync_table_from_data()
+
+    # ------------------------------------------------------------ hover tracking
+    def _on_cell_hover(self, pos):
+        """Track which cell the mouse is over so the delegate can draw a
+        preview. Called from _LaneTable.mouseMoveEvent when not dragging."""
+        if self._drag_active:
+            return
+        cell = self._cell_at(pos)
+        if cell != self._hover_cell:
+            self._hover_cell = cell
+            self.table.viewport().update()
+
+    def _on_cell_leave(self):
+        """Clear the hover when the mouse leaves the table viewport."""
+        if self._hover_cell is not None:
+            self._hover_cell = None
+            self.table.viewport().update()
+
+    # ------------------------------------------------------------ row reorder
+    # Mirrors plm_qt_tables.EditableTable's approach: dragging a row
+    # header only moves the header visually, so re-read the header's new
+    # visual order to physically reorder self.data, then reset the header
+    # back to identity before re-rendering.
+    def _on_row_moved(self, logical_index, old_visual, new_visual):
+        if self._building:
+            return
+        header = self.table.verticalHeader()
+        new_data = [self.data[header.logicalIndex(v)] for v in range(len(self.data))]
+        self.data = new_data
+        self._renumber()
+        self._reset_header_order()
+        self._render_body()
+
+    def _reset_header_order(self):
+        header = self.table.verticalHeader()
+        header.blockSignals(True)
+        for logical in range(header.count()):
+            current_visual = header.visualIndex(logical)
+            if current_visual != logical:
+                header.moveSection(current_visual, logical)
+        header.blockSignals(False)
+
+    def _on_header_context_menu(self, pos):
+        header = self.table.verticalHeader()
+        logical = header.logicalIndexAt(pos)
+        if logical < 0:
+            return
+        menu = QtWidgets.QMenu(self)
+        insert_action = menu.addAction("Insert mode row below")
+        delete_action = menu.addAction("Delete this mode row")
+        chosen = menu.exec_(header.mapToGlobal(pos))
+        if chosen == insert_action:
+            self._insert_row_below(logical)
+        elif chosen == delete_action:
+            self._delete_row(logical)
+
+
+class _LaneTable(QtWidgets.QTableWidget):
+    """QTableWidget whose mouse events drive the owning LaneGrid's
+    paint-drag, hover-preview, and double-click-edit-with-rollback
+    behavior. Qt delivers a double-click as mousePress+mouseRelease (first
+    click) followed by mouseDoubleClick+mouseRelease (second click) rather
+    than a second mousePress -- so the first click's own snapshot/paint
+    (from _begin_paint) is exactly the state mouseDoubleClickEvent rolls
+    back to before opening the editor.
+
+    Mouse tracking is enabled so mouseMoveEvent fires even without a
+    button held -- that's what drives the hover-preview system (the pen
+    cursor shows a faded stroke on the cell under the pointer, matching
+    the web's .lg-preview class)."""
+
+    def __init__(self, grid):
+        super().__init__()
+        self._grid = grid
+        self.setMouseTracking(True)
+        self.viewport().setMouseTracking(True)
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        # Catches every real resize AND the 0 -> real-width transition
+        # when this tab is shown for the first time (a hidden QTabWidget
+        # page has zero viewport width until it's actually selected) --
+        # same event lanegrid.js needs its own ResizeObserver for.
+        self._grid._apply_lane_width()
+
+    def mousePressEvent(self, event):
+        if event.button() == QtCore.Qt.LeftButton:
+            cell = self._grid._cell_at(event.pos())
+            if cell is not None:
+                self._grid._begin_paint(*cell)
+                return  # don't let the base class turn this into a selection drag
+        super().mousePressEvent(event)
+
+    def mouseMoveEvent(self, event):
+        if self._grid._drag_active:
+            cell = self._grid._cell_at(event.pos())
+            if cell is not None:
+                self._grid._continue_paint(*cell)
+            return
+        # Not dragging: track hover for the pen preview
+        self._grid._on_cell_hover(event.pos())
+        # Don't call super().mouseMoveEvent -- it would start a selection drag
+        # on the cell that was pressed. We want pure hover tracking instead.
+
+    def mouseReleaseEvent(self, event):
+        if self._grid._drag_active:
+            self._grid._end_paint()
+            return
+        super().mouseReleaseEvent(event)
+
+    def mouseDoubleClickEvent(self, event):
+        cell = self._grid._cell_at(event.pos())
+        if cell is not None:
+            self._grid._rollback_to_snapshot()
+            item = self.itemAt(event.pos())
+            if item is not None:
+                self.editItem(item)
+            return
+        super().mouseDoubleClickEvent(event)
+
+    def leaveEvent(self, event):
+        self._grid._on_cell_leave()
+        super().leaveEvent(event)

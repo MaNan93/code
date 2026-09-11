@@ -1,0 +1,5 @@
+ctrl_id, ctrl_name, max_width
+0,       CtrlB,     6
+1,       CtrlA,     12
+2,       CtrlC,     8
+3,       CtrlD,     3

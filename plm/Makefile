@@ -1,4 +1,6 @@
-# 对 configs/ 下每一套配置集重新跑 tool/plm_gen_rtl.py / tool/plm_gen_tb.py。
+# 对 test/ 下每一套配置集重新跑 `python -m plm.cli.main generate rtl/tb`。
+# 前提：先在仓库根目录跑一次 `pip install -e .`（一次性），把 plm 包装成
+# 可 import 的形式——不然这里的每条命令都会因为 import 失败而报错。
 #
 # 用途：
 #   - CSV 或生成器脚本改完之后，一键把所有配置集的生成物刷新到最新，
@@ -19,7 +21,7 @@
 #   make demo         # 只生成 demo 这一套（RTL + testbench）
 #   make rtl-demo     # 只重新生成 demo 的 RTL
 #   make tb-demo      # 只重新生成 demo 的 testbench
-#   make list         # 列出 configs/ 下识别到的配置集名字
+#   make list         # 列出 test/ 下识别到的配置集名字
 #   make clean        # 删掉所有配置集的生成物（rtl/、tb/tb_pipe_lane_mapper.sv）
 #   make clean-demo   # 只删掉 demo 这一套的生成物
 #   make help         # 打印这份用法（含当前识别到的配置集名字）
@@ -27,13 +29,13 @@
 # 透传额外参数（全局，适用于每一次 make 调用，跨所有配置集）：
 #   GENFLAGS      两个工具都会收到，比如切时钟架构：
 #                   make all GENFLAGS="--pclk-mode pclk_as_phy_input"
-#   RTL_GENFLAGS  只传给 plm_gen_rtl.py，比如切到组合直通的 sel_sync：
+#   RTL_GENFLAGS  只传给 generate rtl，比如切到组合直通的 sel_sync：
 #                   make all RTL_GENFLAGS="--sel-mode comb"
-#   TB_GENFLAGS   只传给 plm_gen_tb.py
+#   TB_GENFLAGS   只传给 generate tb
 #
-# 某个配置集本身就是为了演示某个非默认 flag 存在的（比如 test_maxpclk 演示
+# 某个配置集本身就是为了演示某个非默认 flag 存在的（比如 maxpclk 演示
 # --pclk-mode pclk_as_phy_input），这种 flag 不在这里配置——写在那套配置集
-# 自己的 configs/<SET>/config/gen_flags.txt 里（跟三个 CSV 放一起，两个
+# 自己的 test/<SET>/config/gen_flags.txt 里（跟三个 CSV 放一起，两个
 # Python 工具都会读，各自只认自己认识的 key），这样配置集本身就是自包含的，
 # 不需要为了给它固定一个 flag 而回来改这个 Makefile。上面的 GENFLAGS 系列
 # 变量地位更高，可以临时覆盖任何配置集自带的 gen_flags.txt。
@@ -43,10 +45,10 @@ GENFLAGS     ?=
 RTL_GENFLAGS ?=
 TB_GENFLAGS  ?=
 
-# 自动发现 configs/ 下的配置集：凡是 configs/<name>/config/controllers.csv
+# 自动发现 test/ 下的配置集：凡是 test/<name>/config/controllers.csv
 # 存在的 <name> 都算一个集，不用每加一套配置就手改 Makefile。
-CONFIG_MARKERS := $(wildcard configs/*/config/controllers.csv)
-CONFIGS        := $(patsubst configs/%/config/controllers.csv,%,$(CONFIG_MARKERS))
+CONFIG_MARKERS := $(wildcard test/*/config/controllers.csv)
+CONFIGS        := $(patsubst test/%/config/controllers.csv,%,$(CONFIG_MARKERS))
 
 .PHONY: all help list clean $(CONFIGS) FORCE
 
@@ -62,10 +64,10 @@ help:
 	@echo "Usage:"
 	@echo "  make               same as make all: generate RTL + testbench for every config set"
 	@echo "  make -k            same, but keep going past a failed config set"
-	@echo "  make <SET>         generate RTL + testbench for one config set, e.g. make test_quad"
+	@echo "  make <SET>         generate RTL + testbench for one config set, e.g. make quad"
 	@echo "  make rtl-<SET>     regenerate only that config set's RTL"
 	@echo "  make tb-<SET>      regenerate only that config set's testbench"
-	@echo "  make list          list the config sets found under configs/"
+	@echo "  make list          list the config sets found under test/"
 	@echo "  make clean         delete every config set's generated output"
 	@echo "  make clean-<SET>   delete one config set's generated output"
 	@echo "  make help          print this"
@@ -75,10 +77,10 @@ help:
 	@echo "Pass-through vars (apply to every config set in this invocation, override"
 	@echo "any config set's own gen_flags.txt):"
 	@echo "  GENFLAGS      goes to both tools, e.g. make all GENFLAGS=\"--pclk-mode pclk_as_phy_input\""
-	@echo "  RTL_GENFLAGS  only to plm_gen_rtl.py"
-	@echo "  TB_GENFLAGS   only to plm_gen_tb.py"
+	@echo "  RTL_GENFLAGS  only to generate rtl"
+	@echo "  TB_GENFLAGS   only to generate tb"
 	@echo ""
-	@echo "A config set's own fixed flags go in configs/<SET>/config/gen_flags.txt --"
+	@echo "A config set's own fixed flags go in test/<SET>/config/gen_flags.txt --"
 	@echo "both tools read it automatically, no need to pass it on the command line."
 	@echo ""
 	@echo "See this file's own header comments and docs/tool_usage.md for more."
@@ -90,18 +92,18 @@ $(CONFIGS): %: rtl-% tb-%
 # 重新跑（GNU make 对模式规则生成的目标不会那样处理），所以用经典的 FORCE
 # 依赖强制。
 rtl-%: FORCE
-	$(PYTHON) tool/plm_gen_rtl.py --config $* --quiet $(GENFLAGS) $(RTL_GENFLAGS)
+	$(PYTHON) -m plm.cli.main generate rtl --config $* --quiet $(GENFLAGS) $(RTL_GENFLAGS)
 
 tb-%: FORCE
-	$(PYTHON) tool/plm_gen_tb.py --config $* --quiet $(GENFLAGS) $(TB_GENFLAGS)
+	$(PYTHON) -m plm.cli.main generate tb --config $* --quiet $(GENFLAGS) $(TB_GENFLAGS)
 
 list:
-	@echo "Config sets found under configs/: $(CONFIGS)"
+	@echo "Config sets found under test/: $(CONFIGS)"
 
 clean: $(CONFIGS:%=clean-%)
 
 clean-%: FORCE
-	@echo "cleaning configs/$*/rtl and configs/$*/tb/tb_pipe_lane_mapper.sv"
-	rm -rf configs/$*/rtl configs/$*/tb/tb_pipe_lane_mapper.sv
+	@echo "cleaning test/$*/rtl and test/$*/tb/tb_pipe_lane_mapper.sv"
+	rm -rf test/$*/rtl test/$*/tb/tb_pipe_lane_mapper.sv
 
 FORCE:

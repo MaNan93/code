@@ -33,6 +33,7 @@ from plm.frontend.qt.widgets.theme import (
     VisibleCheckBox,
     add_shadow,
     apply_titlebar_theme,
+    build_stylesheet,
 )
 
 STATE_FILE = Path.home() / ".plm_qt_settings.json"
@@ -112,10 +113,11 @@ class _StableTabBar(QtWidgets.QTabBar):
         # real slack -- horizontalAdvance() alone runs right up against that
         # budget and clips the first/last glyph (seen with "Pipe Signals").
         pad = int(48 * _ui_scale())
-        # Match the QSS pill's own "padding: 8px 16px" (unscaled) instead of
-        # a much taller fixed floor -- that mismatch is what made the
-        # selected tab's filled chip look like an oversized white block.
-        tab_height = max(32, metrics.height() + 16)
+        # Match the QSS pill's own box: "padding: 8px 16px" + 1px border top
+        # and bottom. Anything taller makes the selected tab's filled chip
+        # read as an oversized white block; anything shorter squeezes the
+        # label once the app font grows past the 32px floor.
+        tab_height = max(32, metrics.height() + 18)
         return QtCore.QSize(max(hint.width(), text_width + pad), tab_height)
 
 
@@ -392,6 +394,22 @@ class MainWindow(QtWidgets.QMainWindow):
             return
         central = self.centralWidget()
         margin = max(10, int(12 * _ui_scale()))
+        tab_bar = self.tabs.tabBar()
+        header_aligned = self.main_area.isVisible() and tab_bar.isVisible()
+        if header_aligned:
+            # QSS padding is resolved only after the window is shown, so the
+            # final tab-bar height can differ from its construction-time hint.
+            # Keep the preview heading on that exact live header geometry.
+            self.preview_title.setFixedHeight(tab_bar.height())
+            self.preview_controls.setFixedHeight(tab_bar.height())
+            # Size the buttons off that same live height (minus the frame's
+            # own 1 px border top and bottom) rather than a fixed px value,
+            # so they track the tab pills at every app font size instead of
+            # staying 30 px while everything around them grows.
+            side = max(20, tab_bar.height() - 2)
+            for button in self.preview_buttons:
+                button.setFixedSize(side, side)
+                button.setIconSize(QtCore.QSize(round(side * 0.6), round(side * 0.6)))
         self.preview_controls.adjustSize()
         if getattr(self, "rtl_preview_panel", None) and not self.rtl_preview_panel.isHidden():
             anchor = self.rtl_preview_panel
@@ -400,13 +418,7 @@ class MainWindow(QtWidgets.QMainWindow):
         origin = anchor.mapTo(central, QtCore.QPoint(0, 0))
         inset = 8
         x = origin.x() + anchor.width() - self.preview_controls.width() - inset
-        tab_bar = self.tabs.tabBar()
-        if self.main_area.isVisible() and tab_bar.isVisible():
-            # QSS padding is resolved only after the window is shown, so the
-            # final tab-bar height can differ from its construction-time hint.
-            # Keep the preview heading on that exact live header geometry.
-            self.preview_title.setFixedHeight(tab_bar.height())
-            self.preview_controls.setFixedHeight(tab_bar.height())
+        if header_aligned:
             tab_origin = tab_bar.mapTo(central, QtCore.QPoint(0, 0))
             y = tab_origin.y() + max(0, (tab_bar.height() - self.preview_controls.height()) // 2)
         else:
@@ -637,9 +649,10 @@ class MainWindow(QtWidgets.QMainWindow):
         controls = QtWidgets.QWidget(parent)
         controls.setObjectName("previewControls")
         layout = QtWidgets.QHBoxLayout(controls)
-        # The buttons are 30 px tall and the frame contributes its own border,
-        # so extra vertical padding makes this group taller than the 32 px tab
-        # bar and prevents their centre lines from matching.
+        # The frame already contributes its own 1 px border, and the buttons
+        # are sized to fill the rest of the tab-bar height exactly (see
+        # _position_preview_controls), so any padding here would push this
+        # group taller than the tab bar and break the centre-line match.
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(2)
 
@@ -675,10 +688,14 @@ class MainWindow(QtWidgets.QMainWindow):
         self.preview_toggle_btn.setToolTip("Show RTL preview")
         self.preview_toggle_btn.clicked.connect(self._on_toggle_rtl_preview)
 
-        layout.addWidget(self.preview_refresh_btn)
-        layout.addWidget(self.preview_edit_btn)
-        layout.addWidget(self.preview_expand_btn)
-        layout.addWidget(self.preview_toggle_btn)
+        self.preview_buttons = [
+            self.preview_refresh_btn,
+            self.preview_edit_btn,
+            self.preview_expand_btn,
+            self.preview_toggle_btn,
+        ]
+        for b in self.preview_buttons:
+            layout.addWidget(b)
         return controls
 
     def _build_rtl_preview_panel(self):
@@ -1381,9 +1398,15 @@ class MainWindow(QtWidgets.QMainWindow):
         # have that problem, and is the more literal match for a size
         # that is stored as a CSS-like pixel size.
         font.setPixelSize(round(size))
-        QtWidgets.QApplication.instance().setFont(font)
+        app = QtWidgets.QApplication.instance()
+        app.setFont(font)
+        # The app font alone changes nothing the QSS names a font-size for,
+        # and it names one for QWidget -- so the sheet has to be rebuilt at
+        # the new size too, or this setting only ever moves padding around.
+        app.setStyleSheet(build_stylesheet(round(size)))
         self._apply_sidebar_collapsed()
         QtCore.QTimer.singleShot(0, self._position_floating_log)
+        QtCore.QTimer.singleShot(0, self._position_preview_controls)
 
     def _on_doc(self):
         dlg = QtWidgets.QDialog(self)

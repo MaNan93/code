@@ -201,9 +201,12 @@ class _PaddedItemDelegate(QtWidgets.QStyledItemDelegate):
 class EditableTable(QtWidgets.QWidget):
     # columns: [{"key", "heading"?, "options"?: [...]}] -- options makes
     #          that column a QComboBox instead of a free-text cell.
-    # id_column: optional key of a column that's a pure row-order index
-    #          (0, 1, 2, ...), kept read-only and auto-renumbered after
-    #          every insert / delete / drag-reorder.
+    # id_column: optional key of an identifier column. It stays editable and
+    #          keeps its value across reorders (the ids are referenced by
+    #          lane_mapping.csv, so renumbering them would silently
+    #          re-point every mapped lane); it only gets filled in for
+    #          rows this widget creates itself, with the lowest integer
+    #          not already taken, since a blank id fails validation.
     def __init__(self, columns, id_column=None, parent=None):
         super().__init__(parent)
         self.columns = columns
@@ -315,8 +318,24 @@ class EditableTable(QtWidgets.QWidget):
     def _insert_row_at(self, idx):
         self._data = self.get_rows()
         new_row = {c["key"]: (c["options"][0] if c.get("options") else "") for c in self.columns}
+        if self.id_column:
+            new_row[self.id_column] = self._next_free_id()
         self._data.insert(idx, new_row)
         self._render_body()
+
+    def _next_free_id(self):
+        """Lowest non-negative integer not already used in id_column.
+        Non-numeric ids (the column is free text) just don't reserve
+        anything."""
+        used = set()
+        for row in self._data:
+            value = str(row.get(self.id_column, "")).strip()
+            if value.isdigit():
+                used.add(int(value))
+        candidate = 0
+        while candidate in used:
+            candidate += 1
+        return str(candidate)
 
     def delete_row(self, idx):
         self._data = self.get_rows()

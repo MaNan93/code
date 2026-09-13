@@ -42,11 +42,11 @@ class _SettingsTabBar(QtWidgets.QTabBar):
         hint = super().tabSizeHint(index)
         metrics = QtGui.QFontMetrics(self.font())
         text_width = metrics.horizontalAdvance(self.tabText(index))
-        # Match the pill QSS's own "padding: 8px 16px" instead of a taller
-        # ad-hoc value -- keeps the selected tab's filled chip snug around
-        # the text instead of ballooning into a big blank rectangle.
-        tab_height = max(32, metrics.height() + 16)
-        return QtCore.QSize(max(hint.width(), text_width + 36), max(hint.height(), tab_height))
+        # Both allowances have to cover the pill QSS's own box -- "padding:
+        # 8px 16px", a 2px tab margin and a 1px border -- so the chip stays
+        # snug around the label without clipping it once the app font grows.
+        tab_height = max(32, metrics.height() + 18)
+        return QtCore.QSize(max(hint.width(), text_width + 48), max(hint.height(), tab_height))
 
 
 class SettingsDialog(QtWidgets.QDialog):

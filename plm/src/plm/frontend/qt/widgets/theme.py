@@ -130,11 +130,30 @@ class VisibleCheckBox(QtWidgets.QCheckBox):
             )
         painter.end()
 
-STYLESHEET = f"""
+BASE_FONT_PX = 13  # every font-size below is authored against this baseline
+
+
+def build_stylesheet(base_px=BASE_FONT_PX):
+    """Build the app-wide QSS with every font-size scaled from base_px.
+
+    A stylesheet font-size beats QApplication.setFont(), so setting the app
+    font alone can never resize any text the sheet mentions -- and the sheet
+    mentions QWidget, so that's everything. Changing the size in Settings
+    therefore has to rebuild and re-apply this (see MainWindow._apply_font),
+    not just set the app font."""
+
+    def fs(px):
+        # At the baseline the authored value is emitted verbatim, so the
+        # default look is bit-for-bit what it was before this was scalable
+        # (12.5px in particular must not get rounded away).
+        scaled = px if base_px == BASE_FONT_PX else max(9, round(px * base_px / BASE_FONT_PX))
+        return f"{scaled:g}px"
+
+    return f"""
 QWidget {{
     background: {BG};
     color: {TEXT};
-    font-size: 13px;
+    font-size: {fs(13)};
     font-family: "Segoe UI", "Microsoft YaHei UI", "Microsoft YaHei", "Helvetica Neue", Arial, sans-serif;
 }}
 QLabel {{
@@ -154,7 +173,7 @@ QToolButton#edgeToggle {{
     border: 1px solid {BORDER};
     border-radius: 8px;
     color: {TEXT_SECONDARY};
-    font-size: 13px;
+    font-size: {fs(13)};
 }}
 QToolButton#edgeToggle:hover {{
     background: {BG_HOVER};
@@ -163,7 +182,7 @@ QToolButton#edgeToggle:hover {{
 }}
 QLabel#brandName {{
     font-weight: 600;
-    font-size: 14px;
+    font-size: {fs(14)};
 }}
 QPushButton#sidebarBtn {{
     text-align: left;
@@ -183,7 +202,7 @@ QPushButton#sidebarBtn[collapsed="true"] {{
 }}
 QLabel#sectionHeader {{
     color: {TEXT_TERTIARY};
-    font-size: 11px;
+    font-size: {fs(11)};
     font-weight: 600;
 }}
 QListWidget#recentList {{
@@ -207,7 +226,7 @@ QToolButton#recentMenuBtn {{
     border: none;
     background: transparent;
     color: {TEXT_TERTIARY};
-    font-size: 16px;
+    font-size: {fs(16)};
     font-weight: 700;
     padding: 0px 4px;
     min-width: 20px;
@@ -243,7 +262,7 @@ QTabBar::tab {{
     margin: 0 2px;
     border: 1px solid transparent;
     border-radius: {RADIUS_SM}px;
-    font-size: 13px;
+    font-size: {fs(13)};
     font-weight: 500;
 }}
 QTabBar::tab:hover {{
@@ -277,7 +296,7 @@ QFrame#card {{
 }}
 QLabel#hint {{
     color: {TEXT_SECONDARY};
-    font-size: 13px;
+    font-size: {fs(13)};
 }}
 
 /* -- buttons ------------------------------------------------------------ */
@@ -375,7 +394,7 @@ QHeaderView::section {{
     padding: 6px 8px;
     border: none;
     border-bottom: 1px solid {BORDER};
-    font-size: 11px;
+    font-size: {fs(11)};
     font-weight: 600;
     text-transform: uppercase;
 }}
@@ -385,7 +404,7 @@ QWidget#lgPaletteBar {{
     background: transparent;
 }}
 QPushButton#lgSwatch {{
-    font-size: 12.5px;
+    font-size: {fs(12.5)};
     font-weight: 600;
     border-radius: {RADIUS_PILL}px;
     padding: 5px 15px;
@@ -406,7 +425,7 @@ QToolButton#lgPlusBtn, QToolButton#lgMinusBtn {{
     min-height: 24px;
     max-width: 24px;
     max-height: 24px;
-    font-size: 15px;
+    font-size: {fs(15)};
 }}
 QToolButton#lgPlusBtn:hover {{
     color: {ACCENT};
@@ -431,7 +450,7 @@ QTableWidget#laneGrid {{
 }}
 QTableWidget#laneGrid QHeaderView::section {{
     padding: 5px 1px;
-    font-size: 9px;
+    font-size: {fs(9)};
 }}
 
 /* -- log panel ------------------------------------------------------------ */
@@ -443,7 +462,7 @@ QFrame#logCard {{
 QWidget#logHeader {{ background: transparent; }}
 QLabel#logTitle {{
     color: {TEXT};
-    font-size: 13px;
+    font-size: {fs(13)};
     font-weight: 600;
     padding: 0;
 }}
@@ -467,7 +486,7 @@ QPlainTextEdit#logConsole {{
     background: transparent;
     color: {TEXT_SECONDARY};
     font-family: Consolas, "SF Mono", Menlo, monospace;
-    font-size: 12px;
+    font-size: {fs(12)};
 }}
 
 /* -- generated RTL preview ---------------------------------------------- */
@@ -477,7 +496,7 @@ QFrame#rtlPreviewPanel {{
     border-left: 1px solid {BORDER_STRONG};
 }}
 QLabel#rtlPreviewTitle {{
-    font-size: 13px;
+    font-size: {fs(13)};
     font-weight: 600;
 }}
 QLabel#previewStatus {{ color: {TEXT_TERTIARY}; }}
@@ -488,7 +507,7 @@ QPlainTextEdit#rtlPreviewCode {{
     color: {TEXT};
     padding: 10px;
     font-family: Consolas, "SF Mono", Menlo, monospace;
-    font-size: 12px;
+    font-size: {fs(12)};
 }}
 QToolButton#previewHeaderBtn {{
     min-width: 28px;
@@ -499,7 +518,7 @@ QToolButton#previewHeaderBtn {{
     border-radius: 7px;
     background: transparent;
     color: {TEXT_SECONDARY};
-    font-size: 18px;
+    font-size: {fs(18)};
 }}
 QToolButton#previewHeaderBtn:hover {{ background: {BG_HOVER}; }}
 QWidget#previewControls {{
@@ -507,11 +526,9 @@ QWidget#previewControls {{
     border: 1px solid {BORDER};
     border-radius: 10px;
 }}
+/* Size is set in Python from the live tab-bar height (see
+   MainWindow._position_preview_controls) so these track the app font. */
 QToolButton#previewControlBtn {{
-    min-width: 30px;
-    max-width: 30px;
-    min-height: 30px;
-    max-height: 30px;
     border: none;
     border-radius: 8px;
     background: transparent;
@@ -538,7 +555,7 @@ QToolButton#rowPlusBtn, QToolButton#rowMinusBtn {{
     min-height: 24px;
     max-width: 24px;
     max-height: 24px;
-    font-size: 15px;
+    font-size: {fs(15)};
 }}
 QToolButton#rowPlusBtn:hover {{ color: {ACCENT}; border-color: {ACCENT}; }}
 QToolButton#rowMinusBtn:hover {{ color: {DANGER}; border-color: {DANGER}; }}
@@ -587,3 +604,8 @@ QToolTip {{
     padding: 5px 7px;
 }}
 """
+
+
+# The sheet at the default size, for callers that apply it once at startup
+# before any saved font preference is known (plm.frontend.qt.main).
+STYLESHEET = build_stylesheet()

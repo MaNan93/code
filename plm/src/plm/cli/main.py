@@ -5,7 +5,7 @@ plm -- unified CLI for the PIPE Lane Mapper generator/validator.
 Replaces the two old standalone scripts (plm_gen_rtl.py / plm_gen_tb.py)
 with subcommands of one entry point, reconciling the ways they used to be
 invoked (the Makefile: a bare config-set name + --quiet; the Qt front
-ends: a full workspace path + --verible-path/--verible-flags, no --quiet)
+end: a full workspace path + --verible-path/--verible-flags, no --quiet)
 as different combinations of the same optional flags.
 
     plm generate rtl  --config X [--sel-mode {sync,comb}] [--arch ...] [--pclk-mode ...]

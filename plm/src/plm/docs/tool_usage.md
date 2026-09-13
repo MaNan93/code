@@ -397,4 +397,3 @@ verilator --binary -f flist.f ../tb/tb_pipe_lane_mapper.sv --top-module tb_pipe_
 配置不满足 `Config.validate()` 里的任何一条硬性检查时，生成会直接
 报错退出，不会写出任何文件；各条检查项的目的见 design_notes.md 4.3
 节表 1。
-

@@ -20,12 +20,20 @@ jobs:
     defaults:
       run:
         working-directory: plm
+    env:
+      # tests/test_qt_frontend.py builds real widgets; there is no display
+      # on any runner, so Qt has to use its headless platform plugin.
+      QT_QPA_PLATFORM: offscreen
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python }}
-      - run: python -m pip install -e ".[web]"
+      # The PyQt5 wheel links against libGL/libEGL even for the offscreen
+      # platform, and the Linux runner image doesn't ship them.
+      - if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libgl1 libegl1
+      - run: python -m pip install -e ".[qt]"
       - run: python -m compileall -q src run.py tests
       - run: python -m unittest discover -s tests -v
 

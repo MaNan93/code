@@ -111,6 +111,23 @@ class WorkspaceTests(unittest.TestCase):
         self.assertGreater(len(load_default_signals()), 20)
         self.assertTrue((DOCS_DIR / "tool_usage.md").is_file())
 
+    def test_packaged_tool_usage_matches_repo_copy(self):
+        """docs/tool_usage.md is the copy humans browse (design_notes.md and
+        the Makefile link to it); DOCS_DIR's is the one that ships in the
+        wheel and backs the GUI's Doc button. setuptools can only package
+        files living inside src/plm, so the two have to coexist -- this
+        catches an edit landing in only one of them."""
+        # Compared as text, not bytes: the repo is checked out with
+        # different line endings on different platforms, and that is not
+        # drift worth failing over.
+        packaged = (DOCS_DIR / "tool_usage.md").read_text(encoding="utf-8").splitlines()
+        repo_copy = (ROOT / "docs" / "tool_usage.md").read_text(encoding="utf-8").splitlines()
+        self.assertEqual(
+            packaged,
+            repo_copy,
+            "docs/tool_usage.md and src/plm/docs/tool_usage.md have drifted apart",
+        )
+
 
 class ExporterTests(unittest.TestCase):
     def test_failed_rtl_generation_preserves_previous_output(self):

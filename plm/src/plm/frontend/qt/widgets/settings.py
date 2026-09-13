@@ -1,15 +1,11 @@
 """
-plm_qt_settings -- SettingsDialog, a port of the web front end's Settings
-modal (tool/web/index.html's #settings-modal + the openSettingsModal/
-buildVeribleFlagsForm/commitSettings family in tool/web/app.js).
+plm_qt_settings -- SettingsDialog for desktop-wide UI and formatter options.
 
 Same General / Formatter split: General holds app-wide font preferences;
 Formatter holds verible-path (+ Auto-detect) and the full verible flag set,
-built directly from plm_common.py's own Python constants -- no schema
-endpoint needed here the way plm_web.py's /api/verible/schema is, since
-there's no JSON/HTTP boundary to cross.
+drawn directly from plm.core.verible's Python constants.
 
-Like the web version, verible-path/verible-flags are settings-level only:
+Verible path/flags are settings-level only:
 never written into any workspace's own gen_flags.txt, only passed as
 --verible-path/--verible-flags at Generate time (see plm_qt.py's
 _run_tool). veribleFlags stays None until the user actually saves Settings

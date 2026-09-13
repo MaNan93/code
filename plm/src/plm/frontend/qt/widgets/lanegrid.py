@@ -1,48 +1,9 @@
-"""
-plm_qt_lanegrid -- LaneGrid, the paint-drag Lane Mapping grid widget for
-plm_qt.py.
+"""Paint-and-drag lane-mapping grid for the Qt desktop front end.
 
-Port of the web front end's lanegrid.js (tool/web/lanegrid.js), itself a
-port of plmConsultant.py's Tkinter LaneMappingGrid (tool/plmConsultant.py:512):
-click a controller swatch to make it the "active paint controller", then
-click-and-drag across a block of lane cells to paint them that controller's
-color (repainted from a snapshot on every step, so backtracking un-paints
-cleanly) -- a plain click with no movement still paints one cell. Rows are
-modes, columns are lanes; each cell holds the raw "ctrl_id-ctrl_lane"
-string the CSV already uses.
-
-Three visual features ported from the web front end's lanegrid.js +
-style.css:
-
-  1. Pen cursor: the table cursor becomes an SVG brush loaded with the
-     active controller's colour, hotspot at the nib (3, 24) -- same SVG
-     data URI as lanegrid.js's _penCursorUrl.
-
-  2. Hover preview: while the mouse is over a lane cell (and not mid-
-     drag), the cell shows a faded preview of what a click would paint --
-     same as the web's .lg-preview class.
-
-  3. Parallelogram paint stroke: painted cells render a slanted band
-     (clip-path: polygon equivalent) at 58% opacity instead of a flat
-     solid fill -- same as the web's .lg-painted::before pseudo-element.
-     Implemented via a custom QStyledItemDelegate (_LaneCellDelegate) since
-     QTableWidget items can't do clip-path natively.
-
-Two things are simpler here than in either older port, taking advantage of
-native Qt behavior:
-  - Double-click-to-edit uses the cell's own text (the raw "ctrl_id-port"
-    string) via QTableWidget's native item editing -- no custom overlay
-    input like lanegrid.js's needed. Qt naturally delivers a double-click
-    as mousePressEvent + mouseReleaseEvent + mouseDoubleClickEvent (not a
-    second mousePressEvent the way a browser's `event.detail` does), so
-    the roll-back-before-editing behavior (undoing the first click's own
-    paint stroke before opening the editor on the clean value) is simpler
-    to express: the single mousePressEvent for the first click has already
-    snapshotted and painted, so mouseDoubleClickEvent just restores that
-    same snapshot before calling editItem().
-  - Mode-row reorder reuses QHeaderView.setSectionsMovable(True), the same
-    approach plm_qt_tables.EditableTable uses for Controllers/Pipe
-    Signals, instead of lanegrid.js's native HTML5 drag-and-drop.
+Rows are editable modes and columns are PHY lanes. Controller swatches set
+the active paint value; dragging paints a range with hover preview and a
+coloured pen cursor. Rows can be reordered directly or edited through the
+context menu.
 """
 
 import copy
@@ -60,8 +21,7 @@ LANE_GRID_PALETTE = [
 ]
 LANE_GRID_UNASSIGNED_BG = "#e6e6e6"
 
-# Lane column widths step up geometrically as the lane count drops, same
-# rule as lanegrid.js's _applyLaneWidth (tool/web/lanegrid.js:126): x32 is
+# Lane column widths step up geometrically as the lane count drops: x32 is
 # the reference (fills the available width) and each halving of the lane
 # count makes every lane column LANE_W_RATIO times wider -- x16 = 1.68x
 # x32's width, x8 = 1.68x x16's, and so on -- recomputed on every resize
@@ -77,9 +37,7 @@ def _ui_scale():
     px = app.font().pixelSize() if app else 13
     return max(px, 11) / 13.0
 
-# Paint stroke opacity constants -- match style.css's color-mix values:
-#   .lg-painted::before  -> color-mix(in srgb, var(--paint) 58%, transparent)
-#   .lg-preview::before  -> color-mix(in srgb, var(--paint) 78%, transparent)
+# Paint stroke and hover-preview opacity constants.
 PAINT_OPACITY = 0.58
 PREVIEW_OPACITY = 0.78
 
@@ -91,10 +49,7 @@ def _contrast_text_color(hex_color):
 
 
 def _darken_color(hex_color, factor=0.82):
-    """Darken a hex colour toward black by the given factor (0-1, where 1
-    = unchanged, 0 = black). Matches the web's:
-      color: color-mix(in srgb, var(--paint) 82%, #1a1a1a)
-    """
+    """Darken a hex colour toward black (1 = unchanged, 0 = black)."""
     hex_color = hex_color.lstrip("#")
     r, g, b = (int(hex_color[i:i + 2], 16) for i in (0, 2, 4))
     target = 0x1a
@@ -500,9 +455,7 @@ class LaneGrid(QtWidgets.QWidget):
 
     # ------------------------------------------------------------ pen cursor
     def _apply_paint_cursor(self):
-        """Set the table viewport's cursor to an SVG brush nib filled
-        with the active controller's colour -- same as lanegrid.js's
-        _applyPaintCursor + _penCursorUrl."""
+        """Set the table cursor to a brush nib in the active colour."""
         if self.active_ctrl_id and self.active_ctrl_id in self.color_by_id:
             color = self.color_by_id[self.active_ctrl_id]
             cursor = _make_pen_cursor(color)
@@ -542,8 +495,7 @@ class LaneGrid(QtWidgets.QWidget):
 
     def _apply_lane_width(self):
         """Recompute every lane column's width from the table's own
-        viewport width and the current lane count -- same geometric rule
-        as lanegrid.js's _applyLaneWidth (see LANE_W_RATIO above). Called
+        viewport width and current lane count using LANE_W_RATIO. Called
         on every resize (_LaneTable.resizeEvent) and every column-
         structure change (_render), so the grid stays proportional at any
         window size instead of just falling back on Qt's own default
@@ -775,9 +727,7 @@ class _LaneTable(RowDragTable):
     back to before opening the editor.
 
     Mouse tracking is enabled so mouseMoveEvent fires even without a
-    button held -- that's what drives the hover-preview system (the pen
-    cursor shows a faded stroke on the cell under the pointer, matching
-    the web's .lg-preview class)."""
+    button held; that drives the faded hover-preview stroke."""
 
     def __init__(self, grid):
         super().__init__(drag_columns={0})
@@ -789,8 +739,7 @@ class _LaneTable(RowDragTable):
         super().resizeEvent(event)
         # Catches every real resize AND the 0 -> real-width transition
         # when this tab is shown for the first time (a hidden QTabWidget
-        # page has zero viewport width until it's actually selected) --
-        # same event lanegrid.js needs its own ResizeObserver for.
+        # page has zero viewport width until it is selected).
         self._grid._apply_lane_width()
 
     def mousePressEvent(self, event):

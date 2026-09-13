@@ -1,7 +1,7 @@
 """
 CSV / workspace read-write for editor front ends.
 
-Shared by every front end (web, Qt) that edits the three config CSVs +
+Shared by the Qt front end that edits the three config CSVs +
 gen_flags.txt: standards-compliant CSV writing, existing-line-ending
 preservation, and the same required-column checks, so both tools read and
 write the same files safely. Each front end is responsible for translating

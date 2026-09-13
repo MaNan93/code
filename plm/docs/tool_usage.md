@@ -11,8 +11,7 @@ python run.py generate rtl --config <SET>
 python run.py generate tb  --config <SET>
 python run.py generate all --config <SET>
 python run.py validate     --config <SET>
-python run.py web            # 浏览器前端，需要先 pip install -e ".[web]"
-python run.py qt              # 桌面前端，需要先 pip install -e ".[qt]"
+python run.py -gui            # Qt 桌面前端，需要先 pip install -e ".[qt]"
 ```
 
 本文档下面用的 `plm generate ...`/`plm validate ...` 命令，等价于
@@ -25,7 +24,7 @@ pip install -e .
 ```
 
 这是一次性的（装成可编辑安装），装完之后 `plm` 包才能被 `python -m
-plm.cli.main` 或 `plm`/`plm-web`/`plm-qt` 这几个 console-script 找到。
+plm.cli.main` 或 `plm` console-script 找到。安装后也可以直接运行 `plm -gui`。
 
 - `plm generate rtl --config <SET>` —— 只生成 RTL（`<SET>/rtl/`）
 - `plm generate tb --config <SET>` —— 只生成 testbench（`<SET>/tb/`）
@@ -49,7 +48,7 @@ plm.cli.main` 或 `plm`/`plm-web`/`plm-qt` 这几个 console-script 找到。
 
 ```
 plm/
-├─ run.py                   统一 launcher：python run.py generate|validate|web|qt ...
+├─ run.py                   统一 launcher：python run.py generate|validate|-gui ...
 ├─ pyproject.toml          可编辑安装（pip install -e .）的包定义
 ├─ src/
 │  └─ plm/
@@ -58,7 +57,7 @@ plm/
 │     │  ├─ paths.py          配置集路径解析（PLM_ROOT/CONFIGS_ROOT/resolve_set/...）
 │     │  ├─ verible.py        verible-verilog-format 自动格式化
 │     │  ├─ gen_flags.py      gen_flags.txt 读写（CLI 默认值 + 前端编辑器两种用法）
-│     │  ├─ workspace.py      CSV/工作区读写（供 Web/Qt 前端的编辑器用）
+│     │  ├─ workspace.py      CSV/工作区读写（供 Qt 前端编辑器使用）
 │     │  ├─ generator/
 │     │  │  ├─ rtl.py           纯文本生成：RTL 各模块的 gen_* 函数
 │     │  │  └─ tb.py            纯文本生成：testbench 的 gen_tb()
@@ -73,7 +72,6 @@ plm/
 │     ├─ cli/
 │     │  └─ main.py           统一 CLI：`plm generate rtl|tb|all`、`plm validate`
 │     └─ frontend/
-│        ├─ web/               浏览器前端（Flask，`pip install -e ".[web]"`）
 │        └─ qt/                 桌面前端（PyQt5，`pip install -e ".[qt]"`）
 ├─ test/
 │  └─ <SET>/              一套配置集，SET 是自己起的名字（如 quad）

@@ -1,20 +1,8 @@
-"""
-plm_qt_tables -- EditableTable, a small QTableWidget-based editable table
-for plm_qt.py's Controllers and Pipe Signals tabs.
+"""Editable Qt tables for Controllers and Pipe Signals.
 
-Mirrors table.js's public shape (tool/web/table.js) and behavior: a plain
-column list (some columns free-text, some a fixed dropdown), per-row +/-
-buttons, and drag-to-reorder -- with an optional id_column that's read-only
-and auto-renumbered (0, 1, 2, ...) after every insert/delete/reorder, the
-same as both table.js and plmConsultant.py's own Tkinter EditableTable
-(tool/plmConsultant.py:76) use it for Controllers' ctrl_id.
-
-Row reorder uses QHeaderView.setSectionsMovable(True) on the vertical
-header: dragging a row handle only moves the header visually, so
-_on_row_moved() re-reads the header's new visual order to physically
-reorder the underlying data, then resets the header back to an identity
-mapping before re-rendering -- otherwise each successive drag would
-compound on top of the last one's now-stale visual/logical mapping.
+Cells support free text or fixed-option combo boxes. Whole rows can be
+dragged to reorder them, while a context menu inserts or deletes rows.
+Controller IDs remain editable and retain their values after reordering.
 """
 
 from PyQt5 import QtCore, QtGui, QtWidgets

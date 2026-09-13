@@ -31,7 +31,7 @@ def find_verible(verible_path=None):
 
 # verible-verilog-format flags this project knows how to drive, grouped by
 # value shape -- shared by format_sv() (which flag=value pairs to build)
-# and by the web/Qt Settings UIs (which control to render for each one).
+# and by the Qt Settings UI (which control to render for each one).
 # Every value type reads as a plain string on the CLI ("true"/"false" for
 # booleans included), so DEFAULT_VERIBLE_FLAGS's values are already in
 # their final CLI-ready form.

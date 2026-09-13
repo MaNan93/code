@@ -2,27 +2,13 @@
 plm.frontend.qt.main_window -- MainWindow, the PyQt5 desktop front end's
 main window.
 
-Same role as the web front end (plm.frontend.web): a thin front end over
-the three config CSVs / gen_flags.txt that plm.core.generator reads (via
-plm.cli.main), and over that generation pipeline itself. Unlike the web
-front end, there's no JSON/HTTP boundary here: config access goes
-straight through plm.core.workspace's shared workspace_content/
-save_workspace_content/scaffold_default_content (and the CSV/gen_flags
-read-write functions they're built on), the same ones the web front end
-uses. Editing still just writes the same plain CSV/gen_flags.txt files a
-human would hand-edit; Validate calls plm.core.model.Config directly;
-Generate shells out to `python -m plm.cli.main generate ...`.
-
-Layout and theme are a deliberate port of the web front end's current
-"ChatGPT-inspired" look (plm/frontend/web/static/index.html + style.css),
-not just a functional equivalent: same sidebar structure (brand mark,
-New/Save/Open, Recent with a per-item context menu, Settings/Doc), same
-tab set and order (Controllers / Lane Mapping / Pipe Signals /
-Generation), same Generation page (flags + Validate/Generate actions
-together, no separate toolbar), verible-path/flags living in a Settings
-dialog rather than per-workspace, and a collapsible log panel -- see
-plm.frontend.qt.widgets.theme for the QSS and
-plm.frontend.qt.widgets.settings for the Settings dialog.
+This is a thin desktop front end over the three config CSVs and
+gen_flags.txt that plm.core.generator reads, and over that generation
+pipeline itself. Config access goes straight through plm.core.workspace.
+Editing writes the same plain CSV/gen_flags.txt files a human would edit;
+Validate calls plm.core.model.Config directly; Generate runs
+`python -m plm.cli.main generate ...`. See plm.frontend.qt.widgets.theme
+for the QSS and plm.frontend.qt.widgets.settings for the Settings dialog.
 """
 
 import json
@@ -76,10 +62,7 @@ def _ui_scale():
 
 
 def _svg_icon(svg_path, color=TEXT_SECONDARY, size=22):
-    """Build a small QIcon from an inline SVG path string, stroked with
-    the given colour -- matches the web version's monochrome stroke-based
-    sidebar icon set (style.css comment: 'All sidebar icons are stroke-
-    based SVGs that inherit currentColor')."""
+    """Build a monochrome QIcon from inline SVG path data."""
     svg = (
         f'<svg xmlns="http://www.w3.org/2000/svg" width="{size}" height="{size}" '
         f'viewBox="0 0 24 24" fill="none" stroke="{color}" stroke-width="2" '
@@ -243,13 +226,8 @@ class _CodePreviewEdit(QtWidgets.QPlainTextEdit):
 
 
 # ---------------------------------------------------------------- state file
-# An independent copy of the web front end's own state-file helpers (see
-# plm.frontend.web.workspace_state) -- own state file, own copy of the
-# logic, so the two front ends never interfere with each other just from
-# both being open at once, per this project's "coexist" decision. Also
-# holds this app's own Settings (verible path/flags, font) under a
-# "settings" key, mirroring the web version's localStorage entry for the
-# same data.
+# Desktop state and settings (verible path/flags, editor, and font) live
+# outside workspaces so opening the UI never changes generated inputs.
 
 
 def _read_state_file():
@@ -379,8 +357,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.preview_controls = self._build_preview_controls(central)
 
         # Edge toggle: a small button sitting on the seam between sidebar
-        # and main content, matching the web version's floating
-        # .edge-toggle (plm/frontend/web/static/style.css) -- not part of either layout
+        # and main content. It is not part of either layout
         # (Qt layouts can't place a widget "on the border" between two
         # siblings), so it's a plain child of `central` positioned by
         # hand in _position_sidebar_toggle(), called on every resize and
@@ -429,6 +406,7 @@ class MainWindow(QtWidgets.QMainWindow):
             # final tab-bar height can differ from its construction-time hint.
             # Keep the preview heading on that exact live header geometry.
             self.preview_title.setFixedHeight(tab_bar.height())
+            self.preview_controls.setFixedHeight(tab_bar.height())
             tab_origin = tab_bar.mapTo(central, QtCore.QPoint(0, 0))
             y = tab_origin.y() + max(0, (tab_bar.height() - self.preview_controls.height()) // 2)
         else:
@@ -456,7 +434,7 @@ class MainWindow(QtWidgets.QMainWindow):
         _write_state_file(data)
 
     def _apply_sidebar_collapsed(self):
-        """Collapse to the same icon rail used by the web front end."""
+        """Collapse the navigation sidebar to its icon rail."""
         collapsed = self._sidebar_collapsed
         scale = _ui_scale()
         # Scale sidebar widths from their 13 px baseline so larger fonts still
@@ -521,7 +499,7 @@ class MainWindow(QtWidgets.QMainWindow):
         hl.addItem(self.brand_left_spacer)
         brand_mark = QtWidgets.QLabel()
         self.brand_mark = brand_mark
-        mario = Path(__file__).resolve().parent.parent / "web" / "static" / "mario_icon.png"
+        mario = Path(__file__).resolve().parent / "assets" / "mario_icon.png"
         if mario.is_file():
             pix = QtGui.QPixmap(str(mario)).scaled(
                 28, 28, QtCore.Qt.KeepAspectRatioByExpanding, QtCore.Qt.SmoothTransformation
@@ -659,7 +637,10 @@ class MainWindow(QtWidgets.QMainWindow):
         controls = QtWidgets.QWidget(parent)
         controls.setObjectName("previewControls")
         layout = QtWidgets.QHBoxLayout(controls)
-        layout.setContentsMargins(3, 3, 3, 3)
+        # The buttons are 30 px tall and the frame contributes its own border,
+        # so extra vertical padding makes this group taller than the 32 px tab
+        # bar and prevents their centre lines from matching.
+        layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(2)
 
         self.preview_refresh_btn = QtWidgets.QToolButton(controls)
@@ -1292,8 +1273,7 @@ class MainWindow(QtWidgets.QMainWindow):
         # front-end-agnostic shape) -- translate that to this GUI's own
         # "(default: ...)" placeholder option, same translation
         # plmConsultant.py's own _load_workspace_content does.
-        # verible-path is not loaded here -- like the web front end, it's a
-        # Settings-level value now, never surfaced on this page (see
+        # verible-path is a Settings-level value, never surfaced on this page (see
         # _run_tool for where it's actually used).
         self.arch_combo.setCurrentText(flags.get("arch") or ARCH_MODES[0])
         self.pclk_mode_combo.setCurrentText(flags.get("pclk-mode") or PCLK_MODES[0])
@@ -1330,8 +1310,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def _on_new(self):
         # "New" creates a config set -- it's a naming action, not a
-        # "browse to a location" one (matches the web front end's own
-        # openNewWorkspaceFlow, fixed for the same reason): just ask for a
+        # "browse to a location" one: just ask for a
         # name, land it next to whatever's currently open (or
         # CONFIGS_ROOT/home when nothing is).
         name, ok = QtWidgets.QInputDialog.getText(self, "New workspace", "New config name:")
@@ -1400,8 +1379,7 @@ class MainWindow(QtWidgets.QMainWindow):
         # default) also garbles text on Windows independent of the family
         # issue above -- setPixelSize() only takes an int and doesn't
         # have that problem, and is the more literal match for a size
-        # that was modeled on the web version's CSS pixel-based
-        # font-size in the first place.
+        # that is stored as a CSS-like pixel size.
         font.setPixelSize(round(size))
         QtWidgets.QApplication.instance().setFont(font)
         self._apply_sidebar_collapsed()
@@ -1432,7 +1410,7 @@ class MainWindow(QtWidgets.QMainWindow):
     # ------------------------------------------------------------ Lane Mapping tab
     def _set_lane_count_display(self, n):
         """Update the lane-count combobox to show n. The GUI uses x-prefix
-        labels (x1/x2/x4/...) matching the web version, but a config set
+        labels (x1/x2/x4/...), but a config set
         loaded from disk may legitimately have an arbitrary lane count --
         plm itself supports any width, only this picker is narrowed for
         usability -- so a value outside LANE_COUNTS is appended just so it
@@ -1512,17 +1490,13 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def _run_tool(self, target, then=None):
         """QProcess runs `python -m plm.cli.main generate <target>`
-        against the current workspace, asynchronously -- no worker
-        thread or SSE plumbing needed the way the web front end's
-        stream_generate requires, since QProcess's signals already
+        against the current workspace asynchronously. QProcess signals
         deliver output on the Qt event loop as it arrives.
 
         verible-path/verible-flags come from this app's own Settings
-        (see plm.frontend.qt.widgets.settings) -- like the web front
-        end, neither is ever written into the workspace's own
-        gen_flags.txt, only passed as --verible-path/--verible-flags
-        on this one invocation (mirrors the web front end's own
-        stream_generate, plm.frontend.web.routes)."""
+        (see plm.frontend.qt.widgets.settings). Neither is written into
+        the workspace's gen_flags.txt; both are passed only for this
+        invocation."""
         if not self._save_before_action():
             return
         cmd = [sys.executable, "-m", "plm.cli.main", "generate", target, "--config", str(self.current_workspace)]

@@ -4,7 +4,7 @@ plm -- unified CLI for the PIPE Lane Mapper generator/validator.
 
 Replaces the two old standalone scripts (plm_gen_rtl.py / plm_gen_tb.py)
 with subcommands of one entry point, reconciling the ways they used to be
-invoked (the Makefile: a bare config-set name + --quiet; the web/Qt front
+invoked (the Makefile: a bare config-set name + --quiet; the Qt front
 ends: a full workspace path + --verible-path/--verible-flags, no --quiet)
 as different combinations of the same optional flags.
 
@@ -21,10 +21,14 @@ or a full path -- resolve_set() already makes that transparent, see
 plm.core.paths.
 
 Also runnable as `python -m plm.cli.main ...` without relying on the
-`plm` console-script being on PATH -- this is how the web/Qt front ends
-and the Makefile invoke it (via sys.executable -m, not the installed
-script name), since that only depends on the interpreter being able to
-import plm, not on PATH having the venv's script directory on it.
+`plm` console-script being on PATH -- this is how the Qt front end and the
+Makefile invoke it (via sys.executable -m, not the installed script name),
+since that only depends on the interpreter being able to import plm, not on
+PATH having the venv's script directory on it.
+
+    plm -gui
+
+`-gui` (also accepted as `--gui`) launches the Qt desktop front end.
 """
 
 import argparse
@@ -216,6 +220,12 @@ def cmd_validate(argv):
     print(cfg.report())
 
 
+def cmd_gui(argv):
+    """Launch the only supported graphical front end (Qt)."""
+    from plm.frontend.qt.main import main as qt_main
+    return qt_main(argv)
+
+
 SUBCOMMANDS = {
     ("generate", "rtl"): cmd_generate_rtl,
     ("generate", "tb"): cmd_generate_tb,
@@ -226,10 +236,15 @@ SUBCOMMANDS = {
 
 def main(argv=None):
     argv = sys.argv[1:] if argv is None else argv
+    if argv[:1] in (["-gui"], ["--gui"]):
+        return cmd_gui(argv[1:])
+    if argv in (["-h"], ["--help"]):
+        print(__doc__)
+        return 0
     if argv[:1] == ["generate"] and len(argv) >= 2 and argv[1] in ("rtl", "tb", "all"):
-        SUBCOMMANDS[("generate", argv[1])](argv[2:])
+        return SUBCOMMANDS[("generate", argv[1])](argv[2:])
     elif argv[:1] == ["validate"]:
-        SUBCOMMANDS[("validate",)](argv[1:])
+        return SUBCOMMANDS[("validate",)](argv[1:])
     else:
         print(__doc__)
         if argv:

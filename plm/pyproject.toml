@@ -10,13 +10,10 @@ requires-python = ">=3.9"
 dependencies = []
 
 [project.optional-dependencies]
-web = ["flask>=2.0"]
 qt = ["PyQt5>=5.15"]
 
 [project.scripts]
 plm = "plm.cli.main:main"
-plm-web = "plm.frontend.web.app:main"
-plm-qt = "plm.frontend.qt.main:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
@@ -24,4 +21,4 @@ where = ["src"]
 [tool.setuptools.package-data]
 "plm" = ["docs/*.md"]
 "plm.core" = ["common/*.sv", "config/*.csv", "tb_makefile.mk"]
-"plm.frontend.web" = ["static/*"]
+"plm.frontend.qt" = ["assets/*.png"]

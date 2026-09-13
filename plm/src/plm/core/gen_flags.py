@@ -6,7 +6,7 @@ Two shapes of this same one file are needed:
     consumed as argparse defaults by the CLI (cli/main.py).
   - read_gen_flags/write_gen_flags: the front ends' own typed shape
     (unset arch/pclk-mode/sel-mode as None, dpr as bool), consumed by
-    plm.core.workspace and the web/Qt front ends' Generation pages.
+    plm.core.workspace and the Qt front end's Generation page.
 Both flavors operate on the same file, so they live together here rather
 than being split by which caller happens to use them.
 """

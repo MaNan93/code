@@ -1,13 +1,8 @@
 """
 plm_qt_theme -- QSS theme for the Qt desktop front end.
 
-Originally a faithful port of the web front end's light "ChatGPT-inspired"
-theme (tool/web/style.css's `:root` block). The Qt front end has since
-deliberately diverged to a warm, Claude.ai-inspired palette (cream
-backgrounds, terracotta accent) requested for this UI specifically --
-the web front end's own theme is untouched, so the two are no longer
-expected to match colour-for-colour. Layout/radius values are still
-shared conventions, just not re-derived from style.css line-for-line.
+The palette uses warm cream surfaces and a terracotta accent. Constants at
+the top of this module are the source of truth for desktop colours and radii.
 """
 
 import sys
@@ -37,7 +32,7 @@ RADIUS_PILL = 14  # QSS has no CSS-style "999px + overflow" pill trick -- a
 def add_shadow(widget, blur=16, offset=(0, 2), alpha=35):
     """Qt has no CSS box-shadow equivalent in QSS -- a
     QGraphicsDropShadowEffect is the actual way to give a widget the
-    soft, floating look style.css gets from --shadow-sm."""
+    soft floating surface used by cards and controls."""
     effect = QtWidgets.QGraphicsDropShadowEffect(widget)
     effect.setBlurRadius(blur)
     effect.setOffset(*offset)

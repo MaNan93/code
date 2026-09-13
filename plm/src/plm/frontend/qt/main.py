@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
-plm-qt -- PIPE Lane Mapper config editor + generator, PyQt5 desktop front end.
+plm -gui -- PIPE Lane Mapper config editor and generator.
 
-Run: python3 -m plm.frontend.qt.main
-(or, once installed: plm-qt)
+Run: python run.py -gui
+(or, once installed: plm -gui)
 """
 
 import sys
@@ -13,7 +13,7 @@ try:
     from PyQt5 import QtCore, QtGui, QtWidgets
 except ImportError:
     sys.exit(
-        "plm-qt needs PyQt5. Install it with:\n"
+        "plm -gui needs PyQt5. Install it with:\n"
         '    pip install "plm[qt]"\n'
         "(or, offline, transfer the PyQt5/PyQt5-sip wheels to this machine and pip install those)."
     )
@@ -21,15 +21,16 @@ except ImportError:
 from plm.frontend.qt.main_window import MainWindow
 from plm.frontend.qt.widgets.theme import STYLESHEET, apply_titlebar_theme
 
-APP_ICON_PATH = Path(__file__).resolve().parent.parent / "web" / "static" / "mario_icon.png"
+APP_ICON_PATH = Path(__file__).resolve().parent / "assets" / "mario_icon.png"
 
 
-def main():
+def main(argv=None):
     if hasattr(QtCore.Qt, "AA_EnableHighDpiScaling"):
         QtWidgets.QApplication.setAttribute(QtCore.Qt.AA_EnableHighDpiScaling, True)
     if hasattr(QtCore.Qt, "AA_UseHighDpiPixmaps"):
         QtWidgets.QApplication.setAttribute(QtCore.Qt.AA_UseHighDpiPixmaps, True)
-    app = QtWidgets.QApplication(sys.argv)
+    argv = sys.argv[1:] if argv is None else list(argv)
+    app = QtWidgets.QApplication([sys.argv[0], *argv])
     app.setApplicationName("plmConsultant")
     if APP_ICON_PATH.is_file():
         # Set on the app, not just the main window, so every top-level
@@ -58,8 +59,8 @@ def main():
     win = MainWindow()
     apply_titlebar_theme(win)
     win.show()
-    sys.exit(app.exec_())
+    return app.exec_()
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

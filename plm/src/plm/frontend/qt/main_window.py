@@ -54,6 +54,7 @@ PCLK_MODES = ["(default: pclk_as_phy_output)", "pclk_as_phy_output", "pclk_as_ph
 SEL_MODES = ["(default: sync)", "sync", "comb"]
 LANE_COUNTS = ["x2", "x4", "x8", "x16", "x32"]
 DOC_PATH = DOCS_DIR / "tool_usage.md"
+PREVIEW_MAXIMIZE_SNAP_RATIO = 0.25
 
 
 
@@ -303,8 +304,10 @@ class MainWindow(QtWidgets.QMainWindow):
         self.content_splitter = QtWidgets.QSplitter(QtCore.Qt.Horizontal)
         self.content_splitter.setObjectName("contentSplitter")
         self.content_splitter.setChildrenCollapsible(False)
+        self.content_splitter.setCollapsible(0, True)
+        self.content_splitter.setCollapsible(1, False)
         self.content_splitter.setHandleWidth(1)
-        self.content_splitter.splitterMoved.connect(lambda _pos, _index: self._position_floating_log())
+        self.content_splitter.splitterMoved.connect(self._on_content_splitter_moved)
         self.content_splitter.addWidget(self._build_main())
         self.rtl_preview_panel = self._build_rtl_preview_panel()
         self.content_splitter.addWidget(self.rtl_preview_panel)
@@ -542,6 +545,9 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def _build_main(self):
         main = QtWidgets.QWidget()
+        # Let the splitter shrink this pane below the tab bar's size hint so
+        # a leftward drag can reach the preview-maximize snap threshold.
+        main.setSizePolicy(QtWidgets.QSizePolicy.Ignored, QtWidgets.QSizePolicy.Expanding)
         self.main_area = main
         mv = QtWidgets.QVBoxLayout(main)
         mv.setContentsMargins(0, 0, 0, 0)
@@ -683,6 +689,18 @@ class MainWindow(QtWidgets.QMainWindow):
             self.content_splitter.setSizes([int(total * 0.56), int(total * 0.44)])
         self._position_preview_controls()
         QtCore.QTimer.singleShot(0, self._position_floating_log)
+
+    def _on_content_splitter_moved(self, position, _index):
+        self._position_floating_log()
+        if (
+            getattr(self, "_preview_maximized", False)
+            or self.rtl_preview_panel.isHidden()
+            or not self.main_area.isVisible()
+        ):
+            return
+        snap_position = int(self.content_splitter.width() * PREVIEW_MAXIMIZE_SNAP_RATIO)
+        if position <= snap_position:
+            QtCore.QTimer.singleShot(0, self._on_toggle_preview_maximized)
 
     def _on_toggle_preview_maximized(self):
         if not self._preview_maximized:

@@ -22,5 +22,6 @@ plm-qt = "plm.frontend.qt.main:main"
 where = ["src"]
 
 [tool.setuptools.package-data]
-"plm.core" = ["common/*.sv", "tb_makefile.mk"]
+"plm" = ["docs/*.md"]
+"plm.core" = ["common/*.sv", "config/*.csv", "tb_makefile.mk"]
 "plm.frontend.web" = ["static/*"]

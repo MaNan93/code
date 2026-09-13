@@ -8,7 +8,34 @@ generators: plm.core.generator.rtl and plm.core.generator.tb.
 
 import csv
 from pathlib import Path
+import re
 import sys
+
+
+_SV_IDENTIFIER_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_$]*$")
+_SV_KEYWORDS = {
+    "always", "always_comb", "always_ff", "always_latch", "and", "assign",
+    "automatic", "begin", "bit", "case", "class", "clocking", "const",
+    "default", "disable", "do", "else", "end", "endcase", "endclass",
+    "endfunction", "endgenerate", "endmodule", "endpackage", "endtask",
+    "enum", "event", "for", "force", "foreach", "forever", "fork",
+    "function", "generate", "genvar", "if", "import", "inout", "input",
+    "int", "integer", "interface", "logic", "localparam", "module",
+    "or", "output", "package", "parameter", "program", "property",
+    "reg", "release", "repeat", "return", "signed", "static", "struct",
+    "task", "time", "typedef", "union", "unsigned", "var", "wait",
+    "while", "wire",
+}
+
+
+def _require_sv_identifier(value, what):
+    """Reject names that would make the generated SystemVerilog invalid."""
+    if not _SV_IDENTIFIER_RE.fullmatch(value) or value.lower() in _SV_KEYWORDS:
+        raise ValueError(
+            f"{what}='{value}' is not a legal SystemVerilog identifier "
+            "(use letters, digits, '_' or '$', do not start with a digit, "
+            "and do not use a SystemVerilog keyword)"
+        )
 
 
 def _strip_dict(row):
@@ -190,18 +217,44 @@ class Config:
     @staticmethod
     def _load_ctrl(path):
         out = {}
+        seen_names = {}
         with open(path, newline="", encoding="utf-8") as f:
             rows = enumerate(_stripped(csv.DictReader(f)), start=2)
             for i, r in rows:
+                if r.get(None):
+                    raise SystemExit(f"{path} line {i}: row has more fields than the header")
                 for col in ("ctrl_id", "ctrl_name", "max_width"):
                     if col not in r or not (r[col] or "").strip():
                         raise SystemExit(f"{path} line {i}: missing {col}")
-                c = Controller(r["ctrl_id"], r["ctrl_name"], r["max_width"])
+                try:
+                    c = Controller(r["ctrl_id"], r["ctrl_name"], r["max_width"])
+                    _require_sv_identifier(c.name, "ctrl_name")
+                except ValueError as e:
+                    raise SystemExit(f"{path} line {i}: controller attribute validation failed, {e}") from e
+                if c.id < 0:
+                    raise SystemExit(f"{path} line {i}: ctrl_id must be >= 0")
+                if c.max_width < 1:
+                    raise SystemExit(f"{path} line {i}: max_width must be >= 1")
                 if c.id in out:
                     raise SystemExit(f"{path} line {i}: duplicate ctrl_id {c.id}")
+                # Controller names are lower-cased in generated signal names,
+                # so CtrlA and ctrla collide even though SV itself is
+                # case-sensitive.
+                if c.lname in seen_names:
+                    raise SystemExit(
+                        f"{path} line {i}: ctrl_name {c.name!r} collides with "
+                        f"{seen_names[c.lname]!r} after lower-case normalization"
+                    )
+                seen_names[c.lname] = c.name
                 out[c.id] = c
         if not out:
             raise SystemExit(f"{path}: no controllers defined")
+        expected = list(range(len(out)))
+        if sorted(out) != expected:
+            raise SystemExit(
+                f"{path}: ctrl_id values must be contiguous starting at 0; "
+                f"found {sorted(out)}, expected {expected}"
+            )
         return out
 
     # -- pipe_signals.csv
@@ -212,10 +265,16 @@ class Config:
         with open(path, newline="", encoding="utf-8") as f:
             rows = enumerate(_stripped(csv.DictReader(f)), start=2)
             for i, r in rows:
+                if r.get(None):
+                    raise SystemExit(f"{path} line {i}: row has more fields than the header")
                 for col in ("signal_name", "signal_type", "direction", "width", "safe_state", "tie_off"):
                     if col not in r or not (r[col] or "").strip():
                         raise SystemExit(f"{path} line {i}: missing {col}")
                 name = r["signal_name"]
+                try:
+                    _require_sv_identifier(name, "signal_name")
+                except ValueError as e:
+                    raise SystemExit(f"{path} line {i}: {e}") from e
                 if name in seen:
                     raise SystemExit(f"{path} line {i}: signal {name} defined twice")
                 seen.add(name)
@@ -236,7 +295,7 @@ class Config:
                     raise SystemExit(f"{path} line {i}: signal attribute validation failed, {e}") from e
                 if s.width < 1:
                     raise SystemExit(f"{path} line {i}: width must be >= 1")
-                if s.safe_state >= (1 << s.width):
+                if not (0 <= s.safe_state < (1 << s.width)):
                     raise SystemExit(
                         f"{path} line {i}: signal {name} has safe_state="
                         f"{s.safe_state}, out of range for width={s.width}"
@@ -262,6 +321,12 @@ class Config:
             if not cols:
                 raise SystemExit(f"{path}: header has no lane columns besides mode")
             lane_count = len(cols)
+            expected_cols = [f"lane{i}" for i in range(lane_count)]
+            if cols != expected_cols:
+                raise SystemExit(
+                    f"{path}: lane columns must be exactly "
+                    f"{', '.join(expected_cols)}; found {', '.join(cols)}"
+                )
 
             modes, mapping = [], {}
             for i, r in enumerate(_stripped(rd), start=2):
@@ -312,6 +377,10 @@ class Config:
                         per[idx] = (int(a), int(b))
                     except ValueError as e:
                         raise SystemExit(f"{path} line {i} {col}: '{cell}' contains a non-integer") from e
+                    if per[idx][0] < 0 or per[idx][1] < 0:
+                        raise SystemExit(
+                            f"{path} line {i} {col}: controller id and lane index must be >= 0"
+                        )
                 modes.append(m)
                 mapping[m] = per
 

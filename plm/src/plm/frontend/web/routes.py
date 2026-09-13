@@ -17,7 +17,7 @@ from pathlib import Path
 from flask import Response, jsonify, request, send_from_directory
 
 from plm.core.model import Config
-from plm.core.paths import CONFIGS_ROOT, PLM_ROOT, has_csvs
+from plm.core.paths import CONFIGS_ROOT, DOCS_DIR, PLM_ROOT, is_deletable_workspace, is_workspace_root
 from plm.core.verible import (
     DEFAULT_VERIBLE_FLAGS,
     VERIBLE_ALIGN_PARAMS,
@@ -45,11 +45,20 @@ from plm.frontend.web.workspace_state import (
     valid_name,
 )
 
-# The only server-side session state this tool keeps -- see app.py's
-# module docstring. main() may set this once at startup (reopening the
-# last workspace); every handler below that needs it does `global
-# current_workspace` to read/mutate this same module attribute.
+# Selection state is only a convenience for reopen/current-workspace UI.
+# Every mutating or generation request carries its own explicit workspace,
+# so concurrent tabs cannot redirect each other's work.
 current_workspace = None  # Path | None
+
+
+def _request_workspace(body):
+    raw = (body or {}).get("workspace")
+    if not raw:
+        raise ApiError("workspace is required")
+    ws = Path(raw).resolve()
+    if not is_workspace_root(ws):
+        raise ApiError(f"Not a PLM workspace: {ws}")
+    return ws
 
 
 # ---------------------------------------------------------------- API route handlers
@@ -85,7 +94,7 @@ def api_browse(query, body):
         raise ApiError(str(e)) from e
     for c in children:
         if c.is_dir() and not c.name.startswith("."):
-            entries.append({"name": c.name, "path": str(c), "workspace": has_csvs(c / "config")})
+            entries.append({"name": c.name, "path": str(c), "workspace": is_workspace_root(c)})
     parent = str(d.parent) if d.parent != d else None
     return {"path": str(d), "parent": parent, "entries": entries}
 
@@ -95,9 +104,9 @@ def api_workspace_open(query, body):
     raw = (body or {}).get("path")
     if not raw:
         raise ApiError("path is required")
-    ws = Path(raw)
-    if not ws.is_dir():
-        raise ApiError(f"Not a directory: {ws}")
+    ws = Path(raw).resolve()
+    if not is_workspace_root(ws):
+        raise ApiError(f"Not a PLM workspace (missing config CSVs): {ws}")
     content = workspace_content(ws)  # raises ValueError on real parse failure -- leaves current_workspace untouched
     current_workspace = ws
     add_recent_workspace(ws)
@@ -115,11 +124,15 @@ def api_workspace_new(query, body):
     parent = (body or {}).get("parent") or (CONFIGS_ROOT if CONFIGS_ROOT.is_dir() else Path.home())
     name = (body or {}).get("name")
     name = valid_name(name)
-    ws = Path(parent) / name
+    ws = (Path(parent) / name).resolve()
     if ws.exists():
         raise ApiError(f"{ws} already exists.")
     ws.mkdir(parents=True)
-    payload = scaffold_default_content(ws)
+    try:
+        payload = scaffold_default_content(ws)
+    except BaseException:
+        shutil.rmtree(ws, ignore_errors=True)
+        raise
     current_workspace = ws
     add_recent_workspace(ws)
     save_last_workspace(ws)
@@ -127,10 +140,9 @@ def api_workspace_new(query, body):
 
 
 def api_workspace_save(query, body):
-    if current_workspace is None:
-        raise ApiError("No workspace open.")
-    save_workspace_content(current_workspace, body or {})
-    return {"workspace": str(current_workspace), "saved": True}
+    ws = _request_workspace(body)
+    save_workspace_content(ws, body or {})
+    return {"workspace": str(ws), "saved": True}
 
 
 def api_workspace_save_as(query, body):
@@ -138,10 +150,16 @@ def api_workspace_save_as(query, body):
     new_path = (body or {}).get("new_path")
     if not new_path:
         raise ApiError("new_path is required")
-    ws = Path(new_path)
-    ws.mkdir(parents=True, exist_ok=True)
+    ws = Path(new_path).resolve()
+    if ws.exists():
+        raise ApiError(f"{ws} already exists; Save As will not overwrite a directory")
+    ws.mkdir(parents=True)
     payload = {k: (body or {}).get(k) for k in ("controllers", "signals", "mapping", "gen_flags")}
-    save_workspace_content(ws, payload)
+    try:
+        save_workspace_content(ws, payload)
+    except BaseException:
+        shutil.rmtree(ws, ignore_errors=True)
+        raise
     current_workspace = ws
     add_recent_workspace(ws)
     save_last_workspace(ws)
@@ -153,9 +171,12 @@ def api_workspace_delete(query, body):
     raw = (body or {}).get("path")
     if not raw:
         raise ApiError("path is required")
-    ws = Path(raw)
-    if not ws.is_dir():
-        raise ApiError(f"Not a directory: {ws}")
+    ws = Path(raw).resolve()
+    if not is_deletable_workspace(ws):
+        raise ApiError(
+            f"Refusing to delete {ws}: it is not a marked PLM workspace. "
+            "Open and Save a legacy workspace once before deleting it."
+        )
     shutil.rmtree(ws)
     if current_workspace == ws:
         current_workspace = None
@@ -167,10 +188,9 @@ def api_workspace_current(query, body):
 
 
 def api_validate(query, body):
-    if current_workspace is None:
-        raise ApiError("No workspace open.")
-    save_workspace_content(current_workspace, body or {})
-    cfg_dir = current_workspace / "config"
+    ws = _request_workspace(body)
+    save_workspace_content(ws, body or {})
+    cfg_dir = ws / "config"
     try:
         cfg = Config(cfg_dir)
     except SystemExit as e:
@@ -204,7 +224,7 @@ def api_default_signals(query, body):
 # ---------------------------------------------------------------- generate (SSE)
 
 
-def stream_generate(targets, verible_path=None, verible_flags=None):
+def stream_generate(targets, workspace=None, verible_path=None, verible_flags=None):
     """Runs `python -m plm.cli.main generate rtl`/`generate tb` against the
     current workspace, yielding each line of stdout as an SSE event as it
     arrives. Flask's dev server handles each request on its own thread
@@ -222,7 +242,11 @@ def stream_generate(targets, verible_path=None, verible_flags=None):
     def emit(event, data):
         return f"event: {event}\ndata: {json.dumps(data)}\n\n"
 
-    if current_workspace is None:
+    try:
+        ws = Path(workspace).resolve() if workspace else None
+    except (TypeError, ValueError):
+        ws = None
+    if ws is None or not is_workspace_root(ws):
         yield emit("log", {"line": "No workspace open.\n"})
         yield emit("done", {"returncode": 1})
         return
@@ -230,7 +254,7 @@ def stream_generate(targets, verible_path=None, verible_flags=None):
     to_run = [t for t in targets if t in ("rtl", "tb")]
     overall_rc = 0
     for target in to_run:
-        cmd = [sys.executable, "-m", "plm.cli.main", "generate", target, "--config", str(current_workspace)]
+        cmd = [sys.executable, "-m", "plm.cli.main", "generate", target, "--config", str(ws)]
         if verible_path:
             cmd += ["--verible-path", verible_path]
         if verible_flags:
@@ -267,7 +291,7 @@ def route_docs(name):
     """Serve the project's own docs/ files (read-only) so the in-app Doc
     button can open them. Restricted to plain .md files directly under
     docs/, so this can't be used to read arbitrary paths."""
-    docs_dir = (PLM_ROOT / "docs").resolve()
+    docs_dir = DOCS_DIR.resolve()
     target = (docs_dir / name).resolve()
     if docs_dir not in target.parents or target.suffix.lower() != ".md":
         return jsonify({"error": "invalid docs path"}), 400
@@ -355,8 +379,12 @@ def route_generate_stream():
         targets = ["rtl", "tb"]
     verible_path = request.args.get("verible_path")
     verible_flags = request.args.get("verible_flags")
+    workspace = request.args.get("workspace")
     return Response(
-        stream_generate(targets, verible_path=verible_path, verible_flags=verible_flags),
+        stream_generate(
+            targets, workspace=workspace,
+            verible_path=verible_path, verible_flags=verible_flags,
+        ),
         mimetype="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )

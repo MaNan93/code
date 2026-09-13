@@ -15,10 +15,10 @@ calls plm.core.model.Config directly, and /api/generate/stream shells out
 to `python -m plm.cli.main generate ...`, the same way the Makefile does,
 streaming output back as Server-Sent Events.
 
-The server holds exactly one piece of session state: the currently-open
-workspace path (this is a single-user, single-process, local-only tool --
-no auth, no concurrent-client handling). Every read/write goes straight to
-disk; there is no server-side copy of table contents between requests.
+The server remembers the last selected workspace for startup convenience.
+Mutating and generation requests carry their workspace explicitly, so tabs
+cannot redirect each other's work. The server is intentionally local-only
+and refuses non-loopback bind addresses because it has no authentication.
 
 Run: python3 -m plm.frontend.web.app [--port N] [--no-browser]
 (or, once installed: plm-web [--port N] [--no-browser])
@@ -81,6 +81,12 @@ def main():
     ap.add_argument("--host", default="127.0.0.1", help="bind address (default: 127.0.0.1, local-only)")
     ap.add_argument("--no-browser", action="store_true", help="don't auto-open a browser tab")
     args = ap.parse_args()
+
+    if args.host not in ("127.0.0.1", "localhost", "::1"):
+        ap.error(
+            "plm-web has no remote authentication and may edit/delete local files; "
+            "--host must be 127.0.0.1, localhost, or ::1"
+        )
 
     last = load_last_workspace()
     if last is not None:

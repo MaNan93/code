@@ -2,9 +2,9 @@
 CSV / workspace read-write for editor front ends.
 
 Shared by every front end (web, Qt) that edits the three config CSVs +
-gen_flags.txt: comma-aligned CSV writing, existing-line-ending
+gen_flags.txt: standards-compliant CSV writing, existing-line-ending
 preservation, and the same required-column checks, so both tools read and
-write byte-identical files. Each front end is responsible for translating
+write the same files safely. Each front end is responsible for translating
 its own widget/request state into the plain rows/flags shapes these
 functions take, and back.
 
@@ -17,10 +17,13 @@ logic used by more than one front end, same as the rest of plm.core.
 
 from pathlib import Path
 import csv
+import os
+import shutil
+import tempfile
 
 from plm.core.gen_flags import existing_line_ending, read_gen_flags, write_gen_flags
 from plm.core.model import _stripped
-from plm.core.paths import CONFIGS_ROOT, has_csvs, list_configs
+from plm.core.paths import BUILTIN_CFG, CONFIGS_ROOT, WORKSPACE_MARKER, has_csvs, list_configs
 from plm.core.verible import find_verible
 
 
@@ -45,13 +48,20 @@ def read_csv_rows(path, required_cols=None):
     with open(path, newline="", encoding="utf-8") as f:
         rd = csv.DictReader(f)
         rd.fieldnames = [c.strip() if c else c for c in (rd.fieldnames or [])]
+        if len(rd.fieldnames) != len(set(rd.fieldnames)):
+            raise ValueError(f"{path}: header contains duplicate column names")
         if required_cols and not set(required_cols) <= set(rd.fieldnames):
             missing = sorted(set(required_cols) - set(rd.fieldnames))
             raise ValueError(
                 f"{path}: header is missing {', '.join(missing)} "
                 f"(found: {', '.join(rd.fieldnames) or '(no header)'})"
             )
-        return [dict(r) for r in _stripped(rd)]
+        rows = []
+        for line, row in enumerate(_stripped(rd), start=2):
+            if row.get(None):
+                raise ValueError(f"{path} line {line}: row has more fields than the header")
+            rows.append(dict(row))
+        return rows
 
 
 def read_mapping_csv(path):
@@ -61,34 +71,36 @@ def read_mapping_csv(path):
     with open(path, newline="", encoding="utf-8") as f:
         rd = csv.DictReader(f)
         fieldnames = [c.strip() if c else c for c in (rd.fieldnames or [])]
+        if len(fieldnames) != len(set(fieldnames)):
+            raise ValueError(f"{path}: header contains duplicate column names")
         rd.fieldnames = fieldnames
         if "mode" not in fieldnames:
             raise ValueError(
                 f"{path}: header is missing 'mode' (found: {', '.join(fieldnames) or '(no header)'})"
             )
         lane_cols = [c for c in fieldnames if c != "mode"]
-        rows = [dict(r) for r in _stripped(rd)]
-    return rows, max(1, len(lane_cols))
+        if not lane_cols:
+            raise ValueError(f"{path}: header has no lane columns besides mode")
+        expected = [f"lane{i}" for i in range(len(lane_cols))]
+        if lane_cols != expected:
+            raise ValueError(
+                f"{path}: lane columns must be exactly {', '.join(expected)}; "
+                f"found {', '.join(lane_cols)}"
+            )
+        rows = []
+        for line, row in enumerate(_stripped(rd), start=2):
+            if row.get(None):
+                raise ValueError(f"{path} line {line}: row has more fields than the header")
+            rows.append(dict(row))
+    return rows, len(lane_cols)
 
 
 def write_aligned_csv(path, header, rows, eol):
-    """Write a CSV with every column comma-aligned (each field padded with
-    spaces after its comma so the next column lines up), for hand-editing
-    readability. header/rows entries are plain values (not yet
-    comma-escaped) -- this domain (signal/controller names, small
-    integers, mode indices) never needs CSV quoting, so this skips the csv
-    module entirely rather than fighting it over inserted alignment spaces.
-    """
-    all_rows = [list(header)] + [list(r) for r in rows]
-    ncols = len(header)
-    widths = [max(len(str(row[i])) for row in all_rows) for i in range(ncols)]
+    """Write standards-compliant CSV with correct quoting/escaping."""
     with open(path, "w", newline="", encoding="utf-8") as f:
-        for row in all_rows:
-            cells = []
-            for i, v in enumerate(row):
-                v = str(v)
-                cells.append((v + ",").ljust(widths[i] + 2) if i < ncols - 1 else v)
-            f.write("".join(cells) + eol)
+        wr = csv.writer(f, lineterminator=eol)
+        wr.writerow(header)
+        wr.writerows(rows)
 
 
 def write_controllers_csv(path, rows):
@@ -148,6 +160,9 @@ def load_default_signals():
     this project's own bundled sample workspaces (test/test_quad, etc.)
     always exist regardless of which workspace is currently open, so
     they're a reliable template source."""
+    packaged = BUILTIN_CFG / "pipe_signals.csv"
+    if packaged.is_file():
+        return read_csv_rows(packaged)
     for name in list_configs():
         src = CONFIGS_ROOT / name / "config" / "pipe_signals.csv"
         if src.is_file():
@@ -192,12 +207,41 @@ def workspace_content(ws_root):
 def save_workspace_content(ws_root, payload):
     ws_root = Path(ws_root)
     cfg_dir = ws_root / "config"
-    cfg_dir.mkdir(parents=True, exist_ok=True)
+    ws_root.mkdir(parents=True, exist_ok=True)
     mapping = payload.get("mapping") or {}
-    write_controllers_csv(cfg_dir / "controllers.csv", payload.get("controllers") or [])
-    write_signals_csv(cfg_dir / "pipe_signals.csv", payload.get("signals") or [])
-    write_mapping_csv(cfg_dir / "lane_mapping.csv", int(mapping.get("lane_count") or 4), mapping.get("rows") or [])
-    write_gen_flags(cfg_dir / "gen_flags.txt", payload.get("gen_flags") or {})
+    try:
+        lane_count = int(mapping.get("lane_count") or 4)
+    except (TypeError, ValueError) as e:
+        raise ValueError("lane_count must be an integer") from e
+    if lane_count < 1:
+        raise ValueError("lane_count must be >= 1")
+
+    staging_root = Path(tempfile.mkdtemp(prefix=".plm-save-", dir=ws_root))
+    staged_cfg = staging_root / "config"
+    backup_cfg = staging_root / "previous-config"
+    try:
+        if cfg_dir.is_dir():
+            shutil.copytree(cfg_dir, staged_cfg)
+        else:
+            staged_cfg.mkdir()
+        write_controllers_csv(staged_cfg / "controllers.csv", payload.get("controllers") or [])
+        write_signals_csv(staged_cfg / "pipe_signals.csv", payload.get("signals") or [])
+        write_mapping_csv(staged_cfg / "lane_mapping.csv", lane_count, mapping.get("rows") or [])
+        write_gen_flags(staged_cfg / "gen_flags.txt", payload.get("gen_flags") or {})
+
+        if cfg_dir.exists():
+            os.replace(cfg_dir, backup_cfg)
+        try:
+            os.replace(staged_cfg, cfg_dir)
+        except BaseException:
+            if backup_cfg.exists() and not cfg_dir.exists():
+                os.replace(backup_cfg, cfg_dir)
+            raise
+        if backup_cfg.exists():
+            shutil.rmtree(backup_cfg, ignore_errors=True)
+        (ws_root / WORKSPACE_MARKER).write_text("PLM workspace\n", encoding="utf-8")
+    finally:
+        shutil.rmtree(staging_root, ignore_errors=True)
 
 
 def scaffold_default_content(ws_root):

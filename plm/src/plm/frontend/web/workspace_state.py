@@ -10,6 +10,8 @@ from both being open at once, per this project's "coexist" decision.
 import json
 from pathlib import Path
 
+from plm.core.paths import is_workspace_root
+
 STATE_FILE = Path.home() / ".plm_web_workspace.json"
 MAX_RECENT_WORKSPACES = 10
 
@@ -38,7 +40,7 @@ def _write_state_file(data):
 
 def load_recent_workspaces():
     raw = _read_state_file().get("recent", [])
-    return [p for p in (Path(r) for r in raw) if p.is_dir()]
+    return [p for p in (Path(r) for r in raw) if is_workspace_root(p)]
 
 
 def add_recent_workspace(path):
@@ -67,7 +69,7 @@ def load_last_workspace():
     if not raw:
         return None
     path = Path(raw)
-    return path if path.is_dir() else None
+    return path if is_workspace_root(path) else None
 
 
 def valid_name(name):

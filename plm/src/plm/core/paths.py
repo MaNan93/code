@@ -8,9 +8,15 @@ generator and every front end, so it's defined once here.
 from pathlib import Path
 
 SCRIPT_DIR = Path(__file__).resolve().parent  # .../plm/src/plm/core
-PLM_ROOT = SCRIPT_DIR.parent.parent.parent  # .../plm (repo root: core -> plm pkg -> src -> repo)
+PACKAGE_ROOT = SCRIPT_DIR.parent
+_SOURCE_ROOT = SCRIPT_DIR.parent.parent.parent
+# Source checkout: the repository root. Installed wheel: the importable
+# package directory. Code must never infer that site-packages/../.. is a
+# project checkout.
+PLM_ROOT = _SOURCE_ROOT if (_SOURCE_ROOT / "pyproject.toml").is_file() else PACKAGE_ROOT
 CONFIGS_ROOT = PLM_ROOT / "test"  # .../plm/test
 BUILTIN_CFG = SCRIPT_DIR / "config"  # built-in default CSVs (if shipped alongside the package)
+DOCS_DIR = PACKAGE_ROOT / "docs"
 COMMON_DIR = (
     SCRIPT_DIR / "common"
 )  # hand-written common modules (config-independent, shipped with the package)
@@ -18,11 +24,29 @@ TB_MAKEFILE = (
     SCRIPT_DIR / "tb_makefile.mk"
 )  # hand-written VCS/Verdi Makefile (config-independent), copied to <set>/tb/Makefile
 CSV_NAMES = ("controllers.csv", "lane_mapping.csv", "pipe_signals.csv")
+WORKSPACE_MARKER = ".plm-workspace"
 
 
 def has_csvs(d):
     d = Path(d)
     return d.is_dir() and all((d / n).is_file() for n in CSV_NAMES)
+
+
+def is_workspace_root(path):
+    """True only for a complete PLM workspace, never an arbitrary folder."""
+    path = Path(path)
+    return path.is_dir() and has_csvs(path / "config")
+
+
+def is_deletable_workspace(path):
+    """Deletion requires both a valid workspace and an explicit marker.
+
+    The marker is created by current PLM versions on New/Save. Legacy
+    workspaces become deletable after one successful Save; merely browsing or
+    opening a directory can therefore never authorize recursive deletion.
+    """
+    path = Path(path)
+    return is_workspace_root(path) and (path / WORKSPACE_MARKER).is_file()
 
 
 def clog2(n):

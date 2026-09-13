@@ -1,35 +1,81 @@
 """
-plm_qt_theme -- QSS port of the web front end's light "ChatGPT-inspired"
-theme (tool/web/style.css's `:root` block; the dark `[data-theme="dark"]`
-variant is never actually toggled on there either -- `<body
-data-theme="light">` is hardcoded -- so light is the one theme worth
-porting here for parity).
+plm_qt_theme -- QSS theme for the Qt desktop front end.
 
-Values below are copy-pasted from style.css's :root, not re-derived, so
-this stays a faithful port rather than a fresh design -- see that file if
-the web theme's colors/radii ever change and this should follow.
+Originally a faithful port of the web front end's light "ChatGPT-inspired"
+theme (tool/web/style.css's `:root` block). The Qt front end has since
+deliberately diverged to a warm, Claude.ai-inspired palette (cream
+backgrounds, terracotta accent) requested for this UI specifically --
+the web front end's own theme is untouched, so the two are no longer
+expected to match colour-for-colour. Layout/radius values are still
+shared conventions, just not re-derived from style.css line-for-line.
 """
+
+import sys
 
 from PyQt5 import QtCore, QtGui, QtWidgets
 
-BG = "#ffffff"
-BG_ELEVATED = "#f7f7f8"
-BG_SIDEBAR = "#f9f9f9"
-BG_HOVER = "#ececec"
-BG_ACTIVE = "#e3e3e3"
-BORDER = "#e5e5e5"
-BORDER_STRONG = "#d4d4d4"
-TEXT = "#0d0d0d"
-TEXT_SECONDARY = "#5d5d5d"
-TEXT_TERTIARY = "#8e8e8e"
-ACCENT = "#10a37f"
-ACCENT_HOVER = "#0e906f"
-DANGER = "#ef4146"
+BG = "#faf9f6"
+BG_ELEVATED = "#f5f4ef"
+BG_SIDEBAR = "#f0eee6"
+BG_HOVER = "#ece9e0"
+BG_ACTIVE = "#e4e0d3"
+BORDER = "#e5e1d6"
+BORDER_STRONG = "#d6d0c0"
+TEXT = "#2b2926"
+TEXT_SECONDARY = "#6b6658"
+TEXT_TERTIARY = "#9c9686"
+ACCENT = "#d97757"
+ACCENT_HOVER = "#c15f3c"
+DANGER = "#c0392b"
 
 RADIUS_SM = 8
 RADIUS_MD = 12
 RADIUS_PILL = 14  # QSS has no CSS-style "999px + overflow" pill trick -- a
 # radius about half the tab/pill's own height reads as fully rounded ends.
+
+
+def add_shadow(widget, blur=16, offset=(0, 2), alpha=35):
+    """Qt has no CSS box-shadow equivalent in QSS -- a
+    QGraphicsDropShadowEffect is the actual way to give a widget the
+    soft, floating look style.css gets from --shadow-sm."""
+    effect = QtWidgets.QGraphicsDropShadowEffect(widget)
+    effect.setBlurRadius(blur)
+    effect.setOffset(*offset)
+    effect.setColor(QtGui.QColor(0, 0, 0, alpha))
+    widget.setGraphicsEffect(effect)
+
+
+def apply_titlebar_theme(window):
+    """Recolour a top-level window/dialog's native OS title bar to match
+    the app's own theme.
+
+    Qt/QSS only styles the client area -- the title bar is drawn by the
+    OS. DWMWA_CAPTION_COLOR/DWMWA_TEXT_COLOR (Windows 11 build 22000+)
+    are the only supported way to change that; on any older Windows, or
+    any non-Windows platform, DwmSetWindowAttribute simply fails and this
+    is a no-op. Call this on every top-level QMainWindow/QDialog the app
+    creates (main window, Settings, the Documentation viewer, ...), not
+    just the main window, since each gets its own native title bar."""
+    if sys.platform != "win32":
+        return
+    import ctypes
+
+    def _colorref(hex_color):
+        hex_color = hex_color.lstrip("#")
+        r, g, b = (int(hex_color[i : i + 2], 16) for i in (0, 2, 4))
+        return r | (g << 8) | (b << 16)  # COLORREF is 0x00BBGGRR, not RGB
+
+    try:
+        hwnd = int(window.winId())
+        dwmapi = ctypes.windll.dwmapi
+        DWMWA_CAPTION_COLOR = 35
+        DWMWA_TEXT_COLOR = 36
+        caption = ctypes.c_int(_colorref(BG_ELEVATED))
+        text = ctypes.c_int(_colorref(TEXT))
+        dwmapi.DwmSetWindowAttribute(hwnd, DWMWA_CAPTION_COLOR, ctypes.byref(caption), ctypes.sizeof(caption))
+        dwmapi.DwmSetWindowAttribute(hwnd, DWMWA_TEXT_COLOR, ctypes.byref(text), ctypes.sizeof(text))
+    except (OSError, AttributeError, ValueError):
+        pass
 
 
 class RoundedComboBox(QtWidgets.QComboBox):
@@ -94,6 +140,7 @@ QWidget {{
     background: {BG};
     color: {TEXT};
     font-size: 13px;
+    font-family: "Segoe UI", "Microsoft YaHei UI", "Microsoft YaHei", "Helvetica Neue", Arial, sans-serif;
 }}
 QLabel {{
     background: transparent;
@@ -102,7 +149,7 @@ QLabel {{
 /* -- sidebar ------------------------------------------------------- */
 QWidget#sidebar,
 QWidget#sidebar QWidget {{
-    background: #F0F3F9;
+    background: {BG_SIDEBAR};
 }}
 QWidget#sidebar {{
     border-right: 2px solid {BORDER_STRONG};
@@ -145,7 +192,7 @@ QLabel#sectionHeader {{
     font-weight: 600;
 }}
 QListWidget#recentList {{
-    background: #F0F3F9;
+    background: {BG_SIDEBAR};
     border: none;
     outline: none;
 }}
@@ -161,12 +208,29 @@ QListWidget#recentList::item:selected {{
     background: {BG_ACTIVE};
     color: {TEXT};
 }}
+QToolButton#recentMenuBtn {{
+    border: none;
+    background: transparent;
+    color: {TEXT_TERTIARY};
+    font-size: 16px;
+    font-weight: 700;
+    padding: 0px 4px;
+    min-width: 20px;
+    max-width: 20px;
+    min-height: 20px;
+    max-height: 20px;
+    border-radius: {RADIUS_SM - 2}px;
+}}
+QToolButton#recentMenuBtn:hover {{
+    background: {BG_ACTIVE};
+    color: {TEXT};
+}}
 QListWidget#recentList[collapsed="true"]::item {{
     padding-left: 0;
     padding-right: 0;
 }}
 
-/* -- pill tabs --------------------------------------------------------- */
+/* -- pill tab switcher --------------------------------------------------- */
 QTabWidget::pane {{
     border: none;
     top: -1px;
@@ -180,11 +244,10 @@ QTabBar {{
 QTabBar::tab {{
     background: transparent;
     color: {TEXT_SECONDARY};
-    padding: 9px 16px;
-    margin-right: 6px;
-    border: none;
-    border-bottom: 2px solid transparent;
-    border-radius: 0;
+    padding: 8px 16px;
+    margin: 0 2px;
+    border: 1px solid transparent;
+    border-radius: {RADIUS_SM}px;
     font-size: 13px;
     font-weight: 500;
 }}
@@ -193,9 +256,9 @@ QTabBar::tab:hover {{
     color: {TEXT};
 }}
 QTabBar::tab:selected {{
-    background: transparent;
+    background: {BG};
+    border: 1px solid {BORDER};
     color: {TEXT};
-    border-bottom: 2px solid {ACCENT};
     font-weight: 600;
 }}
 
@@ -281,6 +344,20 @@ QComboBox::drop-down {{
 QLineEdit:focus, QComboBox:focus, QSpinBox:focus, QDoubleSpinBox:focus {{
     border-color: {ACCENT};
 }}
+QComboBox QAbstractItemView {{
+    background: {BG};
+    color: {TEXT};
+    border: 1px solid {BORDER};
+    border-radius: {RADIUS_SM}px;
+    outline: none;
+    padding: 4px;
+    selection-background-color: {BG_HOVER};
+    selection-color: {TEXT};
+}}
+QComboBox QAbstractItemView::item {{
+    padding: 6px 8px;
+    border-radius: {RADIUS_SM - 2}px;
+}}
 QCheckBox {{
     spacing: 8px;
     background: transparent;
@@ -315,8 +392,8 @@ QWidget#lgPaletteBar {{
 QPushButton#lgSwatch {{
     font-size: 12.5px;
     font-weight: 600;
-    border-radius: 14px;
-    padding: 5px 13px;
+    border-radius: {RADIUS_PILL}px;
+    padding: 5px 15px;
     min-width: 0;
 }}
 QPushButton#lgSwatch:hover {{
@@ -412,8 +489,8 @@ QLabel#previewStatus {{ color: {TEXT_TERTIARY}; }}
 QPlainTextEdit#rtlPreviewCode {{
     border: 1px solid {BORDER};
     border-radius: {RADIUS_SM}px;
-    background: #fbfbfb;
-    color: #24292f;
+    background: {BG_ELEVATED};
+    color: {TEXT};
     padding: 10px;
     font-family: Consolas, "SF Mono", Menlo, monospace;
     font-size: 12px;
@@ -453,8 +530,8 @@ QDialog {{
 }}
 /* -- desktop polish ----------------------------------------------------- */
 QTableWidget {{
-    alternate-background-color: #fbfbfb;
-    selection-background-color: #dff4ee;
+    alternate-background-color: {BG_ELEVATED};
+    selection-background-color: #f2ded4;
     selection-color: {TEXT};
 }}
 QToolButton#rowPlusBtn, QToolButton#rowMinusBtn {{
@@ -494,6 +571,19 @@ QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {{
     background: transparent;
     border: none;
     height: 0;
+}}
+QScrollBar:horizontal {{ background: transparent; height: 14px; margin: 2px; }}
+QScrollBar::handle:horizontal {{
+    background: #c9c9c9;
+    border-radius: 4px;
+    min-width: 28px;
+}}
+QScrollBar::handle:horizontal:hover {{ background: #aaaaaa; }}
+QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal,
+QScrollBar::add-page:horizontal, QScrollBar::sub-page:horizontal {{
+    background: transparent;
+    border: none;
+    width: 0;
 }}
 QToolTip {{
     background: {TEXT};

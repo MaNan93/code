@@ -1,0 +1,379 @@
+From 6083a4b85025de2a2e6b92b6ba8d6fb85b78c013 Mon Sep 17 00:00:00 2001
+From: MaNan <1607702@qq.com>
+Date: Fri, 11 Sep 2026 23:43:25 +0800
+Subject: [PATCH] fix(plm-qt): scale fixed UI sizes with font size and clamp
+ font range
+
+The Qt frontend broke when a large font size (e.g. 18.5 px) was saved
+in settings: the fixed-width sidebar, lane grid, and tables were sized
+against a 13 px baseline and could not fit the larger text, causing
+overflow and clipped content.
+
+- Clamp Settings font size to 11-16 px and apply the same clamp in
+  MainWindow._apply_font().
+- Introduce _ui_scale() helpers and scale hardcoded widths/heights in
+  sidebar, topbar, tab bar, lane grid, and EditableTable.
+- Replace the lane grid palette bar's QHBoxLayout with a wrapping
+  _FlowLayout so swatches reflow instead of overflowing at narrow
+  widths or larger fonts.
+- Scale lane grid palette swatch padding/radius from the baseline.
+
+Fixes the layout issues visible in the work/ debug screenshots when
+font size was set to 18.5 px.
+---
+ plm/src/plm/frontend/qt/main_window.py      |  40 +++++--
+ plm/src/plm/frontend/qt/widgets/lanegrid.py | 119 +++++++++++++++++---
+ plm/src/plm/frontend/qt/widgets/settings.py |   3 +-
+ plm/src/plm/frontend/qt/widgets/tables.py   |  21 +++-
+ 4 files changed, 151 insertions(+), 32 deletions(-)
+
+diff --git a/plm/src/plm/frontend/qt/main_window.py b/plm/src/plm/frontend/qt/main_window.py
+index 04e418e..35ce65a 100644
+--- a/plm/src/plm/frontend/qt/main_window.py
++++ b/plm/src/plm/frontend/qt/main_window.py
+@@ -56,6 +56,14 @@ DOC_PATH = DOCS_DIR / "tool_usage.md"
+ 
+ 
+ 
++def _ui_scale():
++    """Return a scaling factor relative to the 13 px design baseline so
++    fixed-size UI chrome (sidebar, topbar, table columns, lane grid)
++    stays proportional when the user changes the app font."""
++    app = QtWidgets.QApplication.instance()
++    px = app.font().pixelSize() if app else 13
++    return max(px, 11) / 13.0
++
+ 
+ def _svg_icon(svg_path, color="#5d5d5d", size=16):
+     """Build a small QIcon from an inline SVG path string, stroked with
+@@ -95,8 +103,10 @@ class _StableTabBar(QtWidgets.QTabBar):
+             if hasattr(metrics, "horizontalAdvance")
+             else metrics.width(text)
+         )
+-        # 32 px for the QSS padding plus a small allowance for DPI rounding.
+-        return QtCore.QSize(max(hint.width(), text_width + 40), max(hint.height(), 38))
++        # Scale the 32 px padding allowance with the current font size so tab
++        # labels stay separated under larger fonts / higher DPI.
++        pad = int(40 * _ui_scale())
++        return QtCore.QSize(max(hint.width(), text_width + pad), max(hint.height(), int(38 * _ui_scale())))
+ 
+ 
+ # ---------------------------------------------------------------- state file
+@@ -248,7 +258,10 @@ class MainWindow(QtWidgets.QMainWindow):
+     def _apply_sidebar_collapsed(self):
+         """Collapse to the same icon rail used by the web front end."""
+         collapsed = self._sidebar_collapsed
+-        self.sidebar.setFixedWidth(58 if collapsed else 260)
++        scale = _ui_scale()
++        # Scale sidebar widths from their 13 px baseline so larger fonts still
++        # fit button labels and the brand name.
++        self.sidebar.setFixedWidth(int(58 * scale) if collapsed else int(260 * scale))
+         self.brand_name.setVisible(not collapsed)
+         self.section_header.setVisible(not collapsed)
+         self.recent_list.setHorizontalScrollBarPolicy(
+@@ -258,7 +271,7 @@ class MainWindow(QtWidgets.QMainWindow):
+             button.setText("" if collapsed else f" {label}")
+             button.setToolTip(label)
+             if collapsed:
+-                button.setFixedWidth(42)
++                button.setFixedWidth(int(42 * scale))
+             else:
+                 button.setMinimumWidth(0)
+                 button.setMaximumWidth(16777215)
+@@ -364,16 +377,16 @@ class MainWindow(QtWidgets.QMainWindow):
+         mv.setContentsMargins(0, 0, 0, 0)
+         mv.setSpacing(0)
+ 
+-        topbar = QtWidgets.QWidget()
+-        topbar.setObjectName("topbar")
+-        topbar.setFixedHeight(56)
+-        tl = QtWidgets.QHBoxLayout(topbar)
++        self.topbar = QtWidgets.QWidget()
++        self.topbar.setObjectName("topbar")
++        self.topbar.setFixedHeight(int(56 * _ui_scale()))
++        tl = QtWidgets.QHBoxLayout(self.topbar)
+         tl.setContentsMargins(18, 0, 18, 0)
+         self.workspace_label = QtWidgets.QLabel("No workspace open")
+         self.workspace_label.setObjectName("workspaceTitle")
+         tl.addWidget(self.workspace_label)
+         tl.addStretch(1)
+-        mv.addWidget(topbar)
++        mv.addWidget(self.topbar)
+ 
+         content = QtWidgets.QWidget()
+         cv = QtWidgets.QVBoxLayout(content)
+@@ -822,6 +835,10 @@ class MainWindow(QtWidgets.QMainWindow):
+     def _apply_font(self, settings):
+         family = settings.get("fontFamily")
+         size = settings.get("fontSize") or DEFAULT_SETTINGS["fontSize"]
++        # Clamp to the same range the Settings dialog exposes. Sizes above
++        # ~16 px blow up fixed-width UI parts (sidebar, lane grid, tables)
++        # that are sized against a 13 px baseline.
++        size = max(11, min(size, 16))
+         # QApplication.font()'s own untouched default is locale-dependent,
+         # not "the system UI font" -- on a Chinese-locale Windows install
+         # it can resolve to SimSun (a legacy bitmap CJK font) even for an
+@@ -841,6 +858,11 @@ class MainWindow(QtWidgets.QMainWindow):
+         # font-size in the first place.
+         font.setPixelSize(round(size))
+         QtWidgets.QApplication.instance().setFont(font)
++        # Resize fixed UI chrome whose hardcoded pixel sizes were chosen at
++        # the 13 px baseline, so a larger font doesn't clip text.
++        if getattr(self, "topbar", None) is not None:
++            self.topbar.setFixedHeight(int(56 * _ui_scale()))
++        self._apply_sidebar_collapsed()
+ 
+     def _on_doc(self):
+         dlg = QtWidgets.QDialog(self)
+diff --git a/plm/src/plm/frontend/qt/widgets/lanegrid.py b/plm/src/plm/frontend/qt/widgets/lanegrid.py
+index 5a647ae..7e7a6a6 100644
+--- a/plm/src/plm/frontend/qt/widgets/lanegrid.py
++++ b/plm/src/plm/frontend/qt/widgets/lanegrid.py
+@@ -69,6 +69,13 @@ LANE_MODE_W = 64
+ LANE_ACTIONS_W = 68
+ LANE_MIN_CELL = 26
+ 
++
++def _ui_scale():
++    """Scaling factor relative to the 13 px design baseline."""
++    app = QtWidgets.QApplication.instance()
++    px = app.font().pixelSize() if app else 13
++    return max(px, 11) / 13.0
++
+ # Paint stroke opacity constants -- match style.css's color-mix values:
+ #   .lg-painted::before  -> color-mix(in srgb, var(--paint) 58%, transparent)
+ #   .lg-preview::before  -> color-mix(in srgb, var(--paint) 78%, transparent)
+@@ -234,6 +241,80 @@ class _LaneCellDelegate(QtWidgets.QStyledItemDelegate):
+         painter.fillPath(path, c)
+ 
+ 
++class _FlowLayout(QtWidgets.QLayout):
++    """A left-to-right, top-to-bottom wrapping layout for the palette
++    bar so controller swatches reflow instead of overflowing the lane
++    mapping page at narrow widths or larger font sizes."""
++
++    def __init__(self, parent=None, margin=0, h_spacing=6, v_spacing=6):
++        super().__init__(parent)
++        if parent is not None:
++            self.setContentsMargins(margin, margin, margin, margin)
++        self._h_spacing = h_spacing
++        self._v_spacing = v_spacing
++        self._items = []
++
++    def addItem(self, item):
++        self._items.append(item)
++
++    def count(self):
++        return len(self._items)
++
++    def itemAt(self, index):
++        if 0 <= index < len(self._items):
++            return self._items[index]
++        return None
++
++    def takeAt(self, index):
++        if 0 <= index < len(self._items):
++            return self._items.pop(index)
++        return None
++
++    def expandingDirections(self):
++        return QtCore.Qt.Orientations(0)
++
++    def hasHeightForWidth(self):
++        return True
++
++    def heightForWidth(self, width):
++        return self._do_layout(QtCore.QRect(0, 0, width, 0), True)
++
++    def setGeometry(self, rect):
++        super().setGeometry(rect)
++        self._do_layout(rect, False)
++
++    def sizeHint(self):
++        return self.minimumSize()
++
++    def minimumSize(self):
++        size = QtCore.QSize()
++        for item in self._items:
++            size = size.expandedTo(item.minimumSize())
++        margin = self.contentsMargins()
++        size += QtCore.QSize(margin.left() + margin.right(), margin.top() + margin.bottom())
++        return size
++
++    def _do_layout(self, rect, test_only):
++        x = rect.x()
++        y = rect.y()
++        line_height = 0
++        for item in self._items:
++            wid = item.widget()
++            space_x = self._h_spacing
++            space_y = self._v_spacing
++            next_x = x + item.sizeHint().width() + space_x
++            if next_x - space_x > rect.right() and line_height > 0:
++                x = rect.x()
++                y += line_height + space_y
++                next_x = x + item.sizeHint().width() + space_x
++                line_height = 0
++            if not test_only:
++                item.setGeometry(QtCore.QRect(QtCore.QPoint(x, y), item.sizeHint()))
++            x = next_x
++            line_height = max(line_height, item.sizeHint().height())
++        return y + line_height - rect.y()
++
++
+ class LaneGrid(QtWidgets.QWidget):
+     def __init__(self, parent=None):
+         super().__init__(parent)
+@@ -260,12 +341,11 @@ class LaneGrid(QtWidgets.QWidget):
+         self.palette_bar = QtWidgets.QWidget()
+         self.palette_bar.setObjectName("lgPaletteBar")
+         palette_outer = QtWidgets.QVBoxLayout(self.palette_bar)
+-        palette_outer.setContentsMargins(0, 0, 0, 8)
+-        palette_outer.setSpacing(6)
+-        # Use a flow layout: we add swatches in a horizontal row that wraps
+-        self._palette_flow = QtWidgets.QHBoxLayout()
+-        self._palette_flow.setContentsMargins(0, 0, 0, 0)
+-        self._palette_flow.setSpacing(6)
++        palette_outer.setContentsMargins(0, 0, 0, int(8 * _ui_scale()))
++        palette_outer.setSpacing(int(6 * _ui_scale()))
++        # Use a flow layout so swatches wrap to multiple rows instead of
++        # overflowing the lane mapping page at narrow widths.
++        self._palette_flow = _FlowLayout(h_spacing=int(6 * _ui_scale()), v_spacing=int(6 * _ui_scale()))
+         palette_outer.addLayout(self._palette_flow)
+         layout.addWidget(self.palette_bar)
+ 
+@@ -334,6 +414,7 @@ class LaneGrid(QtWidgets.QWidget):
+ 
+     # ------------------------------------------------------------ palette
+     def _render_palette(self):
++        scale = _ui_scale()
+         # Clear existing swatches
+         while self._palette_flow.count():
+             item = self._palette_flow.takeAt(0)
+@@ -350,20 +431,21 @@ class LaneGrid(QtWidgets.QWidget):
+             btn.setCheckable(True)
+             btn.setChecked(is_active)
+             text_color = _contrast_text_color(color)
+-            # Pill shape: fully rounded ends, border, active gets inner ring
++            # Pill shape: fully rounded ends, border, active gets inner ring.
++            # Scale padding/radius/font from the 13 px baseline.
+             border_color = "#0d0d0d" if is_active else "#e5e5e5"
+             outline = (
+-                f"border: 2px solid {border_color};" if is_active
+-                else f"border: 1px solid {border_color};"
++                f"border: {int(2 * scale)}px solid {border_color};" if is_active
++                else f"border: {int(1 * scale)}px solid {border_color};"
+             )
+             btn.setStyleSheet(
+                 f"QPushButton#lgSwatch {{"
+                 f"  background-color: {color};"
+                 f"  color: {text_color};"
+-                f"  font-size: 12.5px;"
++                f"  font-size: {12.5 * scale:.1f}px;"
+                 f"  font-weight: 600;"
+-                f"  border-radius: 14px;"
+-                f"  padding: 5px 13px;"
++                f"  border-radius: {int(14 * scale)}px;"
++                f"  padding: {int(5 * scale)}px {int(13 * scale)}px;"
+                 f"  {outline}"
+                 f"}}"
+                 f"QPushButton#lgSwatch:hover {{"
+@@ -373,7 +455,6 @@ class LaneGrid(QtWidgets.QWidget):
+             btn.setCursor(QtCore.Qt.PointingHandCursor)
+             btn.clicked.connect(lambda _checked=False, cid=cid: self._set_active_controller(cid))
+             self._palette_flow.addWidget(btn)
+-        self._palette_flow.addStretch(1)
+ 
+     def _set_active_controller(self, cid):
+         self.active_ctrl_id = cid
+@@ -420,15 +501,19 @@ class LaneGrid(QtWidgets.QWidget):
+         column auto-sizing."""
+         if self.lane_count <= 0 or self.table.columnCount() < self.lane_count + 2:
+             return
+-        avail = self.table.viewport().width() - LANE_MODE_W - LANE_ACTIONS_W
++        scale = _ui_scale()
++        mode_w = int(LANE_MODE_W * scale)
++        actions_w = int(LANE_ACTIONS_W * scale)
++        min_cell = int(LANE_MIN_CELL * scale)
++        avail = self.table.viewport().width() - mode_w - actions_w
+         n = max(1, self.lane_count)
+         w32 = avail / 32 if avail > 0 else 0
+         w = w32 * (LANE_W_RATIO ** math.log2(32 / n))
+-        min_w = max(int(w), LANE_MIN_CELL)
+-        self.table.setColumnWidth(0, LANE_MODE_W)
++        min_w = max(int(w), min_cell)
++        self.table.setColumnWidth(0, mode_w)
+         for l in range(self.lane_count):
+             self.table.setColumnWidth(l + 1, min_w)
+-        self.table.setColumnWidth(self.lane_count + 1, LANE_ACTIONS_W)
++        self.table.setColumnWidth(self.lane_count + 1, actions_w)
+ 
+     def _render_body(self):
+         self._building = True
+diff --git a/plm/src/plm/frontend/qt/widgets/settings.py b/plm/src/plm/frontend/qt/widgets/settings.py
+index 55ce1d1..871394a 100644
+--- a/plm/src/plm/frontend/qt/widgets/settings.py
++++ b/plm/src/plm/frontend/qt/widgets/settings.py
+@@ -62,7 +62,8 @@ class SettingsDialog(QtWidgets.QDialog):
+         form.addRow("Font:", self.font_family_edit)
+ 
+         self.font_size_spin = QtWidgets.QDoubleSpinBox()
+-        self.font_size_spin.setRange(11, 20)
++        self.font_size_spin.setRange(11, 16)
++        self.font_size_spin.setDecimals(1)
+         self.font_size_spin.setValue(self._settings.get("fontSize") or DEFAULT_SETTINGS["fontSize"])
+         form.addRow("Font size:", self.font_size_spin)
+ 
+diff --git a/plm/src/plm/frontend/qt/widgets/tables.py b/plm/src/plm/frontend/qt/widgets/tables.py
+index d6efbd6..8f86751 100644
+--- a/plm/src/plm/frontend/qt/widgets/tables.py
++++ b/plm/src/plm/frontend/qt/widgets/tables.py
+@@ -20,6 +20,13 @@ compound on top of the last one's now-stale visual/logical mapping.
+ from PyQt5 import QtCore, QtWidgets
+ 
+ 
++def _ui_scale():
++    """Scaling factor relative to the 13 px design baseline."""
++    app = QtWidgets.QApplication.instance()
++    px = app.font().pixelSize() if app else 13
++    return max(px, 11) / 13.0
++
++
+ class EditableTable(QtWidgets.QWidget):
+     # columns: [{"key", "heading"?, "options"?: [...]}] -- options makes
+     #          that column a QComboBox instead of a free-text cell.
+@@ -40,7 +47,8 @@ class EditableTable(QtWidgets.QWidget):
+         self.table.setColumnCount(len(columns) + 1)  # + one actions column
+         self.table.setHorizontalHeaderLabels([c.get("heading", c["key"]) for c in columns] + [""])
+         header = self.table.horizontalHeader()
+-        header.setMinimumSectionSize(72)
++        scale = _ui_scale()
++        header.setMinimumSectionSize(int(72 * scale))
+         header.setTextElideMode(QtCore.Qt.ElideRight)
+         metrics = header.fontMetrics()
+         for index, column in enumerate(columns):
+@@ -52,14 +60,17 @@ class EditableTable(QtWidgets.QWidget):
+                     if hasattr(metrics, "horizontalAdvance")
+                     else metrics.width(heading)
+                 )
+-                self.table.setColumnWidth(index, max(int(column["width"]), text_width + 28))
++                # Scale the design width and the heading padding from 13 px baseline.
++                target = max(int(column["width"] * scale), text_width + int(28 * scale))
++                self.table.setColumnWidth(index, target)
+             else:
+                 header.setSectionResizeMode(index, QtWidgets.QHeaderView.Stretch)
+         header.setSectionResizeMode(len(columns), QtWidgets.QHeaderView.Fixed)
+-        self.table.setColumnWidth(len(columns), 72)
++        # Action column needs room for +/- buttons at the current font size.
++        self.table.setColumnWidth(len(columns), int(72 * scale))
+         self.table.setHorizontalScrollMode(QtWidgets.QAbstractItemView.ScrollPerPixel)
+-        self.table.verticalHeader().setDefaultSectionSize(38)
+-        self.table.verticalHeader().setMinimumSectionSize(34)
++        self.table.verticalHeader().setDefaultSectionSize(int(38 * scale))
++        self.table.verticalHeader().setMinimumSectionSize(int(34 * scale))
+         self.table.setAlternatingRowColors(True)
+         self.table.setSelectionBehavior(QtWidgets.QAbstractItemView.SelectItems)
+         self.table.setSelectionMode(QtWidgets.QAbstractItemView.ExtendedSelection)
+-- 
+2.55.0.windows.3
+

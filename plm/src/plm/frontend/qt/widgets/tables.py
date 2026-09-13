@@ -19,7 +19,7 @@ compound on top of the last one's now-stale visual/logical mapping.
 
 from PyQt5 import QtCore, QtGui, QtWidgets
 
-from plm.frontend.qt.widgets.theme import RoundedComboBox
+from plm.frontend.qt.widgets.theme import ACCENT, RoundedComboBox
 
 
 _DRAG_HANDLE_ICON = None
@@ -62,6 +62,13 @@ class RowDragTable(QtWidgets.QTableWidget):
     """Table with whole-row selection and a native drag ghost/drop line."""
 
     rowMoveRequested = QtCore.pyqtSignal(int, int)
+    # Emitted for a right-click (or Menu-key press) anywhere in the table,
+    # row == -1 if it landed on no row. A direct contextMenuEvent()
+    # override, not the usual viewport()-CustomContextMenu-policy idiom --
+    # that idiom silently never fires for cells with no cell widget on top
+    # of them (only cells hosting a combo box got a menu), while this is
+    # guaranteed to run for every click regardless of what's in the cell.
+    rowContextMenuRequested = QtCore.pyqtSignal(int, QtCore.QPoint)
     MIME_TYPE = "application/x-plm-table-row"
 
     def __init__(self, drag_columns=None, parent=None):
@@ -89,6 +96,11 @@ class RowDragTable(QtWidgets.QTableWidget):
         else:
             self._row_drag_start = None
             self._row_drag_source = -1
+
+    def contextMenuEvent(self, event):
+        index = self.indexAt(event.pos())
+        self.rowContextMenuRequested.emit(index.row() if index.isValid() else -1, event.globalPos())
+        event.accept()
 
     def mouseMoveEvent(self, event):
         if (
@@ -168,7 +180,7 @@ class RowDragTable(QtWidgets.QTableWidget):
             rect = self.visualRect(self.model().index(self._drop_before_row, 0))
             y = rect.top()
         painter = QtGui.QPainter(self.viewport())
-        painter.setPen(QtGui.QPen(QtGui.QColor("#10a37f"), 2))
+        painter.setPen(QtGui.QPen(QtGui.QColor(ACCENT), 2))
         painter.drawLine(0, y, self.viewport().width(), y)
 
 
@@ -225,8 +237,7 @@ class EditableTable(QtWidgets.QWidget):
             header.setSectionResizeMode(index, QtWidgets.QHeaderView.Fixed)
         self.table.setHorizontalScrollMode(QtWidgets.QAbstractItemView.ScrollPerPixel)
         self.table.setAlternatingRowColors(True)
-        self.table.viewport().setContextMenuPolicy(QtCore.Qt.CustomContextMenu)
-        self.table.viewport().customContextMenuRequested.connect(self._on_row_context_menu)
+        self.table.rowContextMenuRequested.connect(self._on_row_context_menu)
         row_header = self.table.verticalHeader()
         row_header.hide()
         self.table.rowMoveRequested.connect(self._on_row_drop)
@@ -351,15 +362,12 @@ class EditableTable(QtWidgets.QWidget):
                     self.table.setItem(r, c, item)
         self._building = False
 
-    def _on_row_context_menu(self, pos):
-        index = self.table.indexAt(pos)
-        if index.isValid():
-            row = index.row()
-        else:
+    def _on_row_context_menu(self, row, global_pos):
+        if row < 0:
             row = self.table.currentRow()
             if row < 0 and self.table.rowCount():
                 row = self.table.rowCount() - 1
-        self._show_row_context_menu(row, self.table.viewport().mapToGlobal(pos))
+        self._show_row_context_menu(row, global_pos)
 
     def _show_row_context_menu(self, row, global_pos):
         if row >= 0:

@@ -51,6 +51,7 @@ import math
 from PyQt5 import QtCore, QtGui, QtWidgets
 
 from plm.frontend.qt.widgets.tables import RowDragTable
+from plm.frontend.qt.widgets.theme import BORDER, BORDER_STRONG, TEXT, add_shadow
 
 LANE_GRID_PALETTE = [
     "#4C78A8", "#F58518", "#54A24B", "#E45756", "#72B7B2",
@@ -364,8 +365,7 @@ class LaneGrid(QtWidgets.QWidget):
         self.table.setObjectName("laneGrid")
         self.table.setHorizontalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOff)
         self.table.setHorizontalScrollMode(QtWidgets.QAbstractItemView.ScrollPerPixel)
-        self.table.viewport().setContextMenuPolicy(QtCore.Qt.CustomContextMenu)
-        self.table.viewport().customContextMenuRequested.connect(self._on_row_context_menu)
+        self.table.rowContextMenuRequested.connect(self._on_row_context_menu)
         lane_header = self.table.horizontalHeader()
         lane_header.setMinimumSectionSize(1)
         lane_header.setDefaultAlignment(QtCore.Qt.AlignCenter)
@@ -462,7 +462,7 @@ class LaneGrid(QtWidgets.QWidget):
             text_color = _contrast_text_color(color)
             # Pill shape: fully rounded ends, border, active gets inner ring.
             # Scale padding/radius/font from the 13 px baseline.
-            border_color = "#0d0d0d" if is_active else "#e5e5e5"
+            border_color = TEXT if is_active else BORDER
             outline = (
                 f"border: {int(2 * scale)}px solid {border_color};" if is_active
                 else f"border: {int(1 * scale)}px solid {border_color};"
@@ -474,15 +474,19 @@ class LaneGrid(QtWidgets.QWidget):
                 f"  font-size: {12.5 * scale:.1f}px;"
                 f"  font-weight: 600;"
                 f"  border-radius: {int(14 * scale)}px;"
-                f"  padding: {int(5 * scale)}px {int(13 * scale)}px;"
+                # Horizontal padding must be >= the border-radius, otherwise
+                # the pill's rounded ends bite into the top/bottom of the
+                # first/last character before the flat padding band starts.
+                f"  padding: {int(5 * scale)}px {int(15 * scale)}px;"
                 f"  {outline}"
                 f"}}"
                 f"QPushButton#lgSwatch:hover {{"
-                f"  border-color: #d4d4d4;"
+                f"  border-color: {BORDER_STRONG};"
                 f"}}"
             )
             btn.setCursor(QtCore.Qt.PointingHandCursor)
             btn.setMinimumHeight(int(30 * scale))
+            add_shadow(btn, blur=int(8 * scale), offset=(0, int(1 * scale)), alpha=45)
             btn.clicked.connect(lambda _checked=False, cid=cid: self._set_active_controller(cid))
             self._palette_flow.addWidget(btn)
         self._palette_flow.invalidate()
@@ -735,11 +739,8 @@ class LaneGrid(QtWidgets.QWidget):
         elif chosen == delete_action:
             self._delete_row(logical)
 
-    def _on_row_context_menu(self, pos):
-        index = self.table.indexAt(pos)
-        if index.isValid():
-            row = index.row()
-        else:
+    def _on_row_context_menu(self, row, global_pos):
+        if row < 0:
             row = self.table.currentRow()
             if row < 0 and self.table.rowCount():
                 row = self.table.rowCount() - 1
@@ -755,7 +756,7 @@ class LaneGrid(QtWidgets.QWidget):
             insert_above = None
             insert_below = menu.addAction("Insert row")
             delete_current = None
-        chosen = menu.exec_(self.table.viewport().mapToGlobal(pos))
+        chosen = menu.exec_(global_pos)
         if insert_above is not None and chosen == insert_above:
             self._insert_row_above(row)
         elif chosen == insert_below:

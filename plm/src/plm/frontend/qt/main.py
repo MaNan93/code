@@ -7,6 +7,7 @@ Run: python3 -m plm.frontend.qt.main
 """
 
 import sys
+from pathlib import Path
 
 try:
     from PyQt5 import QtCore, QtGui, QtWidgets
@@ -18,7 +19,9 @@ except ImportError:
     )
 
 from plm.frontend.qt.main_window import MainWindow
-from plm.frontend.qt.widgets.theme import STYLESHEET
+from plm.frontend.qt.widgets.theme import STYLESHEET, apply_titlebar_theme
+
+APP_ICON_PATH = Path(__file__).resolve().parent.parent / "web" / "static" / "mario_icon.png"
 
 
 def main():
@@ -28,6 +31,11 @@ def main():
         QtWidgets.QApplication.setAttribute(QtCore.Qt.AA_UseHighDpiPixmaps, True)
     app = QtWidgets.QApplication(sys.argv)
     app.setApplicationName("plmConsultant")
+    if APP_ICON_PATH.is_file():
+        # Set on the app, not just the main window, so every top-level
+        # window/dialog (Settings, Documentation, ...) that doesn't set
+        # its own icon inherits this one for free.
+        app.setWindowIcon(QtGui.QIcon(str(APP_ICON_PATH)))
     # Custom QSS on QTabBar/QPushButton/etc. renders inconsistently (tabs
     # overlapping, buttons losing their box) under whichever native style
     # (windowsvista, GTK, ...) is active by default -- each native style
@@ -48,6 +56,7 @@ def main():
     app.setFont(QtGui.QFont("Segoe UI", 13))
     app.setStyleSheet(STYLESHEET)
     win = MainWindow()
+    apply_titlebar_theme(win)
     win.show()
     sys.exit(app.exec_())
 

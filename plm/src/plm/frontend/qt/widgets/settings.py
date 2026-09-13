@@ -28,7 +28,7 @@ from plm.core.verible import (
     VERIBLE_ALIGN_PARAMS,
     find_verible,
 )
-from plm.frontend.qt.widgets.theme import RoundedComboBox
+from plm.frontend.qt.widgets.theme import RoundedComboBox, add_shadow, apply_titlebar_theme
 
 DEFAULT_SETTINGS = {
     "veriblePath": "",
@@ -46,7 +46,10 @@ class _SettingsTabBar(QtWidgets.QTabBar):
         hint = super().tabSizeHint(index)
         metrics = QtGui.QFontMetrics(self.font())
         text_width = metrics.horizontalAdvance(self.tabText(index))
-        tab_height = metrics.height() + 22
+        # Match the pill QSS's own "padding: 8px 16px" instead of a taller
+        # ad-hoc value -- keeps the selected tab's filled chip snug around
+        # the text instead of ballooning into a big blank rectangle.
+        tab_height = max(32, metrics.height() + 16)
         return QtCore.QSize(max(hint.width(), text_width + 36), max(hint.height(), tab_height))
 
 
@@ -56,6 +59,7 @@ class SettingsDialog(QtWidgets.QDialog):
         self.setWindowTitle("Settings")
         self.setWindowFlag(QtCore.Qt.WindowContextHelpButtonHint, False)
         self.resize(560, 520)
+        apply_titlebar_theme(self)
         self._settings = {**DEFAULT_SETTINGS, **(settings or {})}
         self._flag_widgets = {}  # param -> QComboBox/QLineEdit
 
@@ -66,6 +70,7 @@ class SettingsDialog(QtWidgets.QDialog):
         tab_bar.setExpanding(False)
         tab_bar.setUsesScrollButtons(False)
         tab_bar.setElideMode(QtCore.Qt.ElideNone)
+        add_shadow(tab_bar, blur=10, offset=(0, 2), alpha=30)
         tabs.setTabBar(tab_bar)
         tabs.addTab(self._build_general_tab(), "General")
         tabs.addTab(self._build_formatter_tab(), "Formatter")
@@ -73,6 +78,8 @@ class SettingsDialog(QtWidgets.QDialog):
 
         buttons = QtWidgets.QDialogButtonBox(QtWidgets.QDialogButtonBox.Save | QtWidgets.QDialogButtonBox.Cancel)
         buttons.button(QtWidgets.QDialogButtonBox.Save).setObjectName("primaryBtn")
+        for role in (QtWidgets.QDialogButtonBox.Save, QtWidgets.QDialogButtonBox.Cancel):
+            add_shadow(buttons.button(role), blur=10, offset=(0, 1), alpha=40)
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)
         outer.addWidget(buttons)
@@ -101,13 +108,10 @@ class SettingsDialog(QtWidgets.QDialog):
         editor_layout.addWidget(self.editor_path_edit, stretch=1)
         editor_browse = QtWidgets.QPushButton("Browse")
         editor_browse.clicked.connect(self._browse_editor)
+        add_shadow(editor_browse, blur=10, offset=(0, 1), alpha=40)
         editor_layout.addWidget(editor_browse)
         form.addRow("Editor:", editor_row)
 
-        hint = QtWidgets.QLabel("Applies app-wide. Leave Font blank to use the system default.")
-        hint.setObjectName("hint")
-        hint.setWordWrap(True)
-        form.addRow(hint)
         return tab
 
     # ------------------------------------------------------------ Formatter
@@ -120,14 +124,11 @@ class SettingsDialog(QtWidgets.QDialog):
         path_row.addWidget(self.verible_path_edit, stretch=1)
         detect_btn = QtWidgets.QPushButton("Auto-detect")
         detect_btn.clicked.connect(self._on_detect)
+        add_shadow(detect_btn, blur=10, offset=(0, 1), alpha=40)
         path_row.addWidget(detect_btn)
         outer.addLayout(path_row)
 
-        hint = QtWidgets.QLabel(
-            "Used to auto-format generated RTL/TB. Applies to every workspace (stored in this "
-            "app's own settings file, not written into any workspace's own files). Leave a "
-            "numeric field blank to omit that flag."
-        )
+        hint = QtWidgets.QLabel("Use verible-verilog-format to format Verilog files.")
         hint.setObjectName("hint")
         hint.setWordWrap(True)
         outer.addWidget(hint)
@@ -144,6 +145,7 @@ class SettingsDialog(QtWidgets.QDialog):
 
         reset_btn = QtWidgets.QPushButton("Reset to default")
         reset_btn.clicked.connect(lambda: self._build_flags_form(None))
+        add_shadow(reset_btn, blur=10, offset=(0, 1), alpha=40)
         outer.addWidget(reset_btn)
 
         return tab

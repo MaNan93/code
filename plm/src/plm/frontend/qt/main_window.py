@@ -39,7 +39,15 @@ from plm.core.workspace import save_workspace_content, scaffold_default_content,
 from plm.frontend.qt.widgets.lanegrid import LaneGrid
 from plm.frontend.qt.widgets.settings import DEFAULT_SETTINGS, SettingsDialog
 from plm.frontend.qt.widgets.tables import EditableTable
-from plm.frontend.qt.widgets.theme import RoundedComboBox, VisibleCheckBox
+from plm.frontend.qt.widgets.theme import (
+    BG_HOVER,
+    TEXT_SECONDARY,
+    TEXT_TERTIARY,
+    RoundedComboBox,
+    VisibleCheckBox,
+    add_shadow,
+    apply_titlebar_theme,
+)
 
 STATE_FILE = Path.home() / ".plm_qt_settings.json"
 MAX_RECENT_WORKSPACES = 10
@@ -54,7 +62,7 @@ PCLK_MODES = ["(default: pclk_as_phy_output)", "pclk_as_phy_output", "pclk_as_ph
 SEL_MODES = ["(default: sync)", "sync", "comb"]
 LANE_COUNTS = ["x2", "x4", "x8", "x16", "x32"]
 DOC_PATH = DOCS_DIR / "tool_usage.md"
-PREVIEW_MAXIMIZE_SNAP_RATIO = 0.25
+PREVIEW_MAXIMIZE_ANIM_MS = 180
 
 
 
@@ -67,7 +75,7 @@ def _ui_scale():
     return max(px, 11) / 13.0
 
 
-def _svg_icon(svg_path, color="#5d5d5d", size=22):
+def _svg_icon(svg_path, color=TEXT_SECONDARY, size=22):
     """Build a small QIcon from an inline SVG path string, stroked with
     the given colour -- matches the web version's monochrome stroke-based
     sidebar icon set (style.css comment: 'All sidebar icons are stroke-
@@ -91,7 +99,11 @@ _SVG_SAVE = '<path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1
 _SVG_OPEN = '<path d="M3 7a2 2 0 0 1 2-2h4l2 3h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>'
 _SVG_PREVIEW_PANEL = '<rect x="3" y="4" width="18" height="16" rx="3"/><path d="M15 4v16"/>'
 _SVG_PREVIEW_EXPAND = '<path d="M8 3H3v5M16 21h5v-5M3 8l6-6M21 16l-6 6"/>'
-_SVG_MORE = '<circle cx="6" cy="12" r="1" fill="#8e8e8e" stroke="none"/><circle cx="12" cy="12" r="1" fill="#8e8e8e" stroke="none"/><circle cx="18" cy="12" r="1" fill="#8e8e8e" stroke="none"/>'
+_SVG_MORE = (
+    f'<circle cx="6" cy="12" r="1" fill="{TEXT_TERTIARY}" stroke="none"/>'
+    f'<circle cx="12" cy="12" r="1" fill="{TEXT_TERTIARY}" stroke="none"/>'
+    f'<circle cx="18" cy="12" r="1" fill="{TEXT_TERTIARY}" stroke="none"/>'
+)
 _SVG_CHEVRON_DOWN = '<path d="m7 9 5 5 5-5"/>'
 _SVG_CHEVRON_RIGHT = '<path d="m9 7 5 5-5 5"/>'
 _SVG_REFRESH = '<path d="M20 11a8 8 0 1 0 2 5.3"/><path d="M20 4v7h-7"/>'
@@ -112,11 +124,53 @@ class _StableTabBar(QtWidgets.QTabBar):
             if hasattr(metrics, "horizontalAdvance")
             else metrics.width(text)
         )
-        # Scale the 32 px padding allowance with the current font size so tab
-        # labels stay separated under larger fonts / higher DPI.
-        pad = int(28 * _ui_scale())
-        tab_height = max(int(42 * _ui_scale()), metrics.height() + 20)
+        # Must cover the QSS pill's own horizontal padding (16px each side)
+        # + tab margin (2px each side) + border (1px each side) = 38px, with
+        # real slack -- horizontalAdvance() alone runs right up against that
+        # budget and clips the first/last glyph (seen with "Pipe Signals").
+        pad = int(48 * _ui_scale())
+        # Match the QSS pill's own "padding: 8px 16px" (unscaled) instead of
+        # a much taller fixed floor -- that mismatch is what made the
+        # selected tab's filled chip look like an oversized white block.
+        tab_height = max(32, metrics.height() + 16)
         return QtCore.QSize(max(hint.width(), text_width + pad), tab_height)
+
+
+class _RecentItemRow(QtWidgets.QWidget):
+    """A Recent-list row: name + an always-visible "more options" (kebab)
+    button that opens the same menu right-click already offered, so the
+    action isn't only discoverable by right-clicking."""
+
+    open_requested = QtCore.pyqtSignal()
+    menu_requested = QtCore.pyqtSignal(QtCore.QPoint)
+
+    def __init__(self, text, alignment, parent=None):
+        super().__init__(parent)
+        self.setAttribute(QtCore.Qt.WA_StyledBackground, False)
+        layout = QtWidgets.QHBoxLayout(self)
+        layout.setContentsMargins(10, 0, 2, 0)
+        layout.setSpacing(2)
+        self.label = QtWidgets.QLabel(text)
+        self.label.setAlignment(alignment)
+        layout.addWidget(self.label, stretch=1)
+        self.menu_btn = QtWidgets.QToolButton()
+        self.menu_btn.setObjectName("recentMenuBtn")
+        self.menu_btn.setText("⋮")
+        self.menu_btn.setCursor(QtCore.Qt.PointingHandCursor)
+        self.menu_btn.setToolTip("More options")
+        self.menu_btn.clicked.connect(self._emit_menu_requested)
+        layout.addWidget(self.menu_btn)
+
+    def _emit_menu_requested(self):
+        pos = self.menu_btn.mapToGlobal(QtCore.QPoint(0, self.menu_btn.height()))
+        self.menu_requested.emit(pos)
+
+    def mousePressEvent(self, event):
+        # Only the label/background area falls through to here -- clicks on
+        # menu_btn are consumed by the button itself before reaching this.
+        if event.button() == QtCore.Qt.LeftButton:
+            self.open_requested.emit()
+        super().mousePressEvent(event)
 
 
 class _LineNumberArea(QtWidgets.QWidget):
@@ -165,8 +219,8 @@ class _CodePreviewEdit(QtWidgets.QPlainTextEdit):
 
     def paint_line_number_area(self, event):
         painter = QtGui.QPainter(self.line_number_area)
-        painter.fillRect(event.rect(), QtGui.QColor("#f3f3f3"))
-        painter.setPen(QtGui.QColor("#9a9a9a"))
+        painter.fillRect(event.rect(), QtGui.QColor(BG_HOVER))
+        painter.setPen(QtGui.QColor(TEXT_TERTIARY))
 
         block = self.firstVisibleBlock()
         number = block.blockNumber()
@@ -304,13 +358,13 @@ class MainWindow(QtWidgets.QMainWindow):
         self.content_splitter = QtWidgets.QSplitter(QtCore.Qt.Horizontal)
         self.content_splitter.setObjectName("contentSplitter")
         self.content_splitter.setChildrenCollapsible(False)
-        self.content_splitter.setCollapsible(0, True)
-        self.content_splitter.setCollapsible(1, False)
         self.content_splitter.setHandleWidth(1)
         self.content_splitter.splitterMoved.connect(self._on_content_splitter_moved)
         self.content_splitter.addWidget(self._build_main())
         self.rtl_preview_panel = self._build_rtl_preview_panel()
         self.content_splitter.addWidget(self.rtl_preview_panel)
+        self.content_splitter.setCollapsible(0, True)
+        self.content_splitter.setCollapsible(1, False)
         self.main_area.installEventFilter(self)
         self.editor_shell.installEventFilter(self)
         self.rtl_preview_panel.installEventFilter(self)
@@ -318,6 +372,8 @@ class MainWindow(QtWidgets.QMainWindow):
         self.content_splitter.setStretchFactor(1, 1)
         self.rtl_preview_panel.hide()
         self._preview_maximized = False
+        self._preview_maximize_pending = False
+        self._splitter_animation = None
         root.addWidget(self.content_splitter, stretch=1)
 
         self.preview_controls = self._build_preview_controls(central)
@@ -428,7 +484,9 @@ class MainWindow(QtWidgets.QMainWindow):
         rail_button_width = self.sidebar.width() - 16
         for button, label in self.sidebar_action_buttons + self.sidebar_bottom_buttons:
             button.setText("" if collapsed else f" {label}")
-            button.setToolTip(label)
+            # A tooltip repeating the label is only useful once the label
+            # itself is hidden (collapsed, icon-only rail).
+            button.setToolTip(label if collapsed else "")
             button.setProperty("collapsed", collapsed)
             button.setIconSize(QtCore.QSize(22, 22))
             button.setFixedHeight(42)
@@ -463,7 +521,7 @@ class MainWindow(QtWidgets.QMainWindow):
         hl.addItem(self.brand_left_spacer)
         brand_mark = QtWidgets.QLabel()
         self.brand_mark = brand_mark
-        mario = Path(__file__).resolve().parent.parent / "web" / "static" / "mario.png"
+        mario = Path(__file__).resolve().parent.parent / "web" / "static" / "mario_icon.png"
         if mario.is_file():
             pix = QtGui.QPixmap(str(mario)).scaled(
                 28, 28, QtCore.Qt.KeepAspectRatioByExpanding, QtCore.Qt.SmoothTransformation
@@ -499,6 +557,7 @@ class MainWindow(QtWidgets.QMainWindow):
                 b.setIconSize(QtCore.QSize(22, 22))
                 b.setLayoutDirection(QtCore.Qt.LeftToRight)
                 b.setStyleSheet(b.styleSheet() + "" if b.styleSheet() else "")
+            add_shadow(b, blur=8, offset=(0, 1), alpha=30)
             b.clicked.connect(handler)
             al.addWidget(b)
         sb.addWidget(actions)
@@ -537,6 +596,7 @@ class MainWindow(QtWidgets.QMainWindow):
             if not icon.isNull():
                 b.setIcon(icon)
                 b.setIconSize(QtCore.QSize(22, 22))
+            add_shadow(b, blur=8, offset=(0, 1), alpha=30)
             b.clicked.connect(handler)
             bl.addWidget(b)
         sb.addWidget(bottom)
@@ -565,6 +625,7 @@ class MainWindow(QtWidgets.QMainWindow):
         tab_bar.setExpanding(False)
         tab_bar.setUsesScrollButtons(False)
         tab_bar.setElideMode(QtCore.Qt.ElideNone)
+        add_shadow(tab_bar, blur=10, offset=(0, 2), alpha=30)
         self.tabs.setTabBar(tab_bar)
         self.tabs.addTab(self._build_controllers_tab(), "Controllers")
         self._lane_mapping_page = self._build_lane_mapping_tab()
@@ -674,7 +735,11 @@ class MainWindow(QtWidgets.QMainWindow):
         return panel
 
     def _on_toggle_rtl_preview(self, checked):
+        if getattr(self, "_splitter_animation", None) is not None:
+            self._splitter_animation.stop()
+            self._splitter_animation = None
         self._preview_maximized = False
+        self._preview_maximize_pending = False
         self.main_area.setVisible(True)
         self.rtl_preview_panel.setVisible(checked)
         self.preview_toggle_btn.setChecked(checked)
@@ -690,19 +755,75 @@ class MainWindow(QtWidgets.QMainWindow):
         self._position_preview_controls()
         QtCore.QTimer.singleShot(0, self._position_floating_log)
 
+    def _last_tab_reveal_width(self):
+        """Width the tab bar (flush with main_area's left/right edges) needs
+        so its last tab -- Generation -- is fully visible and not clipped by
+        a narrower left splitter pane."""
+        tab_bar = self.tabs.tabBar()
+        count = tab_bar.count()
+        if count == 0:
+            return 0
+        rect = tab_bar.tabRect(count - 1)
+        return rect.x() + rect.width()
+
     def _on_content_splitter_moved(self, position, _index):
         self._position_floating_log()
         if (
             getattr(self, "_preview_maximized", False)
+            or getattr(self, "_preview_maximize_pending", False)
             or self.rtl_preview_panel.isHidden()
             or not self.main_area.isVisible()
         ):
             return
-        snap_position = int(self.content_splitter.width() * PREVIEW_MAXIMIZE_SNAP_RATIO)
+        snap_position = self._last_tab_reveal_width()
         if position <= snap_position:
-            QtCore.QTimer.singleShot(0, self._on_toggle_preview_maximized)
+            # Drag can fire splitterMoved several times before this deferred
+            # call runs; latch immediately so a fast drag doesn't queue the
+            # toggle twice and cancel itself back out.
+            self._preview_maximize_pending = True
+            QtCore.QTimer.singleShot(0, self._trigger_preview_maximize_from_snap)
+
+    def _trigger_preview_maximize_from_snap(self):
+        self._preview_maximize_pending = False
+        if not self._preview_maximized:
+            self._on_toggle_preview_maximized()
+
+    def _animate_splitter_sizes(self, target_sizes, on_finished=None):
+        splitter = self.content_splitter
+        start_sizes = splitter.sizes()
+        if getattr(self, "_splitter_animation", None) is not None:
+            self._splitter_animation.stop()
+        if len(start_sizes) != len(target_sizes):
+            splitter.setSizes(target_sizes)
+            if on_finished:
+                on_finished()
+            return
+
+        anim = QtCore.QVariantAnimation(self)
+        anim.setDuration(PREVIEW_MAXIMIZE_ANIM_MS)
+        anim.setStartValue(0.0)
+        anim.setEndValue(1.0)
+        anim.setEasingCurve(QtCore.QEasingCurve.OutCubic)
+
+        def _apply(t):
+            sizes = [int(round(s + (target - s) * t)) for s, target in zip(start_sizes, target_sizes)]
+            splitter.setSizes(sizes)
+            self._position_preview_controls()
+            self._position_floating_log()
+
+        anim.valueChanged.connect(_apply)
+
+        def _cleanup():
+            self._splitter_animation = None
+            if on_finished:
+                on_finished()
+
+        anim.finished.connect(_cleanup)
+        self._splitter_animation = anim
+        anim.start()
 
     def _on_toggle_preview_maximized(self):
+        total = max(800, self.content_splitter.width())
         if not self._preview_maximized:
             self._preview_maximized = True
             self.preview_toggle_btn.setChecked(True)
@@ -710,17 +831,29 @@ class MainWindow(QtWidgets.QMainWindow):
             self.preview_edit_btn.show()
             self.preview_expand_btn.show()
             self.rtl_preview_panel.show()
-            self.main_area.hide()
             self.preview_expand_btn.setToolTip("Restore split preview")
             self.preview_toggle_btn.setToolTip("Hide RTL preview")
             self._refresh_rtl_preview()
+
+            def _finish_maximize():
+                # Only actually remove main_area from the layout once it has
+                # visually shrunk to nothing, so the collapse reads as a
+                # slide rather than an instant cut.
+                if self._preview_maximized:
+                    self.main_area.hide()
+                self._position_preview_controls()
+                self._position_floating_log()
+
+            self._animate_splitter_sizes([0, total], on_finished=_finish_maximize)
         else:
             self._preview_maximized = False
             self.main_area.show()
             self.rtl_preview_panel.show()
-            total = max(800, self.content_splitter.width())
-            self.content_splitter.setSizes([int(total * 0.56), int(total * 0.44)])
             self.preview_expand_btn.setToolTip("Maximize RTL preview")
+            self._animate_splitter_sizes(
+                [int(total * 0.56), int(total * 0.44)],
+                on_finished=lambda: (self._position_preview_controls(), self._position_floating_log()),
+            )
         self._position_preview_controls()
         QtCore.QTimer.singleShot(0, self._position_floating_log)
 
@@ -803,28 +936,20 @@ class MainWindow(QtWidgets.QMainWindow):
         if expanded:
             height = min(int(260 * scale), max(190, int(self.main_area.height() * 0.38)))
         else:
-            height = int(50 * scale)
+            # Collapsed: hug the header row's real height instead of a fixed
+            # constant that was taller than "LOG" + the chevron actually need.
+            margins = self.log_layout.contentsMargins()
+            height = self.log_header.sizeHint().height() + margins.top() + margins.bottom()
         y = max(margin, bottom - height)
         self.log_card.setGeometry(x, y, width, height)
         self.log_card.raise_()
-
-    @staticmethod
-    def _add_shadow(widget):
-        """Qt has no CSS box-shadow equivalent in QSS -- a
-        QGraphicsDropShadowEffect is the actual way to give a widget the
-        soft, floating look style.css gets from --shadow-sm."""
-        effect = QtWidgets.QGraphicsDropShadowEffect(widget)
-        effect.setBlurRadius(16)
-        effect.setOffset(0, 2)
-        effect.setColor(QtGui.QColor(0, 0, 0, 35))
-        widget.setGraphicsEffect(effect)
 
     @classmethod
     def _card(cls):
         """Create a card frame and return it with its content layout."""
         frame = QtWidgets.QFrame()
         frame.setObjectName("card")
-        cls._add_shadow(frame)
+        add_shadow(frame)
         layout = QtWidgets.QVBoxLayout(frame)
         layout.setContentsMargins(22, 22, 22, 22)
         return frame, layout
@@ -960,13 +1085,14 @@ class MainWindow(QtWidgets.QMainWindow):
         card = QtWidgets.QFrame()
         card.setObjectName("logCard")
         card.setContentsMargins(0, 0, 0, 0)
-        self._add_shadow(card)
+        add_shadow(card)
         self.log_layout = QtWidgets.QVBoxLayout(card)
         self.log_layout.setContentsMargins(18, 14, 18, 16)
         self.log_layout.setSpacing(10)
 
         header = QtWidgets.QWidget()
         header.setObjectName("logHeader")
+        self.log_header = header
         header_layout = QtWidgets.QHBoxLayout(header)
         header_layout.setContentsMargins(0, 0, 0, 0)
         header_layout.setSpacing(4)
@@ -1033,26 +1159,48 @@ class MainWindow(QtWidgets.QMainWindow):
                 "".join(part[0] for part in parts[:2]).upper()
                 if len(parts) > 1 else p.name[:2].upper()
             )
-            item = QtWidgets.QListWidgetItem(initials if collapsed else p.name)
-            item.setTextAlignment(QtCore.Qt.AlignCenter if collapsed else QtCore.Qt.AlignLeft)
-            item.setToolTip(str(p))
+            alignment = QtCore.Qt.AlignCenter if collapsed else QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter
+            item = QtWidgets.QListWidgetItem()
             item.setData(QtCore.Qt.UserRole, str(p))
             self.recent_list.addItem(item)
+            if collapsed:
+                item.setText(initials)
+                item.setTextAlignment(alignment)
+                item.setToolTip(str(p))
+            else:
+                row = _RecentItemRow(p.name, alignment)
+                row.label.setToolTip(str(p))
+                row.open_requested.connect(lambda path=str(p): self._open_workspace(Path(path)))
+                row.menu_requested.connect(lambda pos, it=item: self._show_recent_menu(it, pos))
+                # QListWidget#recentList::item's QSS padding/margin (9px/12px
+                # + 1px, 20px total vertical) shrinks a widget-item's
+                # allocated height instead of adding to it -- an explicit
+                # sizeHint smaller than that just collapses to 0 and the row
+                # renders blank. Pad past it with real slack.
+                hint = row.sizeHint()
+                item.setSizeHint(QtCore.QSize(hint.width(), hint.height() + 28))
+                self.recent_list.setItemWidget(item, row)
             if str(p) == current:
                 item.setSelected(True)
 
     def _on_recent_clicked(self, item):
-        self._open_workspace(Path(item.data(QtCore.Qt.UserRole)))
+        # Only fires for the collapsed (icon-rail) rows -- expanded rows use
+        # a custom _RecentItemRow widget that handles its own click instead.
+        if self.recent_list.itemWidget(item) is None:
+            self._open_workspace(Path(item.data(QtCore.Qt.UserRole)))
 
     def _on_recent_context_menu(self, pos):
         item = self.recent_list.itemAt(pos)
         if item is None:
             return
+        self._show_recent_menu(item, self.recent_list.mapToGlobal(pos))
+
+    def _show_recent_menu(self, item, global_pos):
         path = item.data(QtCore.Qt.UserRole)
         menu = QtWidgets.QMenu(self)
         remove_action = menu.addAction("Remove from list")
         delete_action = menu.addAction("Delete project")
-        chosen = menu.exec_(self.recent_list.mapToGlobal(pos))
+        chosen = menu.exec_(global_pos)
         if chosen == remove_action:
             self._remove_recent_entry(path)
         elif chosen == delete_action:
@@ -1262,7 +1410,9 @@ class MainWindow(QtWidgets.QMainWindow):
     def _on_doc(self):
         dlg = QtWidgets.QDialog(self)
         dlg.setWindowTitle("Documentation")
+        dlg.setWindowFlag(QtCore.Qt.WindowContextHelpButtonHint, False)
         dlg.resize(760, 640)
+        apply_titlebar_theme(dlg)
         v = QtWidgets.QVBoxLayout(dlg)
         viewer = QtWidgets.QTextBrowser()
         try:

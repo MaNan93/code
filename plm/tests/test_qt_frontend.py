@@ -239,7 +239,7 @@ class QtFrontendTests(unittest.TestCase):
             table._show_row_context_menu(-1, QtCore.QPoint())
         self.assertEqual(table.table.rowCount(), 1)
 
-    def test_recent_menu_labels_and_destructive_style(self):
+    def test_recent_menu_labels_and_actions(self):
         window = MainWindow()
         self.addCleanup(window.close)
         item = QtWidgets.QListWidgetItem()
@@ -249,8 +249,6 @@ class QtFrontendTests(unittest.TestCase):
         def choose_clear(menu, _pos):
             actions = [action for action in menu.actions() if not action.isSeparator()]
             captured["labels"] = [action.text() for action in actions]
-            captured["style"] = menu.style()
-            captured["delete_is_destructive"] = actions[-1].property("destructive")
             return actions[1]
 
         with mock.patch.object(QtWidgets.QMenu, "exec_", choose_clear), mock.patch.object(
@@ -259,8 +257,6 @@ class QtFrontendTests(unittest.TestCase):
             window._show_recent_menu(item, QtCore.QPoint())
 
         self.assertEqual(captured["labels"], ["Rename", "Clear", "Delete"])
-        self.assertIsInstance(captured["style"], main_window._RecentMenuStyle)
-        self.assertTrue(captured["delete_is_destructive"])
         clear.assert_called_once()
 
     def test_lane_grid_context_menu_and_x32_layout(self):

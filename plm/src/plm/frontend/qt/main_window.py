@@ -30,7 +30,6 @@ from plm.frontend.qt.widgets.settings import DEFAULT_SETTINGS, SettingsDialog
 from plm.frontend.qt.widgets.tables import EditableTable
 from plm.frontend.qt.widgets.theme import (
     BG_HOVER,
-    DANGER,
     TEXT_SECONDARY,
     TEXT_TERTIARY,
     RoundedComboBox,
@@ -129,29 +128,6 @@ class _StableTabBar(QtWidgets.QTabBar):
             metrics.height() + 18 + 2 * TAB_VERTICAL_GAP,
         )
         return QtCore.QSize(max(hint.width(), text_width + pad), tab_height)
-
-
-class _RecentMenuStyle(QtWidgets.QProxyStyle):
-    """Render the destructive Recent-menu action in warning red."""
-
-    def drawControl(self, element, option, painter, widget=None):
-        if element == QtWidgets.QStyle.CE_MenuItem and option.text == "Delete":
-            option = QtWidgets.QStyleOptionMenuItem(option)
-            palette = QtGui.QPalette(option.palette)
-            for group in (
-                QtGui.QPalette.Active,
-                QtGui.QPalette.Inactive,
-                QtGui.QPalette.Disabled,
-            ):
-                for role in (
-                    QtGui.QPalette.Text,
-                    QtGui.QPalette.WindowText,
-                    QtGui.QPalette.ButtonText,
-                    QtGui.QPalette.HighlightedText,
-                ):
-                    palette.setColor(group, role, QtGui.QColor(DANGER))
-            option.palette = palette
-        super().drawControl(element, option, painter, widget)
 
 
 class _RecentItemRow(QtWidgets.QWidget):
@@ -1165,11 +1141,7 @@ class MainWindow(QtWidgets.QMainWindow):
             self.preview_diff_btn.setChecked(False)
 
         if self.preview_diff_btn.isChecked() and has_diff:
-            relative = (
-                str(path.relative_to(self.current_workspace))
-                if self.current_workspace
-                else path.name
-            )
+            relative = self._preview_diff_label(path)
             text = "".join(
                 difflib.unified_diff(
                     previous.splitlines(keepends=True),
@@ -1183,6 +1155,21 @@ class MainWindow(QtWidgets.QMainWindow):
             self.preview_highlighter.set_language(path.suffix)
         self.preview_code.setPlainText(text)
         self.preview_code.moveCursor(QtGui.QTextCursor.Start)
+
+    def _preview_diff_label(self, path):
+        """Workspace-relative path for a unified-diff header.
+
+        as_posix() because a diff header is forward-slashed everywhere, and
+        a guarded relative_to() because an unguarded one raises ValueError
+        for a selection left over from another workspace -- and raising
+        inside a Qt slot makes PyQt call qFatal(), killing the app outright
+        rather than surfacing a traceback."""
+        if not self.current_workspace:
+            return path.name
+        try:
+            return path.relative_to(self.current_workspace).as_posix()
+        except ValueError:
+            return path.name
 
     def _on_preview_highlight_toggled(self, checked):
         self.preview_highlighter.set_enabled(checked)
@@ -1488,14 +1475,14 @@ class MainWindow(QtWidgets.QMainWindow):
     def _show_recent_menu(self, item, global_pos):
         path = item.data(QtCore.Qt.UserRole)
         menu = QtWidgets.QMenu(self)
-        menu_style = _RecentMenuStyle()
-        menu_style.setParent(menu)
-        menu.setStyle(menu_style)
+        # No per-item colouring here: the app stylesheet's QMenu::item rules
+        # make QStyleSheetStyle draw the items itself and never delegate to a
+        # QProxyStyle, so an override never ran. Delete confirms in a dialog
+        # before it removes anything, which is the warning that matters.
         rename_action = menu.addAction("Rename")
         menu.addSeparator()
         remove_action = menu.addAction("Clear")
         delete_action = menu.addAction("Delete")
-        delete_action.setProperty("destructive", True)
         chosen = menu.exec_(global_pos)
         if chosen == rename_action:
             self._rename_workspace_at(path)
@@ -1616,6 +1603,14 @@ class MainWindow(QtWidgets.QMainWindow):
         except (ValueError, OSError) as e:
             QtWidgets.QMessageBox.critical(self, "Load failed", f"Could not load {path}:\n{e}")
             return
+        if self.current_workspace != path:
+            # Preview state is keyed by absolute path and only ever means
+            # anything for the open workspace: carrying it across keeps every
+            # file of every workspace opened this session in memory, and
+            # leaves a selection pointing outside current_workspace.
+            self._preview_current_contents = {}
+            self._preview_previous_contents = {}
+            self._selected_preview_file = None
         self.current_workspace = path
         self.controllers_table.set_rows(content["controllers"])
         self.signals_table.set_rows(content["signals"])

@@ -84,7 +84,10 @@ class CodeHighlighter(QtGui.QSyntaxHighlighter):
     def _highlight_diff(self, text):
         if text.startswith("@@"):
             kind = "diff_hunk"
-        elif text.startswith(("---", "+++")):
+        elif text.startswith(("--- ", "+++ ")):
+            # The trailing space is what separates a file header from a
+            # removed line that itself starts with dashes (a "-----" comment
+            # banner becomes "------" once deleted).
             kind = "diff_meta"
         elif text.startswith("+"):
             kind = "diff_add"

@@ -1031,6 +1031,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def _show_preview_more_menu(self):
         menu = QtWidgets.QMenu(self.preview_more_btn)
+        refresh_action = menu.addAction("Refresh generated files")
         edit_action = menu.addAction("Edit current file")
         highlight_action = menu.addAction("Syntax highlighting")
         highlight_action.setCheckable(True)
@@ -1042,12 +1043,18 @@ class MainWindow(QtWidgets.QMainWindow):
         menu.addSeparator()
         search_action = menu.addAction("Find in file")
         copy_action = menu.addAction("Copy file path")
+        menu.addSeparator()
+        maximize_action = menu.addAction(
+            "Restore split preview" if self._preview_maximized else "Maximize preview"
+        )
         chosen = menu.exec_(
             self.preview_more_btn.mapToGlobal(
                 QtCore.QPoint(0, self.preview_more_btn.height())
             )
         )
-        if chosen == edit_action:
+        if chosen == refresh_action:
+            self._refresh_rtl_preview()
+        elif chosen == edit_action:
             self._edit_selected_rtl_file()
         elif chosen == highlight_action:
             self.preview_highlight_btn.setChecked(highlight_action.isChecked())
@@ -1057,10 +1064,14 @@ class MainWindow(QtWidgets.QMainWindow):
             self._on_preview_search_open()
         elif chosen == copy_action:
             self._copy_preview_path()
+        elif chosen == maximize_action:
+            self._on_toggle_preview_maximized()
 
     def _apply_preview_control_density(self, available_width):
-        """Collapse secondary preview actions before they can cover Files."""
-        compact = available_width < int(430 * _ui_scale())
+        """Collapse preview actions in two stages before they can cover Files."""
+        scale = _ui_scale()
+        compact = available_width < int(430 * scale)
+        narrow = available_width < int(190 * scale)
         for button in (
             self.preview_edit_btn,
             self.preview_highlight_btn,
@@ -1069,6 +1080,8 @@ class MainWindow(QtWidgets.QMainWindow):
             self.preview_copy_path_btn,
         ):
             button.setVisible(not compact)
+        self.preview_refresh_btn.setVisible(not narrow)
+        self.preview_expand_btn.setVisible(not narrow)
         self.preview_more_btn.setVisible(compact)
 
     def _build_rtl_preview_panel(self):

@@ -1,17 +1,18 @@
 """
 plm_qt_theme -- QSS theme for the Qt desktop front end.
 
-The palette uses warm cream surfaces and a terracotta accent. Constants at
-the top of this module are the source of truth for desktop colours and radii.
+The palette uses a warm off-white sidebar, white work surfaces and a
+terracotta accent. Constants at the top of this module are the source of
+truth for desktop colours and radii.
 """
 
 import sys
 
 from PyQt5 import QtCore, QtGui, QtWidgets
 
-BG = "#faf9f6"
-BG_ELEVATED = "#f5f4ef"
-BG_SIDEBAR = "#f0eee6"
+BG = "#ffffff"
+BG_ELEVATED = "#ffffff"
+BG_SIDEBAR = "#F9F6F4"
 BG_HOVER = "#ece9e0"
 BG_ACTIVE = "#e4e0d3"
 BORDER = "#e5e1d6"

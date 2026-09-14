@@ -195,6 +195,28 @@ class QtFrontendTests(unittest.TestCase):
         python_path = process.processEnvironment().value("PYTHONPATH").split(os.pathsep)
         self.assertIn(str(main_window.PLM_ROOT / "src"), python_path)
 
+    def test_modal_dialog_blurs_only_while_open(self):
+        window = MainWindow()
+        self.addCleanup(window.close)
+        dialog = QtWidgets.QDialog(window)
+        blur_was_active = []
+
+        def fake_exec():
+            blur_was_active.append(
+                isinstance(
+                    window.centralWidget().graphicsEffect(),
+                    QtWidgets.QGraphicsBlurEffect,
+                )
+            )
+            return QtWidgets.QDialog.Rejected
+
+        with mock.patch.object(dialog, "exec_", side_effect=fake_exec):
+            result = window._exec_modal_blurred(dialog)
+
+        self.assertEqual(result, QtWidgets.QDialog.Rejected)
+        self.assertEqual(blur_was_active, [True])
+        self.assertIsNone(window.centralWidget().graphicsEffect())
+
     def test_table_context_menu_inserts_and_deletes(self):
         table = EditableTable([
             {"key": "id", "heading": "ID"},

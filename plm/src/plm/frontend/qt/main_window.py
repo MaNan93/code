@@ -1691,10 +1691,26 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def _on_settings(self):
         dlg = SettingsDialog(self, load_settings())
-        if dlg.exec_() == QtWidgets.QDialog.Accepted:
+        if self._exec_modal_blurred(dlg) == QtWidgets.QDialog.Accepted:
             settings = dlg.get_settings()
             save_settings(settings)
             self._apply_font(settings)
+
+    def _exec_modal_blurred(self, dialog):
+        """Run a modal dialog while softly blurring the main application.
+
+        The dialog is a separate top-level window, so the effect only covers
+        the content behind it and is always removed when the dialog closes.
+        """
+        background = self.centralWidget()
+        effect = QtWidgets.QGraphicsBlurEffect(background)
+        effect.setBlurRadius(6)
+        effect.setBlurHints(QtWidgets.QGraphicsBlurEffect.PerformanceHint)
+        background.setGraphicsEffect(effect)
+        try:
+            return dialog.exec_()
+        finally:
+            background.setGraphicsEffect(None)
 
     def _apply_font(self, settings):
         family = settings.get("fontFamily")
@@ -1750,7 +1766,7 @@ class MainWindow(QtWidgets.QMainWindow):
         close_btn = QtWidgets.QPushButton("Close")
         close_btn.clicked.connect(dlg.accept)
         v.addWidget(close_btn, alignment=QtCore.Qt.AlignRight)
-        dlg.exec_()
+        self._exec_modal_blurred(dlg)
 
     # ------------------------------------------------------------ Lane Mapping tab
     def _set_lane_count_display(self, n):

@@ -721,6 +721,19 @@ QMenu {{
 }}
 QMenu::item {{ padding: 7px 24px 7px 10px; border-radius: 6px; }}
 QMenu::item:selected {{ background: {BG_HOVER}; }}
+QPushButton#destructiveMenuItem {{
+    border: none;
+    border-radius: 6px;
+    background: transparent;
+    color: {DANGER};
+    text-align: left;
+    padding: 7px 24px 7px 10px;
+    font-weight: 600;
+}}
+QPushButton#destructiveMenuItem:hover {{
+    background: {BG_HOVER};
+    color: {DANGER};
+}}
 QScrollBar:vertical {{ background: transparent; width: 14px; margin: 2px; }}
 QScrollBar::handle:vertical {{
     background: {SCROLLBAR};

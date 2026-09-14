@@ -30,6 +30,7 @@ from plm.frontend.qt.widgets.settings import DEFAULT_SETTINGS, SettingsDialog
 from plm.frontend.qt.widgets.tables import EditableTable
 from plm.frontend.qt.widgets.theme import (
     BG_HOVER,
+    DANGER,
     TEXT_SECONDARY,
     TEXT_TERTIARY,
     RoundedComboBox,
@@ -128,6 +129,29 @@ class _StableTabBar(QtWidgets.QTabBar):
             metrics.height() + 18 + 2 * TAB_VERTICAL_GAP,
         )
         return QtCore.QSize(max(hint.width(), text_width + pad), tab_height)
+
+
+class _RecentMenuStyle(QtWidgets.QProxyStyle):
+    """Render the destructive Recent-menu action in warning red."""
+
+    def drawControl(self, element, option, painter, widget=None):
+        if element == QtWidgets.QStyle.CE_MenuItem and option.text == "Delete":
+            option = QtWidgets.QStyleOptionMenuItem(option)
+            palette = QtGui.QPalette(option.palette)
+            for group in (
+                QtGui.QPalette.Active,
+                QtGui.QPalette.Inactive,
+                QtGui.QPalette.Disabled,
+            ):
+                for role in (
+                    QtGui.QPalette.Text,
+                    QtGui.QPalette.WindowText,
+                    QtGui.QPalette.ButtonText,
+                    QtGui.QPalette.HighlightedText,
+                ):
+                    palette.setColor(group, role, QtGui.QColor(DANGER))
+            option.palette = palette
+        super().drawControl(element, option, painter, widget)
 
 
 class _RecentItemRow(QtWidgets.QWidget):
@@ -1464,10 +1488,14 @@ class MainWindow(QtWidgets.QMainWindow):
     def _show_recent_menu(self, item, global_pos):
         path = item.data(QtCore.Qt.UserRole)
         menu = QtWidgets.QMenu(self)
+        menu_style = _RecentMenuStyle()
+        menu_style.setParent(menu)
+        menu.setStyle(menu_style)
         rename_action = menu.addAction("Rename")
         menu.addSeparator()
-        remove_action = menu.addAction("Remove from list")
-        delete_action = menu.addAction("Delete project")
+        remove_action = menu.addAction("Clear")
+        delete_action = menu.addAction("Delete")
+        delete_action.setProperty("destructive", True)
         chosen = menu.exec_(global_pos)
         if chosen == rename_action:
             self._rename_workspace_at(path)

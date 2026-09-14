@@ -527,6 +527,36 @@ QFrame#rtlPreviewPanel {{
     border-left: 1px solid {BORDER_STRONG};
 }}
 QLabel#previewStatus {{ color: {TEXT_TERTIARY}; }}
+QLineEdit#previewSearchEdit {{
+    border: 1px solid {BORDER};
+    border-radius: {RADIUS_SM}px;
+    padding: 4px 8px;
+    background: {BG};
+}}
+QLineEdit#previewSearchEdit:focus {{ border-color: {ACCENT}; }}
+QLabel#previewSearchStatus {{
+    color: {TEXT_TERTIARY};
+    font-size: {fs(12)};
+    padding: 0 4px;
+}}
+QToolButton#previewSearchBtn {{
+    border: none;
+    background: transparent;
+    color: {TEXT_SECONDARY};
+    border-radius: 6px;
+    min-width: 22px;
+    min-height: 22px;
+}}
+QToolButton#previewSearchBtn:hover {{ background: {BG_HOVER}; color: {TEXT}; }}
+QPlainTextEdit#topologySummary {{
+    border: 1px solid {BORDER};
+    border-radius: {RADIUS_SM}px;
+    background: {BG_ELEVATED};
+    color: {TEXT};
+    padding: 8px;
+    font-family: Consolas, "SF Mono", Menlo, monospace;
+    font-size: {fs(12)};
+}}
 QWidget#previewHeader {{ background: transparent; }}
 QToolButton#previewRootBtn {{
     background: {BG_ELEVATED};

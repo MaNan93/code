@@ -1,4 +1,5 @@
 import os
+import shutil
 import tempfile
 import unittest
 from pathlib import Path
@@ -348,6 +349,148 @@ class QtFrontendTests(unittest.TestCase):
         self.assertEqual(BG, "#ffffff")
         self.assertEqual(BG_ELEVATED, "#ffffff")
         self.assertEqual(BG_SIDEBAR, "#F6F6F6")
+
+    def _sample_workspace(self):
+        """A minimal but valid workspace the real loader accepts."""
+        workspace = Path(self.temp.name) / "quad"
+        shutil.copytree(
+            Path(main_window.PLM_ROOT) / "test" / "quad" / "config",
+            workspace / "config",
+        )
+        return workspace
+
+    def test_unsaved_edits_mark_the_title_and_gate_switching(self):
+        workspace = self._sample_workspace()
+        window = MainWindow()
+        self.addCleanup(window.close)
+        window._open_workspace(workspace)
+        self.process_events()
+
+        self.assertFalse(window._is_dirty())
+        self.assertNotIn("*", window.windowTitle())
+
+        window.controllers_table.insert_row_below(0)
+        self.process_events()
+        self.assertTrue(window._is_dirty())
+        window._poll_dirty_state()
+        self.assertIn("*", window.windowTitle())
+
+        # Cancel must leave both the edit and the open workspace alone.
+        with mock.patch.object(
+            QtWidgets.QMessageBox, "question", return_value=QtWidgets.QMessageBox.Cancel
+        ):
+            self.assertFalse(window._confirm_discard_changes())
+        self.assertTrue(window._is_dirty())
+
+        # Discard drops them without writing anything.
+        with mock.patch.object(
+            QtWidgets.QMessageBox, "question", return_value=QtWidgets.QMessageBox.Discard
+        ):
+            self.assertTrue(window._confirm_discard_changes())
+
+        # Save clears the marker.
+        with mock.patch.object(
+            QtWidgets.QMessageBox, "question", return_value=QtWidgets.QMessageBox.Save
+        ):
+            self.assertTrue(window._confirm_discard_changes())
+        self.assertFalse(window._is_dirty())
+        window._poll_dirty_state()
+        self.assertNotIn("*", window.windowTitle())
+
+    def test_revert_restores_the_version_on_disk(self):
+        workspace = self._sample_workspace()
+        window = MainWindow()
+        self.addCleanup(window.close)
+        window._open_workspace(workspace)
+        self.process_events()
+        before = [row["ctrl_name"] for row in window.controllers_table.get_rows()]
+
+        window.controllers_table.insert_row_below(0)
+        self.process_events()
+        self.assertTrue(window._is_dirty())
+
+        with mock.patch.object(
+            QtWidgets.QMessageBox, "question", return_value=QtWidgets.QMessageBox.Yes
+        ):
+            window._on_revert()
+        self.process_events()
+        self.assertEqual(
+            [row["ctrl_name"] for row in window.controllers_table.get_rows()], before
+        )
+        self.assertFalse(window._is_dirty())
+
+    def test_generation_buttons_lock_while_a_run_is_in_flight(self):
+        window = MainWindow()
+        self.addCleanup(window.close)
+        self.assertTrue(all(button.isEnabled() for button in window.generation_buttons))
+
+        window._set_generation_busy(True)
+        self.assertFalse(any(button.isEnabled() for button in window.generation_buttons))
+        # A second click while busy must not start another writer.
+        with mock.patch.object(window, "_save_before_action") as save:
+            window._run_tool("rtl")
+        save.assert_not_called()
+
+        window._set_generation_busy(False)
+        self.assertTrue(all(button.isEnabled() for button in window.generation_buttons))
+
+    def test_topology_summary_reports_lane_groups(self):
+        workspace = self._sample_workspace()
+        window = MainWindow()
+        self.addCleanup(window.close)
+        window._open_workspace(workspace)
+        self.process_events()
+
+        text = window.topology_summary.toPlainText()
+        self.assertIn("Lane groups", text)
+        # Built from the live widgets, not the file on disk.
+        self.assertNotEqual(text, "Open a workspace to see its lane topology.")
+
+    def test_preview_search_finds_matches_and_jumps_to_a_line(self):
+        workspace = self._sample_workspace()
+        rtl = workspace / "rtl" / "src"
+        rtl.mkdir(parents=True)
+        (rtl / "pipe_lane_mapper.sv").write_text(
+            "module pipe_lane_mapper;\n  logic marker_signal;\nendmodule\n",
+            encoding="utf-8",
+        )
+        window = MainWindow()
+        self.addCleanup(window.close)
+        window._open_workspace(workspace)
+        window.show()
+        window._on_toggle_rtl_preview(True)
+        self.process_events()
+
+        window._selected_preview_file = rtl / "pipe_lane_mapper.sv"
+        window._show_selected_preview_file()
+        self.process_events()
+
+        self.assertFalse(window.preview_search_bar.isVisible())
+        window._on_preview_search_open()
+        self.assertTrue(window.preview_search_bar.isVisible())
+
+        window.preview_search_edit.setText("marker_signal")
+        self.assertEqual(window.preview_search_status.text(), "1 found")
+        window._preview_find_next()
+        self.assertEqual(window.preview_code.textCursor().selectedText(), "marker_signal")
+
+        window.preview_search_edit.setText("nothing_here")
+        window._preview_find_next()
+        self.assertEqual(window.preview_search_status.text(), "no match")
+
+        window.preview_search_edit.setText(":3")
+        window._preview_find_next()
+        self.assertEqual(window.preview_search_status.text(), "line 3")
+        self.assertEqual(window.preview_code.textCursor().blockNumber(), 2)
+
+        window._copy_preview_path()
+        self.assertEqual(
+            QtWidgets.QApplication.clipboard().text(),
+            str(rtl / "pipe_lane_mapper.sv"),
+        )
+
+        window._set_preview_search_visible(False)
+        self.assertFalse(window.preview_search_bar.isVisible())
 
 
 if __name__ == "__main__":

@@ -17,6 +17,8 @@ import os
 import re
 import shutil
 import sys
+import tempfile
+import time
 from pathlib import Path
 
 from PyQt5 import QtCore, QtGui, QtWidgets
@@ -103,6 +105,8 @@ _SVG_REFRESH = '<path d="M20 11a8 8 0 1 0 2 5.3"/><path d="M20 4v7h-7"/>'
 _SVG_EDIT = '<path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4z"/>'
 _SVG_HIGHLIGHT = '<path d="M8 5 3 12l5 7M16 5l5 7-5 7M14 3l-4 18"/>'
 _SVG_DIFF = '<path d="M6 3v18M18 3v18M10 8h5l-2-2M15 16h-5l2 2"/>'
+_SVG_SEARCH = '<circle cx="11" cy="11" r="7"/><path d="M20 20l-4.2-4.2"/>'
+_SVG_COPY = '<rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>'
 _SVG_SETTINGS = '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>'
 _SVG_DOC = '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M16 13H8"/><path d="M16 17H8"/><path d="M10 9H8"/>'
 
@@ -362,6 +366,10 @@ class MainWindow(QtWidgets.QMainWindow):
     def __init__(self):
         super().__init__()
         self.current_workspace = None  # Path | None
+        self._saved_payload = None  # last on-disk state, for dirty detection
+        self._title_shows_dirty = False
+        self._generation_busy = False
+        self._topology_payload = None
         self.setWindowTitle("plmConsultant")
         self.resize(1200, 780)
         self.setMinimumSize(900, 620)
@@ -371,6 +379,13 @@ class MainWindow(QtWidgets.QMainWindow):
             app.installEventFilter(self)
         self._apply_font(load_settings())
         self._refresh_recent()
+        QtWidgets.QShortcut(
+            QtGui.QKeySequence.Find, self, self._on_preview_search_open
+        )
+        self._dirty_timer = QtCore.QTimer(self)
+        self._dirty_timer.setInterval(700)
+        self._dirty_timer.timeout.connect(self._poll_dirty_state)
+        self._dirty_timer.start()
         last = load_last_workspace()
         if last:
             self._open_workspace(last)
@@ -463,6 +478,9 @@ class MainWindow(QtWidgets.QMainWindow):
         self._position_preview_file_tree()
 
     def closeEvent(self, event):
+        if not self._confirm_discard_changes():
+            event.ignore()
+            return
         app = QtWidgets.QApplication.instance()
         if app is not None:
             app.removeEventFilter(self)
@@ -651,13 +669,15 @@ class MainWindow(QtWidgets.QMainWindow):
         al.setSpacing(4)
         btn_new = QtWidgets.QPushButton(" New")
         btn_save = QtWidgets.QPushButton(" Save")
+        btn_revert = QtWidgets.QPushButton(" Revert")
         btn_open = QtWidgets.QPushButton(" Open")
         self.sidebar_action_buttons = [
-            (btn_new, "New"), (btn_save, "Save"), (btn_open, "Open")
+            (btn_new, "New"), (btn_save, "Save"), (btn_revert, "Revert"), (btn_open, "Open")
         ]
         for b, icon_svg, handler in (
             (btn_new, _SVG_NEW, self._on_new),
             (btn_save, _SVG_SAVE, self._on_save),
+            (btn_revert, _SVG_REFRESH, self._on_revert),
             (btn_open, _SVG_OPEN, self._on_open),
         ):
             b.setObjectName("sidebarBtn")
@@ -741,7 +761,8 @@ class MainWindow(QtWidgets.QMainWindow):
         self._lane_mapping_page = self._build_lane_mapping_tab()
         self.tabs.addTab(self._lane_mapping_page, "Lane Mapping")
         self.tabs.addTab(self._build_signals_tab(), "Pipe Signals")
-        self.tabs.addTab(self._build_generation_tab(), "Generation")
+        self._generation_page = self._build_generation_tab()
+        self.tabs.addTab(self._generation_page, "Generation")
         self.tabs.currentChanged.connect(self._on_tab_changed)
 
         editor_shell = QtWidgets.QFrame()
@@ -814,6 +835,24 @@ class MainWindow(QtWidgets.QMainWindow):
         self.preview_diff_btn.toggled.connect(self._on_preview_diff_toggled)
         self.preview_diff_btn.hide()
 
+        self.preview_search_btn = QtWidgets.QToolButton(controls)
+        self.preview_search_btn.setObjectName("previewControlBtn")
+        self.preview_search_btn.setIcon(_svg_icon(_SVG_SEARCH, size=18))
+        self.preview_search_btn.setIconSize(QtCore.QSize(18, 18))
+        self.preview_search_btn.setToolTip("Find in file (Ctrl+F)")
+        self.preview_search_btn.setAccessibleName("Find")
+        self.preview_search_btn.clicked.connect(self._on_preview_search_open)
+        self.preview_search_btn.hide()
+
+        self.preview_copy_path_btn = QtWidgets.QToolButton(controls)
+        self.preview_copy_path_btn.setObjectName("previewControlBtn")
+        self.preview_copy_path_btn.setIcon(_svg_icon(_SVG_COPY, size=18))
+        self.preview_copy_path_btn.setIconSize(QtCore.QSize(18, 18))
+        self.preview_copy_path_btn.setToolTip("Copy this file's path")
+        self.preview_copy_path_btn.setAccessibleName("Copy path")
+        self.preview_copy_path_btn.clicked.connect(self._copy_preview_path)
+        self.preview_copy_path_btn.hide()
+
         self.preview_expand_btn = QtWidgets.QToolButton(controls)
         self.preview_expand_btn.setObjectName("previewControlBtn")
         self.preview_expand_btn.setIcon(_svg_icon(_SVG_PREVIEW_EXPAND, size=18))
@@ -836,12 +875,136 @@ class MainWindow(QtWidgets.QMainWindow):
             self.preview_edit_btn,
             self.preview_highlight_btn,
             self.preview_diff_btn,
+            self.preview_search_btn,
+            self.preview_copy_path_btn,
             self.preview_expand_btn,
             self.preview_toggle_btn,
         ]
         for b in self.preview_buttons:
             layout.addWidget(b)
         return controls
+
+    def _build_preview_search_bar(self):
+        bar = QtWidgets.QWidget()
+        bar.setObjectName("previewSearchBar")
+        row = QtWidgets.QHBoxLayout(bar)
+        row.setContentsMargins(0, 0, 0, 0)
+        row.setSpacing(4)
+
+        self.preview_search_edit = QtWidgets.QLineEdit()
+        self.preview_search_edit.setObjectName("previewSearchEdit")
+        self.preview_search_edit.setPlaceholderText("Find in file  (:42 jumps to a line)")
+        self.preview_search_edit.setClearButtonEnabled(True)
+        self.preview_search_edit.returnPressed.connect(self._preview_find_next)
+        self.preview_search_edit.textChanged.connect(self._on_preview_search_text_changed)
+        row.addWidget(self.preview_search_edit, stretch=1)
+
+        self.preview_search_status = QtWidgets.QLabel("")
+        self.preview_search_status.setObjectName("previewSearchStatus")
+        row.addWidget(self.preview_search_status)
+
+        for text, tip, handler in (
+            ("↑", "Previous match (Shift+Enter)", self._preview_find_previous),
+            ("↓", "Next match (Enter)", self._preview_find_next),
+            ("✕", "Close (Esc)", lambda: self._set_preview_search_visible(False)),
+        ):
+            button = QtWidgets.QToolButton()
+            button.setObjectName("previewSearchBtn")
+            button.setText(text)
+            button.setToolTip(tip)
+            button.setCursor(QtCore.Qt.PointingHandCursor)
+            button.clicked.connect(handler)
+            row.addWidget(button)
+
+        for sequence, handler in (
+            (QtGui.QKeySequence("Shift+Return"), self._preview_find_previous),
+            (QtGui.QKeySequence("Shift+Enter"), self._preview_find_previous),
+            (QtGui.QKeySequence(QtCore.Qt.Key_Escape), lambda: self._set_preview_search_visible(False)),
+        ):
+            shortcut = QtWidgets.QShortcut(sequence, bar, handler)
+            shortcut.setContext(QtCore.Qt.WidgetWithChildrenShortcut)
+
+        bar.hide()
+        return bar
+
+    def _set_preview_search_visible(self, visible):
+        self.preview_search_bar.setVisible(visible)
+        if visible:
+            self.preview_search_edit.setFocus()
+            self.preview_search_edit.selectAll()
+        else:
+            self.preview_search_edit.clear()
+            self.preview_code.setFocus()
+
+    def _on_preview_search_open(self):
+        """Ctrl+F: only meaningful while the preview is actually showing."""
+        if not self.rtl_preview_panel.isVisible():
+            return
+        self._set_preview_search_visible(True)
+
+    def _on_preview_search_text_changed(self, text):
+        if not text:
+            self.preview_search_status.setText("")
+            return
+        if text.startswith(":"):
+            self.preview_search_status.setText("line")
+            return
+        total = self.preview_code.toPlainText().count(text)
+        self.preview_search_status.setText(f"{total} found" if total else "no match")
+
+    def _preview_goto_line(self, number):
+        document = self.preview_code.document()
+        block = document.findBlockByLineNumber(max(0, number - 1))
+        if not block.isValid():
+            self.preview_search_status.setText("no such line")
+            return
+        cursor = QtGui.QTextCursor(block)
+        self.preview_code.setTextCursor(cursor)
+        self.preview_code.centerCursor()
+        self.preview_search_status.setText(f"line {number}")
+
+    def _preview_find(self, backwards):
+        query = self.preview_search_edit.text()
+        if not query:
+            return
+        if query.startswith(":"):
+            digits = query[1:].strip()
+            if digits.isdigit():
+                self._preview_goto_line(int(digits))
+            else:
+                self.preview_search_status.setText("expected :<line>")
+            return
+        flags = QtGui.QTextDocument.FindFlags()
+        if backwards:
+            flags |= QtGui.QTextDocument.FindBackward
+        if self.preview_code.find(query, flags):
+            self.preview_code.centerCursor()
+            return
+        # Wrap around: restart from the far end and try once more, so the
+        # last match does not look like "no match".
+        cursor = self.preview_code.textCursor()
+        cursor.movePosition(
+            QtGui.QTextCursor.End if backwards else QtGui.QTextCursor.Start
+        )
+        self.preview_code.setTextCursor(cursor)
+        if self.preview_code.find(query, flags):
+            self.preview_code.centerCursor()
+        else:
+            self.preview_search_status.setText("no match")
+
+    def _preview_find_next(self):
+        self._preview_find(backwards=False)
+
+    def _preview_find_previous(self):
+        self._preview_find(backwards=True)
+
+    def _copy_preview_path(self):
+        path = self._selected_preview_file
+        if not path:
+            self._log("No preview file selected.")
+            return
+        QtWidgets.QApplication.clipboard().setText(str(path))
+        self._log(f"Copied {path} to the clipboard.")
 
     def _build_rtl_preview_panel(self):
         panel = QtWidgets.QFrame()
@@ -869,6 +1032,9 @@ class MainWindow(QtWidgets.QMainWindow):
         header_layout.addWidget(self.preview_root_btn, alignment=QtCore.Qt.AlignVCenter)
         header_layout.addStretch(1)
         layout.addWidget(self.preview_header)
+
+        self.preview_search_bar = self._build_preview_search_bar()
+        layout.addWidget(self.preview_search_bar)
 
         self.preview_file_tree = QtWidgets.QTreeWidget(panel)
         self.preview_file_tree.setObjectName("previewFileTree")
@@ -907,9 +1073,13 @@ class MainWindow(QtWidgets.QMainWindow):
         self.preview_edit_btn.setVisible(checked)
         self.preview_highlight_btn.setVisible(checked)
         self.preview_diff_btn.setVisible(checked)
+        self.preview_search_btn.setVisible(checked)
+        self.preview_copy_path_btn.setVisible(checked)
         self.preview_expand_btn.setVisible(checked)
         self.preview_toggle_btn.setToolTip("Preview")
         self.preview_expand_btn.setToolTip("Maximize RTL preview")
+        if not checked:
+            self._set_preview_search_visible(False)
         if checked:
             self._refresh_rtl_preview()
             total = max(800, self.content_splitter.width())
@@ -993,6 +1163,8 @@ class MainWindow(QtWidgets.QMainWindow):
             self.preview_edit_btn.show()
             self.preview_highlight_btn.show()
             self.preview_diff_btn.show()
+            self.preview_search_btn.show()
+            self.preview_copy_path_btn.show()
             self.preview_expand_btn.show()
             self.rtl_preview_panel.show()
             self.preview_expand_btn.setToolTip("Restore split preview")
@@ -1354,10 +1526,20 @@ class MainWindow(QtWidgets.QMainWindow):
         btn_gen_rtl.clicked.connect(self._on_gen_rtl)
         btn_gen_tb.clicked.connect(self._on_gen_tb)
         btn_gen_all.clicked.connect(self._on_gen_all)
-        for b in (btn_validate, btn_gen_rtl, btn_gen_tb, btn_gen_all):
+        self.generation_buttons = [btn_validate, btn_gen_rtl, btn_gen_tb, btn_gen_all]
+        for b in self.generation_buttons:
             actions_row.addWidget(b)
         layout.addLayout(actions_row)
-        layout.addStretch(1)
+
+        summary_header = QtWidgets.QLabel("Topology summary")
+        summary_header.setObjectName("sectionHeader")
+        layout.addWidget(summary_header)
+        self.topology_summary = QtWidgets.QPlainTextEdit()
+        self.topology_summary.setObjectName("topologySummary")
+        self.topology_summary.setReadOnly(True)
+        self.topology_summary.setLineWrapMode(QtWidgets.QPlainTextEdit.NoWrap)
+        self.topology_summary.setPlainText("Open a workspace to see its lane topology.")
+        layout.addWidget(self.topology_summary, stretch=1)
 
         return frame
 
@@ -1767,9 +1949,82 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def _update_workspace_label(self):
         if self.current_workspace:
-            self.setWindowTitle(f"plmConsultant - {self.current_workspace.name}")
+            marker = "*" if self._is_dirty() else ""
+            self.setWindowTitle(f"plmConsultant - {self.current_workspace.name}{marker}")
         else:
             self.setWindowTitle("plmConsultant")
+
+    # ------------------------------------------------------------ dirty state
+    def _mark_saved(self):
+        """Snapshot what is now on disk, so edits can be detected against it."""
+        self._saved_payload = self._gather_payload() if self.current_workspace else None
+        self._update_workspace_label()
+
+    def _is_dirty(self):
+        if self.current_workspace is None or self._saved_payload is None:
+            return False
+        return self._gather_payload() != self._saved_payload
+
+    def _poll_dirty_state(self):
+        """Drive the title's modified marker.
+
+        Polled rather than signal-driven on purpose: the three editors are
+        a table, a paint grid and a form, each with its own set of change
+        signals, and a missed connection would silently show a workspace as
+        saved while it is not. _gather_payload() costs well under a
+        millisecond even on the widest bundled sample."""
+        if self.current_workspace is None:
+            return
+        dirty = self._is_dirty()
+        if dirty != self._title_shows_dirty:
+            self._title_shows_dirty = dirty
+            self._update_workspace_label()
+        # The gen-flag controls live on the Generation page itself, so
+        # arriving at the tab is not enough to keep the summary current.
+        # _refresh_topology_summary() no-ops unless the payload moved.
+        if self.tabs.currentWidget() is getattr(self, "_generation_page", None):
+            self._refresh_topology_summary()
+
+    def _confirm_discard_changes(self):
+        """Ask before dropping unsaved edits. True = caller may proceed."""
+        if not self._is_dirty():
+            return True
+        answer = QtWidgets.QMessageBox.question(
+            self,
+            "Unsaved changes",
+            f"{self.current_workspace.name} has unsaved changes.\nSave them first?",
+            QtWidgets.QMessageBox.Save
+            | QtWidgets.QMessageBox.Discard
+            | QtWidgets.QMessageBox.Cancel,
+            QtWidgets.QMessageBox.Save,
+        )
+        if answer == QtWidgets.QMessageBox.Cancel:
+            return False
+        if answer == QtWidgets.QMessageBox.Save:
+            return self._on_save()
+        return True
+
+    def _on_revert(self):
+        """Reload the workspace from disk, dropping in-memory edits."""
+        if self.current_workspace is None:
+            QtWidgets.QMessageBox.warning(self, "No workspace", "Open or create a workspace first.")
+            return
+        if not self._is_dirty():
+            self._log("Nothing to revert.")
+            return
+        answer = QtWidgets.QMessageBox.question(
+            self,
+            "Revert",
+            f"Discard unsaved changes and reload {self.current_workspace.name} from disk?",
+            QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No,
+            QtWidgets.QMessageBox.No,
+        )
+        if answer != QtWidgets.QMessageBox.Yes:
+            return
+        target = self.current_workspace
+        self._saved_payload = None  # skip the prompt _open_workspace would raise
+        self._open_workspace(target)
+        self._log(f"Reverted to the version on disk: {target}.")
 
     # ------------------------------------------------------------ workspace lifecycle
     def _open_workspace(self, path):
@@ -1778,6 +2033,8 @@ class MainWindow(QtWidgets.QMainWindow):
             QtWidgets.QMessageBox.warning(
                 self, "Open failed", f"Not a PLM workspace (missing config CSVs): {path}"
             )
+            return
+        if not self._confirm_discard_changes():
             return
         try:
             content = workspace_content(path)
@@ -1807,6 +2064,8 @@ class MainWindow(QtWidgets.QMainWindow):
         self._refresh_recent()
         self._update_workspace_label()
         self._log(f"Loaded {path}.")
+        self._mark_saved()
+        self._refresh_topology_summary()
         if getattr(self, "rtl_preview_panel", None) and self.rtl_preview_panel.isVisible():
             self._refresh_rtl_preview()
 
@@ -1852,6 +2111,8 @@ class MainWindow(QtWidgets.QMainWindow):
             self._open_workspace(d)
 
     def _on_new(self):
+        if not self._confirm_discard_changes():
+            return
         # "New" creates a config set -- it's a naming action, not a
         # "browse to a location" one: just ask for a
         # name, land it next to whatever's currently open (or
@@ -1882,16 +2143,21 @@ class MainWindow(QtWidgets.QMainWindow):
         self._open_workspace(ws)
 
     def _on_save(self):
+        """Returns True when the workspace is on disk, False on failure --
+        _confirm_discard_changes() relies on that to keep edits when a save
+        the user asked for could not be written."""
         if self.current_workspace is None:
             QtWidgets.QMessageBox.warning(self, "No workspace", "Open or create a workspace first.")
-            return
+            return False
         try:
             save_workspace_content(self.current_workspace, self._gather_payload())
         except (ValueError, OSError) as e:
             QtWidgets.QMessageBox.critical(self, "Save failed", str(e))
             self._log(f"Save failed: {e}")
-            return
+            return False
         self._log(f"Saved {self.current_workspace}/config/*.")
+        self._mark_saved()
+        return True
 
     def _on_settings(self):
         dlg = SettingsDialog(self, load_settings())
@@ -2008,6 +2274,10 @@ class MainWindow(QtWidgets.QMainWindow):
         # sync step (mirrors plmConsultant.py's own _on_tab_changed).
         if self.tabs.widget(index) is self._lane_mapping_page:
             self.lane_grid.set_controllers(self.controllers_table.get_rows())
+        elif self.tabs.widget(index) is getattr(self, "_generation_page", None):
+            # Rebuilt on arrival rather than on every edit: the summary only
+            # has to be current when it is actually on screen.
+            self._refresh_topology_summary()
 
     # ------------------------------------------------------------ validate / generate
     def _save_before_action(self):
@@ -2024,6 +2294,7 @@ class MainWindow(QtWidgets.QMainWindow):
             QtWidgets.QMessageBox.critical(self, "Save failed", str(e))
             self._log(f"Save failed: {e}")
             return False
+        self._mark_saved()
         return True
 
     def _validation_problem_path(self, message):
@@ -2068,6 +2339,44 @@ class MainWindow(QtWidgets.QMainWindow):
         else:
             self._log("OK -- config is valid.")
 
+    def _set_generation_busy(self, busy):
+        """Lock the Generate/Validate row while a run is in flight.
+
+        Two overlapping runs write the same files, so a double click is not
+        just wasted work -- it can interleave two writers over one output
+        tree."""
+        self._generation_busy = bool(busy)
+        for button in getattr(self, "generation_buttons", []):
+            button.setEnabled(not busy)
+
+    def _refresh_topology_summary(self):
+        """Render Config.report() for what would be generated right now.
+
+        Written to a scratch copy rather than read back from the workspace,
+        so the summary describes the edits in front of the user instead of
+        whatever was last saved."""
+        if not getattr(self, "topology_summary", None):
+            return
+        if self.current_workspace is None:
+            self.topology_summary.setPlainText("Open a workspace to see its lane topology.")
+            return
+        payload = self._gather_payload()
+        if payload == getattr(self, "_topology_payload", None):
+            return
+        self._topology_payload = payload
+        try:
+            with tempfile.TemporaryDirectory() as scratch:
+                root = Path(scratch) / "summary"
+                save_workspace_content(root, payload)
+                text = Config(root / "config").report()
+        except SystemExit as e:
+            # Config rejects a malformed set by raising SystemExit with the
+            # offending line, which is worth showing verbatim here.
+            text = f"Config cannot be read yet:\n{e}"
+        except (ValueError, OSError) as e:
+            text = f"Could not build the summary:\n{e}"
+        self.topology_summary.setPlainText(text)
+
     def _on_gen_rtl(self):
         self._run_tool("rtl")
 
@@ -2086,10 +2395,15 @@ class MainWindow(QtWidgets.QMainWindow):
         (see plm.frontend.qt.widgets.settings). Neither is written into
         the workspace's gen_flags.txt; both are passed only for this
         invocation."""
+        if self._generation_busy:
+            return
         if not self._save_before_action():
             return
         self._clear_problems()
         self._set_bottom_panel_page(1)
+        self._set_generation_busy(True)
+        started_at = time.monotonic()
+        generated = []
         cmd = [sys.executable, "-m", "plm.cli.main", "generate", target, "--config", str(self.current_workspace)]
         settings = load_settings()
         verible_path = settings.get("veriblePath")
@@ -2122,12 +2436,23 @@ class MainWindow(QtWidgets.QMainWindow):
         def on_ready_read():
             data = bytes(proc.readAllStandardOutput()).decode("utf-8", errors="replace")
             for line in data.splitlines():
+                stripped = line.strip()
+                if stripped.startswith("generated "):
+                    generated.append(stripped[len("generated ") :])
                 self._capture_problem_line(line)
                 self._log(line)
 
         def on_finished(exit_code, _exit_status):
+            self._set_generation_busy(False)
+            elapsed = time.monotonic() - started_at
+            errors = sum(1 for problem in self._problems if problem.get("severity") == "Error")
+            self._log(
+                f"[generate {target}: {len(generated)} file(s), {errors} error(s), "
+                f"{elapsed:.1f}s]"
+            )
             if exit_code == 0:
                 self._log("[generate finished]")
+                self._refresh_topology_summary()
                 if target in ("rtl", "all"):
                     self._refresh_rtl_preview()
             else:
@@ -2147,6 +2472,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
         def on_error(_error):
             if proc.state() == QtCore.QProcess.NotRunning:
+                self._set_generation_busy(False)
                 message = f"Failed to launch generate {target}: {proc.errorString()}"
                 self._log(message)
                 self._add_problem("Generate", "Error", message)

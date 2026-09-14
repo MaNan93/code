@@ -75,8 +75,8 @@ class QtFrontendTests(unittest.TestCase):
         self.assertEqual(root_left, code_left)
         self.assertEqual(window.preview_toggle_btn.toolTip(), "Preview")
         self.assertEqual(window.preview_toggle_btn.accessibleName(), "Preview")
-        self.assertEqual(window.log_title.height(), window.log_more.height())
-        self.assertEqual(window.log_title.height(), window.log_toggle.height())
+        self.assertEqual(window.problems_tab_btn.height(), window.log_more.height())
+        self.assertEqual(window.log_tab_btn.height(), window.log_toggle.height())
 
         def widget_bottom(widget):
             point = widget.mapTo(
@@ -182,6 +182,64 @@ class QtFrontendTests(unittest.TestCase):
         self.assertEqual(window.preview_highlighter._language, "diff")
         self.assertIn("--- previous/rtl/common/pipe_lane_clk_gate.sv", window.preview_code.toPlainText())
         self.assertIn("+  assign enabled = 1'b1;", window.preview_code.toPlainText())
+
+    def test_validation_errors_fill_problems_panel(self):
+        window = MainWindow()
+        self.addCleanup(window.close)
+        window.current_workspace = Path(self.temp.name) / "quad"
+        config = mock.Mock()
+        config.validate.return_value = ["controller max_width must be positive"]
+
+        with mock.patch.object(
+            window, "_save_before_action", return_value=True
+        ), mock.patch.object(main_window, "Config", return_value=config):
+            window._on_validate()
+
+        self.assertEqual(window.problem_tree.topLevelItemCount(), 1)
+        problem = window.problem_tree.topLevelItem(0)
+        self.assertEqual(problem.text(0), "Error")
+        self.assertEqual(problem.text(1), "controller max_width must be positive")
+        self.assertEqual(problem.text(2), "config/controllers.csv")
+        self.assertEqual(window.problems_tab_btn.text(), "PROBLEMS 1")
+        self.assertIs(window.bottom_panel_stack.currentWidget(), window.problem_tree)
+
+    def test_generate_output_parser_extracts_source_location(self):
+        window = MainWindow()
+        self.addCleanup(window.close)
+
+        window._capture_problem_line(
+            "rtl/common/pipe_lane_clk_gate.sv:12:3: error: syntax error"
+        )
+
+        self.assertEqual(window.problem_tree.topLevelItemCount(), 1)
+        problem = window.problem_tree.topLevelItem(0)
+        self.assertEqual(problem.text(0), "Error")
+        self.assertEqual(problem.text(1), "syntax error")
+        self.assertEqual(problem.text(2), "rtl/common/pipe_lane_clk_gate.sv")
+        self.assertEqual(problem.text(3), "12:3")
+
+    def test_problem_double_click_opens_preview_at_line(self):
+        workspace = Path(self.temp.name) / "quad"
+        source = workspace / "rtl" / "broken.sv"
+        source.parent.mkdir(parents=True)
+        source.write_text(
+            "module broken;\n"
+            "  bad syntax here\n"
+            "endmodule\n",
+            encoding="utf-8",
+        )
+        window = MainWindow()
+        self.addCleanup(window.close)
+        window.current_workspace = workspace
+        window._add_problem(
+            "Generate", "Error", "syntax error", source, line=2, column=3
+        )
+
+        window._on_problem_activated(window.problem_tree.topLevelItem(0), 0)
+
+        self.assertTrue(window.rtl_preview_panel.isVisible())
+        self.assertEqual(window._selected_preview_file, source)
+        self.assertEqual(window.preview_code.textCursor().blockNumber(), 1)
 
     def test_generate_process_can_import_source_checkout(self):
         window = MainWindow()

@@ -1,0 +1,157 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>PlmLayoutReference</class>
+ <widget class="QMainWindow" name="PlmLayoutReference">
+  <property name="geometry">
+   <rect><x>0</x><y>0</y><width>1200</width><height>780</height></rect>
+  </property>
+  <property name="minimumSize">
+   <size><width>900</width><height>620</height></size>
+  </property>
+  <property name="windowTitle"><string>plmConsultant — Designer layout reference</string></property>
+  <widget class="QWidget" name="centralWidget">
+   <layout class="QHBoxLayout" name="rootLayout">
+    <property name="spacing"><number>0</number></property>
+    <property name="leftMargin"><number>0</number></property>
+    <property name="topMargin"><number>0</number></property>
+    <property name="rightMargin"><number>0</number></property>
+    <property name="bottomMargin"><number>0</number></property>
+    <item>
+     <widget class="QFrame" name="sidebar">
+      <property name="minimumSize"><size><width>260</width><height>0</height></size></property>
+      <property name="maximumSize"><size><width>260</width><height>16777215</height></size></property>
+      <property name="toolTip"><string>左侧边栏 / sidebar</string></property>
+      <layout class="QVBoxLayout" name="sidebarLayout">
+       <property name="leftMargin"><number>8</number></property>
+       <property name="topMargin"><number>10</number></property>
+       <property name="rightMargin"><number>8</number></property>
+       <property name="bottomMargin"><number>8</number></property>
+       <item>
+        <layout class="QHBoxLayout" name="brandLayout">
+         <item><widget class="QLabel" name="brandIcon"><property name="text"><string>◎</string></property></widget></item>
+         <item><widget class="QLabel" name="brandName"><property name="text"><string>plmConsultant</string></property></widget></item>
+         <item><spacer name="brandSpacer"><property name="orientation"><enum>Qt::Horizontal</enum></property><property name="sizeHint" stdset="0"><size><width>40</width><height>20</height></size></property></spacer></item>
+        </layout>
+       </item>
+       <item><widget class="QPushButton" name="newWorkspaceButton"><property name="text"><string>＋  New</string></property><property name="toolTip"><string>新建工作区 / New</string></property></widget></item>
+       <item><widget class="QPushButton" name="saveWorkspaceButton"><property name="text"><string>▣  Save</string></property><property name="toolTip"><string>保存工作区 / Save</string></property></widget></item>
+       <item><widget class="QPushButton" name="openWorkspaceButton"><property name="text"><string>□  Open</string></property><property name="toolTip"><string>打开工作区 / Open</string></property></widget></item>
+       <item><widget class="QLabel" name="sectionHeader"><property name="text"><string>最近</string></property></widget></item>
+       <item>
+        <widget class="QListWidget" name="recentList">
+         <property name="toolTip"><string>最近项目列表 / Recent workspaces；双击或三点菜单可重命名</string></property>
+         <item><property name="text"><string>quad                                      ⋮</string></property></item>
+        </widget>
+       </item>
+       <item><widget class="QPushButton" name="settingsButton"><property name="text"><string>⚙  Settings</string></property></widget></item>
+       <item><widget class="QPushButton" name="documentationButton"><property name="text"><string>▤  Doc</string></property></widget></item>
+      </layout>
+     </widget>
+    </item>
+    <item>
+     <widget class="QToolButton" name="edgeToggle">
+      <property name="minimumSize"><size><width>16</width><height>56</height></size></property>
+      <property name="maximumSize"><size><width>16</width><height>56</height></size></property>
+      <property name="text"><string>‹</string></property>
+      <property name="toolTip"><string>侧栏折叠按钮 / edgeToggle</string></property>
+     </widget>
+    </item>
+    <item>
+     <widget class="QSplitter" name="contentSplitter">
+      <property name="orientation"><enum>Qt::Horizontal</enum></property>
+      <widget class="QWidget" name="mainArea">
+       <layout class="QVBoxLayout" name="mainAreaLayout">
+        <property name="spacing"><number>0</number></property>
+        <property name="leftMargin"><number>0</number></property>
+        <property name="topMargin"><number>0</number></property>
+        <property name="rightMargin"><number>0</number></property>
+        <property name="bottomMargin"><number>0</number></property>
+        <item>
+         <widget class="QFrame" name="editorShell">
+          <layout class="QVBoxLayout" name="editorShellLayout">
+           <property name="spacing"><number>0</number></property>
+           <property name="leftMargin"><number>0</number></property>
+           <property name="topMargin"><number>0</number></property>
+           <property name="rightMargin"><number>0</number></property>
+           <property name="bottomMargin"><number>0</number></property>
+           <item>
+            <widget class="QTabWidget" name="tabs">
+             <property name="currentIndex"><number>0</number></property>
+             <widget class="QWidget" name="controllersPage">
+              <attribute name="title"><string>Controllers</string></attribute>
+              <layout class="QVBoxLayout" name="controllersLayout">
+               <property name="leftMargin"><number>0</number></property><property name="topMargin"><number>0</number></property><property name="rightMargin"><number>0</number></property><property name="bottomMargin"><number>0</number></property>
+               <item>
+                <widget class="QTableWidget" name="controllersTable">
+                 <property name="toolTip"><string>Controller 配置表 / controllersTable</string></property>
+                 <column><property name="text"><string>CTRL_ID</string></property></column>
+                 <column><property name="text"><string>CTRL_NAME</string></property></column>
+                 <column><property name="text"><string>MAX_WIDTH</string></property></column>
+                </widget>
+               </item>
+              </layout>
+             </widget>
+             <widget class="QWidget" name="laneMappingPage">
+              <attribute name="title"><string>Lane Mapping</string></attribute>
+              <layout class="QVBoxLayout" name="laneMappingLayout">
+               <item><widget class="QLabel" name="lanePaletteLabel"><property name="text"><string>Controller palette (lgPaletteBar / lgSwatch)</string></property></widget></item>
+               <item><widget class="QTableWidget" name="laneGrid"><property name="toolTip"><string>Lane 映射网格 / laneGrid</string></property><column><property name="text"><string>MODE</string></property></column><column><property name="text"><string>LANE 0</string></property></column><column><property name="text"><string>LANE 1</string></property></column><column><property name="text"><string>LANE …</string></property></column></widget></item>
+              </layout>
+             </widget>
+             <widget class="QWidget" name="pipeSignalsPage">
+              <attribute name="title"><string>Pipe Signals</string></attribute>
+              <layout class="QVBoxLayout" name="pipeSignalsLayout">
+               <property name="leftMargin"><number>0</number></property><property name="topMargin"><number>0</number></property><property name="rightMargin"><number>0</number></property><property name="bottomMargin"><number>0</number></property>
+               <item><widget class="QTableWidget" name="signalsTable"><property name="toolTip"><string>PIPE 信号表 / signalsTable</string></property><column><property name="text"><string>SIGNAL</string></property></column><column><property name="text"><string>DIRECTION</string></property></column><column><property name="text"><string>TYPE</string></property></column><column><property name="text"><string>WIDTH</string></property></column></widget></item>
+              </layout>
+             </widget>
+             <widget class="QWidget" name="generationPage">
+              <attribute name="title"><string>Generation</string></attribute>
+              <layout class="QVBoxLayout" name="generationLayout">
+               <item><widget class="QGroupBox" name="generationSettingsGroup"><property name="title"><string>Generation settings</string></property><layout class="QFormLayout" name="generationSettingsLayout"><item row="0" column="0"><widget class="QLabel" name="archLabel"><property name="text"><string>Architecture</string></property></widget></item><item row="0" column="1"><widget class="QComboBox" name="archCombo"/></item><item row="1" column="0"><widget class="QLabel" name="pclkModeLabel"><property name="text"><string>PCLK mode</string></property></widget></item><item row="1" column="1"><widget class="QComboBox" name="pclkModeCombo"/></item></layout></widget></item>
+               <item><layout class="QHBoxLayout" name="generationButtonsLayout"><item><widget class="QPushButton" name="validateButton"><property name="text"><string>Validate</string></property></widget></item><item><widget class="QPushButton" name="generateRtlButton"><property name="text"><string>Generate RTL</string></property></widget></item><item><widget class="QPushButton" name="generateTbButton"><property name="text"><string>Generate TB</string></property></widget></item><item><widget class="QPushButton" name="generateAllButton"><property name="text"><string>Generate All</string></property></widget></item></layout></item>
+               <item><spacer name="generationSpacer"><property name="orientation"><enum>Qt::Vertical</enum></property><property name="sizeHint" stdset="0"><size><width>20</width><height>40</height></size></property></spacer></item>
+              </layout>
+             </widget>
+            </widget>
+           </item>
+          </layout>
+         </widget>
+        </item>
+        <item>
+         <widget class="QFrame" name="logCard">
+          <property name="minimumSize"><size><width>0</width><height>190</height></size></property>
+          <property name="toolTip"><string>运行时为浮动日志面板 / logCard</string></property>
+          <layout class="QVBoxLayout" name="logLayout">
+           <item><layout class="QHBoxLayout" name="logHeader"><item><widget class="QLabel" name="logTitle"><property name="text"><string>LOG</string></property></widget></item><item><spacer name="logHeaderSpacer"><property name="orientation"><enum>Qt::Horizontal</enum></property><property name="sizeHint" stdset="0"><size><width>40</width><height>20</height></size></property></spacer></item><item><widget class="QToolButton" name="logMoreButton"><property name="text"><string>⋯</string></property></widget></item><item><widget class="QToolButton" name="logToggle"><property name="text"><string>⌄</string></property></widget></item></layout></item>
+           <item><widget class="QPlainTextEdit" name="logConsole"><property name="plainText"><string>[11:41:51] Loaded workspace.</string></property><property name="readOnly"><bool>true</bool></property></widget></item>
+          </layout>
+         </widget>
+        </item>
+       </layout>
+      </widget>
+      <widget class="QFrame" name="rtlPreviewPanel">
+       <property name="minimumSize"><size><width>360</width><height>0</height></size></property>
+       <property name="toolTip"><string>右侧预览面板 / rtlPreviewPanel</string></property>
+       <layout class="QVBoxLayout" name="previewLayout">
+        <item><layout class="QHBoxLayout" name="previewHeaderLayout"><item><widget class="QLabel" name="rtlPreviewTitle"><property name="text"><string>Preview</string></property></widget></item><item><spacer name="previewHeaderSpacer"><property name="orientation"><enum>Qt::Horizontal</enum></property><property name="sizeHint" stdset="0"><size><width>40</width><height>20</height></size></property></spacer></item><item><widget class="QToolButton" name="previewRefreshButton"><property name="text"><string>↻</string></property><property name="toolTip"><string>刷新预览文件</string></property></widget></item><item><widget class="QToolButton" name="previewEditButton"><property name="text"><string>✎</string></property><property name="toolTip"><string>外部编辑器打开</string></property></widget></item><item><widget class="QToolButton" name="previewMaximizeButton"><property name="text"><string>⤢</string></property><property name="toolTip"><string>最大化/还原预览</string></property></widget></item><item><widget class="QToolButton" name="previewToggleButton"><property name="text"><string>▣</string></property><property name="toolTip"><string>显示/隐藏预览</string></property></widget></item></layout></item>
+        <item>
+         <widget class="QComboBox" name="previewFileCombo">
+          <property name="toolTip"><string>CSV、RTL 和 filelist 文件选择框</string></property>
+          <item><property name="text"><string>config/controllers.csv</string></property></item>
+          <item><property name="text"><string>config/lane_mapping.csv</string></property></item>
+          <item><property name="text"><string>config/pipe_signals.csv</string></property></item>
+          <item><property name="text"><string>rtl/common/pipe_lane_clk_gate.sv</string></property></item>
+         </widget>
+        </item>
+        <item><widget class="QPlainTextEdit" name="rtlPreviewCode"><property name="toolTip"><string>代码/CSV 文本预览区</string></property><property name="plainText"><string>// Preview content</string></property><property name="readOnly"><bool>true</bool></property></widget></item>
+       </layout>
+      </widget>
+     </widget>
+    </item>
+   </layout>
+  </widget>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>

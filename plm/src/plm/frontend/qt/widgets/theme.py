@@ -222,6 +222,12 @@ QListWidget#recentList::item:selected {{
     background: {BG_ACTIVE};
     color: {TEXT};
 }}
+/* setItemWidget() inserts a child QWidget over each QListWidget item.
+   Keep that child transparent so the item's normal/hover/selected fill
+   remains one continuous colour behind the label and menu button. */
+QListWidget#recentList QWidget {{
+    background: transparent;
+}}
 QToolButton#recentMenuBtn {{
     border: none;
     background: transparent;

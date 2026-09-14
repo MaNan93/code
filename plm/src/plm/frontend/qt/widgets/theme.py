@@ -21,7 +21,6 @@ TEXT_SECONDARY = "#6b6658"
 TEXT_TERTIARY = "#9c9686"
 ACCENT = "#d97757"
 ACCENT_HOVER = "#c15f3c"
-DANGER = "#c0392b"
 
 RADIUS_SM = 8
 RADIUS_MD = 12
@@ -327,9 +326,6 @@ QPushButton#primaryBtn:hover {{
     background: {ACCENT_HOVER};
     border-color: {ACCENT_HOVER};
 }}
-QPushButton#dangerAction {{
-    color: {DANGER};
-}}
 QToolButton {{
     border: 1px solid {BORDER};
     border-radius: 6px;
@@ -420,30 +416,6 @@ QPushButton#lgSwatch:hover {{
     border-color: {BORDER_STRONG};
 }}
 
-/* -- LaneGrid +/- row action buttons ----------------------------------- */
-QToolButton#lgPlusBtn, QToolButton#lgMinusBtn {{
-    border: 1px solid {BORDER};
-    border-radius: 6px;
-    background: {BG};
-    color: {TEXT_SECONDARY};
-    padding: 2px;
-    min-width: 24px;
-    min-height: 24px;
-    max-width: 24px;
-    max-height: 24px;
-    font-size: {fs(15)};
-}}
-QToolButton#lgPlusBtn:hover {{
-    color: {ACCENT};
-    border-color: {ACCENT};
-    background: {BG_HOVER};
-}}
-QToolButton#lgMinusBtn:hover {{
-    color: {DANGER};
-    border-color: {DANGER};
-    background: {BG_HOVER};
-}}
-
 /* -- LaneGrid table (lane mapping grid) --------------------------------- */
 QTableWidget#laneGrid {{
     background: {BG};
@@ -515,18 +487,6 @@ QPlainTextEdit#rtlPreviewCode {{
     font-family: Consolas, "SF Mono", Menlo, monospace;
     font-size: {fs(12)};
 }}
-QToolButton#previewHeaderBtn {{
-    min-width: 28px;
-    max-width: 28px;
-    min-height: 28px;
-    max-height: 28px;
-    border: none;
-    border-radius: 7px;
-    background: transparent;
-    color: {TEXT_SECONDARY};
-    font-size: {fs(18)};
-}}
-QToolButton#previewHeaderBtn:hover {{ background: {BG_HOVER}; }}
 QWidget#previewControls {{
     background: {BG_ELEVATED};
     border: 1px solid {BORDER};
@@ -552,19 +512,6 @@ QTableWidget {{
     selection-background-color: #f2ded4;
     selection-color: {TEXT};
 }}
-QToolButton#rowPlusBtn, QToolButton#rowMinusBtn {{
-    border: 1px solid {BORDER};
-    border-radius: 6px;
-    background: {BG};
-    color: {TEXT_SECONDARY};
-    min-width: 24px;
-    min-height: 24px;
-    max-width: 24px;
-    max-height: 24px;
-    font-size: {fs(15)};
-}}
-QToolButton#rowPlusBtn:hover {{ color: {ACCENT}; border-color: {ACCENT}; }}
-QToolButton#rowMinusBtn:hover {{ color: {DANGER}; border-color: {DANGER}; }}
 QPushButton:disabled, QToolButton:disabled, QComboBox:disabled {{
     color: {TEXT_TERTIARY};
     background: {BG_ELEVATED};
@@ -615,3 +562,10 @@ QToolTip {{
 # The sheet at the default size, for callers that apply it once at startup
 # before any saved font preference is known (plm.frontend.qt.main).
 STYLESHEET = build_stylesheet()
+__pycache__/
+*.pyc
+.DS_Store
+*.egg-info/
+build/
+dist/
+work/

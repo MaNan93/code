@@ -1,29 +1,50 @@
 """
-plm_qt_theme -- QSS theme for the Qt desktop front end.
+plm_qt_theme -- QSS theme for the Qt desktop front end, on SAP's Horizon
+design tokens.
 
-The palette uses a warm off-white sidebar, white work surfaces and a
-terracotta accent. Constants at the top of this module are the source of
-truth for desktop colours and radii.
+The values below are transcribed from theming-base-content's
+`content/Base/baseLib/sap_horizon/variables.json` (Apache-2.0), with the
+upstream token name kept in a comment so any of them can be checked
+against the source. Only the tokens this app actually renders are here.
+
+Note what this is *not*: SAP's own component library (fundamental-styles)
+is HTML + CSS, and Qt style sheets are a small subset of CSS with Qt class
+selectors, no flexbox/grid, no custom properties and no ::before/::after.
+None of that CSS can be used directly, so the component rules further down
+re-express Horizon's geometry in the vocabulary QSS actually has.
 """
 
 import sys
 
 from PyQt5 import QtCore, QtGui, QtWidgets
 
-BG = "#ffffff"
-BG_ELEVATED = "#ffffff"
-BG_SIDEBAR = "#F6F6F6"
-BG_HOVER = "#ece9e0"
-BG_ACTIVE = "#e4e0d3"
-BORDER = "#e5e1d6"
-BORDER_STRONG = "#d6d0c0"
-TEXT = "#2b2926"
-TEXT_SECONDARY = "#6b6658"
-TEXT_TERTIARY = "#9c9686"
-ACCENT = "#d97757"
-ACCENT_HOVER = "#c15f3c"
-DANGER = "#cf222e"
+from plm.frontend.qt.widgets import sap_icons
 
+BG = "#ffffff"  # sapBaseColor / sapList_Background
+BG_ELEVATED = "#ffffff"  # sapGroup_ContentBackground
+BG_SIDEBAR = "#f5f6f7"  # sapBackgroundColor
+BG_HOVER = "#eaecee"  # sapList_Hover_Background
+BG_ACTIVE = "#ebf8ff"  # sapList_SelectionBackgroundColor
+BORDER = "#e5e5e5"  # sapList_BorderColor
+BORDER_STRONG = "#d9d9d9"  # sapGroup_ContentBorderColor
+TEXT = "#131e29"  # sapTextColor
+TEXT_SECONDARY = "#556b82"  # sapContent_LabelColor
+TEXT_TERTIARY = "#758ca4"  # sapContent_NonInteractiveIconColor
+ACCENT = "#0070f2"  # sapBrandColor / sapButton_Emphasized_Background
+ACCENT_HOVER = "#0064d9"  # sapHighlightColor
+DANGER = "#aa0808"  # sapNegativeColor
+POSITIVE = "#256f3a"  # sapPositiveColor
+CRITICAL = "#e76500"  # sapCriticalColor
+FIELD_BORDER = "#556b81"  # sapField_BorderColor
+FIELD_FOCUS_BORDER = "#0032a5"  # sapField_Focus_BorderColor
+BUTTON_BORDER = "#bcc3ca"  # sapButton_BorderColor
+BUTTON_TEXT = "#0064d9"  # sapButton_TextColor
+SCROLLBAR = "#7b91a8"  # sapScrollBar_FaceColor
+
+# Horizon's corner radii, converted from rem at the 16 px root the tokens
+# assume: sapField_BorderCornerRadius .25rem, sapButton_ .5rem,
+# sapElement_ .75rem.
+RADIUS_FIELD = 4
 RADIUS_SM = 8
 RADIUS_MD = 12
 RADIUS_PILL = 14  # QSS has no CSS-style "999px + overflow" pill trick -- a
@@ -139,6 +160,27 @@ class VisibleCheckBox(QtWidgets.QCheckBox):
 BASE_FONT_PX = 13  # every font-size below is authored against this baseline
 
 
+def ui_font_stack():
+    """The app font stack, led by "72" when its vendored file registered.
+
+    Falls back to the platform UI faces if the font is missing, so a
+    stripped-down install still renders sensibly instead of landing on
+    whatever Qt picks by default."""
+    families = []
+    sap_family = sap_icons.text_font_family()
+    if sap_family:
+        families.append(f'"{sap_family}"')
+    families += [
+        '"Segoe UI"',
+        '"Microsoft YaHei UI"',
+        '"Microsoft YaHei"',
+        '"Helvetica Neue"',
+        "Arial",
+        "sans-serif",
+    ]
+    return ", ".join(families)
+
+
 def build_stylesheet(base_px=BASE_FONT_PX):
     """Build the app-wide QSS with every font-size scaled from base_px.
 
@@ -160,7 +202,9 @@ QWidget {{
     background: {BG};
     color: {TEXT};
     font-size: {fs(13)};
-    font-family: "Segoe UI", "Microsoft YaHei UI", "Microsoft YaHei", "Helvetica Neue", Arial, sans-serif;
+    /* "72" is SAP's own UI typeface (sapFontFamily). It covers Latin only,
+       so the CJK faces stay behind it for the Chinese sidebar labels. */
+    font-family: {ui_font_stack()};
 }}
 QLabel {{
     background: transparent;
@@ -270,28 +314,32 @@ QTabWidget#settingsTabs::pane {{
 QTabBar {{
     background: transparent;
 }}
+/* Fiori's icon tab bar marks the active tab with a brand-coloured rule
+   under it, not with a filled chip. The transparent border on the resting
+   state reserves the same 3px so selecting a tab doesn't shift the text. */
 QTabBar::tab {{
     background: transparent;
     color: {TEXT_SECONDARY};
     padding: 8px 16px;
     margin: 0 2px;
-    border: 1px solid transparent;
-    border-radius: {RADIUS_SM}px;
+    border: none;
+    border-bottom: 3px solid transparent;
+    border-radius: 0;
     font-size: {fs(13)};
-    font-weight: 500;
+    font-weight: 400;
 }}
 QTabWidget#tabs QTabBar::tab {{
-    margin: 4px 2px;
+    margin: 4px 2px 0 2px;
 }}
 QTabBar::tab:hover {{
     background: {BG_HOVER};
     color: {TEXT};
 }}
 QTabBar::tab:selected {{
-    background: {BG};
-    border: 1px solid {BORDER};
-    color: {TEXT};
-    font-weight: 600;
+    background: transparent;
+    color: {ACCENT_HOVER};
+    border-bottom: 3px solid {ACCENT};
+    font-weight: 700;
 }}
 
 /* -- cards ------------------------------------------------------------- */
@@ -319,26 +367,45 @@ QLabel#hint {{
 }}
 
 /* -- buttons ------------------------------------------------------------ */
+/* Horizon's default button is quiet -- white, a light grey outline, and
+   the label itself in brand blue to carry the affordance. Emphasized
+   (primaryBtn here) is the filled one, and a screen is meant to have at
+   most one. */
 QPushButton {{
-    border: 1px solid {BORDER};
+    border: 1px solid {BUTTON_BORDER};
     background: {BG};
-    color: {TEXT};
+    color: {BUTTON_TEXT};
     padding: 7px 14px;
     border-radius: {RADIUS_SM}px;
 }}
 QPushButton:hover {{
     background: {BG_HOVER};
-    border-color: {BORDER_STRONG};
+    border-color: {BUTTON_BORDER};
+}}
+QPushButton:pressed {{
+    background: {ACCENT};
+    border-color: {ACCENT};
+    color: white;
+}}
+QPushButton:disabled {{
+    color: {TEXT_TERTIARY};
+    border-color: {BORDER};
+    background: {BG};
 }}
 QPushButton#primaryBtn {{
     background: {ACCENT};
     color: white;
     border-color: {ACCENT};
-    font-weight: 600;
+    font-weight: 700;
 }}
 QPushButton#primaryBtn:hover {{
     background: {ACCENT_HOVER};
     border-color: {ACCENT_HOVER};
+}}
+QPushButton#primaryBtn:disabled {{
+    background: {BORDER};
+    border-color: {BORDER};
+    color: {TEXT_TERTIARY};
 }}
 QToolButton {{
     border: 1px solid {BORDER};
@@ -352,12 +419,15 @@ QToolButton:hover {{
 }}
 
 /* -- inputs -------------------------------------------------------------- */
+/* Fields are the one place Horizon keeps a dark outline
+   (sapField_BorderColor) and a tight 4px radius, which is what separates
+   an editable field from a button at a glance. */
 QLineEdit, QComboBox, QSpinBox, QDoubleSpinBox {{
-    border: 1px solid {BORDER};
+    border: 1px solid {FIELD_BORDER};
     background: {BG};
     color: {TEXT};
     padding: 5px 8px;
-    border-radius: {RADIUS_SM}px;
+    border-radius: {RADIUS_FIELD}px;
 }}
 QComboBox {{
     padding-right: 30px;
@@ -368,25 +438,32 @@ QComboBox::drop-down {{
     width: 28px;
     background: transparent;
     border: none;
-    border-top-right-radius: {RADIUS_SM - 1}px;
-    border-bottom-right-radius: {RADIUS_SM - 1}px;
+    border-top-right-radius: {RADIUS_FIELD - 1}px;
+    border-bottom-right-radius: {RADIUS_FIELD - 1}px;
+}}
+QLineEdit:hover, QComboBox:hover, QSpinBox:hover, QDoubleSpinBox:hover {{
+    border-color: {ACCENT_HOVER};
 }}
 QLineEdit:focus, QComboBox:focus, QSpinBox:focus, QDoubleSpinBox:focus {{
-    border-color: {ACCENT};
+    border: 2px solid {FIELD_FOCUS_BORDER};
+}}
+QLineEdit:disabled, QComboBox:disabled, QSpinBox:disabled, QDoubleSpinBox:disabled {{
+    border-color: {BORDER};
+    color: {TEXT_TERTIARY};
 }}
 QComboBox QAbstractItemView {{
     background: {BG};
     color: {TEXT};
     border: 1px solid {BORDER};
-    border-radius: {RADIUS_SM}px;
+    border-radius: {RADIUS_FIELD}px;
     outline: none;
     padding: 4px;
-    selection-background-color: {BG_HOVER};
+    selection-background-color: {BG_ACTIVE};
     selection-color: {TEXT};
 }}
 QComboBox QAbstractItemView::item {{
     padding: 6px 8px;
-    border-radius: {RADIUS_SM - 2}px;
+    border-radius: 2px;
 }}
 QCheckBox {{
     spacing: 8px;
@@ -404,15 +481,21 @@ QTableWidget::item {{
     padding-left: 10px;
     padding-right: 10px;
 }}
+/* Fiori column headers are sentence-case labels over a strong rule, not
+   small-caps -- and the rule is what separates header from body, so it is
+   darker than the row separators. */
 QHeaderView::section {{
     background: {BG_ELEVATED};
     color: {TEXT_SECONDARY};
-    padding: 6px 8px;
+    padding: 8px;
     border: none;
-    border-bottom: 1px solid {BORDER};
-    font-size: {fs(11)};
-    font-weight: 600;
-    text-transform: uppercase;
+    border-bottom: 2px solid {BORDER_STRONG};
+    font-size: {fs(12)};
+    font-weight: 700;
+}}
+QTableWidget::item:selected {{
+    background: {BG_ACTIVE};
+    color: {TEXT};
 }}
 
 /* -- LaneGrid palette bar (pill swatches) ------------------------------- */
@@ -623,7 +706,7 @@ QDialog {{
 /* -- desktop polish ----------------------------------------------------- */
 QTableWidget {{
     alternate-background-color: {BG_ELEVATED};
-    selection-background-color: #f2ded4;
+    selection-background-color: {BG_ACTIVE};
     selection-color: {TEXT};
 }}
 QPushButton:disabled, QToolButton:disabled, QComboBox:disabled {{
@@ -640,11 +723,11 @@ QMenu::item {{ padding: 7px 24px 7px 10px; border-radius: 6px; }}
 QMenu::item:selected {{ background: {BG_HOVER}; }}
 QScrollBar:vertical {{ background: transparent; width: 14px; margin: 2px; }}
 QScrollBar::handle:vertical {{
-    background: #c9c9c9;
+    background: {SCROLLBAR};
     border-radius: 4px;
     min-height: 28px;
 }}
-QScrollBar::handle:vertical:hover {{ background: #aaaaaa; }}
+QScrollBar::handle:vertical:hover {{ background: {TEXT_SECONDARY}; }}
 QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical,
 QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {{
     background: transparent;
@@ -653,11 +736,11 @@ QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {{
 }}
 QScrollBar:horizontal {{ background: transparent; height: 14px; margin: 2px; }}
 QScrollBar::handle:horizontal {{
-    background: #c9c9c9;
+    background: {SCROLLBAR};
     border-radius: 4px;
     min-width: 28px;
 }}
-QScrollBar::handle:horizontal:hover {{ background: #aaaaaa; }}
+QScrollBar::handle:horizontal:hover {{ background: {TEXT_SECONDARY}; }}
 QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal,
 QScrollBar::add-page:horizontal, QScrollBar::sub-page:horizontal {{
     background: transparent;

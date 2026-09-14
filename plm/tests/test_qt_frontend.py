@@ -14,7 +14,14 @@ from plm.frontend.qt.main import APP_ICON_PATH
 from plm.frontend.qt.main_window import MainWindow
 from plm.frontend.qt.widgets.lanegrid import LaneGrid
 from plm.frontend.qt.widgets.tables import EditableTable
-from plm.frontend.qt.widgets.theme import BG, BG_ELEVATED, BG_SIDEBAR, STYLESHEET, VisibleCheckBox
+from plm.frontend.qt.widgets import theme
+from plm.frontend.qt.widgets.theme import (
+    BG,
+    BG_ELEVATED,
+    BG_SIDEBAR,
+    VisibleCheckBox,
+    build_stylesheet,
+)
 
 
 class QtFrontendTests(unittest.TestCase):
@@ -23,7 +30,7 @@ class QtFrontendTests(unittest.TestCase):
         cls.app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
         cls.app.setStyle("Fusion")
         cls.app.setFont(QtGui.QFont("Segoe UI", 13))
-        cls.app.setStyleSheet(STYLESHEET)
+        cls.app.setStyleSheet(build_stylesheet())
 
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
@@ -345,10 +352,37 @@ class QtFrontendTests(unittest.TestCase):
         self.assertTrue(checkbox.isChecked())
         self.assertTrue(APP_ICON_PATH.is_file(), APP_ICON_PATH)
 
-    def test_white_canvas_and_reference_gray_sidebar_palette(self):
-        self.assertEqual(BG, "#ffffff")
-        self.assertEqual(BG_ELEVATED, "#ffffff")
-        self.assertEqual(BG_SIDEBAR, "#F6F6F6")
+    def test_palette_matches_sap_horizon_tokens(self):
+        """Pins the palette to Horizon's published values, so a stray tweak
+        to one colour shows up as a failing test rather than as a slow
+        drift away from the design system. Names are the upstream tokens in
+        theming-base-content's sap_horizon/variables.json."""
+        self.assertEqual(BG, "#ffffff")  # sapBaseColor
+        self.assertEqual(BG_ELEVATED, "#ffffff")  # sapGroup_ContentBackground
+        self.assertEqual(BG_SIDEBAR, "#f5f6f7")  # sapBackgroundColor
+        self.assertEqual(theme.ACCENT, "#0070f2")  # sapBrandColor
+        self.assertEqual(theme.TEXT, "#131e29")  # sapTextColor
+        self.assertEqual(theme.DANGER, "#aa0808")  # sapNegativeColor
+
+    def test_sap_icon_font_backs_every_named_icon(self):
+        from plm.frontend.qt.widgets import sap_icons
+
+        self.assertTrue(sap_icons.ICON_FONT_PATH.is_file(), sap_icons.ICON_FONT_PATH)
+        self.assertEqual(sap_icons.text_font_family(), "72")
+        blank = []
+        for name in sap_icons.CODEPOINTS:
+            image = sap_icons.icon(name, "#131e29", 24).pixmap(24, 24).toImage()
+            inked = sum(
+                1
+                for y in range(image.height())
+                for x in range(image.width())
+                if image.pixelColor(x, y).alpha() > 0
+            )
+            if inked < 8:
+                blank.append(name)
+        # A wrong codepoint renders as nothing (or as .notdef), which is easy
+        # to miss by eye across a toolbar of small glyphs.
+        self.assertEqual(blank, [], f"icons resolved to no glyph: {blank}")
 
     def _sample_workspace(self):
         """A minimal but valid workspace the real loader accepts."""

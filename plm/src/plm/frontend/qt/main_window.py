@@ -27,6 +27,7 @@ from plm.core.gen_flags import ARCH_PCLK_MODE, PCLK_MODE_ARCH
 from plm.core.model import Config
 from plm.core.paths import CONFIGS_ROOT, DOCS_DIR, PLM_ROOT, is_deletable_workspace, is_workspace_root
 from plm.core.workspace import save_workspace_content, scaffold_default_content, workspace_content
+from plm.frontend.qt.widgets import sap_icons
 from plm.frontend.qt.widgets.lanegrid import LaneGrid
 from plm.frontend.qt.widgets.code_highlighter import CodeHighlighter
 from plm.frontend.qt.widgets.settings import DEFAULT_SETTINGS, SettingsDialog
@@ -73,42 +74,33 @@ def _ui_scale():
     return max(px, 11) / 13.0
 
 
-def _svg_icon(svg_path, color=TEXT_SECONDARY, size=22):
-    """Build a monochrome QIcon from inline SVG path data."""
-    svg = (
-        f'<svg xmlns="http://www.w3.org/2000/svg" width="{size}" height="{size}" '
-        f'viewBox="0 0 24 24" fill="none" stroke="{color}" stroke-width="2" '
-        f'stroke-linecap="round" stroke-linejoin="round">'
-        f'{svg_path}</svg>'
-    )
-    img = QtGui.QImage()
-    img.loadFromData(svg.encode('utf-8'))
-    if img.isNull():
-        return QtGui.QIcon()
-    return QtGui.QIcon(QtGui.QPixmap.fromImage(img))
+def _svg_icon(name, color=TEXT_SECONDARY, size=22):
+    """Build a monochrome QIcon for an SAP icon name.
+
+    Kept under the old name and signature so every call site reads the
+    same; only the artwork source changed, from hand-drawn inline SVG to
+    the SAP icon font (see plm.frontend.qt.widgets.sap_icons)."""
+    return sap_icons.icon(name, color=color, size=size)
 
 
-# SVG path data for each sidebar icon (stroke-based, 24x24 viewBox)
-_SVG_NEW = '<path d="M12 5v14M5 12h14"/>'                        # + circle
-_SVG_SAVE = '<path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><path d="M17 21v-8H7v8"/><path d="M7 3v5h8"/>'
-_SVG_OPEN = '<path d="M3 7a2 2 0 0 1 2-2h4l2 3h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>'
-_SVG_PREVIEW_PANEL = '<rect x="3" y="4" width="18" height="16" rx="3"/><path d="M15 4v16"/>'
-_SVG_PREVIEW_EXPAND = '<path d="M8 3H3v5M16 21h5v-5M3 8l6-6M21 16l-6 6"/>'
-_SVG_MORE = (
-    f'<circle cx="6" cy="12" r="1" fill="{TEXT_TERTIARY}" stroke="none"/>'
-    f'<circle cx="12" cy="12" r="1" fill="{TEXT_TERTIARY}" stroke="none"/>'
-    f'<circle cx="18" cy="12" r="1" fill="{TEXT_TERTIARY}" stroke="none"/>'
-)
-_SVG_CHEVRON_DOWN = '<path d="m7 9 5 5 5-5"/>'
-_SVG_CHEVRON_RIGHT = '<path d="m9 7 5 5-5 5"/>'
-_SVG_REFRESH = '<path d="M20 11a8 8 0 1 0 2 5.3"/><path d="M20 4v7h-7"/>'
-_SVG_EDIT = '<path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4z"/>'
-_SVG_HIGHLIGHT = '<path d="M8 5 3 12l5 7M16 5l5 7-5 7M14 3l-4 18"/>'
-_SVG_DIFF = '<path d="M6 3v18M18 3v18M10 8h5l-2-2M15 16h-5l2 2"/>'
-_SVG_SEARCH = '<circle cx="11" cy="11" r="7"/><path d="M20 20l-4.2-4.2"/>'
-_SVG_COPY = '<rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>'
-_SVG_SETTINGS = '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>'
-_SVG_DOC = '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M16 13H8"/><path d="M16 17H8"/><path d="M10 9H8"/>'
+# SAP icon names (upstream's own, e.g. the web library's `sap-icon--add`).
+_SVG_NEW = "add"
+_SVG_SAVE = "save"
+_SVG_REVERT = "undo"
+_SVG_OPEN = "open-folder"
+_SVG_PREVIEW_PANEL = "screen-split-two"
+_SVG_PREVIEW_EXPAND = "full-screen"
+_SVG_MORE = "overflow"
+_SVG_CHEVRON_DOWN = "navigation-down-arrow"
+_SVG_CHEVRON_RIGHT = "navigation-right-arrow"
+_SVG_REFRESH = "refresh"
+_SVG_EDIT = "edit"
+_SVG_HIGHLIGHT = "syntax"
+_SVG_DIFF = "compare"
+_SVG_SEARCH = "search"
+_SVG_COPY = "copy"
+_SVG_SETTINGS = "action-settings"
+_SVG_DOC = "document-text"
 
 
 class _StableTabBar(QtWidgets.QTabBar):
@@ -677,7 +669,7 @@ class MainWindow(QtWidgets.QMainWindow):
         for b, icon_svg, handler in (
             (btn_new, _SVG_NEW, self._on_new),
             (btn_save, _SVG_SAVE, self._on_save),
-            (btn_revert, _SVG_REFRESH, self._on_revert),
+            (btn_revert, _SVG_REVERT, self._on_revert),
             (btn_open, _SVG_OPEN, self._on_open),
         ):
             b.setObjectName("sidebarBtn")

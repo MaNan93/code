@@ -19,7 +19,7 @@ except ImportError:
     )
 
 from plm.frontend.qt.main_window import MainWindow
-from plm.frontend.qt.widgets.theme import STYLESHEET, apply_titlebar_theme
+from plm.frontend.qt.widgets.theme import apply_titlebar_theme, build_stylesheet
 
 APP_ICON_PATH = Path(__file__).resolve().parent / "assets" / "mario_icon.png"
 
@@ -55,7 +55,10 @@ def main(argv=None):
     # MainWindow's own _apply_font() call later is just adjusting size,
     # not recovering from an already-wrong family.
     app.setFont(QtGui.QFont("Segoe UI", 13))
-    app.setStyleSheet(STYLESHEET)
+    # Built here rather than imported as a constant: the sheet names the
+    # vendored "72" family, and fonts can only be registered once a
+    # QApplication exists.
+    app.setStyleSheet(build_stylesheet())
     win = MainWindow()
     apply_titlebar_theme(win)
     win.show()

@@ -50,6 +50,7 @@ SEL_MODES = ["(default: sync)", "sync", "comb"]
 LANE_COUNTS = ["x2", "x4", "x8", "x16", "x32"]
 DOC_PATH = DOCS_DIR / "tool_usage.md"
 PREVIEW_MAXIMIZE_ANIM_MS = 180
+BOTTOM_EDGE_INSET = 12
 
 
 
@@ -605,7 +606,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
         bottom = QtWidgets.QWidget()
         bl = QtWidgets.QVBoxLayout(bottom)
-        bl.setContentsMargins(8, 8, 8, 8)
+        bl.setContentsMargins(8, 8, 8, BOTTOM_EDGE_INSET)
         bl.setSpacing(4)
         btn_settings = QtWidgets.QPushButton(" Settings")
         btn_doc = QtWidgets.QPushButton(" Doc")
@@ -642,7 +643,7 @@ class MainWindow(QtWidgets.QMainWindow):
         cv = QtWidgets.QVBoxLayout(content)
         # Fill the main content width and meet the title bar at the top.  Keep
         # only the bottom breathing room used by the floating log card.
-        cv.setContentsMargins(0, 0, 0, 12)
+        cv.setContentsMargins(0, 0, 0, BOTTOM_EDGE_INSET)
 
         self.tabs = QtWidgets.QTabWidget()
         self.tabs.setObjectName("tabs")
@@ -738,7 +739,7 @@ class MainWindow(QtWidgets.QMainWindow):
         panel.setObjectName("rtlPreviewPanel")
         layout = QtWidgets.QVBoxLayout(panel)
         # Match the tab bar's y-origin; editorShell contributes a 1 px border.
-        layout.setContentsMargins(18, 1, 18, 14)
+        layout.setContentsMargins(18, 1, 18, BOTTOM_EDGE_INSET)
         layout.setSpacing(10)
 
         title_row = QtWidgets.QHBoxLayout()

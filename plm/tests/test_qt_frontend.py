@@ -57,6 +57,18 @@ class QtFrontendTests(unittest.TestCase):
         self.assertEqual(window.log_title.height(), window.log_more.height())
         self.assertEqual(window.log_title.height(), window.log_toggle.height())
 
+        def widget_bottom(widget):
+            point = widget.mapTo(
+                window.centralWidget(), QtCore.QPoint(0, widget.height())
+            )
+            return point.y()
+
+        doc_button = next(
+            button for button, label in window.sidebar_bottom_buttons if label == "Doc"
+        )
+        self.assertEqual(widget_bottom(doc_button), widget_bottom(window.log_card))
+        self.assertEqual(widget_bottom(window.log_card), widget_bottom(window.preview_code))
+
         window.content_splitter.moveSplitter(int(window.content_splitter.width() * 0.20), 1)
         QtTest.QTest.qWait(main_window.PREVIEW_MAXIMIZE_ANIM_MS + 30)
         self.process_events()

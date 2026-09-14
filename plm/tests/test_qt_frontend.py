@@ -231,11 +231,14 @@ class QtFrontendTests(unittest.TestCase):
         window = MainWindow()
         self.addCleanup(window.close)
         window.current_workspace = workspace
+        window.show()
+        self.process_events()
         window._add_problem(
             "Generate", "Error", "syntax error", source, line=2, column=3
         )
 
         window._on_problem_activated(window.problem_tree.topLevelItem(0), 0)
+        self.process_events()
 
         self.assertTrue(window.rtl_preview_panel.isVisible())
         self.assertEqual(window._selected_preview_file, source)

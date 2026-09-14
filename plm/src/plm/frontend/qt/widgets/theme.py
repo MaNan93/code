@@ -452,11 +452,22 @@ QFrame#logCard {{
     border-radius: {RADIUS_MD}px;
 }}
 QWidget#logHeader {{ background: transparent; }}
-QLabel#logTitle {{
-    color: {TEXT};
-    font-size: {fs(13)};
+QToolButton#bottomPanelTab {{
+    border: none;
+    border-bottom: 2px solid transparent;
+    border-radius: 0;
+    background: transparent;
+    color: {TEXT_SECONDARY};
+    font-size: {fs(12)};
     font-weight: 600;
-    padding: 0;
+    padding: 0 6px;
+}}
+QToolButton#bottomPanelTab:hover {{
+    color: {TEXT};
+}}
+QToolButton#bottomPanelTab:checked {{
+    color: {TEXT};
+    border-bottom-color: {ACCENT};
 }}
 QToolButton#logHeaderBtn, QToolButton#logToggle {{
     min-width: 26px;
@@ -479,6 +490,34 @@ QPlainTextEdit#logConsole {{
     color: {TEXT_SECONDARY};
     font-family: Consolas, "SF Mono", Menlo, monospace;
     font-size: {fs(12)};
+}}
+QWidget#bottomPanelStack {{
+    background: transparent;
+}}
+QTreeWidget#problemTree {{
+    border: none;
+    background: transparent;
+    color: {TEXT};
+    outline: none;
+}}
+QTreeWidget#problemTree::item {{
+    min-height: 25px;
+    padding: 2px 4px;
+}}
+QTreeWidget#problemTree::item:hover {{
+    background: {BG_HOVER};
+}}
+QTreeWidget#problemTree::item:selected {{
+    background: {BG_ACTIVE};
+    color: {TEXT};
+}}
+QTreeWidget#problemTree QHeaderView::section {{
+    background: {BG};
+    color: {TEXT_SECONDARY};
+    border: none;
+    border-bottom: 1px solid {BORDER};
+    padding: 5px 4px;
+    font-weight: 600;
 }}
 
 /* -- generated RTL preview ---------------------------------------------- */

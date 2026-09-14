@@ -14,6 +14,7 @@ for the QSS and plm.frontend.qt.widgets.settings for the Settings dialog.
 import difflib
 import json
 import os
+import re
 import shutil
 import sys
 from pathlib import Path
@@ -55,6 +56,9 @@ DOC_PATH = DOCS_DIR / "tool_usage.md"
 PREVIEW_MAXIMIZE_ANIM_MS = 180
 BOTTOM_EDGE_INSET = 12
 TAB_VERTICAL_GAP = 4
+_PROBLEM_LOCATION_RE = re.compile(
+    r"^(?P<path>.+?):(?P<line>\d+)(?::(?P<column>\d+))?:\s*(?P<body>.+)$"
+)
 
 
 
@@ -1372,16 +1376,35 @@ class MainWindow(QtWidgets.QMainWindow):
         header_layout = QtWidgets.QHBoxLayout(header)
         header_layout.setContentsMargins(0, 0, 0, 0)
         header_layout.setSpacing(4)
-        self.log_title = QtWidgets.QLabel("LOG")
-        self.log_title.setObjectName("logTitle")
-        self.log_title.setFixedHeight(26)
-        header_layout.addWidget(self.log_title, alignment=QtCore.Qt.AlignVCenter)
+
+        self.problems_tab_btn = QtWidgets.QToolButton()
+        self.problems_tab_btn.setObjectName("bottomPanelTab")
+        self.problems_tab_btn.setText("PROBLEMS 0")
+        self.problems_tab_btn.setCheckable(True)
+        self.problems_tab_btn.setFixedHeight(26)
+        header_layout.addWidget(self.problems_tab_btn, alignment=QtCore.Qt.AlignVCenter)
+
+        self.log_tab_btn = QtWidgets.QToolButton()
+        self.log_tab_btn.setObjectName("bottomPanelTab")
+        self.log_tab_btn.setText("LOG")
+        self.log_tab_btn.setCheckable(True)
+        self.log_tab_btn.setChecked(True)
+        self.log_tab_btn.setFixedHeight(26)
+        header_layout.addWidget(self.log_tab_btn, alignment=QtCore.Qt.AlignVCenter)
+
+        panel_tabs = QtWidgets.QButtonGroup(card)
+        panel_tabs.setExclusive(True)
+        panel_tabs.addButton(self.problems_tab_btn, 0)
+        panel_tabs.addButton(self.log_tab_btn, 1)
+        self.problems_tab_btn.clicked.connect(lambda: self._set_bottom_panel_page(0))
+        self.log_tab_btn.clicked.connect(lambda: self._set_bottom_panel_page(1))
+
         header_layout.addStretch(1)
         self.log_more = QtWidgets.QToolButton()
         self.log_more.setObjectName("logHeaderBtn")
         self.log_more.setIcon(_svg_icon(_SVG_MORE, size=16))
         self.log_more.setIconSize(QtCore.QSize(16, 16))
-        self.log_more.setToolTip("Log options")
+        self.log_more.setToolTip("Panel options")
         self.log_more.clicked.connect(self._show_log_menu)
         header_layout.addWidget(self.log_more, alignment=QtCore.Qt.AlignVCenter)
         self.log_toggle = QtWidgets.QToolButton()
@@ -1396,29 +1419,183 @@ class MainWindow(QtWidgets.QMainWindow):
         header_layout.addWidget(self.log_toggle, alignment=QtCore.Qt.AlignVCenter)
         self.log_layout.addWidget(header)
 
+        self.bottom_panel_stack = QtWidgets.QStackedWidget()
+        self.bottom_panel_stack.setObjectName("bottomPanelStack")
+
+        self.problem_tree = QtWidgets.QTreeWidget()
+        self.problem_tree.setObjectName("problemTree")
+        self.problem_tree.setHeaderLabels(["Severity", "Message", "File", "Line"])
+        self.problem_tree.setRootIsDecorated(False)
+        self.problem_tree.setAlternatingRowColors(False)
+        self.problem_tree.setSelectionMode(QtWidgets.QAbstractItemView.SingleSelection)
+        self.problem_tree.setColumnWidth(0, 88)
+        self.problem_tree.setColumnWidth(1, 430)
+        self.problem_tree.setColumnWidth(2, 210)
+        self.problem_tree.setColumnWidth(3, 70)
+        self.problem_tree.itemDoubleClicked.connect(self._on_problem_activated)
+        self.bottom_panel_stack.addWidget(self.problem_tree)
+
         self.log = QtWidgets.QPlainTextEdit()
         self.log.setObjectName("logConsole")
         self.log.setReadOnly(True)
         self.log.setMaximumBlockCount(2000)
         self.log.setMinimumHeight(100)
-        self.log_layout.addWidget(self.log, stretch=1)
+        self.bottom_panel_stack.addWidget(self.log)
+        self.bottom_panel_stack.setCurrentWidget(self.log)
+        self.log_layout.addWidget(self.bottom_panel_stack, stretch=1)
 
+        self._problems = []
+        self._problem_keys = set()
         return card
+
+    def _set_bottom_panel_page(self, index):
+        self.bottom_panel_stack.setCurrentIndex(index)
+        self.problems_tab_btn.setChecked(index == 0)
+        self.log_tab_btn.setChecked(index == 1)
+
+    def _show_problems_panel(self):
+        if not self.log_toggle.isChecked():
+            self.log_toggle.setChecked(True)
+            self._on_toggle_log(True)
+        self._set_bottom_panel_page(0)
+
+    def _clear_problems(self):
+        self._problems.clear()
+        self._problem_keys.clear()
+        self.problem_tree.clear()
+        self.problems_tab_btn.setText("PROBLEMS 0")
+
+    def _add_problem(self, source, severity, message, path=None, line=None, column=None):
+        path_text = str(path) if path else ""
+        key = (source, severity, message, path_text, line, column)
+        if key in self._problem_keys:
+            return
+        self._problem_keys.add(key)
+        problem = {
+            "source": source,
+            "severity": severity,
+            "message": message,
+            "path": path_text,
+            "line": line,
+            "column": column,
+        }
+        self._problems.append(problem)
+
+        display_path = path_text
+        if path_text and self.current_workspace:
+            try:
+                display_path = str(Path(path_text).relative_to(self.current_workspace))
+            except ValueError:
+                pass
+        location = ""
+        if line is not None:
+            location = str(line)
+            if column is not None:
+                location += f":{column}"
+        item = QtWidgets.QTreeWidgetItem(
+            [severity, message, display_path, location]
+        )
+        item.setToolTip(1, f"{source}: {message}")
+        item.setData(0, QtCore.Qt.UserRole, source)
+        item.setData(2, QtCore.Qt.UserRole, path_text)
+        item.setData(3, QtCore.Qt.UserRole, line)
+        item.setData(3, QtCore.Qt.UserRole + 1, column)
+        color = {
+            "Error": "#cf222e",
+            "Warning": "#9a6700",
+            "Info": "#0969da",
+        }.get(severity, TEXT_SECONDARY)
+        item.setForeground(0, QtGui.QBrush(QtGui.QColor(color)))
+        self.problem_tree.addTopLevelItem(item)
+        self.problems_tab_btn.setText(f"PROBLEMS {len(self._problems)}")
+
+    def _capture_problem_line(self, line, source="Generate"):
+        text = line.strip()
+        if not text:
+            return
+        match = _PROBLEM_LOCATION_RE.match(text)
+        path = None
+        line_number = None
+        column = None
+        body = text
+        if match:
+            path = match.group("path").strip().strip('"')
+            line_number = int(match.group("line"))
+            column_text = match.group("column")
+            column = int(column_text) if column_text else None
+            body = match.group("body").strip()
+
+        lower = body.lower()
+        if any(token in lower for token in ("fatal", "error", "traceback", "exception")):
+            severity = "Error"
+        elif "warning" in lower:
+            severity = "Warning"
+        else:
+            return
+        message = re.sub(
+            r"^(?:fatal|error|warning)\s*:?\s*", "", body,
+            flags=re.IGNORECASE,
+        ) or body
+        self._add_problem(
+            source, severity, message, path, line_number, column
+        )
+
+    def _on_problem_activated(self, item, _column):
+        path_text = item.data(2, QtCore.Qt.UserRole)
+        line = item.data(3, QtCore.Qt.UserRole)
+        if not path_text:
+            return
+        path = Path(path_text)
+        if not path.is_absolute():
+            workspace_path = (
+                self.current_workspace / path
+                if self.current_workspace else None
+            )
+            if workspace_path and workspace_path.is_file():
+                path = workspace_path
+            else:
+                path = PLM_ROOT / path
+        if not path.is_file():
+            self._log(f"Problem source no longer exists: {path}")
+            return
+        if self.rtl_preview_panel.isHidden():
+            self._on_toggle_rtl_preview(True)
+        self._selected_preview_file = path
+        self._show_selected_preview_file()
+        if line:
+            cursor = self.preview_code.textCursor()
+            cursor.movePosition(QtGui.QTextCursor.Start)
+            cursor.movePosition(
+                QtGui.QTextCursor.Down,
+                QtGui.QTextCursor.MoveAnchor,
+                max(0, int(line) - 1),
+            )
+            self.preview_code.setTextCursor(cursor)
+            self.preview_code.centerCursor()
+        self.preview_code.setFocus()
 
     def _on_toggle_log(self, checked):
         chevron = _SVG_CHEVRON_DOWN if checked else _SVG_CHEVRON_RIGHT
         self.log_toggle.setIcon(_svg_icon(chevron, size=16))
         self.log_more.setVisible(checked)
-        self.log.setVisible(checked)
+        self.bottom_panel_stack.setVisible(checked)
         self.log_layout.setContentsMargins(18, 14 if checked else 8, 18, 16 if checked else 8)
         self._position_floating_log()
 
     def _show_log_menu(self):
         menu = QtWidgets.QMenu(self.log_more)
-        clear_action = menu.addAction("Clear log")
-        chosen = menu.exec_(self.log_more.mapToGlobal(QtCore.QPoint(0, self.log_more.height())))
+        showing_problems = self.bottom_panel_stack.currentWidget() is self.problem_tree
+        clear_action = menu.addAction(
+            "Clear problems" if showing_problems else "Clear log"
+        )
+        chosen = menu.exec_(
+            self.log_more.mapToGlobal(QtCore.QPoint(0, self.log_more.height()))
+        )
         if chosen == clear_action:
-            self.log.clear()
+            if showing_problems:
+                self._clear_problems()
+            else:
+                self.log.clear()
 
     def _log(self, text):
         ts = QtCore.QTime.currentTime().toString("HH:mm:ss")
@@ -1573,6 +1750,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self._log(f"Deleted workspace {path}.")
         if self.current_workspace and str(self.current_workspace) == str(path):
             self.current_workspace = None
+            self._clear_problems()
             clear_last_workspace()
             self.controllers_table.set_rows([])
             self.signals_table.set_rows([])
@@ -1612,6 +1790,7 @@ class MainWindow(QtWidgets.QMainWindow):
             self._preview_previous_contents = {}
             self._selected_preview_file = None
         self.current_workspace = path
+        self._clear_problems()
         self.controllers_table.set_rows(content["controllers"])
         self.signals_table.set_rows(content["signals"])
         self._load_gen_flags(content["gen_flags"])
@@ -1844,21 +2023,45 @@ class MainWindow(QtWidgets.QMainWindow):
             return False
         return True
 
+    def _validation_problem_path(self, message):
+        lower = message.lower()
+        config_dir = self.current_workspace / "config"
+        if any(token in lower for token in ("controller", "ctrl", "max_width")):
+            return config_dir / "controllers.csv"
+        if any(token in lower for token in ("signal", "safe_state", "tie_off")):
+            return config_dir / "pipe_signals.csv"
+        if any(token in lower for token in ("mode", "lane", "group", "pclk", "clock")):
+            return config_dir / "lane_mapping.csv"
+        return config_dir
+
     def _on_validate(self):
         if not self._save_before_action():
             return
+        self._clear_problems()
+        self._set_bottom_panel_page(1)
         cfg_dir = self.current_workspace / "config"
         self._log(f"--- validating {cfg_dir} ---")
         try:
             cfg = Config(cfg_dir)
-        except SystemExit as e:
-            self._log(str(e))
+        except SystemExit as error:
+            message = str(error)
+            self._log(message)
+            self._add_problem("Validate", "Error", message, cfg_dir)
+            self._show_problems_panel()
             return
         errs = cfg.validate()
         if errs:
             self._log("Config validation failed:")
-            for e in errs:
-                self._log(f"  - {e}")
+            for error in errs:
+                message = str(error)
+                self._log(f"  - {message}")
+                self._add_problem(
+                    "Validate",
+                    "Error",
+                    message,
+                    self._validation_problem_path(message),
+                )
+            self._show_problems_panel()
         else:
             self._log("OK -- config is valid.")
 
@@ -1882,6 +2085,8 @@ class MainWindow(QtWidgets.QMainWindow):
         invocation."""
         if not self._save_before_action():
             return
+        self._clear_problems()
+        self._set_bottom_panel_page(1)
         cmd = [sys.executable, "-m", "plm.cli.main", "generate", target, "--config", str(self.current_workspace)]
         settings = load_settings()
         verible_path = settings.get("veriblePath")
@@ -1914,6 +2119,7 @@ class MainWindow(QtWidgets.QMainWindow):
         def on_ready_read():
             data = bytes(proc.readAllStandardOutput()).decode("utf-8", errors="replace")
             for line in data.splitlines():
+                self._capture_problem_line(line)
                 self._log(line)
 
         def on_finished(exit_code, _exit_status):
@@ -1923,6 +2129,14 @@ class MainWindow(QtWidgets.QMainWindow):
                     self._refresh_rtl_preview()
             else:
                 self._log(f"[generate finished, exit code {exit_code}]")
+                if not self._problems:
+                    self._add_problem(
+                        "Generate",
+                        "Error",
+                        f"Generation failed with exit code {exit_code}.",
+                    )
+            if self._problems:
+                self._show_problems_panel()
             if proc in self._active_processes:
                 self._active_processes.remove(proc)
             if then and exit_code == 0:
@@ -1930,7 +2144,10 @@ class MainWindow(QtWidgets.QMainWindow):
 
         def on_error(_error):
             if proc.state() == QtCore.QProcess.NotRunning:
-                self._log(f"Failed to launch generate {target}: {proc.errorString()}")
+                message = f"Failed to launch generate {target}: {proc.errorString()}"
+                self._log(message)
+                self._add_problem("Generate", "Error", message)
+                self._show_problems_panel()
 
         proc.readyReadStandardOutput.connect(on_ready_read)
         proc.finished.connect(on_finished)

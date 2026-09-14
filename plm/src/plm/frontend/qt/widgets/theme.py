@@ -252,7 +252,7 @@ QListWidget#recentList[collapsed="true"]::item {{
 /* -- pill tab switcher --------------------------------------------------- */
 QTabWidget::pane {{
     border: none;
-    top: -1px;
+    top: 0;
 }}
 QTabWidget#settingsTabs::pane {{
     top: 6px;

@@ -155,6 +155,16 @@ class QtFrontendTests(unittest.TestCase):
         self.process_events()
         self.assertFalse(window.preview_file_tree.isVisible())
 
+        window._set_preview_search_visible(True)
+        window.preview_root_btn.click()
+        self.process_events()
+        self.assertGreater(
+            window.preview_file_tree.geometry().top(),
+            window.preview_search_bar.geometry().bottom(),
+        )
+        window._set_preview_tree_visible(False)
+        window._set_preview_search_visible(False)
+
         window.preview_root_btn.click()
         self.process_events()
         self.assertTrue(window.preview_file_tree.isVisible())
@@ -264,6 +274,7 @@ class QtFrontendTests(unittest.TestCase):
         process = window._active_processes[-1]
         python_path = process.processEnvironment().value("PYTHONPATH").split(os.pathsep)
         self.assertIn(str(main_window.PLM_ROOT / "src"), python_path)
+        window._set_generation_busy(False)
 
     def test_modal_dialog_blurs_only_while_open(self):
         window = MainWindow()
@@ -318,6 +329,7 @@ class QtFrontendTests(unittest.TestCase):
         def choose_clear(menu, _pos):
             actions = [action for action in menu.actions() if not action.isSeparator()]
             captured["labels"] = [action.text() for action in actions]
+            captured["delete_widget"] = actions[-1].defaultWidget()
             return actions[1]
 
         with mock.patch.object(QtWidgets.QMenu, "exec_", choose_clear), mock.patch.object(
@@ -326,6 +338,7 @@ class QtFrontendTests(unittest.TestCase):
             window._show_recent_menu(item, QtCore.QPoint())
 
         self.assertEqual(captured["labels"], ["Rename", "Clear", "Delete"])
+        self.assertEqual(captured["delete_widget"].objectName(), "destructiveMenuItem")
         clear.assert_called_once()
 
     def test_lane_grid_context_menu_and_x32_layout(self):
@@ -460,6 +473,10 @@ class QtFrontendTests(unittest.TestCase):
 
         window._set_generation_busy(True)
         self.assertFalse(any(button.isEnabled() for button in window.generation_buttons))
+        self.assertFalse(
+            any(button.isEnabled() for button, _label in window.sidebar_action_buttons)
+        )
+        self.assertFalse(window.recent_list.isEnabled())
         # A second click while busy must not start another writer.
         with mock.patch.object(window, "_save_before_action") as save:
             window._run_tool("rtl")
@@ -467,6 +484,10 @@ class QtFrontendTests(unittest.TestCase):
 
         window._set_generation_busy(False)
         self.assertTrue(all(button.isEnabled() for button in window.generation_buttons))
+        self.assertTrue(
+            all(button.isEnabled() for button, _label in window.sidebar_action_buttons)
+        )
+        self.assertTrue(window.recent_list.isEnabled())
 
     def test_topology_summary_reports_lane_groups(self):
         workspace = self._sample_workspace()
@@ -480,12 +501,130 @@ class QtFrontendTests(unittest.TestCase):
         # Built from the live widgets, not the file on disk.
         self.assertNotEqual(text, "Open a workspace to see its lane topology.")
 
+    def test_external_config_change_is_not_overwritten(self):
+        workspace = self._sample_workspace()
+        window = MainWindow()
+        self.addCleanup(window.close)
+        window._open_workspace(workspace)
+        controllers = workspace / "config" / "controllers.csv"
+        external_text = controllers.read_text(encoding="utf-8") + "\n"
+        controllers.write_text(external_text, encoding="utf-8")
+
+        with mock.patch.object(QtWidgets.QMessageBox, "warning") as warning:
+            self.assertFalse(window._on_save())
+
+        warning.assert_called_once()
+        self.assertEqual(controllers.read_text(encoding="utf-8"), external_text)
+
+    def test_new_workspace_prompts_for_unsaved_changes_only_once(self):
+        workspace = self._sample_workspace()
+        window = MainWindow()
+        self.addCleanup(window.close)
+        window._open_workspace(workspace)
+
+        with mock.patch.object(
+            window, "_confirm_discard_changes", return_value=True
+        ) as confirm, mock.patch.object(
+            QtWidgets.QInputDialog, "getText", return_value=("new_quad", True)
+        ):
+            window._on_new()
+
+        confirm.assert_called_once()
+        self.assertEqual(window.current_workspace.name, "new_quad")
+
+    def test_invalid_topology_is_reported_without_calling_report(self):
+        workspace = self._sample_workspace()
+        window = MainWindow()
+        self.addCleanup(window.close)
+        window._open_workspace(workspace)
+        rows = window.lane_grid.get_rows()
+        rows[0]["lane0"] = "99-0"
+        window.lane_grid.set_rows(rows)
+        window._topology_payload = None
+
+        window._refresh_topology_summary()
+
+        summary = window.topology_summary.toPlainText()
+        self.assertIn("Config is not valid yet", summary)
+        self.assertIn("undefined ctrl_id=99", summary)
+
+    def test_preview_toolbar_compacts_before_it_can_overlap_files_button(self):
+        window = MainWindow()
+        self.addCleanup(window.close)
+
+        window._apply_preview_control_density(300)
+        self.assertFalse(window.preview_more_btn.isHidden())
+        self.assertTrue(window.preview_edit_btn.isHidden())
+        self.assertTrue(window.preview_search_btn.isHidden())
+        self.assertFalse(window.preview_refresh_btn.isHidden())
+        self.assertFalse(window.preview_expand_btn.isHidden())
+
+        window._apply_preview_control_density(150)
+        self.assertFalse(window.preview_more_btn.isHidden())
+        self.assertTrue(window.preview_refresh_btn.isHidden())
+        self.assertTrue(window.preview_expand_btn.isHidden())
+        self.assertFalse(window.preview_toggle_btn.isHidden())
+
+        window._apply_preview_control_density(800)
+        self.assertTrue(window.preview_more_btn.isHidden())
+        self.assertFalse(window.preview_edit_btn.isHidden())
+        self.assertFalse(window.preview_search_btn.isHidden())
+
+    def test_floating_log_stays_inside_a_narrow_main_pane(self):
+        window = MainWindow()
+        self.addCleanup(window.close)
+        window.show()
+        window._on_toggle_rtl_preview(True)
+        window.content_splitter.setSizes([120, 700])
+        self.process_events()
+
+        window._position_floating_log()
+
+        self.assertLessEqual(window.log_card.width(), window.main_area.width())
+        self.assertLessEqual(
+            window.log_card.geometry().right(),
+            window.main_area.rect().right(),
+        )
+
+    def test_topology_refresh_is_debounced_from_generation_controls(self):
+        window = MainWindow()
+        self.addCleanup(window.close)
+        generation_index = window.tabs.indexOf(window._generation_page)
+        window.tabs.setCurrentIndex(generation_index)
+        self.process_events()
+
+        timeout_spy = QtTest.QSignalSpy(window._topology_refresh_timer.timeout)
+        window._poll_dirty_state()
+        QtTest.QTest.qWait(300)
+        self.process_events()
+        self.assertEqual(len(timeout_spy), 0)
+
+        next_index = (
+            window.sel_mode_combo.currentIndex() + 1
+        ) % window.sel_mode_combo.count()
+        window.sel_mode_combo.setCurrentIndex(next_index)
+        QtTest.QTest.qWait(300)
+        self.process_events()
+        self.assertEqual(len(timeout_spy), 1)
+
+    def test_close_is_blocked_during_generation(self):
+        window = MainWindow()
+        self.addCleanup(window.close)
+        event = mock.Mock()
+        window._set_generation_busy(True)
+
+        with mock.patch.object(QtWidgets.QMessageBox, "warning"):
+            window.closeEvent(event)
+
+        event.ignore.assert_called_once()
+        window._set_generation_busy(False)
+
     def test_preview_search_finds_matches_and_jumps_to_a_line(self):
         workspace = self._sample_workspace()
         rtl = workspace / "rtl" / "src"
         rtl.mkdir(parents=True)
         (rtl / "pipe_lane_mapper.sv").write_text(
-            "module pipe_lane_mapper;\n  logic marker_signal;\nendmodule\n",
+            "module pipe_lane_mapper;\n  logic Marker_Signal;\nendmodule\n",
             encoding="utf-8",
         )
         window = MainWindow()
@@ -506,7 +645,7 @@ class QtFrontendTests(unittest.TestCase):
         window.preview_search_edit.setText("marker_signal")
         self.assertEqual(window.preview_search_status.text(), "1 found")
         window._preview_find_next()
-        self.assertEqual(window.preview_code.textCursor().selectedText(), "marker_signal")
+        self.assertEqual(window.preview_code.textCursor().selectedText(), "Marker_Signal")
 
         window.preview_search_edit.setText("nothing_here")
         window._preview_find_next()

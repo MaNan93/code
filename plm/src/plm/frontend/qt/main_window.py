@@ -433,16 +433,18 @@ class MainWindow(QtWidgets.QMainWindow):
         tab_bar = self.tabs.tabBar()
         header_aligned = self.main_area.isVisible() and tab_bar.isVisible()
         if header_aligned:
+            tab_index = max(0, self.tabs.currentIndex())
+            tab_rect = tab_bar.tabRect(tab_index)
+            if not tab_rect.isValid():
+                tab_rect = tab_bar.rect()
             # QSS padding is resolved only after the window is shown, so the
             # final tab-bar height can differ from its construction-time hint.
             # Keep the preview heading on that exact live header geometry.
             self.preview_title.setFixedHeight(tab_bar.height())
-            self.preview_controls.setFixedHeight(tab_bar.height())
-            # Size the buttons off that same live height (minus the frame's
-            # own 1 px border top and bottom) rather than a fixed px value,
-            # so they track the tab pills at every app font size instead of
-            # staying 30 px while everything around them grows.
-            side = max(20, tab_bar.height() - 2)
+            # Align the Preview controls to the actual tab pill rather than
+            # the padded QTabBar container.
+            self.preview_controls.setFixedHeight(tab_rect.height())
+            side = max(20, tab_rect.height() - 2)
             for button in self.preview_buttons:
                 button.setFixedSize(side, side)
                 button.setIconSize(QtCore.QSize(round(side * 0.6), round(side * 0.6)))
@@ -456,7 +458,8 @@ class MainWindow(QtWidgets.QMainWindow):
         x = origin.x() + anchor.width() - self.preview_controls.width() - inset
         if header_aligned:
             tab_origin = tab_bar.mapTo(central, QtCore.QPoint(0, 0))
-            y = tab_origin.y() + max(0, (tab_bar.height() - self.preview_controls.height()) // 2)
+            tab_center_y = tab_origin.y() + tab_rect.center().y()
+            y = tab_center_y - self.preview_controls.height() // 2
         else:
             y = origin.y() + inset
         self.preview_controls.move(max(margin, x), max(0, y))
@@ -721,7 +724,8 @@ class MainWindow(QtWidgets.QMainWindow):
         self.preview_toggle_btn.setCheckable(True)
         self.preview_toggle_btn.setIcon(_svg_icon(_SVG_PREVIEW_PANEL, size=18))
         self.preview_toggle_btn.setIconSize(QtCore.QSize(18, 18))
-        self.preview_toggle_btn.setToolTip("Show RTL preview")
+        self.preview_toggle_btn.setToolTip("Preview")
+        self.preview_toggle_btn.setAccessibleName("Preview")
         self.preview_toggle_btn.clicked.connect(self._on_toggle_rtl_preview)
 
         self.preview_buttons = [
@@ -780,7 +784,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.preview_refresh_btn.setVisible(checked)
         self.preview_edit_btn.setVisible(checked)
         self.preview_expand_btn.setVisible(checked)
-        self.preview_toggle_btn.setToolTip("Hide RTL preview" if checked else "Show RTL preview")
+        self.preview_toggle_btn.setToolTip("Preview")
         self.preview_expand_btn.setToolTip("Maximize RTL preview")
         if checked:
             self._refresh_rtl_preview()
@@ -866,7 +870,7 @@ class MainWindow(QtWidgets.QMainWindow):
             self.preview_expand_btn.show()
             self.rtl_preview_panel.show()
             self.preview_expand_btn.setToolTip("Restore split preview")
-            self.preview_toggle_btn.setToolTip("Hide RTL preview")
+            self.preview_toggle_btn.setToolTip("Preview")
             self._refresh_rtl_preview()
 
             def _finish_maximize():

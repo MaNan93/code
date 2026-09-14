@@ -50,10 +50,15 @@ class QtFrontendTests(unittest.TestCase):
         title_top = window.preview_title.mapTo(window.centralWidget(), QtCore.QPoint()).y()
         self.assertEqual(title_top, tab_top)
         self.assertEqual(window.preview_title.height(), tab_bar.height())
+        tab_center_y = tab_bar.mapTo(
+            window.centralWidget(), tab_bar.tabRect(window.tabs.currentIndex()).center()
+        ).y()
         self.assertLessEqual(
-            abs(window.preview_controls.geometry().center().y() - (tab_top + tab_bar.height() // 2)),
+            abs(window.preview_controls.geometry().center().y() - tab_center_y),
             1,
         )
+        self.assertEqual(window.preview_toggle_btn.toolTip(), "Preview")
+        self.assertEqual(window.preview_toggle_btn.accessibleName(), "Preview")
         self.assertEqual(window.log_title.height(), window.log_more.height())
         self.assertEqual(window.log_title.height(), window.log_toggle.height())
 

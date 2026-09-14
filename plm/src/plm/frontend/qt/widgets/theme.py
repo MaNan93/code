@@ -254,11 +254,17 @@ QTabWidget::pane {{
     border: none;
     top: 0;
 }}
+QTabWidget#tabs::pane {{
+    border-top: 2px solid {BORDER_STRONG};
+}}
 QTabWidget#settingsTabs::pane {{
     top: 6px;
 }}
 QTabBar {{
     background: transparent;
+}}
+QTabWidget#tabs QTabBar {{
+    padding: 4px 0;
 }}
 QTabBar::tab {{
     background: transparent;

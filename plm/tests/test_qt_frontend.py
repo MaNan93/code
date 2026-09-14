@@ -13,7 +13,7 @@ from plm.frontend.qt.main import APP_ICON_PATH
 from plm.frontend.qt.main_window import MainWindow
 from plm.frontend.qt.widgets.lanegrid import LaneGrid
 from plm.frontend.qt.widgets.tables import EditableTable
-from plm.frontend.qt.widgets.theme import STYLESHEET, VisibleCheckBox
+from plm.frontend.qt.widgets.theme import BG, BG_ELEVATED, BG_SIDEBAR, STYLESHEET, VisibleCheckBox
 
 
 class QtFrontendTests(unittest.TestCase):
@@ -286,6 +286,11 @@ class QtFrontendTests(unittest.TestCase):
         self.assertFalse(image.isNull())
         self.assertTrue(checkbox.isChecked())
         self.assertTrue(APP_ICON_PATH.is_file(), APP_ICON_PATH)
+
+    def test_white_canvas_and_reference_gray_sidebar_palette(self):
+        self.assertEqual(BG, "#ffffff")
+        self.assertEqual(BG_ELEVATED, "#ffffff")
+        self.assertEqual(BG_SIDEBAR, "#F6F6F6")
 
 
 if __name__ == "__main__":

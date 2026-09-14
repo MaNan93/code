@@ -12,7 +12,7 @@ from PyQt5 import QtCore, QtGui, QtWidgets
 
 BG = "#ffffff"
 BG_ELEVATED = "#ffffff"
-BG_SIDEBAR = "#F9F6F4"
+BG_SIDEBAR = "#F6F6F6"
 BG_HOVER = "#ece9e0"
 BG_ACTIVE = "#e4e0d3"
 BORDER = "#e5e1d6"
@@ -66,7 +66,12 @@ def apply_titlebar_theme(window):
         dwmapi = ctypes.windll.dwmapi
         DWMWA_CAPTION_COLOR = 35
         DWMWA_TEXT_COLOR = 36
-        caption = ctypes.c_int(_colorref(BG_ELEVATED))
+        caption_color = (
+            BG_SIDEBAR
+            if isinstance(window, QtWidgets.QMainWindow)
+            else BG_ELEVATED
+        )
+        caption = ctypes.c_int(_colorref(caption_color))
         text = ctypes.c_int(_colorref(TEXT))
         dwmapi.DwmSetWindowAttribute(hwnd, DWMWA_CAPTION_COLOR, ctypes.byref(caption), ctypes.sizeof(caption))
         dwmapi.DwmSetWindowAttribute(hwnd, DWMWA_TEXT_COLOR, ctypes.byref(text), ctypes.sizeof(text))

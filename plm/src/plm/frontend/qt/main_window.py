@@ -358,7 +358,8 @@ class MainWindow(QtWidgets.QMainWindow):
     def __init__(self):
         super().__init__()
         self.current_workspace = None  # Path | None
-        self._saved_payload = None  # last on-disk state, for dirty detection
+        self._saved_payload = None  # last UI state saved to disk
+        self._saved_disk_signature = None  # config bytes at the last load/save
         self._title_shows_dirty = False
         self._generation_busy = False
         self._topology_payload = None
@@ -470,6 +471,14 @@ class MainWindow(QtWidgets.QMainWindow):
         self._position_preview_file_tree()
 
     def closeEvent(self, event):
+        if self._generation_busy:
+            QtWidgets.QMessageBox.warning(
+                self,
+                "Generation in progress",
+                "Wait for generation to finish before closing the application.",
+            )
+            event.ignore()
+            return
         if not self._confirm_discard_changes():
             event.ignore()
             return
@@ -941,7 +950,7 @@ class MainWindow(QtWidgets.QMainWindow):
         if text.startswith(":"):
             self.preview_search_status.setText("line")
             return
-        total = self.preview_code.toPlainText().count(text)
+        total = self.preview_code.toPlainText().casefold().count(text.casefold())
         self.preview_search_status.setText(f"{total} found" if total else "no match")
 
     def _preview_goto_line(self, number):
@@ -1323,6 +1332,8 @@ class MainWindow(QtWidgets.QMainWindow):
             self.preview_highlighter.set_language(path.suffix)
         self.preview_code.setPlainText(text)
         self.preview_code.moveCursor(QtGui.QTextCursor.Start)
+        if self.preview_search_edit.text():
+            self._on_preview_search_text_changed(self.preview_search_edit.text())
 
     def _preview_diff_label(self, path):
         """Workspace-relative path for a unified-diff header.
@@ -1927,6 +1938,9 @@ class MainWindow(QtWidgets.QMainWindow):
         self._log(f"Deleted workspace {path}.")
         if self.current_workspace and str(self.current_workspace) == str(path):
             self.current_workspace = None
+            self._saved_payload = None
+            self._saved_disk_signature = None
+            self._topology_payload = None
             self._clear_problems()
             clear_last_workspace()
             self.controllers_table.set_rows([])
@@ -1937,6 +1951,11 @@ class MainWindow(QtWidgets.QMainWindow):
             self.lane_grid.set_rows([])
             self.lane_grid.set_controllers([])
             self._update_workspace_label()
+            self._refresh_topology_summary()
+            self._preview_current_contents = {}
+            self._preview_previous_contents = {}
+            self._selected_preview_file = None
+            self._refresh_rtl_preview()
         self._refresh_recent()
 
     def _update_workspace_label(self):
@@ -1947,15 +1966,56 @@ class MainWindow(QtWidgets.QMainWindow):
             self.setWindowTitle("plmConsultant")
 
     # ------------------------------------------------------------ dirty state
+    def _config_disk_signature(self):
+        """Return exact config bytes so external edits cannot be overwritten."""
+        if self.current_workspace is None:
+            return None
+        signature = []
+        config_dir = self.current_workspace / "config"
+        for name in (
+            "controllers.csv",
+            "lane_mapping.csv",
+            "pipe_signals.csv",
+            "gen_flags.txt",
+        ):
+            path = config_dir / name
+            try:
+                content = path.read_bytes()
+            except OSError:
+                content = None
+            signature.append((name, content))
+        return tuple(signature)
+
     def _mark_saved(self):
-        """Snapshot what is now on disk, so edits can be detected against it."""
+        """Snapshot both the UI state and exact config files now on disk."""
         self._saved_payload = self._gather_payload() if self.current_workspace else None
+        self._saved_disk_signature = self._config_disk_signature()
+        self._title_shows_dirty = False
         self._update_workspace_label()
 
     def _is_dirty(self):
         if self.current_workspace is None or self._saved_payload is None:
             return False
         return self._gather_payload() != self._saved_payload
+
+    def _has_external_config_changes(self):
+        return (
+            self.current_workspace is not None
+            and self._saved_disk_signature is not None
+            and self._config_disk_signature() != self._saved_disk_signature
+        )
+
+    def _ensure_external_config_unchanged(self):
+        if not self._has_external_config_changes():
+            return True
+        QtWidgets.QMessageBox.warning(
+            self,
+            "Config changed outside plmConsultant",
+            "One or more config files changed on disk. Reload the workspace "
+            "with Revert before saving, validating, or generating, so those "
+            "external edits are not overwritten.",
+        )
+        return False
 
     def _poll_dirty_state(self):
         """Drive the title's modified marker.
@@ -2001,7 +2061,7 @@ class MainWindow(QtWidgets.QMainWindow):
         if self.current_workspace is None:
             QtWidgets.QMessageBox.warning(self, "No workspace", "Open or create a workspace first.")
             return
-        if not self._is_dirty():
+        if not self._is_dirty() and not self._has_external_config_changes():
             self._log("Nothing to revert.")
             return
         answer = QtWidgets.QMessageBox.question(
@@ -2014,19 +2074,20 @@ class MainWindow(QtWidgets.QMainWindow):
         if answer != QtWidgets.QMessageBox.Yes:
             return
         target = self.current_workspace
-        self._saved_payload = None  # skip the prompt _open_workspace would raise
-        self._open_workspace(target)
+        self._saved_payload = None  # the confirmation above already handled edits
+        self._saved_disk_signature = None
+        self._open_workspace(target, confirm_discard=False)
         self._log(f"Reverted to the version on disk: {target}.")
 
     # ------------------------------------------------------------ workspace lifecycle
-    def _open_workspace(self, path):
+    def _open_workspace(self, path, confirm_discard=True):
         path = Path(path).resolve()
         if not is_workspace_root(path):
             QtWidgets.QMessageBox.warning(
                 self, "Open failed", f"Not a PLM workspace (missing config CSVs): {path}"
             )
             return
-        if not self._confirm_discard_changes():
+        if confirm_discard and not self._confirm_discard_changes():
             return
         try:
             content = workspace_content(path)
@@ -2132,7 +2193,7 @@ class MainWindow(QtWidgets.QMainWindow):
             QtWidgets.QMessageBox.critical(self, "New workspace failed", str(e))
             self._log(f"New workspace failed: {e}")
             return
-        self._open_workspace(ws)
+        self._open_workspace(ws, confirm_discard=False)
 
     def _on_save(self):
         """Returns True when the workspace is on disk, False on failure --
@@ -2140,6 +2201,8 @@ class MainWindow(QtWidgets.QMainWindow):
         the user asked for could not be written."""
         if self.current_workspace is None:
             QtWidgets.QMessageBox.warning(self, "No workspace", "Open or create a workspace first.")
+            return False
+        if not self._ensure_external_config_unchanged():
             return False
         try:
             save_workspace_content(self.current_workspace, self._gather_payload())
@@ -2280,6 +2343,8 @@ class MainWindow(QtWidgets.QMainWindow):
         if self.current_workspace is None:
             QtWidgets.QMessageBox.warning(self, "No workspace", "Open or create a workspace first.")
             return False
+        if not self._ensure_external_config_unchanged():
+            return False
         try:
             save_workspace_content(self.current_workspace, self._gather_payload())
         except (ValueError, OSError) as e:
@@ -2338,8 +2403,13 @@ class MainWindow(QtWidgets.QMainWindow):
         just wasted work -- it can interleave two writers over one output
         tree."""
         self._generation_busy = bool(busy)
+        enabled = not busy
         for button in getattr(self, "generation_buttons", []):
-            button.setEnabled(not busy)
+            button.setEnabled(enabled)
+        for button, _label in getattr(self, "sidebar_action_buttons", []):
+            button.setEnabled(enabled)
+        if getattr(self, "recent_list", None):
+            self.recent_list.setEnabled(enabled)
 
     def _refresh_topology_summary(self):
         """Render Config.report() for what would be generated right now.
@@ -2355,18 +2425,25 @@ class MainWindow(QtWidgets.QMainWindow):
         payload = self._gather_payload()
         if payload == getattr(self, "_topology_payload", None):
             return
-        self._topology_payload = payload
         try:
             with tempfile.TemporaryDirectory() as scratch:
                 root = Path(scratch) / "summary"
                 save_workspace_content(root, payload)
-                text = Config(root / "config").report()
-        except SystemExit as e:
-            # Config rejects a malformed set by raising SystemExit with the
-            # offending line, which is worth showing verbatim here.
-            text = f"Config cannot be read yet:\n{e}"
-        except (ValueError, OSError) as e:
-            text = f"Could not build the summary:\n{e}"
+                config = Config(root / "config")
+                errors = config.validate()
+                if errors:
+                    text = "Config is not valid yet:\n" + "\n".join(
+                        f"  - {error}" for error in errors
+                    )
+                else:
+                    text = config.report()
+        except SystemExit as error:
+            text = f"Config cannot be read yet:\n{error}"
+        except Exception as error:
+            # This runs from Qt slots/timers: never let an unexpected model
+            # exception terminate the GUI.
+            text = f"Could not build the summary:\n{error}"
+        self._topology_payload = payload
         self.topology_summary.setPlainText(text)
 
     def _on_gen_rtl(self):
@@ -2395,8 +2472,10 @@ class MainWindow(QtWidgets.QMainWindow):
         self._set_bottom_panel_page(1)
         self._set_generation_busy(True)
         started_at = time.monotonic()
+        run_workspace = self.current_workspace
         generated = []
-        cmd = [sys.executable, "-m", "plm.cli.main", "generate", target, "--config", str(self.current_workspace)]
+        output_buffer = ""
+        cmd = [sys.executable, "-m", "plm.cli.main", "generate", target, "--config", str(run_workspace)]
         settings = load_settings()
         verible_path = settings.get("veriblePath")
         if verible_path:
@@ -2425,16 +2504,27 @@ class MainWindow(QtWidgets.QMainWindow):
         proc.setProcessEnvironment(environment)
         proc.setProcessChannelMode(QtCore.QProcess.MergedChannels)
 
+        def handle_output_line(line):
+            stripped = line.strip()
+            if stripped.startswith("generated "):
+                generated.append(stripped[len("generated ") :])
+            self._capture_problem_line(line)
+            self._log(line)
+
         def on_ready_read():
+            nonlocal output_buffer
             data = bytes(proc.readAllStandardOutput()).decode("utf-8", errors="replace")
-            for line in data.splitlines():
-                stripped = line.strip()
-                if stripped.startswith("generated "):
-                    generated.append(stripped[len("generated ") :])
-                self._capture_problem_line(line)
-                self._log(line)
+            output_buffer += data
+            while "\n" in output_buffer:
+                line, output_buffer = output_buffer.split("\n", 1)
+                handle_output_line(line.rstrip("\r"))
 
         def on_finished(exit_code, _exit_status):
+            nonlocal output_buffer
+            on_ready_read()
+            if output_buffer:
+                handle_output_line(output_buffer.rstrip("\r"))
+                output_buffer = ""
             self._set_generation_busy(False)
             elapsed = time.monotonic() - started_at
             errors = sum(1 for problem in self._problems if problem.get("severity") == "Error")
@@ -2444,9 +2534,10 @@ class MainWindow(QtWidgets.QMainWindow):
             )
             if exit_code == 0:
                 self._log("[generate finished]")
-                self._refresh_topology_summary()
-                if target in ("rtl", "all"):
-                    self._refresh_rtl_preview()
+                if self.current_workspace == run_workspace:
+                    self._refresh_topology_summary()
+                    if target in ("rtl", "all"):
+                        self._refresh_rtl_preview()
             else:
                 self._log(f"[generate finished, exit code {exit_code}]")
                 if not self._problems:
@@ -2469,6 +2560,8 @@ class MainWindow(QtWidgets.QMainWindow):
                 self._log(message)
                 self._add_problem("Generate", "Error", message)
                 self._show_problems_panel()
+                if proc in getattr(self, "_active_processes", []):
+                    self._active_processes.remove(proc)
 
         proc.readyReadStandardOutput.connect(on_ready_read)
         proc.finished.connect(on_finished)

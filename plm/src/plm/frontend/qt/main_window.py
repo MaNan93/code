@@ -127,6 +127,7 @@ class _RecentItemRow(QtWidgets.QWidget):
     action isn't only discoverable by right-clicking."""
 
     open_requested = QtCore.pyqtSignal()
+    rename_requested = QtCore.pyqtSignal()
     menu_requested = QtCore.pyqtSignal(QtCore.QPoint)
 
     def __init__(self, text, alignment, parent=None):
@@ -136,6 +137,7 @@ class _RecentItemRow(QtWidgets.QWidget):
         layout.setContentsMargins(10, 0, 2, 0)
         layout.setSpacing(2)
         self.label = QtWidgets.QLabel(text)
+        self.label.setAttribute(QtCore.Qt.WA_TransparentForMouseEvents, True)
         self.label.setAlignment(alignment)
         layout.addWidget(self.label, stretch=1)
         self.menu_btn = QtWidgets.QToolButton()
@@ -146,6 +148,13 @@ class _RecentItemRow(QtWidgets.QWidget):
         self.menu_btn.clicked.connect(self._emit_menu_requested)
         layout.addWidget(self.menu_btn)
 
+        # Delay single-click opening just long enough to distinguish it from
+        # a double-click rename. Otherwise the first press of a double click
+        # opens the workspace before the rename dialog appears.
+        self._open_timer = QtCore.QTimer(self)
+        self._open_timer.setSingleShot(True)
+        self._open_timer.timeout.connect(self.open_requested.emit)
+
     def _emit_menu_requested(self):
         pos = self.menu_btn.mapToGlobal(QtCore.QPoint(0, self.menu_btn.height()))
         self.menu_requested.emit(pos)
@@ -154,8 +163,16 @@ class _RecentItemRow(QtWidgets.QWidget):
         # Only the label/background area falls through to here -- clicks on
         # menu_btn are consumed by the button itself before reaching this.
         if event.button() == QtCore.Qt.LeftButton:
-            self.open_requested.emit()
+            self._open_timer.start(QtWidgets.QApplication.doubleClickInterval())
         super().mousePressEvent(event)
+
+    def mouseDoubleClickEvent(self, event):
+        if event.button() == QtCore.Qt.LeftButton:
+            self._open_timer.stop()
+            self.rename_requested.emit()
+            event.accept()
+            return
+        super().mouseDoubleClickEvent(event)
 
 
 class _LineNumberArea(QtWidgets.QWidget):
@@ -270,6 +287,24 @@ def remove_recent_workspace(path):
     data = _read_state_file()
     path_str = str(path)
     data["recent"] = [p for p in data.get("recent", []) if p != path_str]
+    _write_state_file(data)
+
+
+def rename_recent_workspace(old_path, new_path):
+    """Replace a renamed workspace path everywhere it is persisted."""
+    old_path = Path(old_path).resolve()
+    new_path = Path(new_path).resolve()
+    data = _read_state_file()
+    recent = []
+    for raw_path in data.get("recent", []):
+        path = Path(raw_path).resolve()
+        replacement = str(new_path) if path == old_path else str(path)
+        if replacement not in recent:
+            recent.append(replacement)
+    data["recent"] = recent[-MAX_RECENT_WORKSPACES:]
+    last = data.get("workspace")
+    if last and Path(last).resolve() == old_path:
+        data["workspace"] = str(new_path)
     _write_state_file(data)
 
 
@@ -1177,6 +1212,7 @@ class MainWindow(QtWidgets.QMainWindow):
                 row = _RecentItemRow(p.name, alignment)
                 row.label.setToolTip(str(p))
                 row.open_requested.connect(lambda path=str(p): self._open_workspace(Path(path)))
+                row.rename_requested.connect(lambda path=str(p): self._rename_workspace_at(path))
                 row.menu_requested.connect(lambda pos, it=item: self._show_recent_menu(it, pos))
                 # QListWidget#recentList::item's QSS padding/margin (9px/12px
                 # + 1px, 20px total vertical) shrinks a widget-item's
@@ -1204,13 +1240,66 @@ class MainWindow(QtWidgets.QMainWindow):
     def _show_recent_menu(self, item, global_pos):
         path = item.data(QtCore.Qt.UserRole)
         menu = QtWidgets.QMenu(self)
+        rename_action = menu.addAction("Rename")
+        menu.addSeparator()
         remove_action = menu.addAction("Remove from list")
         delete_action = menu.addAction("Delete project")
         chosen = menu.exec_(global_pos)
-        if chosen == remove_action:
+        if chosen == rename_action:
+            self._rename_workspace_at(path)
+        elif chosen == remove_action:
             self._remove_recent_entry(path)
         elif chosen == delete_action:
             self._delete_workspace_at(path)
+
+    def _rename_workspace_at(self, path):
+        path = Path(path).resolve()
+        if not is_workspace_root(path):
+            QtWidgets.QMessageBox.warning(
+                self,
+                "Rename failed",
+                f"Not a PLM workspace (missing config CSVs): {path}",
+            )
+            return
+        name, ok = QtWidgets.QInputDialog.getText(
+            self,
+            "Rename workspace",
+            "New name:",
+            QtWidgets.QLineEdit.Normal,
+            path.name,
+        )
+        if not ok:
+            return
+        try:
+            name = valid_name(name)
+        except ValueError as error:
+            QtWidgets.QMessageBox.warning(self, "Invalid name", str(error))
+            return
+        target = path.with_name(name)
+        if target == path:
+            return
+        if target.exists():
+            QtWidgets.QMessageBox.warning(
+                self,
+                "Rename workspace",
+                f"{target} already exists.",
+            )
+            return
+        was_current = bool(self.current_workspace and self.current_workspace.resolve() == path)
+        try:
+            path.rename(target)
+        except OSError as error:
+            QtWidgets.QMessageBox.critical(self, "Rename failed", str(error))
+            self._log(f"Rename failed: {error}")
+            return
+        rename_recent_workspace(path, target)
+        if was_current:
+            self.current_workspace = target
+            self._update_workspace_label()
+            if self.rtl_preview_panel.isVisible():
+                self._refresh_rtl_preview()
+        self._refresh_recent()
+        self._log(f"Renamed workspace {path} -> {target}.")
 
     def _remove_recent_entry(self, path):
         remove_recent_workspace(path)

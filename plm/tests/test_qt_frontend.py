@@ -155,6 +155,16 @@ class QtFrontendTests(unittest.TestCase):
         self.process_events()
         self.assertFalse(window.preview_file_tree.isVisible())
 
+        window._set_preview_search_visible(True)
+        window.preview_root_btn.click()
+        self.process_events()
+        self.assertGreater(
+            window.preview_file_tree.geometry().top(),
+            window.preview_search_bar.geometry().bottom(),
+        )
+        window._set_preview_tree_visible(False)
+        window._set_preview_search_visible(False)
+
         window.preview_root_btn.click()
         self.process_events()
         self.assertTrue(window.preview_file_tree.isVisible())
@@ -551,6 +561,39 @@ class QtFrontendTests(unittest.TestCase):
         self.assertTrue(window.preview_more_btn.isHidden())
         self.assertFalse(window.preview_edit_btn.isHidden())
         self.assertFalse(window.preview_search_btn.isHidden())
+
+    def test_floating_log_stays_inside_a_narrow_main_pane(self):
+        window = MainWindow()
+        self.addCleanup(window.close)
+        window.show()
+        window._on_toggle_rtl_preview(True)
+        window.content_splitter.setSizes([120, 700])
+        self.process_events()
+
+        window._position_floating_log()
+
+        self.assertLessEqual(window.log_card.width(), window.main_area.width())
+        self.assertLessEqual(
+            window.log_card.geometry().right(),
+            window.main_area.rect().right(),
+        )
+
+    def test_topology_refresh_is_debounced_from_generation_controls(self):
+        window = MainWindow()
+        self.addCleanup(window.close)
+        generation_index = window.tabs.indexOf(window._generation_page)
+        window.tabs.setCurrentIndex(generation_index)
+        self.process_events()
+
+        with mock.patch.object(window, "_refresh_topology_summary") as refresh:
+            window._poll_dirty_state()
+            refresh.assert_not_called()
+
+            next_index = (window.sel_mode_combo.currentIndex() + 1) % window.sel_mode_combo.count()
+            window.sel_mode_combo.setCurrentIndex(next_index)
+            QtTest.QTest.qWait(300)
+            self.process_events()
+            refresh.assert_called_once()
 
     def test_close_is_blocked_during_generation(self):
         window = MainWindow()

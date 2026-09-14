@@ -379,6 +379,10 @@ class MainWindow(QtWidgets.QMainWindow):
         self._dirty_timer.setInterval(700)
         self._dirty_timer.timeout.connect(self._poll_dirty_state)
         self._dirty_timer.start()
+        self._topology_refresh_timer = QtCore.QTimer(self)
+        self._topology_refresh_timer.setSingleShot(True)
+        self._topology_refresh_timer.setInterval(250)
+        self._topology_refresh_timer.timeout.connect(self._refresh_topology_summary)
         last = load_last_workspace()
         if last:
             self._open_workspace(last)
@@ -550,9 +554,15 @@ class MainWindow(QtWidgets.QMainWindow):
         root_bottom = self.preview_root_btn.mapTo(
             panel, QtCore.QPoint(0, self.preview_root_btn.height())
         )
+        content_top = root_bottom.y()
+        if self.preview_search_bar.isVisible():
+            search_bottom = self.preview_search_bar.mapTo(
+                panel, QtCore.QPoint(0, self.preview_search_bar.height())
+            )
+            content_top = max(content_top, search_bottom.y())
         gap = max(4, int(6 * _ui_scale()))
         x = root_bottom.x()
-        y = root_bottom.y() + gap
+        y = content_top + gap
         available_width = max(1, panel.width() - x - 18)
         width = min(
             max(int(320 * _ui_scale()), self.preview_root_btn.width()),
@@ -1436,11 +1446,11 @@ class MainWindow(QtWidgets.QMainWindow):
         if getattr(self, "editor_shell", None):
             shell_origin = self.editor_shell.mapTo(self.main_area, QtCore.QPoint(0, 0))
             x = shell_origin.x()
-            width = max(240, self.editor_shell.width())
+            width = max(1, min(self.editor_shell.width(), self.main_area.width() - x))
             bottom = shell_origin.y() + self.editor_shell.height()
         else:
             x = margin
-            width = max(240, self.main_area.width() - 2 * margin)
+            width = max(1, self.main_area.width() - 2 * margin)
             bottom = self.main_area.height() - margin
         if expanded:
             height = min(int(260 * scale), max(190, int(self.main_area.height() * 0.38)))
@@ -1548,9 +1558,18 @@ class MainWindow(QtWidgets.QMainWindow):
 
         self.arch_combo.currentTextChanged.connect(on_arch_changed)
         self.pclk_mode_combo.currentTextChanged.connect(on_pclk_changed)
+        self.arch_combo.currentTextChanged.connect(
+            self._schedule_topology_summary_refresh
+        )
+        self.pclk_mode_combo.currentTextChanged.connect(
+            self._schedule_topology_summary_refresh
+        )
 
         self.sel_mode_combo = RoundedComboBox()
         self.sel_mode_combo.addItems(SEL_MODES)
+        self.sel_mode_combo.currentTextChanged.connect(
+            self._schedule_topology_summary_refresh
+        )
         form.addRow("sel-mode", self.sel_mode_combo)
 
         self.dpr_check = VisibleCheckBox()
@@ -1569,6 +1588,7 @@ class MainWindow(QtWidgets.QMainWindow):
                 self.sel_mode_combo.setEnabled(True)
 
         self.dpr_check.toggled.connect(on_dpr_toggled)
+        self.dpr_check.toggled.connect(self._schedule_topology_summary_refresh)
         form.addRow("dpr", self.dpr_check)
         layout.addLayout(form)
 
@@ -2096,11 +2116,13 @@ class MainWindow(QtWidgets.QMainWindow):
         if dirty != self._title_shows_dirty:
             self._title_shows_dirty = dirty
             self._update_workspace_label()
-        # The gen-flag controls live on the Generation page itself, so
-        # arriving at the tab is not enough to keep the summary current.
-        # _refresh_topology_summary() no-ops unless the payload moved.
-        if self.tabs.currentWidget() is getattr(self, "_generation_page", None):
-            self._refresh_topology_summary()
+    def _schedule_topology_summary_refresh(self, *_args):
+        """Debounce summary work while generation options are changing."""
+        if (
+            self.tabs.currentWidget() is getattr(self, "_generation_page", None)
+            and hasattr(self, "_topology_refresh_timer")
+        ):
+            self._topology_refresh_timer.start()
 
     def _confirm_discard_changes(self):
         """Ask before dropping unsaved edits. True = caller may proceed."""

@@ -47,7 +47,13 @@ class QtFrontendTests(unittest.TestCase):
         self.process_events()
         tab_bar = window.tabs.tabBar()
         tab_rect = tab_bar.tabRect(window.tabs.currentIndex())
-        tab_top = tab_bar.mapTo(window.centralWidget(), tab_rect.topLeft()).y()
+        pill_rect = tab_rect.adjusted(
+            0,
+            main_window.TAB_VERTICAL_GAP,
+            0,
+            -main_window.TAB_VERTICAL_GAP,
+        )
+        tab_top = tab_bar.mapTo(window.centralWidget(), pill_rect.topLeft()).y()
         root_top = window.preview_root_btn.mapTo(
             window.centralWidget(), QtCore.QPoint()
         ).y()
@@ -55,7 +61,7 @@ class QtFrontendTests(unittest.TestCase):
             window.centralWidget(), window.preview_root_btn.rect().center()
         ).y()
         self.assertLessEqual(abs(root_top - tab_top), 1)
-        self.assertEqual(window.preview_root_btn.height(), tab_rect.height())
+        self.assertEqual(window.preview_root_btn.height(), pill_rect.height())
         self.assertLessEqual(
             abs(window.preview_controls.geometry().center().y() - root_center_y),
             1,
@@ -111,7 +117,12 @@ class QtFrontendTests(unittest.TestCase):
 
         self.assertFalse(hasattr(window, "preview_file_combo"))
         self.assertIsInstance(window.preview_root_btn, QtWidgets.QToolButton)
-        self.assertEqual(window.preview_root_btn.text(), "quad")
+        self.assertEqual(window.preview_root_btn.text(), "")
+        self.assertEqual(
+            window.preview_root_btn.toolButtonStyle(),
+            QtCore.Qt.ToolButtonIconOnly,
+        )
+        self.assertEqual(window.preview_root_btn.accessibleName(), "Files")
         self.assertEqual(window.preview_file_tree.topLevelItemCount(), 2)
         self.assertEqual(
             [window.preview_file_tree.topLevelItem(i).text(0) for i in range(2)],

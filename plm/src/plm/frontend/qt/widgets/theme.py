@@ -263,9 +263,6 @@ QTabWidget#settingsTabs::pane {{
 QTabBar {{
     background: transparent;
 }}
-QTabWidget#tabs QTabBar {{
-    padding: 4px 0;
-}}
 QTabBar::tab {{
     background: transparent;
     color: {TEXT_SECONDARY};
@@ -275,6 +272,9 @@ QTabBar::tab {{
     border-radius: {RADIUS_SM}px;
     font-size: {fs(13)};
     font-weight: 500;
+}}
+QTabWidget#tabs QTabBar::tab {{
+    margin: 4px 2px;
 }}
 QTabBar::tab:hover {{
     background: {BG_HOVER};
@@ -486,10 +486,8 @@ QToolButton#previewRootBtn {{
     background: {BG_ELEVATED};
     border: 1px solid {BORDER};
     border-radius: {RADIUS_SM}px;
-    padding: 3px 11px;
-    text-align: left;
+    padding: 0;
     color: {TEXT};
-    font-weight: 500;
 }}
 QToolButton#previewRootBtn:hover {{
     background: {BG_HOVER};

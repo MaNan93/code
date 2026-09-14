@@ -51,6 +51,7 @@ LANE_COUNTS = ["x2", "x4", "x8", "x16", "x32"]
 DOC_PATH = DOCS_DIR / "tool_usage.md"
 PREVIEW_MAXIMIZE_ANIM_MS = 180
 BOTTOM_EDGE_INSET = 12
+TAB_VERTICAL_GAP = 4
 
 
 
@@ -114,11 +115,13 @@ class _StableTabBar(QtWidgets.QTabBar):
         # real slack -- horizontalAdvance() alone runs right up against that
         # budget and clips the first/last glyph (seen with "Pipe Signals").
         pad = int(48 * _ui_scale())
-        # Match the QSS pill's own box: "padding: 8px 16px" + 1px border top
-        # and bottom. Anything taller makes the selected tab's filled chip
-        # read as an oversized white block; anything shorter squeezes the
-        # label once the app font grows past the 32px floor.
-        tab_height = max(32, metrics.height() + 18)
+        # The tab rect must also reserve transparent space above and below
+        # the painted pill. QTabBar padding is not consistently included in
+        # Qt 5's geometry on Windows, so the gap belongs to each tab itself.
+        tab_height = max(
+            32 + 2 * TAB_VERTICAL_GAP,
+            metrics.height() + 18 + 2 * TAB_VERTICAL_GAP,
+        )
         return QtCore.QSize(max(hint.width(), text_width + pad), tab_height)
 
 
@@ -439,15 +442,20 @@ class MainWindow(QtWidgets.QMainWindow):
             tab_rect = tab_bar.tabRect(tab_index)
             if not tab_rect.isValid():
                 tab_rect = tab_bar.rect()
+            pill_rect = tab_rect.adjusted(
+                0, TAB_VERTICAL_GAP, 0, -TAB_VERTICAL_GAP
+            )
+            if not pill_rect.isValid() or pill_rect.height() < 20:
+                pill_rect = tab_rect
             # QSS padding is resolved only after the window is shown, so the
             # final tab-bar height can differ from its construction-time hint.
             # Keep the preview file button on that exact live header geometry.
             self.preview_header.setFixedHeight(tab_bar.height())
-            self.preview_root_btn.setFixedHeight(tab_rect.height())
+            self.preview_root_btn.setFixedSize(pill_rect.height(), pill_rect.height())
             # Align the Preview controls to the actual tab pill rather than
             # the padded QTabBar container.
-            self.preview_controls.setFixedHeight(tab_rect.height())
-            side = max(20, tab_rect.height() - 2)
+            self.preview_controls.setFixedHeight(pill_rect.height())
+            side = max(20, pill_rect.height() - 2)
             for button in self.preview_buttons:
                 button.setFixedSize(side, side)
                 button.setIconSize(QtCore.QSize(round(side * 0.6), round(side * 0.6)))
@@ -461,7 +469,7 @@ class MainWindow(QtWidgets.QMainWindow):
         x = origin.x() + anchor.width() - self.preview_controls.width() - inset
         if header_aligned:
             tab_origin = tab_bar.mapTo(central, QtCore.QPoint(0, 0))
-            tab_center_y = tab_origin.y() + tab_rect.center().y()
+            tab_center_y = tab_origin.y() + pill_rect.center().y()
             y = tab_center_y - self.preview_controls.height() // 2
         elif (
             getattr(self, "preview_root_btn", None)
@@ -788,14 +796,13 @@ class MainWindow(QtWidgets.QMainWindow):
         self.preview_root_btn = QtWidgets.QToolButton()
         self.preview_root_btn.setObjectName("previewRootBtn")
         self.preview_root_btn.setCheckable(True)
-        self.preview_root_btn.setText("Workspace")
-        self.preview_root_btn.setToolButtonStyle(QtCore.Qt.ToolButtonTextBesideIcon)
+        self.preview_root_btn.setText("")
+        self.preview_root_btn.setToolButtonStyle(QtCore.Qt.ToolButtonIconOnly)
         self.preview_root_btn.setIcon(_svg_icon(_SVG_OPEN, size=17))
         self.preview_root_btn.setIconSize(QtCore.QSize(17, 17))
-        self.preview_root_btn.setMinimumWidth(int(112 * _ui_scale()))
-        self.preview_root_btn.setMaximumWidth(int(260 * _ui_scale()))
         self.preview_root_btn.setCursor(QtCore.Qt.PointingHandCursor)
-        self.preview_root_btn.setToolTip("Open file tree")
+        self.preview_root_btn.setToolTip("Files")
+        self.preview_root_btn.setAccessibleName("Files")
         self.preview_root_btn.clicked.connect(self._set_preview_tree_visible)
         header_layout.addWidget(self.preview_root_btn, alignment=QtCore.Qt.AlignVCenter)
         header_layout.addStretch(1)
@@ -951,8 +958,6 @@ class MainWindow(QtWidgets.QMainWindow):
         self._position_preview_file_tree()
         self.preview_file_tree.setVisible(visible)
         self.preview_root_btn.setChecked(visible)
-        root_name = self.current_workspace.name if self.current_workspace else "Workspace"
-        self.preview_root_btn.setText(root_name)
         if visible:
             self.preview_file_tree.raise_()
 
@@ -1010,8 +1015,6 @@ class MainWindow(QtWidgets.QMainWindow):
         self.preview_file_tree.expandAll()
         self.preview_file_tree.blockSignals(False)
 
-        root_name = self.current_workspace.name if self.current_workspace else "Workspace"
-        self.preview_root_btn.setText(root_name)
         self.preview_root_btn.setToolTip(
             str(self.current_workspace) if self.current_workspace else "No workspace open"
         )

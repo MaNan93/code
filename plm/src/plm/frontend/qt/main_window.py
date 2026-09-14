@@ -516,11 +516,13 @@ class MainWindow(QtWidgets.QMainWindow):
             for button in self.preview_buttons:
                 button.setFixedSize(side, side)
                 button.setIconSize(QtCore.QSize(round(side * 0.6), round(side * 0.6)))
-        self.preview_controls.adjustSize()
         if getattr(self, "rtl_preview_panel", None) and not self.rtl_preview_panel.isHidden():
             anchor = self.rtl_preview_panel
+            self._apply_preview_control_density(anchor.width())
         else:
             anchor = getattr(self, "editor_shell", central)
+            self.preview_more_btn.hide()
+        self.preview_controls.adjustSize()
         origin = anchor.mapTo(central, QtCore.QPoint(0, 0))
         inset = 8
         x = origin.x() + anchor.width() - self.preview_controls.width() - inset
@@ -854,6 +856,15 @@ class MainWindow(QtWidgets.QMainWindow):
         self.preview_copy_path_btn.clicked.connect(self._copy_preview_path)
         self.preview_copy_path_btn.hide()
 
+        self.preview_more_btn = QtWidgets.QToolButton(controls)
+        self.preview_more_btn.setObjectName("previewControlBtn")
+        self.preview_more_btn.setIcon(_svg_icon(_SVG_MORE, size=18))
+        self.preview_more_btn.setIconSize(QtCore.QSize(18, 18))
+        self.preview_more_btn.setToolTip("More preview actions")
+        self.preview_more_btn.setAccessibleName("More preview actions")
+        self.preview_more_btn.clicked.connect(self._show_preview_more_menu)
+        self.preview_more_btn.hide()
+
         self.preview_expand_btn = QtWidgets.QToolButton(controls)
         self.preview_expand_btn.setObjectName("previewControlBtn")
         self.preview_expand_btn.setIcon(_svg_icon(_SVG_PREVIEW_EXPAND, size=18))
@@ -878,6 +889,7 @@ class MainWindow(QtWidgets.QMainWindow):
             self.preview_diff_btn,
             self.preview_search_btn,
             self.preview_copy_path_btn,
+            self.preview_more_btn,
             self.preview_expand_btn,
             self.preview_toggle_btn,
         ]
@@ -1006,6 +1018,48 @@ class MainWindow(QtWidgets.QMainWindow):
             return
         QtWidgets.QApplication.clipboard().setText(str(path))
         self._log(f"Copied {path} to the clipboard.")
+
+    def _show_preview_more_menu(self):
+        menu = QtWidgets.QMenu(self.preview_more_btn)
+        edit_action = menu.addAction("Edit current file")
+        highlight_action = menu.addAction("Syntax highlighting")
+        highlight_action.setCheckable(True)
+        highlight_action.setChecked(self.preview_highlight_btn.isChecked())
+        diff_action = menu.addAction("Show diff")
+        diff_action.setCheckable(True)
+        diff_action.setChecked(self.preview_diff_btn.isChecked())
+        diff_action.setEnabled(self.preview_diff_btn.isEnabled())
+        menu.addSeparator()
+        search_action = menu.addAction("Find in file")
+        copy_action = menu.addAction("Copy file path")
+        chosen = menu.exec_(
+            self.preview_more_btn.mapToGlobal(
+                QtCore.QPoint(0, self.preview_more_btn.height())
+            )
+        )
+        if chosen == edit_action:
+            self._edit_selected_rtl_file()
+        elif chosen == highlight_action:
+            self.preview_highlight_btn.setChecked(highlight_action.isChecked())
+        elif chosen == diff_action:
+            self.preview_diff_btn.setChecked(diff_action.isChecked())
+        elif chosen == search_action:
+            self._on_preview_search_open()
+        elif chosen == copy_action:
+            self._copy_preview_path()
+
+    def _apply_preview_control_density(self, available_width):
+        """Collapse secondary preview actions before they can cover Files."""
+        compact = available_width < int(430 * _ui_scale())
+        for button in (
+            self.preview_edit_btn,
+            self.preview_highlight_btn,
+            self.preview_diff_btn,
+            self.preview_search_btn,
+            self.preview_copy_path_btn,
+        ):
+            button.setVisible(not compact)
+        self.preview_more_btn.setVisible(compact)
 
     def _build_rtl_preview_panel(self):
         panel = QtWidgets.QFrame()
@@ -1840,20 +1894,31 @@ class MainWindow(QtWidgets.QMainWindow):
     def _show_recent_menu(self, item, global_pos):
         path = item.data(QtCore.Qt.UserRole)
         menu = QtWidgets.QMenu(self)
-        # No per-item colouring here: the app stylesheet's QMenu::item rules
-        # make QStyleSheetStyle draw the items itself and never delegate to a
-        # QProxyStyle, so an override never ran. Delete confirms in a dialog
-        # before it removes anything, which is the warning that matters.
         rename_action = menu.addAction("Rename")
         menu.addSeparator()
         remove_action = menu.addAction("Clear")
-        delete_action = menu.addAction("Delete")
+
+        delete_action = QtWidgets.QWidgetAction(menu)
+        delete_action.setText("Delete")
+        delete_button = QtWidgets.QPushButton("Delete")
+        delete_button.setObjectName("destructiveMenuItem")
+        delete_button.setCursor(QtCore.Qt.PointingHandCursor)
+        delete_button.setMinimumWidth(140)
+        delete_action.setDefaultWidget(delete_button)
+        menu.addAction(delete_action)
+        delete_requested = [False]
+
+        def request_delete():
+            delete_requested[0] = True
+            menu.close()
+
+        delete_button.clicked.connect(request_delete)
         chosen = menu.exec_(global_pos)
         if chosen == rename_action:
             self._rename_workspace_at(path)
         elif chosen == remove_action:
             self._remove_recent_entry(path)
-        elif chosen == delete_action:
+        elif chosen == delete_action or delete_requested[0]:
             self._delete_workspace_at(path)
 
     def _rename_workspace_at(self, path):

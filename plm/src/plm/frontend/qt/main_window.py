@@ -417,6 +417,7 @@ class MainWindow(QtWidgets.QMainWindow):
             getattr(self, "rtl_preview_panel", None),
         ) and event.type() in (QtCore.QEvent.Resize, QtCore.QEvent.Move, QtCore.QEvent.Show):
             QtCore.QTimer.singleShot(0, self._position_preview_controls)
+            QtCore.QTimer.singleShot(0, self._position_preview_file_tree)
         return super().eventFilter(watched, event)
 
     def resizeEvent(self, event):
@@ -424,6 +425,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self._position_sidebar_toggle()
         self._position_floating_log()
         self._position_preview_controls()
+        self._position_preview_file_tree()
 
     def _position_preview_controls(self):
         if not getattr(self, "preview_controls", None):
@@ -473,6 +475,30 @@ class MainWindow(QtWidgets.QMainWindow):
             y = origin.y() + inset
         self.preview_controls.move(max(margin, x), max(0, y))
         self.preview_controls.raise_()
+
+    def _position_preview_file_tree(self):
+        if not getattr(self, "preview_file_tree", None):
+            return
+        panel = self.rtl_preview_panel
+        root_bottom = self.preview_root_btn.mapTo(
+            panel, QtCore.QPoint(0, self.preview_root_btn.height())
+        )
+        gap = max(4, int(6 * _ui_scale()))
+        x = root_bottom.x()
+        y = root_bottom.y() + gap
+        available_width = max(1, panel.width() - x - 18)
+        width = min(
+            max(int(320 * _ui_scale()), self.preview_root_btn.width()),
+            available_width,
+        )
+        available_height = max(1, panel.height() - y - BOTTOM_EDGE_INSET)
+        height = min(
+            getattr(self, "_preview_tree_content_height", int(220 * _ui_scale())),
+            available_height,
+        )
+        self.preview_file_tree.setGeometry(x, y, width, height)
+        if self.preview_file_tree.isVisible():
+            self.preview_file_tree.raise_()
 
     def _position_sidebar_toggle(self):
         if getattr(self, "editor_shell", None) and self.editor_shell.isVisible():
@@ -759,26 +785,30 @@ class MainWindow(QtWidgets.QMainWindow):
         header_layout = QtWidgets.QHBoxLayout(self.preview_header)
         header_layout.setContentsMargins(0, 0, 0, 0)
         header_layout.setSpacing(0)
-        self.preview_root_btn = QtWidgets.QPushButton("▸  Workspace")
+        self.preview_root_btn = QtWidgets.QToolButton()
         self.preview_root_btn.setObjectName("previewRootBtn")
         self.preview_root_btn.setCheckable(True)
-        self.preview_root_btn.setIcon(
-            self.style().standardIcon(QtWidgets.QStyle.SP_DirIcon)
-        )
+        self.preview_root_btn.setText("Workspace")
+        self.preview_root_btn.setToolButtonStyle(QtCore.Qt.ToolButtonTextBesideIcon)
+        self.preview_root_btn.setIcon(_svg_icon(_SVG_OPEN, size=17))
+        self.preview_root_btn.setIconSize(QtCore.QSize(17, 17))
+        self.preview_root_btn.setMinimumWidth(int(112 * _ui_scale()))
+        self.preview_root_btn.setMaximumWidth(int(260 * _ui_scale()))
+        self.preview_root_btn.setCursor(QtCore.Qt.PointingHandCursor)
         self.preview_root_btn.setToolTip("Open file tree")
         self.preview_root_btn.clicked.connect(self._set_preview_tree_visible)
         header_layout.addWidget(self.preview_root_btn, alignment=QtCore.Qt.AlignVCenter)
         header_layout.addStretch(1)
         layout.addWidget(self.preview_header)
 
-        self.preview_file_tree = QtWidgets.QTreeWidget()
+        self.preview_file_tree = QtWidgets.QTreeWidget(panel)
         self.preview_file_tree.setObjectName("previewFileTree")
         self.preview_file_tree.setHeaderHidden(True)
         self.preview_file_tree.setRootIsDecorated(True)
         self.preview_file_tree.setUniformRowHeights(True)
         self.preview_file_tree.itemClicked.connect(self._on_preview_tree_item_clicked)
+        add_shadow(self.preview_file_tree, blur=18, offset=(0, 4), alpha=38)
         self.preview_file_tree.hide()
-        layout.addWidget(self.preview_file_tree)
         self._selected_preview_file = None
 
         self.preview_status = QtWidgets.QLabel("Generate RTL to preview the output.")
@@ -918,11 +948,13 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def _set_preview_tree_visible(self, visible):
         visible = bool(visible and self.preview_file_tree.topLevelItemCount())
+        self._position_preview_file_tree()
         self.preview_file_tree.setVisible(visible)
         self.preview_root_btn.setChecked(visible)
         root_name = self.current_workspace.name if self.current_workspace else "Workspace"
-        marker = "▾" if visible else "▸"
-        self.preview_root_btn.setText(f"{marker}  {root_name}")
+        self.preview_root_btn.setText(root_name)
+        if visible:
+            self.preview_file_tree.raise_()
 
     def _on_preview_tree_item_clicked(self, item, _column):
         path_text = item.data(0, QtCore.Qt.UserRole)
@@ -979,14 +1011,17 @@ class MainWindow(QtWidgets.QMainWindow):
         self.preview_file_tree.blockSignals(False)
 
         root_name = self.current_workspace.name if self.current_workspace else "Workspace"
-        self.preview_root_btn.setText(f"▸  {root_name}")
+        self.preview_root_btn.setText(root_name)
         self.preview_root_btn.setToolTip(
             str(self.current_workspace) if self.current_workspace else "No workspace open"
         )
         self.preview_root_btn.setEnabled(bool(files))
         row_count = len(files) + len(directory_items)
-        tree_height = min(int(260 * _ui_scale()), max(int(120 * _ui_scale()), row_count * 26))
-        self.preview_file_tree.setFixedHeight(tree_height)
+        self._preview_tree_content_height = min(
+            int(260 * _ui_scale()),
+            max(int(120 * _ui_scale()), row_count * int(26 * _ui_scale())),
+        )
+        self._position_preview_file_tree()
         if files:
             selected = previous if previous in file_items else str(files[0])
             self._selected_preview_file = Path(selected)

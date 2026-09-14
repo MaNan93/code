@@ -110,16 +110,25 @@ class QtFrontendTests(unittest.TestCase):
         self.process_events()
 
         self.assertFalse(hasattr(window, "preview_file_combo"))
-        self.assertTrue(window.preview_root_btn.text().endswith("quad"))
+        self.assertIsInstance(window.preview_root_btn, QtWidgets.QToolButton)
+        self.assertEqual(window.preview_root_btn.text(), "quad")
         self.assertEqual(window.preview_file_tree.topLevelItemCount(), 2)
         self.assertEqual(
             [window.preview_file_tree.topLevelItem(i).text(0) for i in range(2)],
             ["config", "rtl"],
         )
 
+        code_geometry = QtCore.QRect(window.preview_code.geometry())
         window.preview_root_btn.click()
         self.process_events()
         self.assertTrue(window.preview_file_tree.isVisible())
+        self.assertIs(window.preview_file_tree.parent(), window.rtl_preview_panel)
+        self.assertEqual(window.preview_code.geometry(), code_geometry)
+        self.assertTrue(window.preview_file_tree.geometry().intersects(code_geometry))
+        self.assertEqual(
+            window.preview_file_tree.geometry().left(),
+            code_geometry.left(),
+        )
 
         def find_file(parent, target):
             for index in range(parent.childCount()):

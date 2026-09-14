@@ -482,19 +482,22 @@ QFrame#rtlPreviewPanel {{
 }}
 QLabel#previewStatus {{ color: {TEXT_TERTIARY}; }}
 QWidget#previewHeader {{ background: transparent; }}
-QPushButton#previewRootBtn {{
-    background: transparent;
-    border: 1px solid transparent;
+QToolButton#previewRootBtn {{
+    background: {BG_ELEVATED};
+    border: 1px solid {BORDER};
     border-radius: {RADIUS_SM}px;
-    padding: 4px 10px;
+    padding: 3px 11px;
     text-align: left;
     color: {TEXT};
-    font-weight: 600;
+    font-weight: 500;
 }}
-QPushButton#previewRootBtn:hover,
-QPushButton#previewRootBtn:checked {{
+QToolButton#previewRootBtn:hover {{
     background: {BG_HOVER};
-    border-color: {BORDER};
+    border-color: {BORDER_STRONG};
+}}
+QToolButton#previewRootBtn:checked {{
+    background: {BG_ACTIVE};
+    border-color: {BORDER_STRONG};
 }}
 QTreeWidget#previewFileTree {{
     background: {BG};

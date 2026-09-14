@@ -15,8 +15,8 @@ QFrame#recentWorkspaceRow { background:#e4e0d3; border:none; border-radius:8px; 
 QLabel#recentWorkspaceName { background:transparent; }
 QToolButton#recentMenuBtn { background:transparent; border:none; border-radius:6px; color:#9c9686; font-size:16px; }
 QToolButton#edgeToggle { background:#faf9f6; border:1px solid #e5e1d6; border-radius:8px; }
-QFrame#editorShell { background:#f5f4ef; border:1px solid #e5e1d6; border-radius:12px; }
-QTabWidget::pane { border:none; top:-1px; background:#faf9f6; }
+QFrame#editorShell { background:#f5f4ef; border:1px solid #e5e1d6; border-top:none; border-top-left-radius:0; border-top-right-radius:0; border-bottom-left-radius:12px; border-bottom-right-radius:12px; }
+QTabWidget::pane { border:none; top:-1px; background:transparent; }
 QTabBar::tab { color:#6b6658; background:transparent; padding:8px 18px; margin:0 2px; border:1px solid transparent; border-radius:8px; font-weight:500; }
 QTabBar::tab:selected { color:#2b2926; background:#faf9f6; border-color:#e5e1d6; font-weight:600; }
 QTableWidget { background:#faf9f6; border:none; gridline-color:#e5e1d6; selection-background-color:#f2ded4; }

@@ -285,7 +285,8 @@ QTabBar::tab:selected {{
 QFrame#editorShell {{
     background: {BG_ELEVATED};
     border: 1px solid {BORDER};
-    border-top-left-radius: {RADIUS_MD}px;
+    border-top: none;
+    border-top-left-radius: 0;
     border-top-right-radius: 0;
     border-bottom-left-radius: {RADIUS_MD}px;
     border-bottom-right-radius: {RADIUS_MD}px;

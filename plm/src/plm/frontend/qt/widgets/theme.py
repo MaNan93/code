@@ -571,7 +571,7 @@ QMenu {{
 }}
 QMenu::item {{ padding: 7px 24px 7px 10px; border-radius: 6px; }}
 QMenu::item:selected {{ background: {BG_HOVER}; }}
-QScrollBar:vertical {{ background: transparent; width: 10px; margin: 2px; }}
+QScrollBar:vertical {{ background: transparent; width: 14px; margin: 2px; }}
 QScrollBar::handle:vertical {{
     background: #c9c9c9;
     border-radius: 4px;

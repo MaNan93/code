@@ -585,15 +585,19 @@ class QtFrontendTests(unittest.TestCase):
         window.tabs.setCurrentIndex(generation_index)
         self.process_events()
 
-        with mock.patch.object(window, "_refresh_topology_summary") as refresh:
-            window._poll_dirty_state()
-            refresh.assert_not_called()
+        timeout_spy = QtTest.QSignalSpy(window._topology_refresh_timer.timeout)
+        window._poll_dirty_state()
+        QtTest.QTest.qWait(300)
+        self.process_events()
+        self.assertEqual(len(timeout_spy), 0)
 
-            next_index = (window.sel_mode_combo.currentIndex() + 1) % window.sel_mode_combo.count()
-            window.sel_mode_combo.setCurrentIndex(next_index)
-            QtTest.QTest.qWait(300)
-            self.process_events()
-            refresh.assert_called_once()
+        next_index = (
+            window.sel_mode_combo.currentIndex() + 1
+        ) % window.sel_mode_combo.count()
+        window.sel_mode_combo.setCurrentIndex(next_index)
+        QtTest.QTest.qWait(300)
+        self.process_events()
+        self.assertEqual(len(timeout_spy), 1)
 
     def test_close_is_blocked_during_generation(self):
         window = MainWindow()

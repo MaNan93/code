@@ -872,7 +872,6 @@ class MainWindow(QtWidgets.QMainWindow):
         self.preview_file_tree.setRootIsDecorated(True)
         self.preview_file_tree.setUniformRowHeights(True)
         self.preview_file_tree.itemClicked.connect(self._on_preview_tree_item_clicked)
-        add_shadow(self.preview_file_tree, blur=18, offset=(0, 4), alpha=38)
         self.preview_file_tree.hide()
         self._selected_preview_file = None
 

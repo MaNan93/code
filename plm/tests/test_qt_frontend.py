@@ -123,6 +123,7 @@ class QtFrontendTests(unittest.TestCase):
             QtCore.Qt.ToolButtonIconOnly,
         )
         self.assertEqual(window.preview_root_btn.accessibleName(), "Files")
+        self.assertIsNone(window.preview_file_tree.graphicsEffect())
         self.assertTrue(window.preview_highlight_btn.isChecked())
         self.assertEqual(window.preview_diff_btn.accessibleName(), "Show diff")
         self.assertEqual(window.preview_file_tree.topLevelItemCount(), 2)

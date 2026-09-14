@@ -707,7 +707,7 @@ class MainWindow(QtWidgets.QMainWindow):
         layout.setSpacing(10)
 
         title_row = QtWidgets.QHBoxLayout()
-        title = QtWidgets.QLabel("RTL Preview")
+        title = QtWidgets.QLabel("Preview")
         self.preview_title = title
         title.setObjectName("rtlPreviewTitle")
         title.setFixedHeight(self.tabs.tabBar().tabSizeHint(0).height())
@@ -861,15 +861,23 @@ class MainWindow(QtWidgets.QMainWindow):
         self.preview_file_combo.clear()
         files = []
         if self.current_workspace:
-            rtl_dir = self.current_workspace / "rtl"
-            if rtl_dir.is_dir():
-                extensions = {".sv", ".svh", ".v", ".vh", ".f"}
-                files = sorted(
-                    (path for path in rtl_dir.rglob("*") if path.is_file() and path.suffix.lower() in extensions),
-                    key=lambda path: str(path.relative_to(rtl_dir)).lower(),
+            preview_roots = (
+                (self.current_workspace / "config", {".csv"}),
+                (self.current_workspace / "rtl", {".sv", ".svh", ".v", ".vh", ".f"}),
+            )
+            for root, extensions in preview_roots:
+                if root.is_dir():
+                    files.extend(
+                        path
+                        for path in root.rglob("*")
+                        if path.is_file() and path.suffix.lower() in extensions
+                    )
+            files.sort(key=lambda path: str(path.relative_to(self.current_workspace)).lower())
+            for path in files:
+                self.preview_file_combo.addItem(
+                    str(path.relative_to(self.current_workspace)),
+                    str(path),
                 )
-                for path in files:
-                    self.preview_file_combo.addItem(str(path.relative_to(rtl_dir)), str(path))
         if previous:
             index = self.preview_file_combo.findData(previous)
             if index >= 0:

@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>PreviewPanelReference</class>
+ <widget class="QWidget" name="PreviewPanelReference">
+  <property name="geometry"><rect><x>0</x><y>0</y><width>523</width><height>780</height></rect></property>
+  <property name="windowTitle"><string>Preview panel reference</string></property>
+  <property name="styleSheet"><string notr="true">QWidget { background:#faf9f6; color:#2b2926; font:13px "Segoe UI"; }
+QLabel#rtlPreviewTitle { font-weight:600; background:transparent; }
+QFrame#previewControls { background:#f5f4ef; border:1px solid #e5e1d6; border-radius:10px; }
+QToolButton { background:transparent; border:none; border-radius:8px; color:#6b6658; font-size:18px; }
+QToolButton:hover { background:#ece9e0; }
+QComboBox { background:#faf9f6; border:1px solid #e5e1d6; border-radius:8px; padding:5px 30px 5px 8px; }
+QPlainTextEdit#rtlPreviewCode { background:#f5f4ef; border:1px solid #e5e1d6; border-radius:8px; padding:10px 10px 10px 38px; font:12px Consolas; }
+QLabel#lineNumberArea { background:#ece9e0; color:#9c9686; font:12px Consolas; padding-right:4px; }
+QScrollBar:vertical { width:14px; background:transparent; margin:2px; }
+QScrollBar:horizontal { height:14px; background:transparent; margin:2px; }
+QScrollBar::handle { background:#c9c9c9; border-radius:4px; min-width:28px; min-height:28px; }
+QScrollBar::add-line, QScrollBar::sub-line { width:0; height:0; }</string></property>
+  <widget class="QLabel" name="rtlPreviewTitle"><property name="geometry"><rect><x>18</x><y>2</y><width>160</width><height>36</height></rect></property><property name="text"><string>Preview</string></property><property name="toolTip"><string>rtlPreviewTitle</string></property></widget>
+  <widget class="QFrame" name="previewControls"><property name="geometry"><rect><x>368</x><y>1</y><width>146</width><height>38</height></rect></property>
+   <widget class="QToolButton" name="previewRefreshButton"><property name="geometry"><rect><x>2</x><y>2</y><width>34</width><height>34</height></rect></property><property name="text"><string>↻</string></property></widget>
+   <widget class="QToolButton" name="previewEditButton"><property name="geometry"><rect><x>38</x><y>2</y><width>34</width><height>34</height></rect></property><property name="text"><string>✎</string></property></widget>
+   <widget class="QToolButton" name="previewMaximizeButton"><property name="geometry"><rect><x>74</x><y>2</y><width>34</width><height>34</height></rect></property><property name="text"><string>⤢</string></property></widget>
+   <widget class="QToolButton" name="previewToggleButton"><property name="geometry"><rect><x>110</x><y>2</y><width>34</width><height>34</height></rect></property><property name="text"><string>▣</string></property></widget>
+  </widget>
+  <widget class="QComboBox" name="previewFileCombo"><property name="geometry"><rect><x>18</x><y>48</y><width>486</width><height>34</height></rect></property><property name="toolTip"><string>CSV / RTL / filelist 文件选择框</string></property><item><property name="text"><string>config/controllers.csv</string></property></item><item><property name="text"><string>config/lane_mapping.csv</string></property></item><item><property name="text"><string>config/pipe_signals.csv</string></property></item><item><property name="text"><string>rtl/common/pipe_lane_clk_gate.sv</string></property></item></widget>
+  <widget class="QPlainTextEdit" name="rtlPreviewCode"><property name="geometry"><rect><x>18</x><y>91</y><width>486</width><height>674</height></rect></property><property name="toolTip"><string>代码和 CSV 文本预览区 / rtlPreviewCode</string></property><property name="plainText"><string>//============================================================
+// pipe_lane_clk_gate -- clock-gating wrapper
+//
+// When gating a clock, the enable must only toggle while the
+// clock is low. The preview also supports config CSV files.
+//============================================================
+module pipe_lane_clk_gate (
+    input  logic clk_in,
+    input  logic en,
+    input  logic test_en,
+    output logic clk_out
+);
+
+logic en_latched;
+
+always_latch begin
+    if (!clk_in)
+        en_latched = en | test_en;
+end
+
+assign clk_out = clk_in &amp; en_latched;
+endmodule</string></property><property name="readOnly"><bool>true</bool></property><property name="lineWrapMode"><enum>QPlainTextEdit::NoWrap</enum></property></widget>
+  <widget class="QLabel" name="lineNumberArea"><property name="geometry"><rect><x>29</x><y>102</y><width>28</width><height>622</height></rect></property><property name="text"><string>1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+14
+15
+16
+17
+18
+19
+20</string></property><property name="alignment"><set>Qt::AlignRight|Qt::AlignTop|Qt::AlignTrailing</set></property><property name="toolTip"><string>行号栏 / lineNumberArea</string></property></widget>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>

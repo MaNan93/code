@@ -12,6 +12,7 @@ for the QSS and plm.frontend.qt.widgets.settings for the Settings dialog.
 """
 
 import json
+import difflib
 import shutil
 import sys
 from pathlib import Path
@@ -23,6 +24,7 @@ from plm.core.model import Config
 from plm.core.paths import CONFIGS_ROOT, DOCS_DIR, PLM_ROOT, is_deletable_workspace, is_workspace_root
 from plm.core.workspace import save_workspace_content, scaffold_default_content, workspace_content
 from plm.frontend.qt.widgets.lanegrid import LaneGrid
+from plm.frontend.qt.widgets.code_highlighter import CodeHighlighter
 from plm.frontend.qt.widgets.settings import DEFAULT_SETTINGS, SettingsDialog
 from plm.frontend.qt.widgets.tables import EditableTable
 from plm.frontend.qt.widgets.theme import (
@@ -94,6 +96,8 @@ _SVG_CHEVRON_DOWN = '<path d="m7 9 5 5 5-5"/>'
 _SVG_CHEVRON_RIGHT = '<path d="m9 7 5 5-5 5"/>'
 _SVG_REFRESH = '<path d="M20 11a8 8 0 1 0 2 5.3"/><path d="M20 4v7h-7"/>'
 _SVG_EDIT = '<path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4z"/>'
+_SVG_HIGHLIGHT = '<path d="M8 5 3 12l5 7M16 5l5 7-5 7M14 3l-4 18"/>'
+_SVG_DIFF = '<path d="M6 3v18M18 3v18M10 8h5l-2-2M15 16h-5l2 2"/>'
 _SVG_SETTINGS = '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>'
 _SVG_DOC = '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M16 13H8"/><path d="M16 17H8"/><path d="M10 9H8"/>'
 
@@ -754,6 +758,28 @@ class MainWindow(QtWidgets.QMainWindow):
         self.preview_edit_btn.clicked.connect(self._edit_selected_rtl_file)
         self.preview_edit_btn.hide()
 
+        self.preview_highlight_btn = QtWidgets.QToolButton(controls)
+        self.preview_highlight_btn.setObjectName("previewControlBtn")
+        self.preview_highlight_btn.setCheckable(True)
+        self.preview_highlight_btn.setChecked(True)
+        self.preview_highlight_btn.setIcon(_svg_icon(_SVG_HIGHLIGHT, size=18))
+        self.preview_highlight_btn.setIconSize(QtCore.QSize(18, 18))
+        self.preview_highlight_btn.setToolTip("Syntax highlighting")
+        self.preview_highlight_btn.setAccessibleName("Syntax highlighting")
+        self.preview_highlight_btn.toggled.connect(self._on_preview_highlight_toggled)
+        self.preview_highlight_btn.hide()
+
+        self.preview_diff_btn = QtWidgets.QToolButton(controls)
+        self.preview_diff_btn.setObjectName("previewControlBtn")
+        self.preview_diff_btn.setCheckable(True)
+        self.preview_diff_btn.setIcon(_svg_icon(_SVG_DIFF, size=18))
+        self.preview_diff_btn.setIconSize(QtCore.QSize(18, 18))
+        self.preview_diff_btn.setToolTip("Show changes since previous preview")
+        self.preview_diff_btn.setAccessibleName("Show diff")
+        self.preview_diff_btn.setEnabled(False)
+        self.preview_diff_btn.toggled.connect(self._on_preview_diff_toggled)
+        self.preview_diff_btn.hide()
+
         self.preview_expand_btn = QtWidgets.QToolButton(controls)
         self.preview_expand_btn.setObjectName("previewControlBtn")
         self.preview_expand_btn.setIcon(_svg_icon(_SVG_PREVIEW_EXPAND, size=18))
@@ -774,6 +800,8 @@ class MainWindow(QtWidgets.QMainWindow):
         self.preview_buttons = [
             self.preview_refresh_btn,
             self.preview_edit_btn,
+            self.preview_highlight_btn,
+            self.preview_diff_btn,
             self.preview_expand_btn,
             self.preview_toggle_btn,
         ]
@@ -827,6 +855,9 @@ class MainWindow(QtWidgets.QMainWindow):
         self.preview_code.setObjectName("rtlPreviewCode")
         self.preview_code.setReadOnly(True)
         self.preview_code.setLineWrapMode(QtWidgets.QPlainTextEdit.NoWrap)
+        self.preview_highlighter = CodeHighlighter(self.preview_code.document())
+        self._preview_current_contents = {}
+        self._preview_previous_contents = {}
         layout.addWidget(self.preview_code, stretch=1)
         return panel
 
@@ -841,6 +872,8 @@ class MainWindow(QtWidgets.QMainWindow):
         self.preview_toggle_btn.setChecked(checked)
         self.preview_refresh_btn.setVisible(checked)
         self.preview_edit_btn.setVisible(checked)
+        self.preview_highlight_btn.setVisible(checked)
+        self.preview_diff_btn.setVisible(checked)
         self.preview_expand_btn.setVisible(checked)
         self.preview_toggle_btn.setToolTip("Preview")
         self.preview_expand_btn.setToolTip("Maximize RTL preview")
@@ -925,6 +958,8 @@ class MainWindow(QtWidgets.QMainWindow):
             self.preview_toggle_btn.setChecked(True)
             self.preview_refresh_btn.show()
             self.preview_edit_btn.show()
+            self.preview_highlight_btn.show()
+            self.preview_diff_btn.show()
             self.preview_expand_btn.show()
             self.rtl_preview_panel.show()
             self.preview_expand_btn.setToolTip("Restore split preview")
@@ -989,6 +1024,21 @@ class MainWindow(QtWidgets.QMainWindow):
                     )
             files.sort(key=lambda path: str(path.relative_to(self.current_workspace)).lower())
 
+        old_contents = self._preview_current_contents
+        current_contents = {}
+        for path in files:
+            try:
+                current_contents[str(path)] = path.read_text(
+                    encoding="utf-8", errors="replace"
+                )
+            except OSError:
+                continue
+        for path_text, current_text in current_contents.items():
+            previous_text = old_contents.get(path_text)
+            if previous_text is not None and previous_text != current_text:
+                self._preview_previous_contents[path_text] = previous_text
+        self._preview_current_contents = current_contents
+
         file_items = {}
         directory_items = {}
         directory_icon = self.style().standardIcon(QtWidgets.QStyle.SP_DirIcon)
@@ -1034,6 +1084,8 @@ class MainWindow(QtWidgets.QMainWindow):
             self._set_preview_tree_visible(tree_was_visible)
         else:
             self._selected_preview_file = None
+            self.preview_diff_btn.setChecked(False)
+            self.preview_diff_btn.setEnabled(False)
             self._set_preview_tree_visible(False)
             self.preview_status.setText("Generate RTL to preview the output.")
             self.preview_status.show()
@@ -1044,13 +1096,46 @@ class MainWindow(QtWidgets.QMainWindow):
             self.preview_code.clear()
             return
         path = self._selected_preview_file
-        try:
-            text = path.read_text(encoding="utf-8", errors="replace")
-        except OSError as error:
-            self.preview_code.setPlainText(f"Could not read {path}:\n{error}")
-            return
+        path_text = str(path)
+        text = self._preview_current_contents.get(path_text)
+        if text is None:
+            try:
+                text = path.read_text(encoding="utf-8", errors="replace")
+            except OSError as error:
+                self.preview_code.setPlainText(f"Could not read {path}:\n{error}")
+                return
+            self._preview_current_contents[path_text] = text
+        previous = self._preview_previous_contents.get(path_text)
+        has_diff = previous is not None and previous != text
+        self.preview_diff_btn.setEnabled(has_diff)
+        if not has_diff and self.preview_diff_btn.isChecked():
+            self.preview_diff_btn.setChecked(False)
+
+        if self.preview_diff_btn.isChecked() and has_diff:
+            relative = (
+                str(path.relative_to(self.current_workspace))
+                if self.current_workspace
+                else path.name
+            )
+            text = "".join(
+                difflib.unified_diff(
+                    previous.splitlines(keepends=True),
+                    text.splitlines(keepends=True),
+                    fromfile=f"previous/{relative}",
+                    tofile=f"current/{relative}",
+                )
+            )
+            self.preview_highlighter.set_language("diff")
+        else:
+            self.preview_highlighter.set_language(path.suffix)
         self.preview_code.setPlainText(text)
         self.preview_code.moveCursor(QtGui.QTextCursor.Start)
+
+    def _on_preview_highlight_toggled(self, checked):
+        self.preview_highlighter.set_enabled(checked)
+
+    def _on_preview_diff_toggled(self, _checked):
+        self._show_selected_preview_file()
 
     def _edit_selected_rtl_file(self):
         path = self._selected_preview_file

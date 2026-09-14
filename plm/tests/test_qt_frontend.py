@@ -123,6 +123,8 @@ class QtFrontendTests(unittest.TestCase):
             QtCore.Qt.ToolButtonIconOnly,
         )
         self.assertEqual(window.preview_root_btn.accessibleName(), "Files")
+        self.assertTrue(window.preview_highlight_btn.isChecked())
+        self.assertEqual(window.preview_diff_btn.accessibleName(), "Show diff")
         self.assertEqual(window.preview_file_tree.topLevelItemCount(), 2)
         self.assertEqual(
             [window.preview_file_tree.topLevelItem(i).text(0) for i in range(2)],
@@ -157,6 +159,21 @@ class QtFrontendTests(unittest.TestCase):
         self.assertEqual(window._selected_preview_file, csv_path)
         self.assertIn("ctrl_id,ctrl_name,max_width", window.preview_code.toPlainText())
         self.assertFalse(window.preview_file_tree.isVisible())
+
+        window._selected_preview_file = rtl_path
+        window._show_selected_preview_file()
+        self.assertEqual(window.preview_highlighter._language, "verilog")
+        self.assertFalse(window.preview_diff_btn.isEnabled())
+        rtl_path.write_text(
+            "module pipe_lane_clk_gate;\n  assign enabled = 1'b1;\nendmodule\n",
+            encoding="utf-8",
+        )
+        window._refresh_rtl_preview()
+        self.assertTrue(window.preview_diff_btn.isEnabled())
+        window.preview_diff_btn.click()
+        self.assertEqual(window.preview_highlighter._language, "diff")
+        self.assertIn("--- previous/rtl/common/pipe_lane_clk_gate.sv", window.preview_code.toPlainText())
+        self.assertIn("+  assign enabled = 1'b1;", window.preview_code.toPlainText())
 
     def test_table_context_menu_inserts_and_deletes(self):
         table = EditableTable([

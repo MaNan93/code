@@ -439,8 +439,9 @@ class MainWindow(QtWidgets.QMainWindow):
                 tab_rect = tab_bar.rect()
             # QSS padding is resolved only after the window is shown, so the
             # final tab-bar height can differ from its construction-time hint.
-            # Keep the preview heading on that exact live header geometry.
-            self.preview_title.setFixedHeight(tab_bar.height())
+            # Keep the preview file button on that exact live header geometry.
+            self.preview_header.setFixedHeight(tab_bar.height())
+            self.preview_root_btn.setFixedHeight(tab_rect.height())
             # Align the Preview controls to the actual tab pill rather than
             # the padded QTabBar container.
             self.preview_controls.setFixedHeight(tab_rect.height())
@@ -460,6 +461,14 @@ class MainWindow(QtWidgets.QMainWindow):
             tab_origin = tab_bar.mapTo(central, QtCore.QPoint(0, 0))
             tab_center_y = tab_origin.y() + tab_rect.center().y()
             y = tab_center_y - self.preview_controls.height() // 2
+        elif (
+            getattr(self, "preview_root_btn", None)
+            and self.rtl_preview_panel.isVisible()
+        ):
+            root_center = self.preview_root_btn.mapTo(
+                central, self.preview_root_btn.rect().center()
+            )
+            y = root_center.y() - self.preview_controls.height() // 2
         else:
             y = origin.y() + inset
         self.preview_controls.move(max(margin, x), max(0, y))
@@ -742,23 +751,35 @@ class MainWindow(QtWidgets.QMainWindow):
         panel = QtWidgets.QFrame()
         panel.setObjectName("rtlPreviewPanel")
         layout = QtWidgets.QVBoxLayout(panel)
-        # Match the tab bar's y-origin; editorShell contributes a 1 px border.
-        layout.setContentsMargins(18, 1, 18, BOTTOM_EDGE_INSET)
+        layout.setContentsMargins(18, 0, 18, BOTTOM_EDGE_INSET)
         layout.setSpacing(10)
 
-        title_row = QtWidgets.QHBoxLayout()
-        title = QtWidgets.QLabel("Preview")
-        self.preview_title = title
-        title.setObjectName("rtlPreviewTitle")
-        title.setFixedHeight(self.tabs.tabBar().tabSizeHint(0).height())
-        title_row.addWidget(title, alignment=QtCore.Qt.AlignVCenter)
-        title_row.addStretch(1)
-        layout.addLayout(title_row)
+        self.preview_header = QtWidgets.QWidget()
+        self.preview_header.setObjectName("previewHeader")
+        header_layout = QtWidgets.QHBoxLayout(self.preview_header)
+        header_layout.setContentsMargins(0, 0, 0, 0)
+        header_layout.setSpacing(0)
+        self.preview_root_btn = QtWidgets.QPushButton("▸  Workspace")
+        self.preview_root_btn.setObjectName("previewRootBtn")
+        self.preview_root_btn.setCheckable(True)
+        self.preview_root_btn.setIcon(
+            self.style().standardIcon(QtWidgets.QStyle.SP_DirIcon)
+        )
+        self.preview_root_btn.setToolTip("Open file tree")
+        self.preview_root_btn.clicked.connect(self._set_preview_tree_visible)
+        header_layout.addWidget(self.preview_root_btn, alignment=QtCore.Qt.AlignVCenter)
+        header_layout.addStretch(1)
+        layout.addWidget(self.preview_header)
 
-        self.preview_file_combo = RoundedComboBox()
-        self.preview_file_combo.setObjectName("previewFileCombo")
-        self.preview_file_combo.currentIndexChanged.connect(self._show_selected_rtl_file)
-        layout.addWidget(self.preview_file_combo)
+        self.preview_file_tree = QtWidgets.QTreeWidget()
+        self.preview_file_tree.setObjectName("previewFileTree")
+        self.preview_file_tree.setHeaderHidden(True)
+        self.preview_file_tree.setRootIsDecorated(True)
+        self.preview_file_tree.setUniformRowHeights(True)
+        self.preview_file_tree.itemClicked.connect(self._on_preview_tree_item_clicked)
+        self.preview_file_tree.hide()
+        layout.addWidget(self.preview_file_tree)
+        self._selected_preview_file = None
 
         self.preview_status = QtWidgets.QLabel("Generate RTL to preview the output.")
         self.preview_status.setObjectName("previewStatus")
@@ -895,10 +916,27 @@ class MainWindow(QtWidgets.QMainWindow):
         self._position_preview_controls()
         QtCore.QTimer.singleShot(0, self._position_floating_log)
 
+    def _set_preview_tree_visible(self, visible):
+        visible = bool(visible and self.preview_file_tree.topLevelItemCount())
+        self.preview_file_tree.setVisible(visible)
+        self.preview_root_btn.setChecked(visible)
+        root_name = self.current_workspace.name if self.current_workspace else "Workspace"
+        marker = "▾" if visible else "▸"
+        self.preview_root_btn.setText(f"{marker}  {root_name}")
+
+    def _on_preview_tree_item_clicked(self, item, _column):
+        path_text = item.data(0, QtCore.Qt.UserRole)
+        if not path_text:
+            return
+        self._selected_preview_file = Path(path_text)
+        self._show_selected_preview_file()
+        self._set_preview_tree_visible(False)
+
     def _refresh_rtl_preview(self):
-        previous = self.preview_file_combo.currentData()
-        self.preview_file_combo.blockSignals(True)
-        self.preview_file_combo.clear()
+        previous = str(self._selected_preview_file) if self._selected_preview_file else None
+        tree_was_visible = self.preview_root_btn.isChecked()
+        self.preview_file_tree.blockSignals(True)
+        self.preview_file_tree.clear()
         files = []
         if self.current_workspace:
             preview_roots = (
@@ -913,31 +951,61 @@ class MainWindow(QtWidgets.QMainWindow):
                         if path.is_file() and path.suffix.lower() in extensions
                     )
             files.sort(key=lambda path: str(path.relative_to(self.current_workspace)).lower())
-            for path in files:
-                self.preview_file_combo.addItem(
-                    str(path.relative_to(self.current_workspace)),
-                    str(path),
-                )
-        if previous:
-            index = self.preview_file_combo.findData(previous)
-            if index >= 0:
-                self.preview_file_combo.setCurrentIndex(index)
-        self.preview_file_combo.blockSignals(False)
-        self.preview_file_combo.setVisible(bool(files))
+
+        file_items = {}
+        directory_items = {}
+        directory_icon = self.style().standardIcon(QtWidgets.QStyle.SP_DirIcon)
+        file_icon = self.style().standardIcon(QtWidgets.QStyle.SP_FileIcon)
+        for path in files:
+            relative = path.relative_to(self.current_workspace)
+            parent = self.preview_file_tree.invisibleRootItem()
+            for index, part in enumerate(relative.parts):
+                is_file = index == len(relative.parts) - 1
+                key = relative.parts[: index + 1]
+                if is_file:
+                    item = QtWidgets.QTreeWidgetItem(parent, [part])
+                    item.setIcon(0, file_icon)
+                    item.setData(0, QtCore.Qt.UserRole, str(path))
+                    item.setToolTip(0, str(relative))
+                    file_items[str(path)] = item
+                else:
+                    item = directory_items.get(key)
+                    if item is None:
+                        item = QtWidgets.QTreeWidgetItem(parent, [part])
+                        item.setIcon(0, directory_icon)
+                        directory_items[key] = item
+                    parent = item
+        self.preview_file_tree.expandAll()
+        self.preview_file_tree.blockSignals(False)
+
+        root_name = self.current_workspace.name if self.current_workspace else "Workspace"
+        self.preview_root_btn.setText(f"▸  {root_name}")
+        self.preview_root_btn.setToolTip(
+            str(self.current_workspace) if self.current_workspace else "No workspace open"
+        )
+        self.preview_root_btn.setEnabled(bool(files))
+        row_count = len(files) + len(directory_items)
+        tree_height = min(int(260 * _ui_scale()), max(int(120 * _ui_scale()), row_count * 26))
+        self.preview_file_tree.setFixedHeight(tree_height)
         if files:
+            selected = previous if previous in file_items else str(files[0])
+            self._selected_preview_file = Path(selected)
+            self.preview_file_tree.setCurrentItem(file_items[selected])
             self.preview_status.hide()
-            self._show_selected_rtl_file(self.preview_file_combo.currentIndex())
+            self._show_selected_preview_file()
+            self._set_preview_tree_visible(tree_was_visible)
         else:
+            self._selected_preview_file = None
+            self._set_preview_tree_visible(False)
             self.preview_status.setText("Generate RTL to preview the output.")
             self.preview_status.show()
             self.preview_code.clear()
 
-    def _show_selected_rtl_file(self, index):
-        path_text = self.preview_file_combo.itemData(index) if index >= 0 else None
-        if not path_text:
+    def _show_selected_preview_file(self):
+        if not self._selected_preview_file:
             self.preview_code.clear()
             return
-        path = Path(path_text)
+        path = self._selected_preview_file
         try:
             text = path.read_text(encoding="utf-8", errors="replace")
         except OSError as error:
@@ -947,13 +1015,12 @@ class MainWindow(QtWidgets.QMainWindow):
         self.preview_code.moveCursor(QtGui.QTextCursor.Start)
 
     def _edit_selected_rtl_file(self):
-        index = self.preview_file_combo.currentIndex()
-        path_text = self.preview_file_combo.itemData(index) if index >= 0 else None
-        if not path_text:
+        path = self._selected_preview_file
+        if not path:
             QtWidgets.QMessageBox.information(self, "No file", "Select a generated RTL file first.")
             return
         editor = load_settings().get("editorPath") or "gvim"
-        result = QtCore.QProcess.startDetached(editor, [str(path_text)])
+        result = QtCore.QProcess.startDetached(editor, [str(path)])
         started = result[0] if isinstance(result, tuple) else result
         if not started:
             QtWidgets.QMessageBox.warning(

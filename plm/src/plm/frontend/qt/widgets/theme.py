@@ -480,11 +480,41 @@ QFrame#rtlPreviewPanel {{
     background: {BG};
     border-left: 1px solid {BORDER_STRONG};
 }}
-QLabel#rtlPreviewTitle {{
-    font-size: {fs(13)};
+QLabel#previewStatus {{ color: {TEXT_TERTIARY}; }}
+QWidget#previewHeader {{ background: transparent; }}
+QPushButton#previewRootBtn {{
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: {RADIUS_SM}px;
+    padding: 4px 10px;
+    text-align: left;
+    color: {TEXT};
     font-weight: 600;
 }}
-QLabel#previewStatus {{ color: {TEXT_TERTIARY}; }}
+QPushButton#previewRootBtn:hover,
+QPushButton#previewRootBtn:checked {{
+    background: {BG_HOVER};
+    border-color: {BORDER};
+}}
+QTreeWidget#previewFileTree {{
+    background: {BG};
+    border: 1px solid {BORDER};
+    border-radius: {RADIUS_SM}px;
+    padding: 4px;
+    outline: none;
+}}
+QTreeWidget#previewFileTree::item {{
+    min-height: 24px;
+    padding: 2px 4px;
+    border-radius: 5px;
+}}
+QTreeWidget#previewFileTree::item:hover {{
+    background: {BG_HOVER};
+}}
+QTreeWidget#previewFileTree::item:selected {{
+    background: {BG_ACTIVE};
+    color: {TEXT};
+}}
 QPlainTextEdit#rtlPreviewCode {{
     border: 1px solid {BORDER};
     border-radius: {RADIUS_SM}px;

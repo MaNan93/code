@@ -46,17 +46,27 @@ class QtFrontendTests(unittest.TestCase):
         window._on_toggle_rtl_preview(True)
         self.process_events()
         tab_bar = window.tabs.tabBar()
-        tab_top = tab_bar.mapTo(window.centralWidget(), QtCore.QPoint()).y()
-        title_top = window.preview_title.mapTo(window.centralWidget(), QtCore.QPoint()).y()
-        self.assertEqual(title_top, tab_top)
-        self.assertEqual(window.preview_title.height(), tab_bar.height())
-        tab_center_y = tab_bar.mapTo(
-            window.centralWidget(), tab_bar.tabRect(window.tabs.currentIndex()).center()
+        tab_rect = tab_bar.tabRect(window.tabs.currentIndex())
+        tab_top = tab_bar.mapTo(window.centralWidget(), tab_rect.topLeft()).y()
+        root_top = window.preview_root_btn.mapTo(
+            window.centralWidget(), QtCore.QPoint()
         ).y()
+        root_center_y = window.preview_root_btn.mapTo(
+            window.centralWidget(), window.preview_root_btn.rect().center()
+        ).y()
+        self.assertLessEqual(abs(root_top - tab_top), 1)
+        self.assertEqual(window.preview_root_btn.height(), tab_rect.height())
         self.assertLessEqual(
-            abs(window.preview_controls.geometry().center().y() - tab_center_y),
+            abs(window.preview_controls.geometry().center().y() - root_center_y),
             1,
         )
+        root_left = window.preview_root_btn.mapTo(
+            window.rtl_preview_panel, QtCore.QPoint()
+        ).x()
+        code_left = window.preview_code.mapTo(
+            window.rtl_preview_panel, QtCore.QPoint()
+        ).x()
+        self.assertEqual(root_left, code_left)
         self.assertEqual(window.preview_toggle_btn.toolTip(), "Preview")
         self.assertEqual(window.preview_toggle_btn.accessibleName(), "Preview")
         self.assertEqual(window.log_title.height(), window.log_more.height())
@@ -80,6 +90,53 @@ class QtFrontendTests(unittest.TestCase):
         self.assertTrue(window._preview_maximized)
         self.assertFalse(window.main_area.isVisible())
         self.assertTrue(window.rtl_preview_panel.isVisible())
+
+    def test_preview_file_tree_replaces_file_combo(self):
+        workspace = Path(self.temp.name) / "quad"
+        config = workspace / "config"
+        rtl = workspace / "rtl" / "common"
+        config.mkdir(parents=True)
+        rtl.mkdir(parents=True)
+        csv_path = config / "controllers.csv"
+        rtl_path = rtl / "pipe_lane_clk_gate.sv"
+        csv_path.write_text("ctrl_id,ctrl_name,max_width\n0,CtrlA,12\n", encoding="utf-8")
+        rtl_path.write_text("module pipe_lane_clk_gate;\nendmodule\n", encoding="utf-8")
+
+        window = MainWindow()
+        self.addCleanup(window.close)
+        window.current_workspace = workspace
+        window.show()
+        window._on_toggle_rtl_preview(True)
+        self.process_events()
+
+        self.assertFalse(hasattr(window, "preview_file_combo"))
+        self.assertTrue(window.preview_root_btn.text().endswith("quad"))
+        self.assertEqual(window.preview_file_tree.topLevelItemCount(), 2)
+        self.assertEqual(
+            [window.preview_file_tree.topLevelItem(i).text(0) for i in range(2)],
+            ["config", "rtl"],
+        )
+
+        window.preview_root_btn.click()
+        self.process_events()
+        self.assertTrue(window.preview_file_tree.isVisible())
+
+        def find_file(parent, target):
+            for index in range(parent.childCount()):
+                child = parent.child(index)
+                if child.data(0, QtCore.Qt.UserRole) == str(target):
+                    return child
+                found = find_file(child, target)
+                if found is not None:
+                    return found
+            return None
+
+        csv_item = find_file(window.preview_file_tree.invisibleRootItem(), csv_path)
+        self.assertIsNotNone(csv_item)
+        window._on_preview_tree_item_clicked(csv_item, 0)
+        self.assertEqual(window._selected_preview_file, csv_path)
+        self.assertIn("ctrl_id,ctrl_name,max_width", window.preview_code.toPlainText())
+        self.assertFalse(window.preview_file_tree.isVisible())
 
     def test_table_context_menu_inserts_and_deletes(self):
         table = EditableTable([

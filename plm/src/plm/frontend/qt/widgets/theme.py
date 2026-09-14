@@ -562,10 +562,3 @@ QToolTip {{
 # The sheet at the default size, for callers that apply it once at startup
 # before any saved font preference is known (plm.frontend.qt.main).
 STYLESHEET = build_stylesheet()
-__pycache__/
-*.pyc
-.DS_Store
-*.egg-info/
-build/
-dist/
-work/

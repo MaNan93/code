@@ -1484,7 +1484,10 @@ class MainWindow(QtWidgets.QMainWindow):
         display_path = path_text
         if path_text and self.current_workspace:
             try:
-                display_path = str(Path(path_text).relative_to(self.current_workspace))
+                # as_posix(): this is shown to the user next to paths the
+                # rest of the UI renders forward-slashed, and str() would
+                # backslash it on Windows only.
+                display_path = Path(path_text).relative_to(self.current_workspace).as_posix()
             except ValueError:
                 pass
         location = ""

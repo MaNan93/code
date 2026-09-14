@@ -556,6 +556,14 @@ class QtFrontendTests(unittest.TestCase):
         self.assertFalse(window.preview_more_btn.isHidden())
         self.assertTrue(window.preview_edit_btn.isHidden())
         self.assertTrue(window.preview_search_btn.isHidden())
+        self.assertFalse(window.preview_refresh_btn.isHidden())
+        self.assertFalse(window.preview_expand_btn.isHidden())
+
+        window._apply_preview_control_density(150)
+        self.assertFalse(window.preview_more_btn.isHidden())
+        self.assertTrue(window.preview_refresh_btn.isHidden())
+        self.assertTrue(window.preview_expand_btn.isHidden())
+        self.assertFalse(window.preview_toggle_btn.isHidden())
 
         window._apply_preview_control_density(800)
         self.assertTrue(window.preview_more_btn.isHidden())

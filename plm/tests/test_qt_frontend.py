@@ -142,6 +142,13 @@ class QtFrontendTests(unittest.TestCase):
             window.preview_file_tree.geometry().left(),
             code_geometry.left(),
         )
+        QtTest.QTest.mouseClick(window.preview_code.viewport(), QtCore.Qt.LeftButton)
+        self.process_events()
+        self.assertFalse(window.preview_file_tree.isVisible())
+
+        window.preview_root_btn.click()
+        self.process_events()
+        self.assertTrue(window.preview_file_tree.isVisible())
 
         def find_file(parent, target):
             for index in range(parent.childCount()):
@@ -174,6 +181,19 @@ class QtFrontendTests(unittest.TestCase):
         self.assertEqual(window.preview_highlighter._language, "diff")
         self.assertIn("--- previous/rtl/common/pipe_lane_clk_gate.sv", window.preview_code.toPlainText())
         self.assertIn("+  assign enabled = 1'b1;", window.preview_code.toPlainText())
+
+    def test_generate_process_can_import_source_checkout(self):
+        window = MainWindow()
+        self.addCleanup(window.close)
+        window.current_workspace = Path(self.temp.name) / "quad"
+        with mock.patch.object(
+            window, "_save_before_action", return_value=True
+        ), mock.patch.object(QtCore.QProcess, "start"):
+            window._run_tool("all")
+
+        process = window._active_processes[-1]
+        python_path = process.processEnvironment().value("PYTHONPATH").split(os.pathsep)
+        self.assertIn(str(main_window.PLM_ROOT / "src"), python_path)
 
     def test_table_context_menu_inserts_and_deletes(self):
         table = EditableTable([

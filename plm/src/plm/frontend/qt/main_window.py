@@ -11,8 +11,9 @@ Validate calls plm.core.model.Config directly; Generate runs
 for the QSS and plm.frontend.qt.widgets.settings for the Settings dialog.
 """
 
-import json
 import difflib
+import json
+import os
 import shutil
 import sys
 from pathlib import Path
@@ -361,6 +362,9 @@ class MainWindow(QtWidgets.QMainWindow):
         self.resize(1200, 780)
         self.setMinimumSize(900, 620)
         self._build_ui()
+        app = QtWidgets.QApplication.instance()
+        if app is not None:
+            app.installEventFilter(self)
         self._apply_font(load_settings())
         self._refresh_recent()
         last = load_last_workspace()
@@ -418,6 +422,26 @@ class MainWindow(QtWidgets.QMainWindow):
         QtCore.QTimer.singleShot(0, self._position_preview_controls)
 
     def eventFilter(self, watched, event):
+        if (
+            getattr(self, "preview_file_tree", None)
+            and self.preview_file_tree.isVisible()
+        ):
+            if event.type() == QtCore.QEvent.MouseButtonPress:
+                global_pos = event.globalPos()
+                tree_rect = QtCore.QRect(
+                    self.preview_file_tree.mapToGlobal(QtCore.QPoint()),
+                    self.preview_file_tree.size(),
+                )
+                button_rect = QtCore.QRect(
+                    self.preview_root_btn.mapToGlobal(QtCore.QPoint()),
+                    self.preview_root_btn.size(),
+                )
+                if not tree_rect.contains(global_pos) and not button_rect.contains(global_pos):
+                    QtCore.QTimer.singleShot(
+                        0, lambda: self._set_preview_tree_visible(False)
+                    )
+            elif event.type() == QtCore.QEvent.ApplicationDeactivate:
+                self._set_preview_tree_visible(False)
         if watched in (
             getattr(self, "main_area", None),
             getattr(self, "editor_shell", None),
@@ -433,6 +457,12 @@ class MainWindow(QtWidgets.QMainWindow):
         self._position_floating_log()
         self._position_preview_controls()
         self._position_preview_file_tree()
+
+    def closeEvent(self, event):
+        app = QtWidgets.QApplication.instance()
+        if app is not None:
+            app.removeEventFilter(self)
+        super().closeEvent(event)
 
     def _position_preview_controls(self):
         if not getattr(self, "preview_controls", None):
@@ -1826,6 +1856,21 @@ class MainWindow(QtWidgets.QMainWindow):
 
         proc = QtCore.QProcess(self)
         proc.setWorkingDirectory(str(PLM_ROOT))
+        # run.py can import from a source checkout because it adjusts
+        # sys.path in-process. QProcess starts a fresh interpreter, so pass
+        # the src-layout package root explicitly as well. This keeps the GUI
+        # usable without requiring `pip install -e .`, while preserving any
+        # PYTHONPATH the user already configured.
+        environment = QtCore.QProcessEnvironment.systemEnvironment()
+        source_root = PLM_ROOT / "src"
+        if source_root.is_dir():
+            existing = environment.value("PYTHONPATH")
+            entries = [entry for entry in existing.split(os.pathsep) if entry]
+            source_text = str(source_root)
+            if source_text not in entries:
+                entries.insert(0, source_text)
+            environment.insert("PYTHONPATH", os.pathsep.join(entries))
+        proc.setProcessEnvironment(environment)
         proc.setProcessChannelMode(QtCore.QProcess.MergedChannels)
 
         def on_ready_read():

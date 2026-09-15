@@ -103,6 +103,8 @@ _SVG_SEARCH = "search"
 _SVG_COPY = "copy"
 _SVG_SETTINGS = "action-settings"
 _SVG_DOC = "document-text"
+_SVG_TREE_FILE = "document"
+_SVG_TREE_FOLDER = "folder-blank"
 
 
 class _StableTabBar(QtWidgets.QTabBar):
@@ -1349,8 +1351,8 @@ class MainWindow(QtWidgets.QMainWindow):
 
         file_items = {}
         directory_items = {}
-        directory_icon = self.style().standardIcon(QtWidgets.QStyle.SP_DirIcon)
-        file_icon = self.style().standardIcon(QtWidgets.QStyle.SP_FileIcon)
+        directory_icon = _svg_icon(_SVG_TREE_FOLDER, size=18)
+        file_icon = _svg_icon(_SVG_TREE_FILE, size=18)
         for path in files:
             relative = path.relative_to(self.current_workspace)
             parent = self.preview_file_tree.invisibleRootItem()

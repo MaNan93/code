@@ -2093,6 +2093,7 @@ class MainWindow(QtWidgets.QMainWindow):
             self._preview_previous_contents = {}
             self._selected_preview_file = None
             self._refresh_rtl_preview()
+            self._reset_edit_history()
         self._refresh_recent()
 
     def _update_workspace_label(self):
@@ -2524,6 +2525,8 @@ class MainWindow(QtWidgets.QMainWindow):
         self._update_workspace_label()
         self._log(f"Loaded {path}.")
         self._mark_saved()
+        self._reset_edit_history()
+        self._validate_live_tables()
         self._refresh_topology_summary()
         if getattr(self, "rtl_preview_panel", None) and self.rtl_preview_panel.isVisible():
             self._refresh_rtl_preview()

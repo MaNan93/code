@@ -378,6 +378,10 @@ QPushButton {{
     padding: 7px 14px;
     border-radius: {RADIUS_SM}px;
 }}
+QPushButton#resetDefaultsBtn {{
+    padding: 7px 9px;
+    min-width: 0;
+}}
 QPushButton:hover {{
     background: {BG_HOVER};
     border-color: {BUTTON_BORDER};

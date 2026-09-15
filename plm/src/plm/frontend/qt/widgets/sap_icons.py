@@ -34,6 +34,7 @@ CODEPOINTS = {
     "folder-blank": 0xE08E,
     "full-screen": 0xE166,
     "navigation-down-arrow": 0xE1E2,
+    "navigation-left-arrow": 0xE067,
     "navigation-right-arrow": 0xE066,
     "open-folder": 0xE1C9,
     "overflow": 0xE1F2,

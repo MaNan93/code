@@ -1681,16 +1681,6 @@ class MainWindow(QtWidgets.QMainWindow):
             actions_row.addWidget(b)
         layout.addLayout(actions_row)
 
-        summary_header = QtWidgets.QLabel("Topology summary")
-        summary_header.setObjectName("sectionHeader")
-        layout.addWidget(summary_header)
-        self.topology_summary = QtWidgets.QPlainTextEdit()
-        self.topology_summary.setObjectName("topologySummary")
-        self.topology_summary.setReadOnly(True)
-        self.topology_summary.setLineWrapMode(QtWidgets.QPlainTextEdit.NoWrap)
-        self.topology_summary.setPlainText("Open a workspace to see its lane topology.")
-        layout.addWidget(self.topology_summary, stretch=1)
-
         return frame
 
     def _build_log_panel(self):
@@ -1716,20 +1706,20 @@ class MainWindow(QtWidgets.QMainWindow):
         self.problems_tab_btn.setFixedHeight(26)
         header_layout.addWidget(self.problems_tab_btn, alignment=QtCore.Qt.AlignVCenter)
 
-        self.log_tab_btn = QtWidgets.QToolButton()
-        self.log_tab_btn.setObjectName("bottomPanelTab")
-        self.log_tab_btn.setText("LOG")
-        self.log_tab_btn.setCheckable(True)
-        self.log_tab_btn.setChecked(True)
-        self.log_tab_btn.setFixedHeight(26)
-        header_layout.addWidget(self.log_tab_btn, alignment=QtCore.Qt.AlignVCenter)
+        self.report_tab_btn = QtWidgets.QToolButton()
+        self.report_tab_btn.setObjectName("bottomPanelTab")
+        self.report_tab_btn.setText("REPORT")
+        self.report_tab_btn.setCheckable(True)
+        self.report_tab_btn.setChecked(True)
+        self.report_tab_btn.setFixedHeight(26)
+        header_layout.addWidget(self.report_tab_btn, alignment=QtCore.Qt.AlignVCenter)
 
         panel_tabs = QtWidgets.QButtonGroup(card)
         panel_tabs.setExclusive(True)
         panel_tabs.addButton(self.problems_tab_btn, 0)
-        panel_tabs.addButton(self.log_tab_btn, 1)
+        panel_tabs.addButton(self.report_tab_btn, 1)
         self.problems_tab_btn.clicked.connect(lambda: self._set_bottom_panel_page(0))
-        self.log_tab_btn.clicked.connect(lambda: self._set_bottom_panel_page(1))
+        self.report_tab_btn.clicked.connect(lambda: self._set_bottom_panel_page(1))
 
         header_layout.addStretch(1)
         self.log_more = QtWidgets.QToolButton()
@@ -1767,13 +1757,37 @@ class MainWindow(QtWidgets.QMainWindow):
         self.problem_tree.itemDoubleClicked.connect(self._on_problem_activated)
         self.bottom_panel_stack.addWidget(self.problem_tree)
 
+        report_page = QtWidgets.QWidget()
+        report_page.setObjectName("reportPage")
+        report_layout = QtWidgets.QVBoxLayout(report_page)
+        report_layout.setContentsMargins(0, 0, 0, 0)
+        report_layout.setSpacing(6)
+
+        topology_header = QtWidgets.QLabel("TOPOLOGY")
+        topology_header.setObjectName("sectionHeader")
+        report_layout.addWidget(topology_header)
+        self.topology_summary = QtWidgets.QPlainTextEdit()
+        self.topology_summary.setObjectName("topologySummary")
+        self.topology_summary.setReadOnly(True)
+        self.topology_summary.setLineWrapMode(QtWidgets.QPlainTextEdit.NoWrap)
+        self.topology_summary.setMinimumHeight(70)
+        self.topology_summary.setPlainText(
+            "Open a workspace to see its lane topology."
+        )
+        report_layout.addWidget(self.topology_summary, stretch=1)
+
+        activity_header = QtWidgets.QLabel("ACTIVITY LOG")
+        activity_header.setObjectName("sectionHeader")
+        report_layout.addWidget(activity_header)
         self.log = QtWidgets.QPlainTextEdit()
         self.log.setObjectName("logConsole")
         self.log.setReadOnly(True)
         self.log.setMaximumBlockCount(2000)
-        self.log.setMinimumHeight(100)
-        self.bottom_panel_stack.addWidget(self.log)
-        self.bottom_panel_stack.setCurrentWidget(self.log)
+        self.log.setMinimumHeight(70)
+        report_layout.addWidget(self.log, stretch=1)
+
+        self.bottom_panel_stack.addWidget(report_page)
+        self.bottom_panel_stack.setCurrentWidget(report_page)
         self.log_layout.addWidget(self.bottom_panel_stack, stretch=1)
 
         self._problems = []
@@ -1783,7 +1797,7 @@ class MainWindow(QtWidgets.QMainWindow):
     def _set_bottom_panel_page(self, index):
         self.bottom_panel_stack.setCurrentIndex(index)
         self.problems_tab_btn.setChecked(index == 0)
-        self.log_tab_btn.setChecked(index == 1)
+        self.report_tab_btn.setChecked(index == 1)
 
     def _show_problems_panel(self):
         if not self.log_toggle.isChecked():

@@ -404,11 +404,17 @@ class QtFrontendTests(unittest.TestCase):
         self.assertEqual(
             {
                 name: sap_icons.CODEPOINTS[name]
-                for name in ("document", "folder-blank", "vertical-grip")
+                for name in (
+                    "document",
+                    "folder-blank",
+                    "navigation-left-arrow",
+                    "vertical-grip",
+                )
             },
             {
                 "document": 0xE172,
                 "folder-blank": 0xE08E,
+                "navigation-left-arrow": 0xE067,
                 "vertical-grip": 0xE1FA,
             },
         )
@@ -418,6 +424,9 @@ class QtFrontendTests(unittest.TestCase):
             "standardIcon", inspect.getsource(MainWindow._refresh_rtl_preview)
         )
         self.assertIn("sap_icons.icon", inspect.getsource(tables.drag_handle_icon))
+        main_source = inspect.getsource(main_window)
+        self.assertNotIn('setText("⋮")', main_source)
+        self.assertNotIn('setText("›" if collapsed else "‹")', main_source)
 
     def _sample_workspace(self):
         """A minimal but valid workspace the real loader accepts."""

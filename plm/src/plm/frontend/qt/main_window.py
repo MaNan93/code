@@ -11,7 +11,9 @@ Validate calls plm.core.model.Config directly; Generate runs
 for the QSS and plm.frontend.qt.widgets.settings for the Settings dialog.
 """
 
+import copy
 import difflib
+import hashlib
 import json
 import os
 import re
@@ -24,7 +26,7 @@ from pathlib import Path
 from PyQt5 import QtCore, QtGui, QtWidgets
 
 from plm.core.gen_flags import ARCH_PCLK_MODE, PCLK_MODE_ARCH
-from plm.core.model import Config
+from plm.core.model import Config, is_sv_identifier
 from plm.core.paths import CONFIGS_ROOT, DOCS_DIR, PLM_ROOT, is_deletable_workspace, is_workspace_root
 from plm.core.workspace import save_workspace_content, scaffold_default_content, workspace_content
 from plm.frontend.qt.widgets import sap_icons
@@ -363,6 +365,10 @@ class MainWindow(QtWidgets.QMainWindow):
         self._title_shows_dirty = False
         self._generation_busy = False
         self._topology_payload = None
+        self._history_payload = None
+        self._undo_history = []
+        self._redo_history = []
+        self._restoring_history = False
         self.setWindowTitle("plmConsultant")
         self.resize(1200, 780)
         self.setMinimumSize(900, 620)
@@ -375,6 +381,23 @@ class MainWindow(QtWidgets.QMainWindow):
         QtWidgets.QShortcut(
             QtGui.QKeySequence.Find, self, self._on_preview_search_open
         )
+        self.undo_action = QtWidgets.QAction("Undo", self)
+        self.undo_action.setShortcuts(
+            [QtGui.QKeySequence.Undo]
+        )
+        self.undo_action.triggered.connect(self._undo_edit)
+        self.addAction(self.undo_action)
+        self.redo_action = QtWidgets.QAction("Redo", self)
+        self.redo_action.setShortcuts(
+            [QtGui.QKeySequence.Redo, QtGui.QKeySequence("Ctrl+Shift+Z")]
+        )
+        self.redo_action.triggered.connect(self._redo_edit)
+        self.addAction(self.redo_action)
+        self._update_history_actions()
+        self._edit_timer = QtCore.QTimer(self)
+        self._edit_timer.setSingleShot(True)
+        self._edit_timer.setInterval(300)
+        self._edit_timer.timeout.connect(self._process_live_edits)
         self._dirty_timer = QtCore.QTimer(self)
         self._dirty_timer.setInterval(700)
         self._dirty_timer.timeout.connect(self._poll_dirty_state)
@@ -1495,6 +1518,7 @@ class MainWindow(QtWidgets.QMainWindow):
                      {"key": "max_width", "heading": "max_width"}],
             id_column="ctrl_id",
         )
+        self.controllers_table.changed.connect(self._schedule_live_edit_processing)
         layout.addWidget(self.controllers_table)
         return frame
 
@@ -1511,6 +1535,7 @@ class MainWindow(QtWidgets.QMainWindow):
                 {"key": "tie_off", "heading": "tie_off", "width": 66},
             ],
         )
+        self.signals_table.changed.connect(self._schedule_live_edit_processing)
         layout.addWidget(self.signals_table)
         return frame
 
@@ -1521,11 +1546,15 @@ class MainWindow(QtWidgets.QMainWindow):
         self.lane_count_combo = RoundedComboBox()
         self.lane_count_combo.addItems(LANE_COUNTS)
         self.lane_count_combo.currentTextChanged.connect(self._on_lane_count_changed)
+        self.lane_count_combo.currentTextChanged.connect(
+            self._schedule_live_edit_processing
+        )
         top.addWidget(self.lane_count_combo)
         top.addStretch(1)
         layout.addLayout(top)
 
         self.lane_grid = LaneGrid()
+        self.lane_grid.changed.connect(self._schedule_live_edit_processing)
         layout.addWidget(self.lane_grid, stretch=1)
         return frame
 
@@ -1574,14 +1603,23 @@ class MainWindow(QtWidgets.QMainWindow):
         self.arch_combo.currentTextChanged.connect(
             self._schedule_topology_summary_refresh
         )
+        self.arch_combo.currentTextChanged.connect(
+            self._schedule_live_edit_processing
+        )
         self.pclk_mode_combo.currentTextChanged.connect(
             self._schedule_topology_summary_refresh
+        )
+        self.pclk_mode_combo.currentTextChanged.connect(
+            self._schedule_live_edit_processing
         )
 
         self.sel_mode_combo = RoundedComboBox()
         self.sel_mode_combo.addItems(SEL_MODES)
         self.sel_mode_combo.currentTextChanged.connect(
             self._schedule_topology_summary_refresh
+        )
+        self.sel_mode_combo.currentTextChanged.connect(
+            self._schedule_live_edit_processing
         )
         form.addRow("sel-mode", self.sel_mode_combo)
 
@@ -1602,6 +1640,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
         self.dpr_check.toggled.connect(on_dpr_toggled)
         self.dpr_check.toggled.connect(self._schedule_topology_summary_refresh)
+        self.dpr_check.toggled.connect(self._schedule_live_edit_processing)
         form.addRow("dpr", self.dpr_check)
         layout.addLayout(form)
 

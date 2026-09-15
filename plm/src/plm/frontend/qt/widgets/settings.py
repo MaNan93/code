@@ -139,10 +139,18 @@ class SettingsDialog(QtWidgets.QDialog):
 
         self._build_flags_form(self._settings.get("veribleFlags"))
 
-        reset_btn = QtWidgets.QPushButton("Reset to default")
-        reset_btn.clicked.connect(lambda: self._build_flags_form(None))
-        add_shadow(reset_btn, blur=10, offset=(0, 1), alpha=40)
-        outer.addWidget(reset_btn)
+        self.reset_defaults_btn = QtWidgets.QPushButton("Reset to default")
+        self.reset_defaults_btn.setObjectName("resetDefaultsBtn")
+        self.reset_defaults_btn.setSizePolicy(
+            QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Fixed
+        )
+        self.reset_defaults_btn.clicked.connect(
+            lambda: self._build_flags_form(None)
+        )
+        add_shadow(self.reset_defaults_btn, blur=10, offset=(0, 1), alpha=40)
+        outer.addWidget(
+            self.reset_defaults_btn, alignment=QtCore.Qt.AlignLeft
+        )
 
         return tab
 

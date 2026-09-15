@@ -14,6 +14,7 @@ from plm.frontend.qt import main_window
 from plm.frontend.qt.main import APP_ICON_PATH
 from plm.frontend.qt.main_window import MainWindow
 from plm.frontend.qt.widgets.lanegrid import LaneGrid
+from plm.frontend.qt.widgets.settings import DEFAULT_SETTINGS, SettingsDialog
 from plm.frontend.qt.widgets.tables import EditableTable
 from plm.frontend.qt.widgets import theme
 from plm.frontend.qt.widgets.theme import (
@@ -85,7 +86,7 @@ class QtFrontendTests(unittest.TestCase):
         self.assertEqual(window.preview_toggle_btn.toolTip(), "Preview")
         self.assertEqual(window.preview_toggle_btn.accessibleName(), "Preview")
         self.assertEqual(window.problems_tab_btn.height(), window.log_more.height())
-        self.assertEqual(window.log_tab_btn.height(), window.log_toggle.height())
+        self.assertEqual(window.report_tab_btn.height(), window.log_toggle.height())
 
         def widget_bottom(widget):
             point = widget.mapTo(
@@ -519,6 +520,36 @@ class QtFrontendTests(unittest.TestCase):
             all(button.isEnabled() for button, _label in window.sidebar_action_buttons)
         )
         self.assertTrue(window.recent_list.isEnabled())
+
+    def test_report_combines_topology_and_activity_log(self):
+        window = MainWindow()
+        self.addCleanup(window.close)
+
+        self.assertEqual(window.report_tab_btn.text(), "REPORT")
+        report_page = window.bottom_panel_stack.widget(1)
+        self.assertIs(
+            report_page.findChild(QtWidgets.QPlainTextEdit, "topologySummary"),
+            window.topology_summary,
+        )
+        self.assertIs(
+            report_page.findChild(QtWidgets.QPlainTextEdit, "logConsole"),
+            window.log,
+        )
+        self.assertIsNone(
+            window._generation_page.findChild(
+                QtWidgets.QPlainTextEdit, "topologySummary"
+            )
+        )
+
+    def test_reset_defaults_button_is_compact(self):
+        dialog = SettingsDialog(None, DEFAULT_SETTINGS)
+        self.addCleanup(dialog.close)
+
+        self.assertEqual(
+            dialog.reset_defaults_btn.sizePolicy().horizontalPolicy(),
+            QtWidgets.QSizePolicy.Fixed,
+        )
+        self.assertEqual(dialog.reset_defaults_btn.objectName(), "resetDefaultsBtn")
 
     def test_topology_summary_reports_lane_groups(self):
         workspace = self._sample_workspace()

@@ -1,3 +1,4 @@
+import inspect
 import os
 import shutil
 import tempfile
@@ -396,6 +397,27 @@ class QtFrontendTests(unittest.TestCase):
         # A wrong codepoint renders as nothing (or as .notdef), which is easy
         # to miss by eye across a toolbar of small glyphs.
         self.assertEqual(blank, [], f"icons resolved to no glyph: {blank}")
+
+    def test_preview_tree_and_drag_handle_use_official_sap_icons(self):
+        from plm.frontend.qt.widgets import sap_icons, tables
+
+        self.assertEqual(
+            {
+                name: sap_icons.CODEPOINTS[name]
+                for name in ("document", "folder-blank", "vertical-grip")
+            },
+            {
+                "document": 0xE172,
+                "folder-blank": 0xE08E,
+                "vertical-grip": 0xE1FA,
+            },
+        )
+        self.assertEqual(main_window._SVG_TREE_FILE, "document")
+        self.assertEqual(main_window._SVG_TREE_FOLDER, "folder-blank")
+        self.assertNotIn(
+            "standardIcon", inspect.getsource(MainWindow._refresh_rtl_preview)
+        )
+        self.assertIn("sap_icons.icon", inspect.getsource(tables.drag_handle_icon))
 
     def _sample_workspace(self):
         """A minimal but valid workspace the real loader accepts."""

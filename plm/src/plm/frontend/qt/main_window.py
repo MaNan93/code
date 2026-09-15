@@ -1680,6 +1680,7 @@ class MainWindow(QtWidgets.QMainWindow):
         for b in self.generation_buttons:
             actions_row.addWidget(b)
         layout.addLayout(actions_row)
+        layout.addStretch(1)
 
         return frame
 

@@ -170,6 +170,9 @@ class _LaneCellDelegate(QtWidgets.QStyledItemDelegate):
             painter.setPen(QtGui.QColor("#333333"))
 
         painter.drawText(rect, QtCore.Qt.AlignCenter, port)
+        if (r, c) in grid._cell_errors:
+            painter.setPen(QtGui.QPen(QtGui.QColor("#bb0000"), 2))
+            painter.drawRect(rect.adjusted(1, 1, -2, -2))
 
         painter.restore()
 
@@ -283,6 +286,8 @@ class _FlowLayout(QtWidgets.QLayout):
 
 
 class LaneGrid(QtWidgets.QWidget):
+    changed = QtCore.pyqtSignal()
+
     def __init__(self, parent=None):
         super().__init__(parent)
         self.lane_count = 0
@@ -299,6 +304,7 @@ class LaneGrid(QtWidgets.QWidget):
         self._hover_cell = None  # (row, lane) under the cursor, for pen preview
         self._pen_cursor = None  # cached QCursor for the active controller
         self._bg_color = "#ffffff"  # card background, set from theme
+        self._cell_errors = {}
 
         layout = QtWidgets.QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -373,6 +379,7 @@ class LaneGrid(QtWidgets.QWidget):
             return  # always keep at least one mode row -- an empty table can't be saved anyway
         del self.data[idx]
         self._render_body()
+        self.changed.emit()
 
     def _insert_row_below(self, idx):
         self._insert_row_at(idx + 1 if 0 <= idx < len(self.data) else len(self.data))
@@ -386,6 +393,7 @@ class LaneGrid(QtWidgets.QWidget):
             row[f"lane{l}"] = "0-0"
         self.data.insert(pos, row)
         self._render_body()
+        self.changed.emit()
 
     # ------------------------------------------------------------ palette
     def _render_palette(self):
@@ -549,6 +557,19 @@ class LaneGrid(QtWidgets.QWidget):
         self._building = False
         self._refresh_cell_styles()
 
+    def set_cell_errors(self, errors):
+        """Highlight invalid mode/lane cells; keys are (row, table-column)."""
+        self._cell_errors = dict(errors or {})
+        for row in range(self.table.rowCount()):
+            for column in range(self.table.columnCount()):
+                item = self.table.item(row, column)
+                if item is not None:
+                    item.setToolTip(
+                        self._cell_errors.get((row, column), "")
+                        or (f"L{column - 1}: {item.text()}" if column else "")
+                    )
+        self._refresh_cell_styles()
+
     def _refresh_cell_styles(self):
         """Trigger a repaint of the table viewport so the delegate redraws
         all cells with current paint/preview state. The actual painting
@@ -569,11 +590,13 @@ class LaneGrid(QtWidgets.QWidget):
         r, c = item.row(), item.column()
         if c == 0:
             self.data[r]["mode"] = item.text()
+            self.changed.emit()
             return
         if c < 1 or c > self.lane_count:
             return
         self.data[r][f"lane{c - 1}"] = item.text()
         self._refresh_cell_styles()
+        self.changed.emit()
 
     # ------------------------------------------------------------ paint-drag
     # Called by _LaneTable's mouse event overrides below.
@@ -605,8 +628,11 @@ class LaneGrid(QtWidgets.QWidget):
 
     def _end_paint(self):
         self._drag_active = False
+        changed = self._drag_snapshot is not None and self.data != self._drag_snapshot
         # Refresh so the hover preview comes back after the stroke finishes
         self._refresh_cell_styles()
+        if changed:
+            self.changed.emit()
 
     def _paint_current_rect(self):
         if self._drag_snapshot is None:
@@ -676,6 +702,7 @@ class LaneGrid(QtWidgets.QWidget):
         row = self.data.pop(source)
         self.data.insert(destination, row)
         self._render_body()
+        self.changed.emit()
 
     def _on_header_context_menu(self, pos):
         header = self.table.verticalHeader()

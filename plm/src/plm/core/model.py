@@ -28,9 +28,15 @@ _SV_KEYWORDS = {
 }
 
 
+def is_sv_identifier(value):
+    """Return whether value is a legal, non-keyword SystemVerilog identifier."""
+    text = str(value or "")
+    return bool(_SV_IDENTIFIER_RE.fullmatch(text)) and text.lower() not in _SV_KEYWORDS
+
+
 def _require_sv_identifier(value, what):
     """Reject names that would make the generated SystemVerilog invalid."""
-    if not _SV_IDENTIFIER_RE.fullmatch(value) or value.lower() in _SV_KEYWORDS:
+    if not is_sv_identifier(value):
         raise ValueError(
             f"{what}='{value}' is not a legal SystemVerilog identifier "
             "(use letters, digits, '_' or '$', do not start with a digit, "

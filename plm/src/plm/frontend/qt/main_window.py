@@ -94,6 +94,7 @@ _SVG_PREVIEW_PANEL = "screen-split-two"
 _SVG_PREVIEW_EXPAND = "full-screen"
 _SVG_MORE = "overflow"
 _SVG_CHEVRON_DOWN = "navigation-down-arrow"
+_SVG_CHEVRON_LEFT = "navigation-left-arrow"
 _SVG_CHEVRON_RIGHT = "navigation-right-arrow"
 _SVG_REFRESH = "refresh"
 _SVG_EDIT = "edit"
@@ -155,7 +156,8 @@ class _RecentItemRow(QtWidgets.QWidget):
         layout.addWidget(self.label, stretch=1)
         self.menu_btn = QtWidgets.QToolButton()
         self.menu_btn.setObjectName("recentMenuBtn")
-        self.menu_btn.setText("⋮")
+        self.menu_btn.setIcon(_svg_icon(_SVG_MORE, size=18))
+        self.menu_btn.setIconSize(QtCore.QSize(18, 18))
         self.menu_btn.setCursor(QtCore.Qt.PointingHandCursor)
         self.menu_btn.setToolTip("More options")
         self.menu_btn.clicked.connect(self._emit_menu_requested)
@@ -665,7 +667,11 @@ class MainWindow(QtWidgets.QMainWindow):
                 button.setMinimumWidth(0)
                 button.setMaximumWidth(16777215)
         self._refresh_recent()
-        self.sidebar_toggle.setText("›" if collapsed else "‹")
+        self.sidebar_toggle.setText("")
+        self.sidebar_toggle.setIcon(
+            _svg_icon(_SVG_CHEVRON_RIGHT if collapsed else _SVG_CHEVRON_LEFT, size=14)
+        )
+        self.sidebar_toggle.setIconSize(QtCore.QSize(14, 14))
         self._position_sidebar_toggle()
         QtCore.QTimer.singleShot(0, self._position_sidebar_toggle)
         QtCore.QTimer.singleShot(0, self._position_floating_log)

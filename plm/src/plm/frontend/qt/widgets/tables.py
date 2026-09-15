@@ -323,26 +323,30 @@ class EditableTable(QtWidgets.QWidget):
     def set_cell_errors(self, errors):
         """Highlight invalid cells; errors maps (row, column-key) to text."""
         errors = errors or {}
-        for row in range(self.table.rowCount()):
-            for column_index, column in enumerate(self.columns):
-                message = errors.get((row, column["key"]), "")
-                widget = self.table.cellWidget(row, column_index)
-                if isinstance(widget, QtWidgets.QComboBox):
-                    widget.setProperty("validationError", bool(message))
-                    widget.setToolTip(message)
-                    widget.style().unpolish(widget)
-                    widget.style().polish(widget)
-                else:
-                    item = self.table.item(row, column_index)
-                    if item is None:
-                        continue
-                    item.setToolTip(message)
-                    item.setBackground(
-                        QtGui.QColor("#fff0f0") if message else QtGui.QBrush()
-                    )
-                    item.setForeground(
-                        QtGui.QColor("#bb0000") if message else QtGui.QBrush()
-                    )
+        previous = self.table.blockSignals(True)
+        try:
+            for row in range(self.table.rowCount()):
+                for column_index, column in enumerate(self.columns):
+                    message = errors.get((row, column["key"]), "")
+                    widget = self.table.cellWidget(row, column_index)
+                    if isinstance(widget, QtWidgets.QComboBox):
+                        widget.setProperty("validationError", bool(message))
+                        widget.setToolTip(message)
+                        widget.style().unpolish(widget)
+                        widget.style().polish(widget)
+                    else:
+                        item = self.table.item(row, column_index)
+                        if item is None:
+                            continue
+                        item.setToolTip(message)
+                        item.setBackground(
+                            QtGui.QColor("#fff0f0") if message else QtGui.QBrush()
+                        )
+                        item.setForeground(
+                            QtGui.QColor("#bb0000") if message else QtGui.QBrush()
+                        )
+        finally:
+            self.table.blockSignals(previous)
 
     def insert_row_below(self, idx):
         self._insert_row_at(idx + 1)

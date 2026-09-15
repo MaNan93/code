@@ -369,6 +369,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self._undo_history = []
         self._redo_history = []
         self._restoring_history = False
+        self._generation_file_status = {}
         self.setWindowTitle("plmConsultant")
         self.resize(1200, 780)
         self.setMinimumSize(900, 620)
@@ -1320,6 +1321,7 @@ class MainWindow(QtWidgets.QMainWindow):
             preview_roots = (
                 (self.current_workspace / "config", {".csv"}),
                 (self.current_workspace / "rtl", {".sv", ".svh", ".v", ".vh", ".f"}),
+                (self.current_workspace / "tb", {".sv", ".svh", ".v", ".vh", ".f"}),
             )
             for root, extensions in preview_roots:
                 if root.is_dir():
@@ -1356,10 +1358,21 @@ class MainWindow(QtWidgets.QMainWindow):
                 is_file = index == len(relative.parts) - 1
                 key = relative.parts[: index + 1]
                 if is_file:
-                    item = QtWidgets.QTreeWidgetItem(parent, [part])
+                    status = self._generation_file_status.get(relative.as_posix(), "")
+                    label = f"{part}   {status}" if status else part
+                    item = QtWidgets.QTreeWidgetItem(parent, [label])
                     item.setIcon(0, file_icon)
                     item.setData(0, QtCore.Qt.UserRole, str(path))
-                    item.setToolTip(0, str(relative))
+                    tooltip = str(relative)
+                    if status:
+                        tooltip += f"\nGeneration result: {status}"
+                        color = {
+                            "New": "#107e3e",
+                            "Modified": "#0a6ed1",
+                            "Unchanged": TEXT_TERTIARY,
+                        }[status]
+                        item.setForeground(0, QtGui.QBrush(QtGui.QColor(color)))
+                    item.setToolTip(0, tooltip)
                     file_items[str(path)] = item
                 else:
                     item = directory_items.get(key)
@@ -1703,21 +1716,12 @@ class MainWindow(QtWidgets.QMainWindow):
         self.log_tab_btn.setFixedHeight(26)
         header_layout.addWidget(self.log_tab_btn, alignment=QtCore.Qt.AlignVCenter)
 
-        self.outputs_tab_btn = QtWidgets.QToolButton()
-        self.outputs_tab_btn.setObjectName("bottomPanelTab")
-        self.outputs_tab_btn.setText("OUTPUTS 0")
-        self.outputs_tab_btn.setCheckable(True)
-        self.outputs_tab_btn.setFixedHeight(26)
-        header_layout.addWidget(self.outputs_tab_btn, alignment=QtCore.Qt.AlignVCenter)
-
         panel_tabs = QtWidgets.QButtonGroup(card)
         panel_tabs.setExclusive(True)
         panel_tabs.addButton(self.problems_tab_btn, 0)
         panel_tabs.addButton(self.log_tab_btn, 1)
-        panel_tabs.addButton(self.outputs_tab_btn, 2)
         self.problems_tab_btn.clicked.connect(lambda: self._set_bottom_panel_page(0))
         self.log_tab_btn.clicked.connect(lambda: self._set_bottom_panel_page(1))
-        self.outputs_tab_btn.clicked.connect(lambda: self._set_bottom_panel_page(2))
 
         header_layout.addStretch(1)
         self.log_more = QtWidgets.QToolButton()
@@ -1755,16 +1759,6 @@ class MainWindow(QtWidgets.QMainWindow):
         self.problem_tree.itemDoubleClicked.connect(self._on_problem_activated)
         self.bottom_panel_stack.addWidget(self.problem_tree)
 
-        self.output_tree = QtWidgets.QTreeWidget()
-        self.output_tree.setObjectName("outputTree")
-        self.output_tree.setHeaderLabels(["Status", "File"])
-        self.output_tree.setRootIsDecorated(False)
-        self.output_tree.setAlternatingRowColors(False)
-        self.output_tree.setSelectionMode(QtWidgets.QAbstractItemView.SingleSelection)
-        self.output_tree.setColumnWidth(0, 110)
-        self.output_tree.itemDoubleClicked.connect(self._on_output_activated)
-        self.bottom_panel_stack.addWidget(self.output_tree)
-
         self.log = QtWidgets.QPlainTextEdit()
         self.log.setObjectName("logConsole")
         self.log.setReadOnly(True)
@@ -1782,7 +1776,6 @@ class MainWindow(QtWidgets.QMainWindow):
         self.bottom_panel_stack.setCurrentIndex(index)
         self.problems_tab_btn.setChecked(index == 0)
         self.log_tab_btn.setChecked(index == 1)
-        self.outputs_tab_btn.setChecked(index == 2)
 
     def _show_problems_panel(self):
         if not self.log_toggle.isChecked():
@@ -1797,8 +1790,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.problems_tab_btn.setText("PROBLEMS 0")
 
     def _clear_generation_results(self):
-        self.output_tree.clear()
-        self.outputs_tab_btn.setText("OUTPUTS 0")
+        self._generation_file_status = {}
 
     @staticmethod
     def _output_signature(workspace, target):
@@ -1822,56 +1814,25 @@ class MainWindow(QtWidgets.QMainWindow):
         return signature
 
     def _show_generation_results(self, workspace, before, after):
-        self.output_tree.clear()
-        priorities = {"New": 0, "Modified": 1, "Removed": 2, "Unchanged": 3}
-        rows = []
-        for relative_path in sorted(set(before) | set(after)):
+        statuses = {}
+        counts = {"New": 0, "Modified": 0, "Unchanged": 0}
+        for relative_path, digest in after.items():
             if relative_path not in before:
                 status = "New"
-            elif relative_path not in after:
-                status = "Removed"
-            elif before[relative_path] != after[relative_path]:
+            elif before[relative_path] != digest:
                 status = "Modified"
             else:
                 status = "Unchanged"
-            rows.append((priorities[status], relative_path, status))
-        for _priority, relative_path, status in sorted(rows):
-            item = QtWidgets.QTreeWidgetItem([status, relative_path])
-            path = workspace / relative_path
-            item.setData(1, QtCore.Qt.UserRole, str(path))
-            color = {
-                "New": "#107e3e",
-                "Modified": "#0a6ed1",
-                "Removed": "#bb0000",
-                "Unchanged": TEXT_TERTIARY,
-            }[status]
-            item.setForeground(0, QtGui.QBrush(QtGui.QColor(color)))
-            if status == "Removed":
-                item.setToolTip(1, "Removed during generation")
-            else:
-                item.setToolTip(1, "Double-click to open in Preview")
-            self.output_tree.addTopLevelItem(item)
-        self.outputs_tab_btn.setText(f"OUTPUTS {len(rows)}")
-        if rows:
-            if not self.log_toggle.isChecked():
-                self.log_toggle.setChecked(True)
-                self._on_toggle_log(True)
-            self._set_bottom_panel_page(2)
-
-    def _on_output_activated(self, item, _column):
-        path_text = item.data(1, QtCore.Qt.UserRole)
-        if not path_text:
-            return
-        path = Path(path_text)
-        if not path.is_file():
-            self._log(f"Generated file no longer exists: {path}")
-            return
-        if self.rtl_preview_panel.isHidden():
-            self._on_toggle_rtl_preview(True)
-        self._refresh_rtl_preview()
-        self._selected_preview_file = path
-        self._show_selected_preview_file()
-        self.preview_code.setFocus()
+            statuses[relative_path] = status
+            counts[status] += 1
+        self._generation_file_status = statuses
+        self._log(
+            "Generated files: "
+            f"{counts['New']} new, {counts['Modified']} modified, "
+            f"{counts['Unchanged']} unchanged."
+        )
+        if self.current_workspace == workspace and self.rtl_preview_panel.isVisible():
+            self._refresh_rtl_preview()
 
     def _add_problem(self, source, severity, message, path=None, line=None, column=None):
         path_text = str(path) if path else ""

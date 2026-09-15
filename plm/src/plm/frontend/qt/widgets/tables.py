@@ -339,12 +339,12 @@ class EditableTable(QtWidgets.QWidget):
                         if item is None:
                             continue
                         item.setToolTip(message)
-                        item.setBackground(
-                            QtGui.QColor("#fff0f0") if message else QtGui.QBrush()
-                        )
-                        item.setForeground(
-                            QtGui.QColor("#bb0000") if message else QtGui.QBrush()
-                        )
+                        if message:
+                            item.setBackground(QtGui.QColor("#fff0f0"))
+                            item.setForeground(QtGui.QColor("#bb0000"))
+                        else:
+                            item.setData(QtCore.Qt.BackgroundRole, None)
+                            item.setData(QtCore.Qt.ForegroundRole, None)
         finally:
             self.table.blockSignals(previous)
 

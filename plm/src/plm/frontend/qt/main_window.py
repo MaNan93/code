@@ -1703,12 +1703,21 @@ class MainWindow(QtWidgets.QMainWindow):
         self.log_tab_btn.setFixedHeight(26)
         header_layout.addWidget(self.log_tab_btn, alignment=QtCore.Qt.AlignVCenter)
 
+        self.outputs_tab_btn = QtWidgets.QToolButton()
+        self.outputs_tab_btn.setObjectName("bottomPanelTab")
+        self.outputs_tab_btn.setText("OUTPUTS 0")
+        self.outputs_tab_btn.setCheckable(True)
+        self.outputs_tab_btn.setFixedHeight(26)
+        header_layout.addWidget(self.outputs_tab_btn, alignment=QtCore.Qt.AlignVCenter)
+
         panel_tabs = QtWidgets.QButtonGroup(card)
         panel_tabs.setExclusive(True)
         panel_tabs.addButton(self.problems_tab_btn, 0)
         panel_tabs.addButton(self.log_tab_btn, 1)
+        panel_tabs.addButton(self.outputs_tab_btn, 2)
         self.problems_tab_btn.clicked.connect(lambda: self._set_bottom_panel_page(0))
         self.log_tab_btn.clicked.connect(lambda: self._set_bottom_panel_page(1))
+        self.outputs_tab_btn.clicked.connect(lambda: self._set_bottom_panel_page(2))
 
         header_layout.addStretch(1)
         self.log_more = QtWidgets.QToolButton()
@@ -1746,6 +1755,16 @@ class MainWindow(QtWidgets.QMainWindow):
         self.problem_tree.itemDoubleClicked.connect(self._on_problem_activated)
         self.bottom_panel_stack.addWidget(self.problem_tree)
 
+        self.output_tree = QtWidgets.QTreeWidget()
+        self.output_tree.setObjectName("outputTree")
+        self.output_tree.setHeaderLabels(["Status", "File"])
+        self.output_tree.setRootIsDecorated(False)
+        self.output_tree.setAlternatingRowColors(False)
+        self.output_tree.setSelectionMode(QtWidgets.QAbstractItemView.SingleSelection)
+        self.output_tree.setColumnWidth(0, 110)
+        self.output_tree.itemDoubleClicked.connect(self._on_output_activated)
+        self.bottom_panel_stack.addWidget(self.output_tree)
+
         self.log = QtWidgets.QPlainTextEdit()
         self.log.setObjectName("logConsole")
         self.log.setReadOnly(True)
@@ -1763,6 +1782,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.bottom_panel_stack.setCurrentIndex(index)
         self.problems_tab_btn.setChecked(index == 0)
         self.log_tab_btn.setChecked(index == 1)
+        self.outputs_tab_btn.setChecked(index == 2)
 
     def _show_problems_panel(self):
         if not self.log_toggle.isChecked():
@@ -1775,6 +1795,83 @@ class MainWindow(QtWidgets.QMainWindow):
         self._problem_keys.clear()
         self.problem_tree.clear()
         self.problems_tab_btn.setText("PROBLEMS 0")
+
+    def _clear_generation_results(self):
+        self.output_tree.clear()
+        self.outputs_tab_btn.setText("OUTPUTS 0")
+
+    @staticmethod
+    def _output_signature(workspace, target):
+        roots = []
+        if target in ("rtl", "all"):
+            roots.append(workspace / "rtl")
+        if target in ("tb", "all"):
+            roots.append(workspace / "tb")
+        signature = {}
+        for root in roots:
+            if not root.is_dir():
+                continue
+            for path in sorted(root.rglob("*")):
+                if not path.is_file():
+                    continue
+                try:
+                    digest = hashlib.sha256(path.read_bytes()).hexdigest()
+                except OSError:
+                    continue
+                signature[path.relative_to(workspace).as_posix()] = digest
+        return signature
+
+    def _show_generation_results(self, workspace, before, after):
+        self.output_tree.clear()
+        priorities = {"New": 0, "Modified": 1, "Removed": 2, "Unchanged": 3}
+        rows = []
+        for relative_path in sorted(set(before) | set(after)):
+            if relative_path not in before:
+                status = "New"
+            elif relative_path not in after:
+                status = "Removed"
+            elif before[relative_path] != after[relative_path]:
+                status = "Modified"
+            else:
+                status = "Unchanged"
+            rows.append((priorities[status], relative_path, status))
+        for _priority, relative_path, status in sorted(rows):
+            item = QtWidgets.QTreeWidgetItem([status, relative_path])
+            path = workspace / relative_path
+            item.setData(1, QtCore.Qt.UserRole, str(path))
+            color = {
+                "New": "#107e3e",
+                "Modified": "#0a6ed1",
+                "Removed": "#bb0000",
+                "Unchanged": TEXT_TERTIARY,
+            }[status]
+            item.setForeground(0, QtGui.QBrush(QtGui.QColor(color)))
+            if status == "Removed":
+                item.setToolTip(1, "Removed during generation")
+            else:
+                item.setToolTip(1, "Double-click to open in Preview")
+            self.output_tree.addTopLevelItem(item)
+        self.outputs_tab_btn.setText(f"OUTPUTS {len(rows)}")
+        if rows:
+            if not self.log_toggle.isChecked():
+                self.log_toggle.setChecked(True)
+                self._on_toggle_log(True)
+            self._set_bottom_panel_page(2)
+
+    def _on_output_activated(self, item, _column):
+        path_text = item.data(1, QtCore.Qt.UserRole)
+        if not path_text:
+            return
+        path = Path(path_text)
+        if not path.is_file():
+            self._log(f"Generated file no longer exists: {path}")
+            return
+        if self.rtl_preview_panel.isHidden():
+            self._on_toggle_rtl_preview(True)
+        self._refresh_rtl_preview()
+        self._selected_preview_file = path
+        self._show_selected_preview_file()
+        self.preview_code.setFocus()
 
     def _add_problem(self, source, severity, message, path=None, line=None, column=None):
         path_text = str(path) if path else ""
@@ -2079,6 +2176,7 @@ class MainWindow(QtWidgets.QMainWindow):
             self._saved_disk_signature = None
             self._topology_payload = None
             self._clear_problems()
+            self._clear_generation_results()
             clear_last_workspace()
             self.controllers_table.set_rows([])
             self.signals_table.set_rows([])
@@ -2511,6 +2609,7 @@ class MainWindow(QtWidgets.QMainWindow):
             self._selected_preview_file = None
         self.current_workspace = path
         self._clear_problems()
+        self._clear_generation_results()
         self.controllers_table.set_rows(content["controllers"])
         self.signals_table.set_rows(content["signals"])
         self._load_gen_flags(content["gen_flags"])
@@ -2878,10 +2977,12 @@ class MainWindow(QtWidgets.QMainWindow):
         if not self._save_before_action():
             return
         self._clear_problems()
+        self._clear_generation_results()
         self._set_bottom_panel_page(1)
         self._set_generation_busy(True)
         started_at = time.monotonic()
         run_workspace = self.current_workspace
+        before_outputs = self._output_signature(run_workspace, target)
         generated = []
         output_buffer = ""
         cmd = [sys.executable, "-m", "plm.cli.main", "generate", target, "--config", str(run_workspace)]
@@ -2943,6 +3044,10 @@ class MainWindow(QtWidgets.QMainWindow):
             )
             if exit_code == 0:
                 self._log("[generate finished]")
+                after_outputs = self._output_signature(run_workspace, target)
+                self._show_generation_results(
+                    run_workspace, before_outputs, after_outputs
+                )
                 if self.current_workspace == run_workspace:
                     self._refresh_topology_summary()
                     if target in ("rtl", "all"):

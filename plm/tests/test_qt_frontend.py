@@ -666,5 +666,90 @@ class QtFrontendTests(unittest.TestCase):
         self.assertFalse(window.preview_search_bar.isVisible())
 
 
+    def test_live_validation_marks_duplicate_controller_ids(self):
+        workspace = self._sample_workspace()
+        window = MainWindow()
+        self.addCleanup(window.close)
+        window._open_workspace(workspace)
+        first = window.controllers_table.table.item(0, 0)
+        second = window.controllers_table.table.item(1, 0)
+        original = second.text()
+
+        second.setText(first.text())
+        window._process_live_edits()
+
+        self.assertIn("Duplicate ctrl_id", first.toolTip())
+        self.assertIn("Duplicate ctrl_id", second.toolTip())
+        self.assertGreater(window._live_validation_error_count, 0)
+
+        second.setText(original)
+        window._process_live_edits()
+        self.assertNotIn("Duplicate ctrl_id", first.toolTip())
+
+    def test_undo_redo_restores_complete_editor_snapshot(self):
+        workspace = self._sample_workspace()
+        window = MainWindow()
+        self.addCleanup(window.close)
+        window._open_workspace(workspace)
+        item = window.controllers_table.table.item(0, 1)
+        original = item.text()
+
+        item.setText("RenamedCtrl")
+        window._process_live_edits()
+        self.assertTrue(window.undo_action.isEnabled())
+
+        window._undo_edit()
+        self.assertEqual(
+            window.controllers_table.table.item(0, 1).text(), original
+        )
+        self.assertTrue(window.redo_action.isEnabled())
+
+        window._redo_edit()
+        self.assertEqual(
+            window.controllers_table.table.item(0, 1).text(), "RenamedCtrl"
+        )
+        window._undo_edit()
+        self.assertFalse(window._is_dirty())
+
+    def test_generation_status_is_rendered_in_preview_tree(self):
+        workspace = self._sample_workspace()
+        rtl = workspace / "rtl"
+        rtl.mkdir()
+        modified = rtl / "modified.sv"
+        unchanged = rtl / "unchanged.sv"
+        modified.write_text("module old; endmodule\n", encoding="utf-8")
+        unchanged.write_text("module same; endmodule\n", encoding="utf-8")
+
+        window = MainWindow()
+        self.addCleanup(window.close)
+        window._open_workspace(workspace)
+        window.show()
+        window._on_toggle_rtl_preview(True)
+        self.process_events()
+
+        before = window._output_signature(workspace, "rtl")
+        modified.write_text("module new; endmodule\n", encoding="utf-8")
+        created = rtl / "created.sv"
+        created.write_text("module created; endmodule\n", encoding="utf-8")
+        after = window._output_signature(workspace, "rtl")
+        window._show_generation_results(workspace, before, after)
+        self.process_events()
+
+        labels = []
+
+        def collect(parent):
+            for index in range(parent.childCount()):
+                child = parent.child(index)
+                if child.data(0, QtCore.Qt.UserRole):
+                    labels.append(child.text(0))
+                collect(child)
+
+        collect(window.preview_file_tree.invisibleRootItem())
+        self.assertIn("modified.sv   Modified", labels)
+        self.assertIn("created.sv   New", labels)
+        self.assertIn("unchanged.sv   Unchanged", labels)
+        self.assertFalse(hasattr(window, "outputs_tab_btn"))
+
+
 if __name__ == "__main__":
     unittest.main()

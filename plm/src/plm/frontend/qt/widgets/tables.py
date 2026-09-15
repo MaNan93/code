@@ -7,6 +7,7 @@ Controller IDs remain editable and retain their values after reordering.
 
 from PyQt5 import QtCore, QtGui, QtWidgets
 
+from plm.frontend.qt.widgets import sap_icons
 from plm.frontend.qt.widgets.theme import ACCENT, RoundedComboBox
 
 
@@ -17,17 +18,9 @@ def drag_handle_icon():
     """Return the shared six-dot row-reorder handle icon."""
     global _DRAG_HANDLE_ICON
     if _DRAG_HANDLE_ICON is None:
-        pixmap = QtGui.QPixmap(16, 18)
-        pixmap.fill(QtCore.Qt.transparent)
-        painter = QtGui.QPainter(pixmap)
-        painter.setRenderHint(QtGui.QPainter.Antialiasing, True)
-        painter.setPen(QtCore.Qt.NoPen)
-        painter.setBrush(QtGui.QColor("#8a8a8a"))
-        for x in (5, 11):
-            for y in (4, 9, 14):
-                painter.drawEllipse(QtCore.QPointF(x, y), 1.45, 1.45)
-        painter.end()
-        _DRAG_HANDLE_ICON = QtGui.QIcon(pixmap)
+        _DRAG_HANDLE_ICON = sap_icons.icon(
+            "vertical-grip", color="#758ca4", size=18
+        )
     return _DRAG_HANDLE_ICON
 
 

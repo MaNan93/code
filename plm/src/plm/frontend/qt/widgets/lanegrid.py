@@ -111,6 +111,9 @@ class _LaneCellDelegate(QtWidgets.QStyledItemDelegate):
                 styled.displayAlignment | QtCore.Qt.AlignVCenter,
                 option.fontMetrics.elidedText(text, styled.textElideMode, text_rect.width()),
             )
+            if (r, c) in grid._cell_errors:
+                painter.setPen(QtGui.QPen(QtGui.QColor("#bb0000"), 2))
+                painter.drawRect(option.rect.adjusted(1, 1, -2, -2))
             painter.restore()
             return
         if c < 1 or c > grid.lane_count:

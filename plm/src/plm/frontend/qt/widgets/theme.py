@@ -447,6 +447,10 @@ QLineEdit:hover, QComboBox:hover, QSpinBox:hover, QDoubleSpinBox:hover {{
 QLineEdit:focus, QComboBox:focus, QSpinBox:focus, QDoubleSpinBox:focus {{
     border: 2px solid {FIELD_FOCUS_BORDER};
 }}
+QComboBox[validationError="true"] {{
+    border: 2px solid {DANGER};
+    background: #fff0f0;
+}}
 QLineEdit:disabled, QComboBox:disabled, QSpinBox:disabled, QDoubleSpinBox:disabled {{
     border-color: {BORDER};
     color: {TEXT_TERTIARY};

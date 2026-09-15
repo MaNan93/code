@@ -560,14 +560,18 @@ class LaneGrid(QtWidgets.QWidget):
     def set_cell_errors(self, errors):
         """Highlight invalid mode/lane cells; keys are (row, table-column)."""
         self._cell_errors = dict(errors or {})
-        for row in range(self.table.rowCount()):
-            for column in range(self.table.columnCount()):
-                item = self.table.item(row, column)
-                if item is not None:
-                    item.setToolTip(
-                        self._cell_errors.get((row, column), "")
-                        or (f"L{column - 1}: {item.text()}" if column else "")
-                    )
+        previous = self.table.blockSignals(True)
+        try:
+            for row in range(self.table.rowCount()):
+                for column in range(self.table.columnCount()):
+                    item = self.table.item(row, column)
+                    if item is not None:
+                        item.setToolTip(
+                            self._cell_errors.get((row, column), "")
+                            or (f"L{column - 1}: {item.text()}" if column else "")
+                        )
+        finally:
+            self.table.blockSignals(previous)
         self._refresh_cell_styles()
 
     def _refresh_cell_styles(self):

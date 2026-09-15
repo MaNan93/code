@@ -199,6 +199,8 @@ class _PaddedItemDelegate(QtWidgets.QStyledItemDelegate):
 
 
 class EditableTable(QtWidgets.QWidget):
+    changed = QtCore.pyqtSignal()
+
     # columns: [{"key", "heading"?, "options"?: [...]}] -- options makes
     #          that column a QComboBox instead of a free-text cell.
     # id_column: optional key of an identifier column. It stays editable and
@@ -232,6 +234,7 @@ class EditableTable(QtWidgets.QWidget):
         row_header = self.table.verticalHeader()
         row_header.hide()
         self.table.rowMoveRequested.connect(self._on_row_drop)
+        self.table.itemChanged.connect(self._on_item_changed)
         layout.addWidget(self.table)
         self._schedule_column_resize()
 
@@ -309,6 +312,38 @@ class EditableTable(QtWidgets.QWidget):
         self._data = [dict(r) for r in (rows or [])]
         self._render_body()
 
+    def _on_item_changed(self, _item):
+        if not self._building:
+            self.changed.emit()
+
+    def _on_combo_changed(self, _text):
+        if not self._building:
+            self.changed.emit()
+
+    def set_cell_errors(self, errors):
+        """Highlight invalid cells; errors maps (row, column-key) to text."""
+        errors = errors or {}
+        for row in range(self.table.rowCount()):
+            for column_index, column in enumerate(self.columns):
+                message = errors.get((row, column["key"]), "")
+                widget = self.table.cellWidget(row, column_index)
+                if isinstance(widget, QtWidgets.QComboBox):
+                    widget.setProperty("validationError", bool(message))
+                    widget.setToolTip(message)
+                    widget.style().unpolish(widget)
+                    widget.style().polish(widget)
+                else:
+                    item = self.table.item(row, column_index)
+                    if item is None:
+                        continue
+                    item.setToolTip(message)
+                    item.setBackground(
+                        QtGui.QColor("#fff0f0") if message else QtGui.QBrush()
+                    )
+                    item.setForeground(
+                        QtGui.QColor("#bb0000") if message else QtGui.QBrush()
+                    )
+
     def insert_row_below(self, idx):
         self._insert_row_at(idx + 1)
 
@@ -322,6 +357,7 @@ class EditableTable(QtWidgets.QWidget):
             new_row[self.id_column] = self._next_free_id()
         self._data.insert(idx, new_row)
         self._render_body()
+        self.changed.emit()
 
     def _next_free_id(self):
         """Lowest non-negative integer not already used in id_column.
@@ -343,6 +379,7 @@ class EditableTable(QtWidgets.QWidget):
             return  # always keep at least one row -- an empty table can't be saved anyway
         del self._data[idx]
         self._render_body()
+        self.changed.emit()
 
     # ------------------------------------------------------------ rendering
     def _render_body(self):
@@ -363,6 +400,7 @@ class EditableTable(QtWidgets.QWidget):
                         lambda pos, widget=combo, row_index=r:
                         self._show_row_context_menu(row_index, widget.mapToGlobal(pos))
                     )
+                    combo.currentTextChanged.connect(self._on_combo_changed)
                     self.table.setCellWidget(r, c, combo)
                 else:
                     item = QtWidgets.QTableWidgetItem(str(value))
@@ -406,3 +444,4 @@ class EditableTable(QtWidgets.QWidget):
         live.insert(destination, row)
         self._data = live
         self._render_body()
+        self.changed.emit()

@@ -8,7 +8,9 @@ size without carrying one file per icon per colour.
 The names below are upstream's own (`sap-icon--add`, `sap-icon--save`, ...)
 and their codepoints come from theming-base-content's `SAP-icons.json`.
 Only the icons this application actually uses are listed; to add one, look
-its name up in that file and copy the codepoint across.
+its name up in that file and copy the codepoint across. Button, menu, tree,
+and drag-handle icons must all come through this module; do not mix in Qt
+platform icons or hand-drawn substitutes.
 """
 
 from pathlib import Path
@@ -25,9 +27,11 @@ CODEPOINTS = {
     "add": 0xE058,
     "compare": 0xE086,
     "copy": 0xE245,
+    "document": 0xE172,
     "document-text": 0xE1B4,
     "edit": 0xE038,
     "exit-full-screen": 0xE1F5,
+    "folder-blank": 0xE08E,
     "full-screen": 0xE166,
     "navigation-down-arrow": 0xE1E2,
     "navigation-right-arrow": 0xE066,
@@ -39,6 +43,7 @@ CODEPOINTS = {
     "search": 0xE00D,
     "syntax": 0xE139,
     "undo": 0xE1E0,
+    "vertical-grip": 0xE1FA,
 }
 
 _icon_family = None

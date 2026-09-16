@@ -100,14 +100,20 @@ def resolve_set(arg):
     """
     if arg is None:
         avail = list_configs()
-        raise SystemExit(
-            "A config set must be given via --config."
-            + (
-                f" Available: {', '.join(avail)}"
-                if avail
-                else f" There are no config sets under {CONFIGS_ROOT} yet."
+        if avail:
+            hint = f" Available under {CONFIGS_ROOT}: {', '.join(avail)}"
+        elif CONFIGS_ROOT.is_dir():
+            hint = f" There are no config sets under {CONFIGS_ROOT} yet."
+        else:
+            # Installed from a wheel: CONFIGS_ROOT points inside the package and
+            # the bundled samples are not shipped, so naming that path would
+            # send the user looking in site-packages. Describe what to pass
+            # instead.
+            hint = (
+                " Pass the directory holding "
+                f"{', '.join(CSV_NAMES)} (or its parent)."
             )
-        )
+        raise SystemExit("A config set must be given via --config." + hint)
 
     named = CONFIGS_ROOT / arg
     if has_csvs(named / "config"):

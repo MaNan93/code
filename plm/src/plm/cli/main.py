@@ -1,38 +1,44 @@
 #!/usr/bin/env python3
 """
-plm -- unified CLI for the PIPE Lane Mapper generator/validator.
+plm -- generate the RTL and testbench for a PIPE lane mapper from three CSVs.
 
-Replaces the two old standalone scripts (plm_gen_rtl.py / plm_gen_tb.py)
-with subcommands of one entry point, reconciling the ways they used to be
-invoked (the Makefile: a bare config-set name + --quiet; the Qt front
-end: a full workspace path + --verible-path/--verible-flags, no --quiet)
-as different combinations of the same optional flags.
+    plm generate rtl  --config SET  [flags]   only the RTL      -> SET/rtl/
+    plm generate tb   --config SET  [flags]   only the testbench -> SET/tb/
+    plm generate all  --config SET  [flags]   both
+    plm validate      --config SET            parse + check, write nothing
+    plm -gui                                  the Qt desktop front end
 
-    plm generate rtl  --config X [--sel-mode {sync,comb}] [--arch ...] [--pclk-mode ...]
-                       [--verible-path P] [--verible-flags JSON] [--dpr] [--quiet]
-    plm generate tb   --config X [--arch ...] [--pclk-mode ...]
-                       [--verible-path P] [--verible-flags JSON] [--dpr] [--quiet]
-    plm generate all  --config X [--sel-mode ...] [--arch ...] [--pclk-mode ...]
-                       [--verible-path P] [--verible-flags JSON] [--dpr] [--quiet]
-    plm validate      --config X
+--config takes a directory holding controllers.csv, lane_mapping.csv and
+pipe_signals.csv -- either that directory or its parent. In a source checkout
+a bare name also works and is looked up under test/ (e.g. --config quad).
 
-Every generation flag is passed on the command line. There is no per-config-set
-file pinning them -- a config set is exactly its three CSVs, and the caller
-(the Makefile, or the Qt front end's Generation page) supplies the flags.
+Generation flags, all optional:
 
---config accepts either a bare config-set name (resolved under test/)
-or a full path -- resolve_set() already makes that transparent, see
-plm.core.paths.
+    --arch {original_pipe,serdes}                  cross-check on --pclk-mode
+    --pclk-mode {pclk_as_phy_output,pclk_as_phy_input}
+    --sel-mode {sync,comb}                         `generate rtl`/`all` only
+    --dpr                                          diagnostic probe overlay
+    --verible-path P / --verible-flags JSON        output formatting
+    --quiet                                        skip the topology report
 
-Also runnable as `python -m plm.cli.main ...` without relying on the
-`plm` console-script being on PATH -- this is how the Qt front end and the
-Makefile invoke it (via sys.executable -m, not the installed script name),
-since that only depends on the interpreter being able to import plm, not on
-PATH having the venv's script directory on it.
+Rules the CLI enforces, rather than letting them surface later as an
+elaboration or simulation failure:
 
-    plm -gui
+  - --arch and --pclk-mode describe the same choice two ways and must agree:
+    original_pipe <-> pclk_as_phy_output, serdes <-> pclk_as_phy_input.
+  - RTL and testbench for one config set must be generated with the same
+    --pclk-mode and --dpr. `generate all` does that for you; generating them
+    separately does not.
+  - --dpr requires --sel-mode sync, and only works with pclk_as_phy_output
+    (see design_notes.md 4.8 for why the other architecture deadlocks).
 
-`-gui` (also accepted as `--gui`) launches the Qt desktop front end.
+These flags are read from the command line and nowhere else. A config set may
+also contain gen_flags.txt, but that belongs to the Qt front end -- it is how
+the GUI remembers a workspace's last choices, and this CLI never reads it.
+
+Also runnable as `python -m plm.cli.main ...`, which is how the Makefile and
+the Qt front end invoke it: that only needs the interpreter to be able to
+import plm, not the venv's script directory to be on PATH.
 """
 
 import argparse
@@ -71,9 +77,9 @@ VERIBLE_FLAGS_HELP = (
     "default flag set entirely. Advanced; normally left unset."
 )
 DPR_HELP = (
-    "Also (RTL) / also instantiate (testbench) the DPR (diagnostic probe) "
-    "overlay -- must match between an rtl and tb generated for the same "
-    "config set."
+    "Also generate (RTL) / instantiate (testbench) the DPR diagnostic-probe "
+    "overlay. Requires --sel-mode sync and --pclk-mode pclk_as_phy_output, and "
+    "must match between an rtl and tb generated for the same config set."
 )
 
 
@@ -82,8 +88,8 @@ def _add_config_arg(ap):
         "--config",
         default=None,
         metavar="SET",
-        help="Config set: a name under test/, or a path. Omitting it lists "
-        "the available set names.",
+        help="Directory holding the three config CSVs (or its parent). In a "
+        "source checkout a bare name is also looked up under test/.",
     )
 
 

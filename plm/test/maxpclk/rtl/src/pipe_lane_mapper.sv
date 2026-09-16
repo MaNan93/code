@@ -59,15 +59,15 @@ module pipe_lane_mapper #(
     logic [NC-1:0] ctrl_rst_n;   // reconstructed from each controller's own named port above
     assign ctrl_rst_n = {ctrld_rst_n, ctrlc_rst_n, ctrlb_rst_n, ctrla_rst_n};
     lane_sel_t dec_tgt;   // each group's raw decoder selection (unsynchronized), used by rst_mux
-    logic [1:0] seltgt_g1_l3;   // dec_tgt.g1 synchronized into this lane's owning candidate's own port clock
-    logic [1:0] seltgt_g1_l4;   // dec_tgt.g1 synchronized into this lane's owning candidate's own port clock
-    logic [1:0] seltgt_g1_l5;   // dec_tgt.g1 synchronized into this lane's owning candidate's own port clock
-    logic [1:0] seltgt_g2_l6;   // dec_tgt.g2 synchronized into this lane's owning candidate's own port clock
-    logic [1:0] seltgt_g2_l7;   // dec_tgt.g2 synchronized into this lane's owning candidate's own port clock
-    logic [1:0] seltgt_g2_l8;   // dec_tgt.g2 synchronized into this lane's owning candidate's own port clock
-    logic [3:0] seltgt_g3_l9;   // dec_tgt.g3 synchronized into this lane's owning candidate's own port clock
-    logic [3:0] seltgt_g3_l10;   // dec_tgt.g3 synchronized into this lane's owning candidate's own port clock
-    logic [3:0] seltgt_g3_l11;   // dec_tgt.g3 synchronized into this lane's owning candidate's own port clock
+    logic [1:0] seltgt_g1_l3;   // dec_tgt.g1 synchronized into the clock of the ctrl lane this lane routes to
+    logic [1:0] seltgt_g1_l4;   // dec_tgt.g1 synchronized into the clock of the ctrl lane this lane routes to
+    logic [1:0] seltgt_g1_l5;   // dec_tgt.g1 synchronized into the clock of the ctrl lane this lane routes to
+    logic [1:0] seltgt_g2_l6;   // dec_tgt.g2 synchronized into the clock of the ctrl lane this lane routes to
+    logic [1:0] seltgt_g2_l7;   // dec_tgt.g2 synchronized into the clock of the ctrl lane this lane routes to
+    logic [1:0] seltgt_g2_l8;   // dec_tgt.g2 synchronized into the clock of the ctrl lane this lane routes to
+    logic [3:0] seltgt_g3_l9;   // dec_tgt.g3 synchronized into the clock of the ctrl lane this lane routes to
+    logic [3:0] seltgt_g3_l10;   // dec_tgt.g3 synchronized into the clock of the ctrl lane this lane routes to
+    logic [3:0] seltgt_g3_l11;   // dec_tgt.g3 synchronized into the clock of the ctrl lane this lane routes to
     logic [1:0] rxclk_en_g1_l3;   // dec_tgt.g1 synchronized into rx_clk[3]'s domain
     logic [1:0] rxclk_en_g1_l4;   // dec_tgt.g1 synchronized into rx_clk[4]'s domain
     logic [1:0] rxclk_en_g1_l5;   // dec_tgt.g1 synchronized into rx_clk[5]'s domain

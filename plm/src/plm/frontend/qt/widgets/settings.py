@@ -5,10 +5,11 @@ Same General / Formatter split: General holds app-wide font preferences;
 Formatter holds verible-path (+ Auto-detect) and the full verible flag set,
 drawn directly from plm.core.verible's Python constants.
 
-Verible path/flags are settings-level only:
-never written into any workspace's own gen_flags.txt, only passed as
---verible-path/--verible-flags at Generate time (see plm_qt.py's
-_run_tool). veribleFlags stays None until the user actually saves Settings
+Verible path/flags are settings-level only: never written into a
+workspace, only passed as --verible-path/--verible-flags at Generate time
+(see MainWindow._run_tool, which assembles the whole command line -- the
+arch/pclk-mode/sel-mode/dpr flags reach it the same way, from the
+Generation page). veribleFlags stays None until the user actually saves Settings
 once; an explicitly-saved {} (every field cleared) means "no overrides,
 use verible's own raw defaults" -- a different, real choice from "never
 touched this panel, use this project's own defaults".

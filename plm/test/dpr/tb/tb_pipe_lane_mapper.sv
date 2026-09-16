@@ -4,7 +4,7 @@
 //
 // Checks:
 //   1. Steady-state data routing matches lane_mapping.csv exactly
-//   2. Unmapped controller ports read back SAFE_P2M
+//   2. Unmapped controller lanes read back SAFE_P2M
 //   3. Group sel vectors are always one-hot0 (non-overlap)
 //   4. During the NOV handoff window (sel all-zero), phy lanes present the safe state (txelecidle=1)
 //   5. phy_rst_n follows the current owner's ctrl_rst_n
@@ -111,11 +111,11 @@ module tb_pipe_lane_mapper;
     );
 
     //------------------------------------------------------------ stimulus patterns
-    function automatic mac2phy_lane_t make_m2p(input int cid, input int port);
+    function automatic mac2phy_lane_t make_m2p(input int cid, input int ctrl_lane);
         mac2phy_lane_t v;
         v = SAFE_M2P;
-        v.mac_phy_txdata      = {4'(cid), 20'h0, 8'(port)};
-        v.mac_phy_txdatak     = 4'(port);
+        v.mac_phy_txdata      = {4'(cid), 20'h0, 8'(ctrl_lane)};
+        v.mac_phy_txdatak     = 4'(ctrl_lane);
         v.mac_phy_txdatavalid = 1'b1;
         v.mac_phy_txelecidle  = 1'b0;   // non-idle (may differ from the signal's safe state)
         v.mac_phy_rxstandby   = 1'b0;   // non-idle (may differ from the signal's safe state)
@@ -211,7 +211,7 @@ module tb_pipe_lane_mapper;
         endcase
     endfunction
 
-    function automatic int port_of(input int m, input int l);
+    function automatic int ctrl_lane_of(input int m, input int l);
         case (m)
             0: case (l)
                 0: return 0;
@@ -380,35 +380,11 @@ module tb_pipe_lane_mapper;
     localparam int G2_LANES[3] = '{6, 7, 8};
     localparam int G3_LANES[3] = '{9, 10, 11};
 
-    phy2mac_lane_t exp_safe_p2m_ctrla;
-    assign exp_safe_p2m_ctrla = '{
+    phy2mac_lane_t exp_safe_p2m;
+    assign exp_safe_p2m = '{
+        phy_mac_rxelecidle: 1'b1,
+        phy_mac_rxstandbystatus: 1'b1,
         phy_mac_messagebus: 8'h50,
-        phy_mac_phystatus: phy_phy2mac[0].phy_mac_phystatus,
-        default: '0
-    };
-    phy2mac_lane_t exp_safe_p2m_ctrlb;
-    assign exp_safe_p2m_ctrlb = '{
-        phy_mac_messagebus: 8'h50,
-        phy_mac_phystatus: phy_phy2mac[3].phy_mac_phystatus,
-        default: '0
-    };
-    phy2mac_lane_t exp_safe_p2m_ctrlc;
-    assign exp_safe_p2m_ctrlc = '{
-        phy_mac_messagebus: 8'h50,
-        phy_mac_phystatus: phy_phy2mac[6].phy_mac_phystatus,
-        default: '0
-    };
-    phy2mac_lane_t exp_safe_p2m_ctrld;
-    assign exp_safe_p2m_ctrld = '{
-        phy_mac_messagebus: 8'h50,
-        phy_mac_phystatus: phy_phy2mac[9].phy_mac_phystatus,
-        default: '0
-    };
-
-    phy2mac_lane_t exp_dpr_tie;
-    assign exp_dpr_tie = '{
-        phy_mac_messagebus: 8'h50,
-        phy_mac_phystatus: '0,
         default: '0
     };
 
@@ -429,63 +405,63 @@ module tb_pipe_lane_mapper;
                 foreach (G1_LANES[i])
                     chk_m2p(phy_mac2phy[G1_LANES[i]], SAFE_M2P,
                         $sformatf("G1 lane%0d: sel==0 NOV gap", G1_LANES[i]));
-                chk_p2m(ctrla_phy2mac[3], exp_safe_p2m_ctrla,
+                chk_p2m(ctrla_phy2mac[3], exp_safe_p2m,
                     "G1 CtrlA[3]: sel==0 NOV gap");
-                chk_p2m(ctrla_phy2mac[4], exp_safe_p2m_ctrla,
+                chk_p2m(ctrla_phy2mac[4], exp_safe_p2m,
                     "G1 CtrlA[4]: sel==0 NOV gap");
-                chk_p2m(ctrla_phy2mac[5], exp_safe_p2m_ctrla,
+                chk_p2m(ctrla_phy2mac[5], exp_safe_p2m,
                     "G1 CtrlA[5]: sel==0 NOV gap");
-                chk_p2m(ctrlb_phy2mac[0], exp_safe_p2m_ctrlb,
+                chk_p2m(ctrlb_phy2mac[0], exp_safe_p2m,
                     "G1 CtrlB[0]: sel==0 NOV gap");
-                chk_p2m(ctrlb_phy2mac[1], exp_safe_p2m_ctrlb,
+                chk_p2m(ctrlb_phy2mac[1], exp_safe_p2m,
                     "G1 CtrlB[1]: sel==0 NOV gap");
-                chk_p2m(ctrlb_phy2mac[2], exp_safe_p2m_ctrlb,
+                chk_p2m(ctrlb_phy2mac[2], exp_safe_p2m,
                     "G1 CtrlB[2]: sel==0 NOV gap");
             end
             if (sel_snap.g2 == '0 && dut.sel_tgt.g2 == '0) begin
                 foreach (G2_LANES[i])
                     chk_m2p(phy_mac2phy[G2_LANES[i]], SAFE_M2P,
                         $sformatf("G2 lane%0d: sel==0 NOV gap", G2_LANES[i]));
-                chk_p2m(ctrla_phy2mac[6], exp_safe_p2m_ctrla,
+                chk_p2m(ctrla_phy2mac[6], exp_safe_p2m,
                     "G2 CtrlA[6]: sel==0 NOV gap");
-                chk_p2m(ctrla_phy2mac[7], exp_safe_p2m_ctrla,
+                chk_p2m(ctrla_phy2mac[7], exp_safe_p2m,
                     "G2 CtrlA[7]: sel==0 NOV gap");
-                chk_p2m(ctrla_phy2mac[8], exp_safe_p2m_ctrla,
+                chk_p2m(ctrla_phy2mac[8], exp_safe_p2m,
                     "G2 CtrlA[8]: sel==0 NOV gap");
-                chk_p2m(ctrlc_phy2mac[0], exp_safe_p2m_ctrlc,
+                chk_p2m(ctrlc_phy2mac[0], exp_safe_p2m,
                     "G2 CtrlC[0]: sel==0 NOV gap");
-                chk_p2m(ctrlc_phy2mac[1], exp_safe_p2m_ctrlc,
+                chk_p2m(ctrlc_phy2mac[1], exp_safe_p2m,
                     "G2 CtrlC[1]: sel==0 NOV gap");
-                chk_p2m(ctrlc_phy2mac[2], exp_safe_p2m_ctrlc,
+                chk_p2m(ctrlc_phy2mac[2], exp_safe_p2m,
                     "G2 CtrlC[2]: sel==0 NOV gap");
             end
             if (sel_snap.g3 == '0 && dut.sel_tgt.g3 == '0) begin
                 foreach (G3_LANES[i])
                     chk_m2p(phy_mac2phy[G3_LANES[i]], SAFE_M2P,
                         $sformatf("G3 lane%0d: sel==0 NOV gap", G3_LANES[i]));
-                chk_p2m(ctrla_phy2mac[9], exp_safe_p2m_ctrla,
+                chk_p2m(ctrla_phy2mac[9], exp_safe_p2m,
                     "G3 CtrlA[9]: sel==0 NOV gap");
-                chk_p2m(ctrla_phy2mac[10], exp_safe_p2m_ctrla,
+                chk_p2m(ctrla_phy2mac[10], exp_safe_p2m,
                     "G3 CtrlA[10]: sel==0 NOV gap");
-                chk_p2m(ctrla_phy2mac[11], exp_safe_p2m_ctrla,
+                chk_p2m(ctrla_phy2mac[11], exp_safe_p2m,
                     "G3 CtrlA[11]: sel==0 NOV gap");
-                chk_p2m(ctrlb_phy2mac[3], exp_safe_p2m_ctrlb,
+                chk_p2m(ctrlb_phy2mac[3], exp_safe_p2m,
                     "G3 CtrlB[3]: sel==0 NOV gap");
-                chk_p2m(ctrlb_phy2mac[4], exp_safe_p2m_ctrlb,
+                chk_p2m(ctrlb_phy2mac[4], exp_safe_p2m,
                     "G3 CtrlB[4]: sel==0 NOV gap");
-                chk_p2m(ctrlb_phy2mac[5], exp_safe_p2m_ctrlb,
+                chk_p2m(ctrlb_phy2mac[5], exp_safe_p2m,
                     "G3 CtrlB[5]: sel==0 NOV gap");
-                chk_p2m(ctrlc_phy2mac[3], exp_safe_p2m_ctrlc,
+                chk_p2m(ctrlc_phy2mac[3], exp_safe_p2m,
                     "G3 CtrlC[3]: sel==0 NOV gap");
-                chk_p2m(ctrlc_phy2mac[4], exp_safe_p2m_ctrlc,
+                chk_p2m(ctrlc_phy2mac[4], exp_safe_p2m,
                     "G3 CtrlC[4]: sel==0 NOV gap");
-                chk_p2m(ctrlc_phy2mac[5], exp_safe_p2m_ctrlc,
+                chk_p2m(ctrlc_phy2mac[5], exp_safe_p2m,
                     "G3 CtrlC[5]: sel==0 NOV gap");
-                chk_p2m(ctrld_phy2mac[0], exp_safe_p2m_ctrld,
+                chk_p2m(ctrld_phy2mac[0], exp_safe_p2m,
                     "G3 CtrlD[0]: sel==0 NOV gap");
-                chk_p2m(ctrld_phy2mac[1], exp_safe_p2m_ctrld,
+                chk_p2m(ctrld_phy2mac[1], exp_safe_p2m,
                     "G3 CtrlD[1]: sel==0 NOV gap");
-                chk_p2m(ctrld_phy2mac[2], exp_safe_p2m_ctrld,
+                chk_p2m(ctrld_phy2mac[2], exp_safe_p2m,
                     "G3 CtrlD[2]: sel==0 NOV gap");
             end
             err_safe_state += (err_count - err_before);
@@ -496,16 +472,16 @@ module tb_pipe_lane_mapper;
     task automatic check_mode(input int m);
         mac2phy_lane_t exp_m2p;
         phy2mac_lane_t exp_p2m;
-        int cid, port;
+        int cid, ctrl_lane;
         int unsigned err_before;
 
         for (int l = 0; l < NL; l++) begin
             cid  = owner_of(m, l);
-            port = port_of(m, l);
-            exp_m2p = make_m2p(cid, port);
+            ctrl_lane = ctrl_lane_of(m, l);
+            exp_m2p = make_m2p(cid, ctrl_lane);
             err_before = err_count;
             chk_m2p(phy_mac2phy[l], exp_m2p,
-                $sformatf("mode%0d lane%0d: expected ctrl%0d port%0d", m, l, cid, port));
+                $sformatf("mode%0d lane%0d: expected ctrl%0d lane%0d", m, l, cid, ctrl_lane));
             err_m2p += (err_count - err_before);
 
             err_before = err_count;
@@ -612,7 +588,7 @@ module tb_pipe_lane_mapper;
                 phy2mac_lane_t got;
                 src_lane = -1;
                 for (int l = 0; l < NL; l++)
-                    if (owner_of(m, l) == c && port_of(m, l) == p) src_lane = l;
+                    if (owner_of(m, l) == c && ctrl_lane_of(m, l) == p) src_lane = l;
 
                 case (c)
                     0: got = ctrla_phy2mac[p];
@@ -690,20 +666,20 @@ module tb_pipe_lane_mapper;
         foreach (test_lanes[k]) begin
             automatic int l = test_lanes[k];
             automatic int oid = owner_of(mode, l);
-            automatic int op = port_of(mode, l);
+            automatic int op = ctrl_lane_of(mode, l);
             automatic int unsigned err_before;
             v_lane_mask = '0;
             v_lane_mask[l] = 1'b1;
             #SETTLE;
             err_before = err_count;
             case (oid)
-                0: chk_p2m(ctrla_phy2mac[op], exp_safe_p2m_ctrla,
+                0: chk_p2m(ctrla_phy2mac[op], exp_safe_p2m,
                     $sformatf("dpr claimed lane%0d: real owner CtrlA[%0d] should read SAFE_P2M", l, op));
-                1: chk_p2m(ctrlb_phy2mac[op], exp_safe_p2m_ctrlb,
+                1: chk_p2m(ctrlb_phy2mac[op], exp_safe_p2m,
                     $sformatf("dpr claimed lane%0d: real owner CtrlB[%0d] should read SAFE_P2M", l, op));
-                2: chk_p2m(ctrlc_phy2mac[op], exp_safe_p2m_ctrlc,
+                2: chk_p2m(ctrlc_phy2mac[op], exp_safe_p2m,
                     $sformatf("dpr claimed lane%0d: real owner CtrlC[%0d] should read SAFE_P2M", l, op));
-                3: chk_p2m(ctrld_phy2mac[op], exp_safe_p2m_ctrld,
+                3: chk_p2m(ctrld_phy2mac[op], exp_safe_p2m,
                     $sformatf("dpr claimed lane%0d: real owner CtrlD[%0d] should read SAFE_P2M", l, op));
                 default: ;
             endcase
@@ -712,7 +688,7 @@ module tb_pipe_lane_mapper;
             $display("%0t: dpr claimed lane%0d (%0d cumulative errors)", $time, l, err_count);
             v_lane_mask = '0;
             #SETTLE;
-            chk(dpr_phy2mac[l] == exp_dpr_tie,
+            chk(dpr_phy2mac[l] == exp_safe_p2m,
                 $sformatf("dpr released lane%0d: dpr_phy2mac should revert to tie", l));
             $display("%0t: dpr released lane%0d (%0d cumulative errors)", $time, l, err_count);
             err_dpr += (err_count - err_before);

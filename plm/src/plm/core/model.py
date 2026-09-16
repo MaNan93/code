@@ -48,9 +48,10 @@ def _strip_dict(row):
     """Uniformly strip whitespace (including invisible chars) from a
     DictReader row.
 
-    Strips every key and value, and drops keys whose value is empty.
-    That way downstream parsing doesn't have to worry about whitespace
-    on its own.
+    Strips every key and every string value. That way downstream parsing
+    doesn't have to worry about whitespace on its own. Keys are kept even
+    when their value is empty -- the callers rely on seeing an empty cell so
+    they can report it as missing, rather than as an absent column.
     """
     out = {}
     for k, v in (row or {}).items():
@@ -521,28 +522,66 @@ class Config:
                     )
                 seen[key] = l
 
-        # Every driving source for a given controller port must come from
-        # the same group. Otherwise that port's convergence mux would have
+        # Every driving source for a given controller lane must come from
+        # the same group. Otherwise that lane's convergence mux would have
         # sel bits coming from independent NOVs in different groups -- each
         # converges on its own with no interlock between them, and they
         # could briefly both be 1 at once, causing the two data paths to be
         # OR'd together. Cross-group interlocking is too expensive to
         # implement, so this is constrained at the topology level instead.
-        port_groups = {}
+        lane_groups_of = {}
         for m in self.modes:
             for l in range(self.lane_count):
                 cid, cl = self.mapping[m][l]
                 g = self.group_of_lane(l)
-                port_groups.setdefault((cid, cl), {})[g.gid] = l
-        for (cid, cl), gs in sorted(port_groups.items()):
+                lane_groups_of.setdefault((cid, cl), {})[g.gid] = l
+        for (cid, cl), gs in sorted(lane_groups_of.items()):
             if len(gs) > 1:
                 nm = self.controllers[cid].name if cid in self.controllers else f"ctrl{cid}"
                 detail = ", ".join(f"G{g}(lane{l})" for g, l in sorted(gs.items()))
                 err.append(
                     f"{nm}[{cl}]'s driving sources span multiple lane groups: {detail}.\n"
-                    f"    Every driving source for one controller port must come from "
+                    f"    Every driving source for one controller lane must come from "
                     f"the same group, otherwise the convergence mux's sel bits can't be "
                     f"guaranteed mutually exclusive. Please adjust the lane assignment."
+                )
+
+        # A lane's ctrl-lane index, for one owner, must be the same in every
+        # mode that owner holds it. The generators resolve "which lane of
+        # candidate c does phy lane l feed" exactly once, from the first mode
+        # in which c owns l (gen_sel_gen / gen_clk_mux_phy_input /
+        # gen_data_m2p, and the equivalent hit[0] pick in gen_data_p2m), and
+        # then wire that one ctrl lane for every mode. Nothing downstream
+        # re-derives it per mode, so a phy lane whose ctrl-lane index moves
+        # between modes silently produces a mux/clock-gate wired to the wrong
+        # one in all but that first mode.
+        #
+        # This is not covered by the cross-group rule above: two lanes in the
+        # same group can swap their ctrl-lane indices between modes and still
+        # leave every ctrl lane's drivers inside that one group. Like the
+        # cross-group rule, it's constrained at the topology level rather than
+        # handled in the generator -- per-mode selection would mean a second mux
+        # stage on every lane for no benefit, since a controller is supposed
+        # to change width on a mode switch, not renumber its own lanes.
+        ctrl_lanes_of = {}
+        for m in self.modes:
+            for l in range(self.lane_count):
+                cid, cl = self.mapping[m][l]
+                ctrl_lanes_of.setdefault((l, cid), {}).setdefault(cl, []).append(m)
+        for (l, cid), by_ctrl_lane in sorted(ctrl_lanes_of.items()):
+            if len(by_ctrl_lane) > 1:
+                nm = self.controllers[cid].name if cid in self.controllers else f"ctrl{cid}"
+                detail = ", ".join(
+                    f"{nm}[{cl}] in mode{'s' if len(ms) > 1 else ''} "
+                    f"{', '.join(str(m) for m in ms)}"
+                    for cl, ms in sorted(by_ctrl_lane.items())
+                )
+                err.append(
+                    f"lane{l} maps to more than one {nm} lane across modes: {detail}.\n"
+                    f"    A phy lane must keep the same ctrl lane index in every mode its "
+                    f"owner holds it -- the generated mux and clock gate for that lane are "
+                    f"wired to one fixed ctrl lane, so a moving index would route the other modes "
+                    f"to the wrong one. Please adjust the lane assignment."
                 )
 
         for cid, per in cp.items():

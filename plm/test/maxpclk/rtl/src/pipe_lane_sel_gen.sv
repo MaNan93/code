@@ -20,15 +20,15 @@ module pipe_lane_sel_gen #(
     input logic [NC-1:0] ctrl_rst_n,
     input logic [NL-1:0] rx_clk,   // PHY's per-lane recovered clock
     output lane_sel_t dec_tgt,   // decoder's raw (unsynchronized) target; used by rst_mux
-    output logic [1:0] seltgt_g1_l3,   // dec_tgt.g1 synchronized into this lane's owning candidate's own port clock; used by data_m2p/data_p2m
-    output logic [1:0] seltgt_g1_l4,   // dec_tgt.g1 synchronized into this lane's owning candidate's own port clock; used by data_m2p/data_p2m
-    output logic [1:0] seltgt_g1_l5,   // dec_tgt.g1 synchronized into this lane's owning candidate's own port clock; used by data_m2p/data_p2m
-    output logic [1:0] seltgt_g2_l6,   // dec_tgt.g2 synchronized into this lane's owning candidate's own port clock; used by data_m2p/data_p2m
-    output logic [1:0] seltgt_g2_l7,   // dec_tgt.g2 synchronized into this lane's owning candidate's own port clock; used by data_m2p/data_p2m
-    output logic [1:0] seltgt_g2_l8,   // dec_tgt.g2 synchronized into this lane's owning candidate's own port clock; used by data_m2p/data_p2m
-    output logic [3:0] seltgt_g3_l9,   // dec_tgt.g3 synchronized into this lane's owning candidate's own port clock; used by data_m2p/data_p2m
-    output logic [3:0] seltgt_g3_l10,   // dec_tgt.g3 synchronized into this lane's owning candidate's own port clock; used by data_m2p/data_p2m
-    output logic [3:0] seltgt_g3_l11,   // dec_tgt.g3 synchronized into this lane's owning candidate's own port clock; used by data_m2p/data_p2m
+    output logic [1:0] seltgt_g1_l3,   // dec_tgt.g1 synchronized into this lane's owning candidate's own ctrl lane's clock; used by data_m2p/data_p2m
+    output logic [1:0] seltgt_g1_l4,   // dec_tgt.g1 synchronized into this lane's owning candidate's own ctrl lane's clock; used by data_m2p/data_p2m
+    output logic [1:0] seltgt_g1_l5,   // dec_tgt.g1 synchronized into this lane's owning candidate's own ctrl lane's clock; used by data_m2p/data_p2m
+    output logic [1:0] seltgt_g2_l6,   // dec_tgt.g2 synchronized into this lane's owning candidate's own ctrl lane's clock; used by data_m2p/data_p2m
+    output logic [1:0] seltgt_g2_l7,   // dec_tgt.g2 synchronized into this lane's owning candidate's own ctrl lane's clock; used by data_m2p/data_p2m
+    output logic [1:0] seltgt_g2_l8,   // dec_tgt.g2 synchronized into this lane's owning candidate's own ctrl lane's clock; used by data_m2p/data_p2m
+    output logic [3:0] seltgt_g3_l9,   // dec_tgt.g3 synchronized into this lane's owning candidate's own ctrl lane's clock; used by data_m2p/data_p2m
+    output logic [3:0] seltgt_g3_l10,   // dec_tgt.g3 synchronized into this lane's owning candidate's own ctrl lane's clock; used by data_m2p/data_p2m
+    output logic [3:0] seltgt_g3_l11,   // dec_tgt.g3 synchronized into this lane's owning candidate's own ctrl lane's clock; used by data_m2p/data_p2m
     output logic [1:0] rxclk_en_g1_l3,   // dec_tgt.g1 synchronized into rx_clk[3]'s own domain, for clk_mux's rx_clk gating
     output logic [1:0] rxclk_en_g1_l4,   // dec_tgt.g1 synchronized into rx_clk[4]'s own domain, for clk_mux's rx_clk gating
     output logic [1:0] rxclk_en_g1_l5,   // dec_tgt.g1 synchronized into rx_clk[5]'s own domain, for clk_mux's rx_clk gating
@@ -49,10 +49,10 @@ module pipe_lane_sel_gen #(
 
     //------------------------------------------------------------
     // Data-path select: one pipe_lane_sel_sync per BBM LANE (not per group),
-    // synchronizing dec_tgt.gN into that lane's owning candidate's own port
-    // clock -- {c}_pclk is per-port, so a group-shared sel_tgt synchronized
-    // against only one candidate port would be the wrong domain for whichever
-    // other port that lane actually routes to.
+    // synchronizing dec_tgt.gN into the clock of the ctrl lane that lane
+    // routes to -- {c}_pclk is per ctrl lane, so a group-shared sel_tgt
+    // synchronized against only one candidate's ctrl lane would be the wrong
+    // domain for whichever other one that lane actually routes to.
     //------------------------------------------------------------
     // G1 lane3~5: CtrlA, CtrlB, per-lane select
     pipe_lane_sel_sync #(.N(2), .SYNC(SEL_SYNC)) u_seltgt_sel_sync_g1_l3 (

@@ -24,14 +24,14 @@ module pipe_lane_clk_mux #(
     // CtrlX16: uses phy_pclk[0] in every mode, direct connection
     assign ctrl_pclk[0] = phy_pclk_out[0];
 
-    // CtrlX8: uses phy_pclk[8] in every mode, direct connection
+    // CtrlX8asdfadssssss: uses phy_pclk[8] in every mode, direct connection
     assign ctrl_pclk[1] = phy_pclk_out[8];
 
-    // CtrlX4a: uses phy_pclk[12] in every mode, direct connection
-    assign ctrl_pclk[2] = phy_pclk_out[12];
+    // CtrlX4a: uses phy_pclk[4] in every mode, direct connection
+    assign ctrl_pclk[2] = phy_pclk_out[4];
 
-    // CtrlX4b: uses phy_pclk[4] in every mode, direct connection
-    assign ctrl_pclk[3] = phy_pclk_out[4];
+    // CtrlX4b: uses phy_pclk[12] in every mode, direct connection
+    assign ctrl_pclk[3] = phy_pclk_out[12];
 
     //------------------------------------------------------------
     // Feedback clock: each lane's pclk_in connects to its current owner's ctrl_pclk.
@@ -41,17 +41,17 @@ module pipe_lane_clk_mux #(
     assign phy_pclk_in[1] = ctrl_pclk[0];  // G0 direct to CtrlX16
     assign phy_pclk_in[2] = ctrl_pclk[0];  // G0 direct to CtrlX16
     assign phy_pclk_in[3] = ctrl_pclk[0];  // G0 direct to CtrlX16
-    // G1 lane4~7: CtrlX16, CtrlX4b
+    // G1 lane4~7: CtrlX16, CtrlX4a
     logic [1:0] pin_gated_g1;
     logic pclk_in_g1;
     pipe_lane_clk_gate u_pin_gate_g1_b0 (.clk_in(ctrl_pclk[0]), .en(sel_tgt.g1[0]), .test_en(test_en), .clk_out(pin_gated_g1[0]));
-    pipe_lane_clk_gate u_pin_gate_g1_b1 (.clk_in(ctrl_pclk[3]), .en(sel_tgt.g1[1]), .test_en(test_en), .clk_out(pin_gated_g1[1]));
+    pipe_lane_clk_gate u_pin_gate_g1_b1 (.clk_in(ctrl_pclk[2]), .en(sel_tgt.g1[1]), .test_en(test_en), .clk_out(pin_gated_g1[1]));
     pipe_lane_clk_or #(.N(2)) u_pin_or_g1 (.clk_in(pin_gated_g1), .clk_out(pclk_in_g1));
     assign phy_pclk_in[4] = pclk_in_g1;
     assign phy_pclk_in[5] = pclk_in_g1;
     assign phy_pclk_in[6] = pclk_in_g1;
     assign phy_pclk_in[7] = pclk_in_g1;
-    // G2 lane8~11: CtrlX16, CtrlX8
+    // G2 lane8~11: CtrlX16, CtrlX8asdfadssssss
     logic [1:0] pin_gated_g2;
     logic pclk_in_g2;
     pipe_lane_clk_gate u_pin_gate_g2_b0 (.clk_in(ctrl_pclk[0]), .en(sel_tgt.g2[0]), .test_en(test_en), .clk_out(pin_gated_g2[0]));
@@ -61,12 +61,12 @@ module pipe_lane_clk_mux #(
     assign phy_pclk_in[9] = pclk_in_g2;
     assign phy_pclk_in[10] = pclk_in_g2;
     assign phy_pclk_in[11] = pclk_in_g2;
-    // G3 lane12~15: CtrlX16, CtrlX8, CtrlX4a
+    // G3 lane12~15: CtrlX16, CtrlX8asdfadssssss, CtrlX4b
     logic [2:0] pin_gated_g3;
     logic pclk_in_g3;
     pipe_lane_clk_gate u_pin_gate_g3_b0 (.clk_in(ctrl_pclk[0]), .en(sel_tgt.g3[0]), .test_en(test_en), .clk_out(pin_gated_g3[0]));
     pipe_lane_clk_gate u_pin_gate_g3_b1 (.clk_in(ctrl_pclk[1]), .en(sel_tgt.g3[1]), .test_en(test_en), .clk_out(pin_gated_g3[1]));
-    pipe_lane_clk_gate u_pin_gate_g3_b2 (.clk_in(ctrl_pclk[2]), .en(sel_tgt.g3[2]), .test_en(test_en), .clk_out(pin_gated_g3[2]));
+    pipe_lane_clk_gate u_pin_gate_g3_b2 (.clk_in(ctrl_pclk[3]), .en(sel_tgt.g3[2]), .test_en(test_en), .clk_out(pin_gated_g3[2]));
     pipe_lane_clk_or #(.N(3)) u_pin_or_g3 (.clk_in(pin_gated_g3), .clk_out(pclk_in_g3));
     assign phy_pclk_in[12] = pclk_in_g3;
     assign phy_pclk_in[13] = pclk_in_g3;

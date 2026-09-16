@@ -12,19 +12,19 @@ module pipe_lane_clk_mux #(
     input logic test_en,
     input logic [NC-1:0] ctrl_rst_n,
     input logic [NL-1:0] rx_clk,     // PHY's per-lane recovered clock
-    input logic [11:0] ctrla_pclk,   // CtrlA's own already-divided pclk, one bit per its own port
-    input logic [5:0] ctrlb_pclk,   // CtrlB's own already-divided pclk, one bit per its own port
-    input logic [7:0] ctrlc_pclk,   // CtrlC's own already-divided pclk, one bit per its own port
-    input logic [2:0] ctrld_pclk,   // CtrlD's own already-divided pclk, one bit per its own port
-    input logic [1:0] seltgt_g1_l3,   // dec_tgt.g1 already synchronized into this lane's owning candidate's own port clock, from sel_gen -- also gates phy_pclk
-    input logic [1:0] seltgt_g1_l4,   // dec_tgt.g1 already synchronized into this lane's owning candidate's own port clock, from sel_gen -- also gates phy_pclk
-    input logic [1:0] seltgt_g1_l5,   // dec_tgt.g1 already synchronized into this lane's owning candidate's own port clock, from sel_gen -- also gates phy_pclk
-    input logic [1:0] seltgt_g2_l6,   // dec_tgt.g2 already synchronized into this lane's owning candidate's own port clock, from sel_gen -- also gates phy_pclk
-    input logic [1:0] seltgt_g2_l7,   // dec_tgt.g2 already synchronized into this lane's owning candidate's own port clock, from sel_gen -- also gates phy_pclk
-    input logic [1:0] seltgt_g2_l8,   // dec_tgt.g2 already synchronized into this lane's owning candidate's own port clock, from sel_gen -- also gates phy_pclk
-    input logic [3:0] seltgt_g3_l9,   // dec_tgt.g3 already synchronized into this lane's owning candidate's own port clock, from sel_gen -- also gates phy_pclk
-    input logic [3:0] seltgt_g3_l10,   // dec_tgt.g3 already synchronized into this lane's owning candidate's own port clock, from sel_gen -- also gates phy_pclk
-    input logic [3:0] seltgt_g3_l11,   // dec_tgt.g3 already synchronized into this lane's owning candidate's own port clock, from sel_gen -- also gates phy_pclk
+    input logic [11:0] ctrla_pclk,   // CtrlA's own already-divided pclk, one bit per its own lane
+    input logic [5:0] ctrlb_pclk,   // CtrlB's own already-divided pclk, one bit per its own lane
+    input logic [7:0] ctrlc_pclk,   // CtrlC's own already-divided pclk, one bit per its own lane
+    input logic [2:0] ctrld_pclk,   // CtrlD's own already-divided pclk, one bit per its own lane
+    input logic [1:0] seltgt_g1_l3,   // dec_tgt.g1 already synchronized into this lane's owning candidate's own ctrl lane's clock, from sel_gen -- also gates phy_pclk
+    input logic [1:0] seltgt_g1_l4,   // dec_tgt.g1 already synchronized into this lane's owning candidate's own ctrl lane's clock, from sel_gen -- also gates phy_pclk
+    input logic [1:0] seltgt_g1_l5,   // dec_tgt.g1 already synchronized into this lane's owning candidate's own ctrl lane's clock, from sel_gen -- also gates phy_pclk
+    input logic [1:0] seltgt_g2_l6,   // dec_tgt.g2 already synchronized into this lane's owning candidate's own ctrl lane's clock, from sel_gen -- also gates phy_pclk
+    input logic [1:0] seltgt_g2_l7,   // dec_tgt.g2 already synchronized into this lane's owning candidate's own ctrl lane's clock, from sel_gen -- also gates phy_pclk
+    input logic [1:0] seltgt_g2_l8,   // dec_tgt.g2 already synchronized into this lane's owning candidate's own ctrl lane's clock, from sel_gen -- also gates phy_pclk
+    input logic [3:0] seltgt_g3_l9,   // dec_tgt.g3 already synchronized into this lane's owning candidate's own ctrl lane's clock, from sel_gen -- also gates phy_pclk
+    input logic [3:0] seltgt_g3_l10,   // dec_tgt.g3 already synchronized into this lane's owning candidate's own ctrl lane's clock, from sel_gen -- also gates phy_pclk
+    input logic [3:0] seltgt_g3_l11,   // dec_tgt.g3 already synchronized into this lane's owning candidate's own ctrl lane's clock, from sel_gen -- also gates phy_pclk
     input logic [1:0] rxclk_en_g1_l3,   // dec_tgt.g1 already synchronized into rx_clk[3]'s domain, from sel_gen
     input logic [1:0] rxclk_en_g1_l4,   // dec_tgt.g1 already synchronized into rx_clk[4]'s domain, from sel_gen
     input logic [1:0] rxclk_en_g1_l5,   // dec_tgt.g1 already synchronized into rx_clk[5]'s domain, from sel_gen
@@ -43,7 +43,7 @@ module pipe_lane_clk_mux #(
 
     //------------------------------------------------------------
     // phy_pclk: glitch-free per-lane select among the owning group's
-    // candidate controllers' own port-level pclk.
+    // candidate controllers' own per-ctrl-lane pclk.
     //------------------------------------------------------------
     assign phy_pclk[0] = ctrla_pclk[0];  // G0 direct to CtrlA
     assign phy_pclk[1] = ctrla_pclk[1];  // G0 direct to CtrlA

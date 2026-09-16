@@ -9,10 +9,10 @@
 //
 // Lane grouping: lanes with the same owner sequence are grouped automatically, sharing one NOV.
 //
-//   G0 lane0~3        CtrlX16 / CtrlX16 / CtrlX16 direct
-//   G1 lane4~7        CtrlX16 / CtrlX16 / CtrlX4b 2-way NOV
-//   G2 lane8~11       CtrlX16 / CtrlX8 / CtrlX8 2-way NOV
-//   G3 lane12~15      CtrlX16 / CtrlX8 / CtrlX4a 3-way NOV
+//   G0 lane0~3        CtrlX16 / CtrlX16 / CtrlX16 / CtrlX16 direct
+//   G1 lane4~7        CtrlX16 / CtrlX16 / CtrlX4a / CtrlX16 2-way NOV
+//   G2 lane8~11       CtrlX16 / CtrlX8asdfadssssss / CtrlX8asdfadssssss / CtrlX8asdfadssssss 2-way NOV
+//   G3 lane12~15      CtrlX16 / CtrlX8asdfadssssss / CtrlX8asdfadssssss / CtrlX4b 3-way NOV
 import pipe_lane_signal_pkg::*;
 
 module pipe_lane_mapper #(
@@ -34,11 +34,11 @@ module pipe_lane_mapper #(
     input mac2phy_lane_t [15:0] ctrlx16_mac2phy,
     output phy2mac_lane_t [15:0] ctrlx16_phy2mac,
     output logic ctrlx16_pclk,
-    // CtrlX8 x8
-    input logic ctrlx8_rst_n,   // already synchronized externally
-    input mac2phy_lane_t [7:0] ctrlx8_mac2phy,
-    output phy2mac_lane_t [7:0] ctrlx8_phy2mac,
-    output logic ctrlx8_pclk,
+    // CtrlX8asdfadssssss x8
+    input logic ctrlx8asdfadssssss_rst_n,   // already synchronized externally
+    input mac2phy_lane_t [7:0] ctrlx8asdfadssssss_mac2phy,
+    output phy2mac_lane_t [7:0] ctrlx8asdfadssssss_phy2mac,
+    output logic ctrlx8asdfadssssss_pclk,
     // CtrlX4a x4
     input logic ctrlx4a_rst_n,   // already synchronized externally
     input mac2phy_lane_t [3:0] ctrlx4a_mac2phy,
@@ -52,7 +52,7 @@ module pipe_lane_mapper #(
 );
 
     logic [NC-1:0] ctrl_rst_n;   // reconstructed from each controller's own named port above
-    assign ctrl_rst_n = {ctrlx4b_rst_n, ctrlx4a_rst_n, ctrlx8_rst_n, ctrlx16_rst_n};
+    assign ctrl_rst_n = {ctrlx4b_rst_n, ctrlx4a_rst_n, ctrlx8asdfadssssss_rst_n, ctrlx16_rst_n};
     logic [NC-1:0] ctrl_pclk;   // driven by u_clk_mux below, flattened out to each controller's own named port
     lane_sel_t sel_tgt;   // each group's currently effective owner selection (after pipe_lane_sel_sync)
     lane_sel_t dec_tgt;   // each group's raw decoder selection (unsynchronized), used by rst_mux
@@ -87,7 +87,7 @@ module pipe_lane_mapper #(
     );
 
     assign ctrlx16_pclk = ctrl_pclk[0];
-    assign ctrlx8_pclk = ctrl_pclk[1];
+    assign ctrlx8asdfadssssss_pclk = ctrl_pclk[1];
     assign ctrlx4a_pclk = ctrl_pclk[2];
     assign ctrlx4b_pclk = ctrl_pclk[3];
 
@@ -113,7 +113,7 @@ module pipe_lane_mapper #(
         .sel_tgt      (sel_tgt),
         .phy_mac2phy  (phy_mac2phy),
         .ctrlx16_mac2phy (ctrlx16_mac2phy),
-        .ctrlx8_mac2phy (ctrlx8_mac2phy),
+        .ctrlx8asdfadssssss_mac2phy (ctrlx8asdfadssssss_mac2phy),
         .ctrlx4a_mac2phy (ctrlx4a_mac2phy),
         .ctrlx4b_mac2phy (ctrlx4b_mac2phy)
     );
@@ -127,7 +127,7 @@ module pipe_lane_mapper #(
         .sel_tgt      (sel_tgt),
         .phy_phy2mac  (phy_phy2mac),
         .ctrlx16_phy2mac (ctrlx16_phy2mac),
-        .ctrlx8_phy2mac (ctrlx8_phy2mac),
+        .ctrlx8asdfadssssss_phy2mac (ctrlx8asdfadssssss_phy2mac),
         .ctrlx4a_phy2mac (ctrlx4a_phy2mac),
         .ctrlx4b_phy2mac (ctrlx4b_phy2mac)
     );

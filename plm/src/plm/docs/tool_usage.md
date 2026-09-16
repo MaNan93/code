@@ -37,12 +37,109 @@ plm.cli.main` 或 `plm` console-script 找到。安装后也可以直接运行 `
 逻辑（`plm.core.model`），并且 RTL 和 testbench **都必须用同一个
 `--pclk-mode` 值**——testbench 按这个 flag 决定怎么实例化 DUT，跟 RTL
 实际生成时用的 `--pclk-mode` 不一致，要么编译不过，要么 testbench 和一份
-过期的 RTL 对不上。把 `--pclk-mode` 写进这套配置集的 `gen_flags.txt`
-（见 2.4 节）是保证两边一致的推荐做法——`rtl`/`tb`/`all` 子命令会自动
-读到同一个值，不需要在命令上分别手动传、也不会有传漏的风险。
+过期的 RTL 对不上。最省心的做法是用 `generate all`：一次调用里 RTL 和 testbench 用的是同一组
+参数，不会传漏。分开跑 `generate rtl` / `generate tb` 时，`--pclk-mode`
+（和 `--dpr`）必须自己保证两边一样。
 
-架构设计本身（为什么这样设计、各模块的原理）不在本文档范围内，见
-[`design_notes.md`](design_notes.md)。
+架构设计本身（为什么这样设计、各模块的原理）不在本文档范围内，见仓库里的
+`docs/design_notes.md`（设计笔记不随 wheel 打包，只在源码仓库里）。
+
+## 0. 应用场景
+
+### 0.1 解决的问题
+
+一个 PHY macro 有 N 条 lane，上面挂着多个 controller。不同工作模式下，
+每条 PHY lane 归哪个 controller 管是不一样的——比如 x16 整块给一个 controller，
+或者拆成 x8+x8 给两个。
+
+lane 归属要在运行时随 mode 切换，夹在 controller 和 PHY 中间的那层 mux
+就是 PIPE lane mapper。手写它的麻烦在于：
+
+- **组合爆炸**。lane 数 x mode 数 x 信号数。16 条 lane、4 个 mode、38 个 PIPE 信号，
+  光数据 mux 就是上千行，而且全是机械重复。
+- **切换必须无重叠**。旧 owner 先撤出，中间留一段谁都不驱动的空窗，新 owner 再接上。
+  少一步就是两个 controller 同时驱动同一条 lane。
+- **空窗期的值不能随便给 0**。`txelecidle` 给 0 的含义是"正在发送"，
+  这段时间必须给 1，否则等于在交接过程中对 PHY 下了一条假命令。
+- **时钟要跟着一起换，而且不能有毛刺**。
+- **改一条 lane 的分配，上面所有东西都要重新推一遍**。
+
+这个工具把这件事从"手写 + 逐行 review"变成"改 CSV + 重新生成"。
+
+### 0.2 什么时候用
+
+| 场景 | 说明 |
+|---|---|
+| PCIe bifurcation | 一个 x16 PHY 按 mode 拆成 x16 / x8+x8 / x8+x4+x4 等若干种组合 |
+| 多个 controller 共享一个 PHY macro | 几个独立 controller 分块占用同一组 lane，分法随 mode 变 |
+| 需要运行时切换 lane 归属 | 不断电、不复位整条链路的前提下改分配 |
+| 归属其实是静态的，但组合太多 | 每种组合单独维护一版 RTL 不现实，用一份配置生成一份带 `mode` 输入的 RTL |
+| 需要诊断探针 | `--dpr` 生成一个虚拟 controller，用 `v_lane_mask` 临时接管任意几条 lane 做观测 |
+
+### 0.3 什么时候不用
+
+| 情况 | 原因 |
+|---|---|
+| lane 归属编译期就定死，永远不变 | 直接连线，不需要 mapper |
+| 只有一个 controller，宽度固定 | 同上 |
+| 想要 mapper 以外的东西 | 这个工具只生成 controller 和 PHY 之间那一层。controller 本身、PHY 本身、驱动 mode 切换的软件流程，都不在范围内 |
+
+### 0.4 输入和输出
+
+输入——`<SET>/config/` 下三个 CSV：
+
+| 文件 | 内容 |
+|---|---|
+| `controllers.csv` | 有哪些 controller，各自最多带多少条 lane |
+| `lane_mapping.csv` | 每个 mode 下，每条 PHY lane 归哪个 controller 的哪条 lane |
+| `pipe_signals.csv` | 要经过 mapper 的 PIPE 信号，以及各自的 `safe_state` / `tie_off` |
+
+生成参数（`--arch` / `--pclk-mode` / `--sel-mode` / `--dpr`）只在命令行上给。
+同目录下的 `gen_flags.txt` 是 Qt 前端自己的记忆，CLI 不读，见 2.4 节。
+
+输出——`<SET>/rtl/` 和 `<SET>/tb/`：
+
+| 产物 | 内容 |
+|---|---|
+| `rtl/src/*.sv` | 9 个按配置生成的模块 |
+| `rtl/common/*.sv` | 5 个手写的通用模块（两级同步器、NOV 选择、时钟门控、时钟或、data mux），原样拷贝过来，每套配置自包含 |
+| `rtl/flist.f` | 编译顺序（package 在前） |
+| `tb/tb_pipe_lane_mapper.sv` | 自检 testbench，覆盖时钟、复位、m2p、p2m、tie_off、safe_state 六类检查 |
+| `tb/makefile` | VCS/Verdi 跑仿真用 |
+
+### 0.5 工具替你保证了什么
+
+- **自动分组**。owner 序列完全相同的 lane 会被归成一组，一组共用一套 NOV。
+  `test/bifurcate` 16 条 lane 只分出 4 组、其中 3 组需要 NOV，不是 16 套。
+- **只扰动真正变化的部分**。mode 切换时，owner 没变的组完全不受影响，时钟不停、数据不断。
+- **切换无重叠**。每组一个 `pipe_lane_sel_sync`，保证任何时刻最多一个候选被使能。
+- **空窗值正确且无毛刺**。`safe_state` 用极性归一化实现，不是外挂一个"全 0 时选 SAFE"的并联分支
+  （那种写法在 sel 落 0 和 `~|sel` 拉高之间有一段全 0 窗口，会产生尖峰）。
+- **时钟切换 glitch-free**。所有时钟选择都走 `pipe_lane_clk_gate` + `pipe_lane_clk_or`。
+- **配置非法直接报错**。拓扑上做不出正确硬件的配置在生成前就被拒绝，
+  不会产出一份能编过、跑起来才错的 RTL。
+
+### 0.6 硬性限制
+
+下面这些不满足，`validate` 会直接报错（完整列表见仓库里的 `docs/design_notes.md` 4.3 节）：
+
+| 限制 | 原因 |
+|---|---|
+| controller 的工作时钟必须固定——它在各个 mode 下最低编号的那条 owned lane 不能变 | 工作时钟会变就得上 glitch-free 时钟切换，而那种切换本身也是非重叠的，时钟照样要停，平白多一堆复杂度换不来连续性 |
+| 同一条 controller lane 的所有驱动源必须来自同一个组 | 跨组的 sel 位来自互相独立的 NOV，之间没有互锁，可能短暂同时为 1，两条数据通路会被或在一起 |
+| 一条 PHY lane 在其 owner 持有它的所有 mode 下，controller lane 下标必须固定 | 生成器对每条 lane 只解析一次下标，下标会动就会在其余 mode 接到错误的 controller lane 上 |
+| `mode` 取值必须从 0 开始连续 | 译码器的 `mode` 端口按 `$clog2(mode 数)` 声明位宽，跳号会让部分分支永远选不到 |
+| controller 数量 = PHY lane 总数 / 最小分配颗粒度 | 多了会有 controller 永远分不到 lane，少了会逼着某个 controller 跨 mode 换最低编号 owned lane，破坏上面的时钟固定约束 |
+
+还有三条不报错、但用之前要知道：
+
+- **不校验 PCIe 宽度合法性**。工具允许任意宽度，x3 / x5 / x6 都能生成；
+  真实 PCIe 只允许 2 的幂（x1/x2/x4/x8/x16/x32）。`test/finegrain` 这类配置是用来压生成器的，
+  不是真实拓扑。
+- **`--sel-mode comb` 下 `safe_state` / `tie_off` 不会真正出现**。组合直通没有全 0 空窗，
+  所以空窗值永远观察不到。只有候选 controller 确实在同一个时钟域才能用 `comb`。
+- **`--dpr` 只支持 `pclk_as_phy_output`**。另一套架构里 DPR 没有自由跑的时钟源可用，
+  这个组合会被直接拒绝，原因见 `docs/design_notes.md` 4.8 节。
 
 ## 1. 项目布局
 
@@ -56,7 +153,7 @@ plm/
 │     │  ├─ model.py          配置文件解析与校验（Config / Controller / Signal / LaneGroup）
 │     │  ├─ paths.py          配置集路径解析（PLM_ROOT/CONFIGS_ROOT/resolve_set/...）
 │     │  ├─ verible.py        verible-verilog-format 自动格式化
-│     │  ├─ gen_flags.py      gen_flags.txt 读写（CLI 默认值 + 前端编辑器两种用法）
+│     │  ├─ gen_flags.py      生成 flag 的合法取值表 + arch/pclk-mode 交叉校验
 │     │  ├─ workspace.py      CSV/工作区读写（供 Qt 前端编辑器使用）
 │     │  ├─ generator/
 │     │  │  ├─ rtl.py           纯文本生成：RTL 各模块的 gen_* 函数
@@ -75,11 +172,11 @@ plm/
 │        └─ qt/                 桌面前端（PyQt5，`pip install -e ".[qt]"`）
 ├─ test/
 │  └─ <SET>/              一套配置集，SET 是自己起的名字（如 quad）
-│     ├─ config/           输入：三个 CSV + 一个可选的 flags 文件（见第 2 节）
+│     ├─ config/           输入：三个 CSV（见第 2 节）
 │     │  ├─ controllers.csv
 │     │  ├─ lane_mapping.csv
 │     │  ├─ pipe_signals.csv
-│     │  └─ gen_flags.txt     可选：这套配置集固定绑定的生成参数
+│     │  └─ gen_flags.txt     Qt 前端记住的生成参数，CLI 不读（见 2.4 节）
 │     ├─ rtl/               `plm generate rtl` 的输出（每次生成会被覆盖）
 │     │  ├─ src/             生成出来的模块
 │     │  ├─ common/           从 plm.core.common 复制过来的公共模块
@@ -116,9 +213,9 @@ ctrl_id,ctrl_name,max_width
 |---|---|
 | `ctrl_id` | 整数，从 0 开始，唯一标识一个 controller |
 | `ctrl_name` | controller 名字，生成的信号名会用它的小写形式做前缀（如 `CtrlA` → `ctrla_mac2phy`） |
-| `max_width` | 这个 controller 真实支持的最大 lane 数（端口数组按这个宽度声明，不做统一 padding） |
+| `max_width` | 这个 controller 真实支持的最大 lane 数（它在 RTL 上的端口数组按这个宽度声明，不做统一 padding） |
 
-### 2.2 `lane_mapping.csv`：每个 mode 下每条 PHY lane 分给哪个 controller 的哪个端口
+### 2.2 `lane_mapping.csv`：每个 mode 下每条 PHY lane 分给哪个 controller 的哪条 lane
 
 ```csv
 mode,lane0,lane1,lane2,lane3,...
@@ -129,9 +226,9 @@ mode,lane0,lane1,lane2,lane3,...
 - 第一行的 `lane0`、`lane1`... 是列名，列数 = PHY 总 lane 数。
 - 每一行是一个 `mode` 取值（必须从 0 开始连续编号）。
 - 每个单元格的值是 `<ctrl_id>-<ctrl_lane>`：这条 lane 在这个 mode 下驱动
-  哪个 controller（`ctrl_id`）的第几个端口（`ctrl_lane`，从 0 开始，
+  哪个 controller（`ctrl_id`）自己的第几条 lane（`ctrl_lane`，从 0 开始，
   不能超过该 controller 的 `max_width`）。
-- 同一个 controller 端口不能在同一个 mode 下被多条 lane 同时驱动。
+- 同一条 controller lane 不能在同一个 mode 下被多条 PHY lane 同时驱动。
 
 ### 2.3 `pipe_signals.csv`：声明每一个要走 NOV 的 PIPE 信号
 
@@ -150,7 +247,7 @@ phy_mac_messagebus,perlane,phy2mac,8,0x50,0x50
 | `direction` | `mac2phy`（controller→PHY）或 `phy2mac`（PHY→controller） |
 | `width` | 信号位宽 |
 | `safe_state` | 该信号在"没有 owner"时应呈现的值（`pipe_lane_data_mux.safe()` 的取值）。整数字面量，支持 `int(x, 0)` 认得的写法：十进制、`0x..`、`0b..` |
-| `tie_off` | p2m 方向未分到 lane 的端口应该 tie 成什么。要么是字面量 `lane0`（意为"跟随最低编号 lane 的值"），要么是整数字面量（同 `safe_state` 的格式），必须落在 `[0, 2^width)` 范围内 |
+| `tie_off` | p2m 方向没分到 PHY lane 的那条 controller lane 应该 tie 成什么。要么是字面量 `lane0`（意为"跟随最低编号 lane 的值"），要么是整数字面量（同 `safe_state` 的格式），必须落在 `[0, 2^width)` 范围内 |
 
 `safe_state` 与 `tie_off` 是两个方向各自独立生效的机制，不需要
 （也不应该假设）两者取值一致——细节见 design_notes.md 第 3.6 节。
@@ -167,33 +264,24 @@ controller 一个）展开成一个个 flat 信号端口，方便不想处理 SV
 作为这个标量输出（假定该 controller 自己的所有 lane 在这个信号上本来就
 该一致，这个假定不由生成器校验）。
 
-### 2.4 `gen_flags.txt`（可选）：固定这套配置集的生成参数
+### 2.4 生成参数不在配置文件里
 
-某套配置集如果本身就是为了演示某个非默认参数（比如 `maxpclk` 演示
-`--pclk-mode pclk_as_phy_input`），把这个参数写进它自己的
-`test/<SET>/config/gen_flags.txt`，`generate rtl`/`generate tb`/
-`generate all` 都会自动读取——不需要每次手动在命令行加、也不需要为此去
-改 Makefile，配置集本身就是自包含的。
+`--arch` / `--pclk-mode` / `--sel-mode` / `--dpr` 这四个参数**只能在命令行上给**。
+CLI 不读任何文件来拿它们。
 
-```
-# test/maxpclk/config/gen_flags.txt
-pclk-mode = pclk_as_phy_input
-```
+| 谁来生成 | 参数从哪来 |
+|---|---|
+| 手敲命令行 | 自己写在命令里 |
+| `make <SET>` | 顶层 `Makefile` 里的 `SETFLAGS_<SET>` 变量（见 6.1 节） |
+| Qt 前端 | Generation 页上的三个下拉 + dpr 勾选框，点 Generate 时拼进命令行 |
 
-格式：每行 `key = value`，`key` 就是某个命令行参数去掉前面 `--` 之后的
-名字（比如 `--pclk-mode` 对应 `pclk-mode`）；空行和 `#` 开头的注释会被
-忽略。
+配置目录下还有个 `gen_flags.txt`，但那是 **Qt 前端自己的记忆**：前端保存时写、
+打开 workspace 时读回来恢复上次的选择。CLI 不看它，`make` 也不看它，
+所以手敲命令行或跑 `make` 时改这个文件没有任何效果。
+（历史原因见仓库里 `docs/tool_architecture.md` 第 5 节。）
 
-- **`generate rtl`/`generate tb` 共用同一个文件**：各自只认自己定义过
-  的那些 key，不认识的 key 直接跳过——所以像 `--sel-mode` 这种只有
-  `generate rtl` 认的参数，写在同一个文件里也不会让 `generate tb`
-  报错。
-- **命令行显式传参优先级更高**：`gen_flags.txt` 里的值相当于这套配置集
-  自己的默认值；命令行上再传一次同名参数（不管是手动敲的，还是
-  Makefile 的 `GENFLAGS`/`RTL_GENFLAGS`/`TB_GENFLAGS`），会覆盖文件里
-  的值。
-- 取值仍然会经过正常的参数校验（比如 `--pclk-mode` 的 `choices`），写错
-  了会直接报错退出，不会静默生效成别的值。
+不传就是 CLI 默认值：`--arch original_pipe --pclk-mode pclk_as_phy_output
+--sel-mode sync`，不开 dpr。
 
 ## 3. `plm generate rtl`：生成 RTL
 
@@ -225,11 +313,11 @@ plm generate rtl --config <SET> [其它参数]
 # 默认参数生成 quad 的 RTL
 plm generate rtl --config quad
 
-# 生成 maxpclk 的 RTL——不用加 --pclk-mode，它自己的
-# config/gen_flags.txt 里已经固定了 pclk_as_phy_input（见 2.4 节）
+# 生成 maxpclk 的 RTL——这套配置演示的就是另一套时钟架构，
+# 所以必须显式传参（见 2.4 节）
 plm generate rtl --config maxpclk
 
-# 命令行显式传参会覆盖 gen_flags.txt，临时切回默认的 pclk_as_phy_output 试一下：
+# 临时切回默认的 pclk_as_phy_output 试一下：
 plm generate rtl --config maxpclk --pclk-mode pclk_as_phy_output
 
 # 切到组合直通的 NOV 同步，且不打印生成日志
@@ -266,8 +354,8 @@ plm generate tb --config <SET> [其它参数]
 # 默认参数生成 quad 的 testbench
 plm generate tb --config quad
 
-# 生成 maxpclk 的 testbench——同一个 gen_flags.txt 两个子命令都会读，
-# 所以这里也不用加 --pclk-mode，自动和它的 RTL 保持一致
+# 生成 maxpclk 的 testbench——要和它的 RTL 用同一个 --pclk-mode，
+# 分开跑就得自己传对（用 generate all 就不用操心）
 plm generate tb --config maxpclk
 ```
 
@@ -326,17 +414,23 @@ make all RTL_GENFLAGS="--sel-mode comb"               # 只有 generate rtl 收�
 | `RTL_GENFLAGS` | 只传给 `generate rtl` |
 | `TB_GENFLAGS` | 只传给 `generate tb` |
 
-如果是某个配置集自己固定要用的参数（比如 `maxpclk` 一直都要用
-`--pclk-mode pclk_as_phy_input`），不要写在这里——那种情况写进那套
-配置集自己的 `config/gen_flags.txt`（见 2.4 节），配置集自己带着走，
-不需要碰 `Makefile`。这里的全局变量地位更高：命令行传的值会覆盖任何
-配置集自带的 `gen_flags.txt`。
+某个配置集自己固定要用的参数（比如 `maxpclk` 一直都要用
+`--pclk-mode pclk_as_phy_input`）写在 `Makefile` 里的 `SETFLAGS_<SET>` 变量上：
+
+```make
+SETFLAGS_maxpclk := --arch serdes --pclk-mode pclk_as_phy_input
+SETFLAGS_dpr     := --dpr
+```
+
+加一套需要非默认参数的配置集时，记得在这里补一行，否则 `make <SET>` 会用
+默认参数生成它。上面那三个全局变量追加在 `SETFLAGS_<SET>` 后面，所以可以
+临时覆盖。
 
 ### 6.2 可覆盖的变量
 
 | 变量 | 默认值 | 说明 |
 |---|---|---|
-| `PYTHON` | `python3` | 用哪个 Python 解释器跑 `plm.cli.main` |
+| `PYTHON` | `uv run python` | 用哪个 Python 解释器跑 `plm.cli.main` |
 | `GENFLAGS` | 空 | 追加给两个子命令的额外参数（见 6.1 节） |
 | `RTL_GENFLAGS` | 空 | 只追加给 `generate rtl` 的额外参数 |
 | `TB_GENFLAGS` | 空 | 只追加给 `generate tb` 的额外参数 |

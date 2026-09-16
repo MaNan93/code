@@ -1,5 +1,9 @@
-// PIPE lane mapper PHY->MAC data mux (converges by controller port).
-// sel_tgt's mutual exclusivity is guaranteed by pipe_lane_sel_sync. Undriven ports are tied to the safe state.
+// PIPE lane mapper PHY->MAC data mux (converges by controller lane).
+// sel_tgt's mutual exclusivity is guaranteed by pipe_lane_sel_sync.
+// Two distinct "nothing valid to show" values here, do not confuse them:
+//   SAFE_P2M (from safe_state) -- this ctrl lane does have a driving PHY lane,
+//                                 but no candidate owns it right now (NOV window).
+//   {c}_p2m_tie (from tie_off)  -- this ctrl lane is never driven by any PHY lane.
 import pipe_lane_signal_pkg::*;
 
 module pipe_lane_data_p2m #(
@@ -27,13 +31,13 @@ module pipe_lane_data_p2m #(
     pipe_lane_data_mux #(.WIDTH(PHY2MAC_W), .N(2)) u_p2m_ctrlalpha_1 (
         .sel  (sel_tgt.g1),
         .din  ({ctrlalpha_p2m_tie, phy_phy2mac[1]}),
-        .safe (ctrlalpha_p2m_tie),
+        .safe (SAFE_P2M),
         .dout (ctrlalpha_phy2mac[1])
     );
     pipe_lane_data_mux #(.WIDTH(PHY2MAC_W), .N(2)) u_p2m_ctrlalpha_2 (
         .sel  (sel_tgt.g2),
         .din  ({ctrlalpha_p2m_tie, phy_phy2mac[2]}),
-        .safe (ctrlalpha_p2m_tie),
+        .safe (SAFE_P2M),
         .dout (ctrlalpha_phy2mac[2])
     );
 
@@ -49,7 +53,7 @@ module pipe_lane_data_p2m #(
     pipe_lane_data_mux #(.WIDTH(PHY2MAC_W), .N(2)) u_p2m_ctrlbeta_1 (
         .sel  (sel_tgt.g4),
         .din  ({ctrlbeta_p2m_tie, phy_phy2mac[4]}),
-        .safe (ctrlbeta_p2m_tie),
+        .safe (SAFE_P2M),
         .dout (ctrlbeta_phy2mac[1])
     );
 
@@ -74,7 +78,7 @@ module pipe_lane_data_p2m #(
     pipe_lane_data_mux #(.WIDTH(PHY2MAC_W), .N(2)) u_p2m_ctrldelta_0 (
         .sel  (sel_tgt.g1),
         .din  ({phy_phy2mac[1], ctrldelta_p2m_tie}),
-        .safe (ctrldelta_p2m_tie),
+        .safe (SAFE_P2M),
         .dout (ctrldelta_phy2mac[0])
     );
 
@@ -89,7 +93,7 @@ module pipe_lane_data_p2m #(
     pipe_lane_data_mux #(.WIDTH(PHY2MAC_W), .N(2)) u_p2m_ctrlepsilon_0 (
         .sel  (sel_tgt.g2),
         .din  ({phy_phy2mac[2], ctrlepsilon_p2m_tie}),
-        .safe (ctrlepsilon_p2m_tie),
+        .safe (SAFE_P2M),
         .dout (ctrlepsilon_phy2mac[0])
     );
 
@@ -104,7 +108,7 @@ module pipe_lane_data_p2m #(
     pipe_lane_data_mux #(.WIDTH(PHY2MAC_W), .N(2)) u_p2m_ctrlzeta_0 (
         .sel  (sel_tgt.g4),
         .din  ({phy_phy2mac[4], ctrlzeta_p2m_tie}),
-        .safe (ctrlzeta_p2m_tie),
+        .safe (SAFE_P2M),
         .dout (ctrlzeta_phy2mac[0])
     );
 

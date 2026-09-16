@@ -585,31 +585,7 @@ QPlainTextEdit#logConsole {{
 QWidget#bottomPanelStack {{
     background: transparent;
 }}
-QTreeWidget#problemTree {{
-    border: none;
-    background: transparent;
-    color: {TEXT};
-    outline: none;
-}}
-QTreeWidget#problemTree::item {{
-    min-height: 25px;
-    padding: 2px 4px;
-}}
-QTreeWidget#problemTree::item:hover {{
-    background: {BG_HOVER};
-}}
-QTreeWidget#problemTree::item:selected {{
-    background: {BG_ACTIVE};
-    color: {TEXT};
-}}
-QTreeWidget#problemTree QHeaderView::section {{
-    background: {BG};
-    color: {TEXT_SECONDARY};
-    border: none;
-    border-bottom: 1px solid {BORDER};
-    padding: 5px 4px;
-    font-weight: 600;
-}}
+
 
 /* -- generated RTL preview ---------------------------------------------- */
 QSplitter#contentSplitter::handle {{ background: {BORDER_STRONG}; }}

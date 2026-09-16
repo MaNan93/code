@@ -2,12 +2,12 @@
 plm.frontend.qt.main_window -- MainWindow, the PyQt5 desktop front end's
 main window.
 
-This is a thin desktop front end over the three config CSVs and
-gen_flags.txt that plm.core.generator reads, and over that generation
-pipeline itself. Config access goes straight through plm.core.workspace.
-Editing writes the same plain CSV/gen_flags.txt files a human would edit;
-Validate calls plm.core.model.Config directly; Generate runs
-`python -m plm.cli.main generate ...`. See plm.frontend.qt.widgets.theme
+This is a thin desktop front end over the three config CSVs that
+plm.core.generator reads, and over that generation pipeline itself. Config
+access goes straight through plm.core.workspace. Editing writes the same
+plain CSV files a human would edit; Validate calls plm.core.model.Config
+directly; Generate runs `python -m plm.cli.main generate ...` with the
+Generation page's flags on the command line. See plm.frontend.qt.widgets.theme
 for the QSS and plm.frontend.qt.widgets.settings for the Settings dialog.
 """
 
@@ -18,6 +18,7 @@ import json
 import os
 import re
 import shutil
+import subprocess
 import sys
 import tempfile
 import time
@@ -25,7 +26,13 @@ from pathlib import Path
 
 from PyQt5 import QtCore, QtGui, QtWidgets
 
-from plm.core.gen_flags import ARCH_PCLK_MODE, PCLK_MODE_ARCH
+from plm.core.gen_flags import (
+    ARCH_PCLK_MODE,
+    ARCH_VALUES,
+    PCLK_MODE_ARCH,
+    PCLK_MODE_VALUES,
+    SEL_MODE_VALUES,
+)
 from plm.core.model import Config, is_sv_identifier
 from plm.core.paths import CONFIGS_ROOT, DOCS_DIR, PLM_ROOT, is_deletable_workspace, is_workspace_root
 from plm.core.workspace import save_workspace_content, scaffold_default_content, workspace_content
@@ -47,25 +54,29 @@ from plm.frontend.qt.widgets.theme import (
 
 STATE_FILE = Path.home() / ".plm_qt_settings.json"
 MAX_RECENT_WORKSPACES = 10
+# The file manager's own name, so the menu entry matches what the user will
+# actually see open. This project targets Windows and Linux only.
+REVEAL_LABEL = (
+    "Reveal in Explorer" if sys.platform == "win32" else "Open Containing Folder"
+)
 DIRECTIONS = ["mac2phy", "phy2mac"]
 SIGNAL_TYPES = ["perlane", "shared"]
 # Placeholder-carrying dropdown value lists (Qt-widget-specific display
 # concern -- see plm.core.gen_flags.ARCH_VALUES/PCLK_MODE_VALUES/
 # SEL_MODE_VALUES for the plain, front-end-agnostic value tuples
-# write_gen_flags() itself filters against).
+# _gen_flag_args() filters the combo's current text against).
 ARCH_MODES = ["(default: original_pipe)", "original_pipe", "serdes"]
 PCLK_MODES = ["(default: pclk_as_phy_output)", "pclk_as_phy_output", "pclk_as_phy_input"]
 SEL_MODES = ["(default: sync)", "sync", "comb"]
 LANE_COUNTS = ["x2", "x4", "x8", "x16", "x32"]
-DOC_PATH = DOCS_DIR / "tool_usage.md"
+# The Doc button shows this one guide, read from DOCS_DIR (src/plm/docs) so a
+# source checkout and an installed wheel show the same file. tool_usage.md still ships in the
+# wheel alongside it (it documents the CLI, which this window is not), it
+# just is not what someone clicking Doc in the GUI is asking for.
+DOC_PATH = DOCS_DIR / "qt_frontend_guide.md"
 PREVIEW_MAXIMIZE_ANIM_MS = 180
 BOTTOM_EDGE_INSET = 12
 TAB_VERTICAL_GAP = 4
-_PROBLEM_LOCATION_RE = re.compile(
-    r"^(?P<path>.+?):(?P<line>\d+)(?::(?P<column>\d+))?:\s*(?P<body>.+)$"
-)
-
-
 
 def _ui_scale():
     """Return a scaling factor relative to the 13 px design baseline so
@@ -351,6 +362,47 @@ def save_settings(settings):
     data = _read_state_file()
     data["settings"] = settings
     _write_state_file(data)
+
+
+def _wrap_output(view):
+    """Wrap long lines in a read-only output view instead of scrolling sideways.
+
+    WrapAtWordBoundaryOrAnywhere rather than plain word wrapping: these views
+    carry absolute paths and long identifiers with no spaces to break on, and a
+    "word" wider than the panel would otherwise still force a horizontal
+    scrollbar. The topology report's column alignment does suffer when a line
+    folds, but that only happens in a pane too narrow to have shown the line
+    anyway.
+    """
+    view.setLineWrapMode(QtWidgets.QPlainTextEdit.WidgetWidth)
+    view.setWordWrapMode(QtGui.QTextOption.WrapAtWordBoundaryOrAnywhere)
+    view.setHorizontalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOff)
+
+
+def reveal_in_file_manager(path):
+    """Open the OS file manager on path. Returns True on success.
+
+    Windows selects the entry itself; Linux opens the containing directory,
+    because there is no one invocation that selects an entry across the
+    desktop environments (Nautilus, Dolphin and Thunar each want their own).
+
+    subprocess rather than QDesktopServices.openUrl(): openUrl on a directory
+    opens it, but cannot highlight the entry itself, which is most of the point
+    on a Recent list where the useful answer is "which folder is this one".
+    """
+    path = Path(path)
+    target = path if path.exists() else path.parent
+    try:
+        if sys.platform == "win32":
+            # explorer returns a nonzero exit code even when it succeeds, so
+            # its result is deliberately not checked.
+            subprocess.run(["explorer", f"/select,{os.path.normpath(str(target))}"])
+        else:
+            directory = target if target.is_dir() else target.parent
+            subprocess.run(["xdg-open", str(directory)], check=True)
+        return True
+    except (OSError, subprocess.SubprocessError):
+        return False
 
 
 def valid_name(name):
@@ -1621,27 +1673,14 @@ class MainWindow(QtWidgets.QMainWindow):
 
         self.arch_combo.currentTextChanged.connect(on_arch_changed)
         self.pclk_mode_combo.currentTextChanged.connect(on_pclk_changed)
-        self.arch_combo.currentTextChanged.connect(
-            self._schedule_topology_summary_refresh
-        )
-        self.arch_combo.currentTextChanged.connect(
-            self._schedule_live_edit_processing
-        )
-        self.pclk_mode_combo.currentTextChanged.connect(
-            self._schedule_topology_summary_refresh
-        )
-        self.pclk_mode_combo.currentTextChanged.connect(
-            self._schedule_live_edit_processing
-        )
+        # These are part of _gather_payload() again, so changing one is a real
+        # unsaved edit: it has to reach the dirty marker and the undo history.
+        for combo in (self.arch_combo, self.pclk_mode_combo):
+            combo.currentTextChanged.connect(self._schedule_live_edit_processing)
 
         self.sel_mode_combo = RoundedComboBox()
         self.sel_mode_combo.addItems(SEL_MODES)
-        self.sel_mode_combo.currentTextChanged.connect(
-            self._schedule_topology_summary_refresh
-        )
-        self.sel_mode_combo.currentTextChanged.connect(
-            self._schedule_live_edit_processing
-        )
+        self.sel_mode_combo.currentTextChanged.connect(self._schedule_live_edit_processing)
         form.addRow("sel-mode", self.sel_mode_combo)
 
         self.dpr_check = VisibleCheckBox()
@@ -1660,7 +1699,6 @@ class MainWindow(QtWidgets.QMainWindow):
                 self.sel_mode_combo.setEnabled(True)
 
         self.dpr_check.toggled.connect(on_dpr_toggled)
-        self.dpr_check.toggled.connect(self._schedule_topology_summary_refresh)
         self.dpr_check.toggled.connect(self._schedule_live_edit_processing)
         form.addRow("dpr", self.dpr_check)
         layout.addLayout(form)
@@ -1700,26 +1738,48 @@ class MainWindow(QtWidgets.QMainWindow):
         header_layout.setContentsMargins(0, 0, 0, 0)
         header_layout.setSpacing(4)
 
-        self.problems_tab_btn = QtWidgets.QToolButton()
-        self.problems_tab_btn.setObjectName("bottomPanelTab")
-        self.problems_tab_btn.setText("PROBLEMS 0")
-        self.problems_tab_btn.setCheckable(True)
-        self.problems_tab_btn.setFixedHeight(26)
-        header_layout.addWidget(self.problems_tab_btn, alignment=QtCore.Qt.AlignVCenter)
+        # Two pages, split by question rather than by source:
+        #   LOG    -- "what just happened": the command's own progress, the
+        #             files it wrote, errors, timings. Transient, timestamped.
+        #   REPORT -- "what is this config": Config.report() for whatever is in
+        #             the tabs above right now. Rebuilt live as you edit; it
+        #             does not wait for, or depend on, a generate run.
+        # Generate therefore runs with --quiet (see _run_tool): without it the
+        # generator echoes its own copy of Config.report() and LOG ends up
+        # holding a stale duplicate of REPORT.
+        #
+        # There used to be a third view (a PROBLEMS tree that parsed error lines
+        # back out of the generator's output and made them double-clickable).
+        # It was dropped: this tool's failures are a handful of validation
+        # messages that read fine as plain text, and the config files they point
+        # at are already open in the tabs above.
+        self.log_tab_btn = QtWidgets.QToolButton()
+        self.log_tab_btn.setObjectName("bottomPanelTab")
+        self.log_tab_btn.setText("LOG")
+        self.log_tab_btn.setToolTip(
+            "What the last run did: files written, errors, timings."
+        )
+        self.log_tab_btn.setCheckable(True)
+        self.log_tab_btn.setChecked(True)
+        self.log_tab_btn.setFixedHeight(26)
+        header_layout.addWidget(self.log_tab_btn, alignment=QtCore.Qt.AlignVCenter)
 
         self.report_tab_btn = QtWidgets.QToolButton()
         self.report_tab_btn.setObjectName("bottomPanelTab")
         self.report_tab_btn.setText("REPORT")
+        self.report_tab_btn.setToolTip(
+            "What the current config looks like: lane groups, NOV, pclk sources. "
+            "Follows the tabs above live -- no need to generate first."
+        )
         self.report_tab_btn.setCheckable(True)
-        self.report_tab_btn.setChecked(True)
         self.report_tab_btn.setFixedHeight(26)
         header_layout.addWidget(self.report_tab_btn, alignment=QtCore.Qt.AlignVCenter)
 
         panel_tabs = QtWidgets.QButtonGroup(card)
         panel_tabs.setExclusive(True)
-        panel_tabs.addButton(self.problems_tab_btn, 0)
+        panel_tabs.addButton(self.log_tab_btn, 0)
         panel_tabs.addButton(self.report_tab_btn, 1)
-        self.problems_tab_btn.clicked.connect(lambda: self._set_bottom_panel_page(0))
+        self.log_tab_btn.clicked.connect(lambda: self._set_bottom_panel_page(0))
         self.report_tab_btn.clicked.connect(lambda: self._set_bottom_panel_page(1))
 
         header_layout.addStretch(1)
@@ -1745,72 +1805,37 @@ class MainWindow(QtWidgets.QMainWindow):
         self.bottom_panel_stack = QtWidgets.QStackedWidget()
         self.bottom_panel_stack.setObjectName("bottomPanelStack")
 
-        self.problem_tree = QtWidgets.QTreeWidget()
-        self.problem_tree.setObjectName("problemTree")
-        self.problem_tree.setHeaderLabels(["Severity", "Message", "File", "Line"])
-        self.problem_tree.setRootIsDecorated(False)
-        self.problem_tree.setAlternatingRowColors(False)
-        self.problem_tree.setSelectionMode(QtWidgets.QAbstractItemView.SingleSelection)
-        self.problem_tree.setColumnWidth(0, 88)
-        self.problem_tree.setColumnWidth(1, 430)
-        self.problem_tree.setColumnWidth(2, 210)
-        self.problem_tree.setColumnWidth(3, 70)
-        self.problem_tree.itemDoubleClicked.connect(self._on_problem_activated)
-        self.bottom_panel_stack.addWidget(self.problem_tree)
-
-        report_page = QtWidgets.QWidget()
-        report_page.setObjectName("reportPage")
-        report_layout = QtWidgets.QVBoxLayout(report_page)
-        report_layout.setContentsMargins(0, 0, 0, 0)
-        report_layout.setSpacing(6)
-
-        topology_header = QtWidgets.QLabel("TOPOLOGY")
-        topology_header.setObjectName("sectionHeader")
-        report_layout.addWidget(topology_header)
-        self.topology_summary = QtWidgets.QPlainTextEdit()
-        self.topology_summary.setObjectName("topologySummary")
-        self.topology_summary.setReadOnly(True)
-        self.topology_summary.setLineWrapMode(QtWidgets.QPlainTextEdit.NoWrap)
-        self.topology_summary.setMinimumHeight(70)
-        self.topology_summary.setPlainText(
-            "Open a workspace to see its lane topology."
-        )
-        report_layout.addWidget(self.topology_summary, stretch=1)
-
-        activity_header = QtWidgets.QLabel("ACTIVITY LOG")
-        activity_header.setObjectName("sectionHeader")
-        report_layout.addWidget(activity_header)
+        # Page 0 -- LOG. Was one half of a split REPORT page under its own
+        # "ACTIVITY LOG" sub-header; it is a whole tab now, so the header is
+        # gone and it gets the full height.
         self.log = QtWidgets.QPlainTextEdit()
         self.log.setObjectName("logConsole")
         self.log.setReadOnly(True)
         self.log.setMaximumBlockCount(2000)
         self.log.setMinimumHeight(70)
-        report_layout.addWidget(self.log, stretch=1)
+        _wrap_output(self.log)
+        self.bottom_panel_stack.addWidget(self.log)
 
-        self.bottom_panel_stack.addWidget(report_page)
-        self.bottom_panel_stack.setCurrentWidget(report_page)
+        # Page 1 -- REPORT: Config.report() for whatever is currently in the
+        # tabs above. Also its own whole tab now, no "TOPOLOGY" sub-header
+        # wrapper, so a wide topology table is readable without scrolling in a
+        # half-height box.
+        self.topology_summary = QtWidgets.QPlainTextEdit()
+        self.topology_summary.setObjectName("topologySummary")
+        self.topology_summary.setReadOnly(True)
+        self.topology_summary.setMinimumHeight(70)
+        _wrap_output(self.topology_summary)
+        self.topology_summary.setPlainText("Open a workspace to see its lane topology.")
+        self.bottom_panel_stack.addWidget(self.topology_summary)
+
+        self.bottom_panel_stack.setCurrentWidget(self.log)
         self.log_layout.addWidget(self.bottom_panel_stack, stretch=1)
-
-        self._problems = []
-        self._problem_keys = set()
         return card
 
     def _set_bottom_panel_page(self, index):
         self.bottom_panel_stack.setCurrentIndex(index)
-        self.problems_tab_btn.setChecked(index == 0)
+        self.log_tab_btn.setChecked(index == 0)
         self.report_tab_btn.setChecked(index == 1)
-
-    def _show_problems_panel(self):
-        if not self.log_toggle.isChecked():
-            self.log_toggle.setChecked(True)
-            self._on_toggle_log(True)
-        self._set_bottom_panel_page(0)
-
-    def _clear_problems(self):
-        self._problems.clear()
-        self._problem_keys.clear()
-        self.problem_tree.clear()
-        self.problems_tab_btn.setText("PROBLEMS 0")
 
     def _clear_generation_results(self):
         self._generation_file_status = {}
@@ -1857,118 +1882,6 @@ class MainWindow(QtWidgets.QMainWindow):
         if self.current_workspace == workspace and self.rtl_preview_panel.isVisible():
             self._refresh_rtl_preview()
 
-    def _add_problem(self, source, severity, message, path=None, line=None, column=None):
-        path_text = str(path) if path else ""
-        key = (source, severity, message, path_text, line, column)
-        if key in self._problem_keys:
-            return
-        self._problem_keys.add(key)
-        problem = {
-            "source": source,
-            "severity": severity,
-            "message": message,
-            "path": path_text,
-            "line": line,
-            "column": column,
-        }
-        self._problems.append(problem)
-
-        display_path = path_text
-        if path_text and self.current_workspace:
-            try:
-                # as_posix(): this is shown to the user next to paths the
-                # rest of the UI renders forward-slashed, and str() would
-                # backslash it on Windows only.
-                display_path = Path(path_text).relative_to(self.current_workspace).as_posix()
-            except ValueError:
-                pass
-        location = ""
-        if line is not None:
-            location = str(line)
-            if column is not None:
-                location += f":{column}"
-        item = QtWidgets.QTreeWidgetItem(
-            [severity, message, display_path, location]
-        )
-        item.setToolTip(1, f"{source}: {message}")
-        item.setData(0, QtCore.Qt.UserRole, source)
-        item.setData(2, QtCore.Qt.UserRole, path_text)
-        item.setData(3, QtCore.Qt.UserRole, line)
-        item.setData(3, QtCore.Qt.UserRole + 1, column)
-        color = {
-            "Error": "#cf222e",
-            "Warning": "#9a6700",
-            "Info": "#0969da",
-        }.get(severity, TEXT_SECONDARY)
-        item.setForeground(0, QtGui.QBrush(QtGui.QColor(color)))
-        self.problem_tree.addTopLevelItem(item)
-        self.problems_tab_btn.setText(f"PROBLEMS {len(self._problems)}")
-
-    def _capture_problem_line(self, line, source="Generate"):
-        text = line.strip()
-        if not text:
-            return
-        match = _PROBLEM_LOCATION_RE.match(text)
-        path = None
-        line_number = None
-        column = None
-        body = text
-        if match:
-            path = match.group("path").strip().strip('"')
-            line_number = int(match.group("line"))
-            column_text = match.group("column")
-            column = int(column_text) if column_text else None
-            body = match.group("body").strip()
-
-        lower = body.lower()
-        if any(token in lower for token in ("fatal", "error", "traceback", "exception")):
-            severity = "Error"
-        elif "warning" in lower:
-            severity = "Warning"
-        else:
-            return
-        message = re.sub(
-            r"^(?:fatal|error|warning)\s*:?\s*", "", body,
-            flags=re.IGNORECASE,
-        ) or body
-        self._add_problem(
-            source, severity, message, path, line_number, column
-        )
-
-    def _on_problem_activated(self, item, _column):
-        path_text = item.data(2, QtCore.Qt.UserRole)
-        line = item.data(3, QtCore.Qt.UserRole)
-        if not path_text:
-            return
-        path = Path(path_text)
-        if not path.is_absolute():
-            workspace_path = (
-                self.current_workspace / path
-                if self.current_workspace else None
-            )
-            if workspace_path and workspace_path.is_file():
-                path = workspace_path
-            else:
-                path = PLM_ROOT / path
-        if not path.is_file():
-            self._log(f"Problem source no longer exists: {path}")
-            return
-        if self.rtl_preview_panel.isHidden():
-            self._on_toggle_rtl_preview(True)
-        self._selected_preview_file = path
-        self._show_selected_preview_file()
-        if line:
-            cursor = self.preview_code.textCursor()
-            cursor.movePosition(QtGui.QTextCursor.Start)
-            cursor.movePosition(
-                QtGui.QTextCursor.Down,
-                QtGui.QTextCursor.MoveAnchor,
-                max(0, int(line) - 1),
-            )
-            self.preview_code.setTextCursor(cursor)
-            self.preview_code.centerCursor()
-        self.preview_code.setFocus()
-
     def _on_toggle_log(self, checked):
         chevron = _SVG_CHEVRON_DOWN if checked else _SVG_CHEVRON_RIGHT
         self.log_toggle.setIcon(_svg_icon(chevron, size=16))
@@ -1979,18 +1892,12 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def _show_log_menu(self):
         menu = QtWidgets.QMenu(self.log_more)
-        showing_problems = self.bottom_panel_stack.currentWidget() is self.problem_tree
-        clear_action = menu.addAction(
-            "Clear problems" if showing_problems else "Clear log"
-        )
+        clear_action = menu.addAction("Clear log")
         chosen = menu.exec_(
             self.log_more.mapToGlobal(QtCore.QPoint(0, self.log_more.height()))
         )
         if chosen == clear_action:
-            if showing_problems:
-                self._clear_problems()
-            else:
-                self.log.clear()
+            self.log.clear()
 
     def _log(self, text):
         ts = QtCore.QTime.currentTime().toString("HH:mm:ss")
@@ -2048,6 +1955,7 @@ class MainWindow(QtWidgets.QMainWindow):
         path = item.data(QtCore.Qt.UserRole)
         menu = QtWidgets.QMenu(self)
         rename_action = menu.addAction("Rename")
+        reveal_action = menu.addAction(REVEAL_LABEL)
         menu.addSeparator()
         remove_action = menu.addAction("Clear")
 
@@ -2069,10 +1977,24 @@ class MainWindow(QtWidgets.QMainWindow):
         chosen = menu.exec_(global_pos)
         if chosen == rename_action:
             self._rename_workspace_at(path)
+        elif chosen == reveal_action:
+            self._reveal_workspace_at(path)
         elif chosen == remove_action:
             self._remove_recent_entry(path)
         elif chosen == delete_action or delete_requested[0]:
             self._delete_workspace_at(path)
+
+    def _reveal_workspace_at(self, path):
+        path = Path(path)
+        if not path.exists():
+            QtWidgets.QMessageBox.warning(
+                self, REVEAL_LABEL, f"This folder no longer exists:\n{path}"
+            )
+            return
+        if not reveal_in_file_manager(path):
+            QtWidgets.QMessageBox.warning(
+                self, REVEAL_LABEL, f"Could not open a file manager for:\n{path}"
+            )
 
     def _rename_workspace_at(self, path):
         path = Path(path).resolve()
@@ -2159,7 +2081,6 @@ class MainWindow(QtWidgets.QMainWindow):
             self._saved_payload = None
             self._saved_disk_signature = None
             self._topology_payload = None
-            self._clear_problems()
             self._clear_generation_results()
             clear_last_workspace()
             self.controllers_table.set_rows([])
@@ -2592,7 +2513,6 @@ class MainWindow(QtWidgets.QMainWindow):
             self._preview_previous_contents = {}
             self._selected_preview_file = None
         self.current_workspace = path
-        self._clear_problems()
         self._clear_generation_results()
         self.controllers_table.set_rows(content["controllers"])
         self.signals_table.set_rows(content["signals"])
@@ -2615,21 +2535,51 @@ class MainWindow(QtWidgets.QMainWindow):
             self._refresh_rtl_preview()
 
     def _load_gen_flags(self, flags):
-        # read_gen_flags()/workspace_content() return None for an
-        # unset/unrecognized arch/pclk-mode/sel-mode (their shared,
-        # front-end-agnostic shape) -- translate that to this GUI's own
-        # "(default: ...)" placeholder option, same translation
-        # plmConsultant.py's own _load_workspace_content does.
-        # verible-path is a Settings-level value, never surfaced on this page (see
-        # _run_tool for where it's actually used).
+        """Put the workspace's remembered generation choices on the page.
+
+        workspace.read_gen_flags() returns None for an unset/unrecognized
+        arch/pclk-mode/sel-mode (its front-end-agnostic shape) -- translate
+        that to this GUI's own "(default: ...)" placeholder option.
+
+        These are remembered per workspace, but they still reach the generator
+        only as command-line arguments: _gen_flag_args() builds them from these
+        widgets at Generate time, and the CLI never reads gen_flags.txt itself.
+        """
         self.arch_combo.setCurrentText(flags.get("arch") or ARCH_MODES[0])
         self.pclk_mode_combo.setCurrentText(flags.get("pclk-mode") or PCLK_MODES[0])
         self.sel_mode_combo.setCurrentText(flags.get("sel-mode") or SEL_MODES[0])
         self.dpr_check.setChecked(bool(flags.get("dpr")))
 
+    def _gen_flag_args(self, sel_mode=True):
+        """The Generation page's current choices, as `plm generate` arguments.
+
+        A combo still showing its "(default: ...)" placeholder contributes
+        nothing, so the CLI applies its own default -- the placeholder and the
+        CLI default are the same value, and not passing it keeps the logged
+        command line honest about what was actually chosen.
+
+        sel_mode=False for `generate tb`, which has no --sel-mode option of its
+        own (the testbench doesn't instantiate pipe_lane_sel_sync), so passing
+        it there is an argparse error rather than a no-op.
+        """
+        combos = [
+            ("--arch", self.arch_combo, ARCH_VALUES),
+            ("--pclk-mode", self.pclk_mode_combo, PCLK_MODE_VALUES),
+        ]
+        if sel_mode:
+            combos.append(("--sel-mode", self.sel_mode_combo, SEL_MODE_VALUES))
+        args = []
+        for flag, combo, values in combos:
+            value = combo.currentText()
+            if value in values:
+                args += [flag, value]
+        if self.dpr_check.isChecked():
+            args.append("--dpr")
+        return args
+
     def _gather_payload(self):
-        """Collect the four config files' worth of content to write on
-        Save, straight from the live widgets."""
+        """Collect the workspace's content to write on Save, straight from
+        the live widgets."""
         return {
             "controllers": self.controllers_table.get_rows(),
             "signals": self.signals_table.get_rows(),
@@ -2637,10 +2587,10 @@ class MainWindow(QtWidgets.QMainWindow):
                 "lane_count": self.lane_grid.lane_count,
                 "rows": self.lane_grid.get_rows(),
             },
-            # write_gen_flags() itself filters out any value that isn't a
-            # real arch/pclk-mode/sel-mode choice, so passing the combo's
-            # raw currentText() straight through is safe even while it
-            # still shows its own "(default: ...)" placeholder option.
+            # write_gen_flags() drops anything that isn't a real
+            # arch/pclk-mode/sel-mode choice, so passing the combo's raw
+            # currentText() straight through is safe even while it still shows
+            # its own "(default: ...)" placeholder option.
             "gen_flags": {
                 "arch": self.arch_combo.currentText(),
                 "pclk-mode": self.pclk_mode_combo.currentText(),
@@ -2774,7 +2724,12 @@ class MainWindow(QtWidgets.QMainWindow):
         try:
             text = DOC_PATH.read_text(encoding="utf-8")
         except OSError as e:
-            text = f"Could not load {DOC_PATH}:\n{e}"
+            # Name the path rather than just failing quietly -- a missing doc
+            # here means the install is wrong, and the path says which one.
+            text = (
+                "Could not load this document.\n\nLooked for:\n"
+                f"{DOC_PATH}\n\n{e}"
+            )
         if hasattr(viewer, "setMarkdown"):
             viewer.setMarkdown(text)
         else:
@@ -2846,45 +2801,25 @@ class MainWindow(QtWidgets.QMainWindow):
         self._mark_saved()
         return True
 
-    def _validation_problem_path(self, message):
-        lower = message.lower()
-        config_dir = self.current_workspace / "config"
-        if any(token in lower for token in ("controller", "ctrl", "max_width")):
-            return config_dir / "controllers.csv"
-        if any(token in lower for token in ("signal", "safe_state", "tie_off")):
-            return config_dir / "pipe_signals.csv"
-        if any(token in lower for token in ("mode", "lane", "group", "pclk", "clock")):
-            return config_dir / "lane_mapping.csv"
-        return config_dir
-
     def _on_validate(self):
         if not self._save_before_action():
             return
-        self._clear_problems()
-        self._set_bottom_panel_page(1)
+        self._set_bottom_panel_page(0)  # LOG -- this is where the verdict lands
         cfg_dir = self.current_workspace / "config"
         self._log(f"--- validating {cfg_dir} ---")
         try:
             cfg = Config(cfg_dir)
         except SystemExit as error:
-            message = str(error)
-            self._log(message)
-            self._add_problem("Validate", "Error", message, cfg_dir)
-            self._show_problems_panel()
+            # Config parse failures raise SystemExit (a BaseException, so an
+            # `except Exception` above would not catch it) -- report it and
+            # stay alive rather than taking the GUI down.
+            self._log(str(error))
             return
         errs = cfg.validate()
         if errs:
             self._log("Config validation failed:")
             for error in errs:
-                message = str(error)
-                self._log(f"  - {message}")
-                self._add_problem(
-                    "Validate",
-                    "Error",
-                    message,
-                    self._validation_problem_path(message),
-                )
-            self._show_problems_panel()
+                self._log(f"  - {error}")
         else:
             self._log("OK -- config is valid.")
 
@@ -2952,24 +2887,32 @@ class MainWindow(QtWidgets.QMainWindow):
         against the current workspace asynchronously. QProcess signals
         deliver output on the Qt event loop as it arrives.
 
-        verible-path/verible-flags come from this app's own Settings
-        (see plm.frontend.qt.widgets.settings). Neither is written into
-        the workspace's gen_flags.txt; both are passed only for this
-        invocation."""
+        Every generation flag is passed on this command line and nowhere
+        else: arch/pclk-mode/sel-mode/dpr come from the Generation page via
+        _gen_flag_args(), verible-path/verible-flags from this app's own
+        Settings (see plm.frontend.qt.widgets.settings). None of them is
+        written into the workspace -- a workspace is its three CSVs."""
         if self._generation_busy:
             return
         if not self._save_before_action():
             return
-        self._clear_problems()
         self._clear_generation_results()
-        self._set_bottom_panel_page(1)
+        self._set_bottom_panel_page(0)  # LOG -- the run's output streams in here
         self._set_generation_busy(True)
         started_at = time.monotonic()
         run_workspace = self.current_workspace
         before_outputs = self._output_signature(run_workspace, target)
         generated = []
         output_buffer = ""
-        cmd = [sys.executable, "-m", "plm.cli.main", "generate", target, "--config", str(run_workspace)]
+        # --quiet suppresses the generator's own copy of Config.report(), which
+        # would otherwise be echoed into the LOG on every run -- the REPORT page
+        # already shows exactly that, live. See the two tabs' tooltips for the
+        # split: LOG is what this run did, REPORT is what the config looks like.
+        cmd = [
+            sys.executable, "-m", "plm.cli.main", "generate", target,
+            "--config", str(run_workspace), "--quiet",
+        ]
+        cmd += self._gen_flag_args(sel_mode=(target != "tb"))
         settings = load_settings()
         verible_path = settings.get("veriblePath")
         if verible_path:
@@ -3002,7 +2945,6 @@ class MainWindow(QtWidgets.QMainWindow):
             stripped = line.strip()
             if stripped.startswith("generated "):
                 generated.append(stripped[len("generated ") :])
-            self._capture_problem_line(line)
             self._log(line)
 
         def on_ready_read():
@@ -3021,10 +2963,8 @@ class MainWindow(QtWidgets.QMainWindow):
                 output_buffer = ""
             self._set_generation_busy(False)
             elapsed = time.monotonic() - started_at
-            errors = sum(1 for problem in self._problems if problem.get("severity") == "Error")
             self._log(
-                f"[generate {target}: {len(generated)} file(s), {errors} error(s), "
-                f"{elapsed:.1f}s]"
+                f"[generate {target}: {len(generated)} file(s), {elapsed:.1f}s]"
             )
             if exit_code == 0:
                 self._log("[generate finished]")
@@ -3038,14 +2978,6 @@ class MainWindow(QtWidgets.QMainWindow):
                         self._refresh_rtl_preview()
             else:
                 self._log(f"[generate finished, exit code {exit_code}]")
-                if not self._problems:
-                    self._add_problem(
-                        "Generate",
-                        "Error",
-                        f"Generation failed with exit code {exit_code}.",
-                    )
-            if self._problems:
-                self._show_problems_panel()
             if proc in self._active_processes:
                 self._active_processes.remove(proc)
             if then and exit_code == 0:
@@ -3054,10 +2986,7 @@ class MainWindow(QtWidgets.QMainWindow):
         def on_error(_error):
             if proc.state() == QtCore.QProcess.NotRunning:
                 self._set_generation_busy(False)
-                message = f"Failed to launch generate {target}: {proc.errorString()}"
-                self._log(message)
-                self._add_problem("Generate", "Error", message)
-                self._show_problems_panel()
+                self._log(f"Failed to launch generate {target}: {proc.errorString()}")
                 if proc in getattr(self, "_active_processes", []):
                     self._active_processes.remove(proc)
 

@@ -12,7 +12,7 @@
 // actual library) -- the external logic is unaffected.
 //
 // en must already be registered in the clk_in domain (guaranteed by
-// nov_sel_onehot).
+// pipe_lane_sel_sync).
 //=============================================================================
 module pipe_lane_clk_gate (
     input  logic clk_in,

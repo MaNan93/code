@@ -222,12 +222,12 @@ def gen_sel_gen(cfg, sel_mode="sync", pclk_mode="pclk_as_phy_output", dpr=False)
                  cross-domain synchronization and the NOV break window.
 
     In pclk_mode="pclk_as_phy_input", sel_tgt doesn't exist as a single
-    per-group signal: {c.lname}_pclk[] is per-PORT, not per-controller (see
+    per-group signal: {c.lname}_pclk[] is per-CTRL-LANE, not per-controller (see
     below), so the same "one clock per candidate" shortcut that was wrong
     for phy_pclk/rx_clk is also wrong here -- a group's sel_tgt gates a
     pipe_lane_data_mux whose output is ultimately sampled by the owning
-    controller using ITS OWN port's {c.lname}_pclk[port], so the select
-    needs to be synchronized into that same per-port domain, not a
+    controller using ITS OWN lane's {c.lname}_pclk[], so the select needs to
+    be synchronized into that same per-ctrl-lane domain, not a
     per-controller stand-in. So instead of one sel_tgt.gN per group, this
     module produces one seltgt_g{gid}_l{l} per BBM LANE (mirroring
     phy_pclk's per-lane treatment), which gen_data_m2p/gen_data_p2m
@@ -250,7 +250,7 @@ def gen_sel_gen(cfg, sel_mode="sync", pclk_mode="pclk_as_phy_output", dpr=False)
     synchronized enable, it doesn't instantiate pipe_lane_sel_sync itself.
 
     Each group's owner selection goes through the pipe_lane_sel_sync module
-    (tool/backend/common/pipe_lane_sel_sync.sv), whose SYNC parameter switches between two
+    (plm/core/common/pipe_lane_sel_sync.sv), whose SYNC parameter switches between two
     implementations. Rather than baking a literal into each instance at
     generation time, every data-path pipe_lane_sel_sync in this module
     (the group/lane selects that gate sel_tgt / seltgt_gN_lL) is wired to
@@ -372,7 +372,7 @@ def gen_sel_gen(cfg, sel_mode="sync", pclk_mode="pclk_as_phy_output", dpr=False)
                 ports.append(
                     (
                         f"    output logic [{eff_n-1}:0] seltgt_g{g.gid}_l{l}",
-                        f"   // dec_tgt.g{g.gid} synchronized into this lane's owning candidate's own port clock; used by data_m2p/data_p2m",
+                        f"   // dec_tgt.g{g.gid} synchronized into this lane's owning candidate's own ctrl lane's clock; used by data_m2p/data_p2m",
                     )
                 )
         for g in cfg.groups:
@@ -428,22 +428,22 @@ def gen_sel_gen(cfg, sel_mode="sync", pclk_mode="pclk_as_phy_output", dpr=False)
     if phy_input_mode:
         L.append("    //------------------------------------------------------------")
         L.append("    // Data-path select: one pipe_lane_sel_sync per BBM LANE (not per group),")
-        L.append("    // synchronizing dec_tgt.gN into that lane's owning candidate's own port")
-        L.append("    // clock -- {c}_pclk is per-port, so a group-shared sel_tgt synchronized")
-        L.append("    // against only one candidate port would be the wrong domain for whichever")
-        L.append("    // other port that lane actually routes to.")
+        L.append("    // synchronizing dec_tgt.gN into the clock of the ctrl lane that lane")
+        L.append("    // routes to -- {c}_pclk is per ctrl lane, so a group-shared sel_tgt")
+        L.append("    // synchronized against only one candidate's ctrl lane would be the wrong")
+        L.append("    // domain for whichever other one that lane actually routes to.")
         L.append("    //------------------------------------------------------------")
         for g in (cfg.groups if dpr else [g for g in cfg.groups if not g.is_direct]):
             names = ", ".join(cfg.controllers[c].name for c in g.cands) + (", DPR" if dpr else "")
             L.append(f"    // G{g.gid} lane{g.lanes[0]}~{g.lanes[-1]}: {names}, per-lane select")
             n = g.n + 1 if dpr else g.n
             for l in g.lanes:
-                port_of_cand = {}
+                ctrl_lane_of_cand = {}
                 for c in g.cands:
                     m = next(mm for mm in cfg.modes if g.owners[mm] == c)
-                    port_of_cand[c] = cfg.mapping[m][l][1]
+                    ctrl_lane_of_cand[c] = cfg.mapping[m][l][1]
                 branch_clk_terms = ", ".join(
-                    f"{cfg.controllers[c].lname}_pclk[{port_of_cand[c]}]" for c in reversed(g.cands)
+                    f"{cfg.controllers[c].lname}_pclk[{ctrl_lane_of_cand[c]}]" for c in reversed(g.cands)
                 )
                 branch_rst_terms = ", ".join(f"ctrl_rst_n[{c}]" for c in reversed(g.cands))
                 if dpr:
@@ -531,7 +531,7 @@ def gen_clk_mux(cfg, pclk_mode="pclk_as_phy_output", dpr=False):
     result back as phy_pclk_in. See gen_clk_mux_phy_output() below.
 
     "pclk_as_phy_input": each controller has its own external reference
-    clock and does its own division into a per-port pclk[] that this
+    clock and does its own division into a per-ctrl-lane pclk[] that this
     module glitch-free-selects into phy_pclk; PHY's per-lane recovered
     rx_clk is routed the other way into each controller's own rx_clk[].
     See gen_clk_mux_phy_input() below.
@@ -552,7 +552,7 @@ def gen_glitch_free_clk_select(L, prefix, cand_clks, rst_n_expr, tgt_expr, defau
     working clock (either pclk mode) are architecturally the same circuit
     -- DPR is nothing but one more N-candidate glitch-free clock select,
     just with every PHY lane (or every lane's real_pclk[]) as its candidate
-    set instead of one controller's own handful of ports. Sharing this one
+    set instead of one controller's own handful of lanes. Sharing this one
     function keeps that true in the generator's own code, instead of DPR's
     version being a hand-duplicated near-copy of the real-controller one.
 
@@ -752,7 +752,7 @@ def gen_clk_mux_phy_input(cfg, dpr=False):
 
     Each controller owns its own external reference clock and does its own
     division outside this generator's scope, presenting the divided result
-    as its own pclk[] (one bit per its own port, same width/routing
+    as its own pclk[] (one bit per its own lane, same width/routing
     convention as {c.lname}_mac2phy). There's no separate ctrl_pclk signal
     in this scheme at all: the controller already has its own working
     clock (it generated the division itself), so pipe_lane_sel_gen takes
@@ -764,9 +764,9 @@ def gen_clk_mux_phy_input(cfg, dpr=False):
 
     phy_pclk still needs glitch-free switching for NOV groups, but
     per PHYSICAL LANE rather than per group: different lanes in the same
-    group can pull from different port bits of the same candidate
+    group can pull from different lanes of the same candidate
     controller, so each lane needs dec_tgt synchronized into that lane's
-    own candidate port clocks -- exactly the same synchronization the data
+    own candidate ctrl lane's clock -- exactly the same synchronization the data
     path needs for its own per-lane select (see gen_sel_gen()'s
     seltgt_g{gid}_l{l}: same tgt, same branch_clk domains), so this module
     doesn't re-synchronize dec_tgt itself -- it just reuses sel_gen's
@@ -774,7 +774,7 @@ def gen_clk_mux_phy_input(cfg, dpr=False):
     enable directly.
 
     rx_clk (PHY's per-lane recovered clock) is routed the other direction
-    into each controller port's own rx_clk bit. rx_clk[l] is its own
+    into each controller lane's own rx_clk bit. rx_clk[l] is its own
     independent recovered-clock domain (no fixed phase relation to
     {c.lname}_pclk, unlike the rest of the PIPE-level signals, which all
     live in {c.lname}_pclk), so this needs its own separate
@@ -806,14 +806,14 @@ def gen_clk_mux_phy_input(cfg, dpr=False):
         c = cfg.controllers[cid]
         L.append(
             f"    input logic [{c.max_width-1}:0] {c.lname}_pclk,"
-            f"   // {c.name}'s own already-divided pclk, one bit per its own port"
+            f"   // {c.name}'s own already-divided pclk, one bit per its own lane"
         )
     for g in (cfg.groups if dpr else [g for g in cfg.groups if not g.is_direct]):
         eff_n = g.n + 1 if dpr else g.n
         for l in g.lanes:
             L.append(
                 f"    input logic [{eff_n-1}:0] seltgt_g{g.gid}_l{l},"
-                f"   // dec_tgt.g{g.gid} already synchronized into this lane's owning candidate's own port clock, from sel_gen -- also gates phy_pclk"
+                f"   // dec_tgt.g{g.gid} already synchronized into this lane's owning candidate's own ctrl lane's clock, from sel_gen -- also gates phy_pclk"
             )
     for g in cfg.groups:
         if g.is_direct:
@@ -847,7 +847,7 @@ def gen_clk_mux_phy_input(cfg, dpr=False):
     # synchronizer is needed just for this overlay).
     L.append("    //------------------------------------------------------------")
     L.append("    // phy_pclk: glitch-free per-lane select among the owning group's")
-    L.append("    // candidate controllers' own port-level pclk.")
+    L.append("    // candidate controllers' own per-ctrl-lane pclk.")
     L.append("    //------------------------------------------------------------")
     real_pclk_expr = {}  # lane -> SV expression for that lane's real-candidates-only clock
     for g in cfg.groups:
@@ -868,15 +868,15 @@ def gen_clk_mux_phy_input(cfg, dpr=False):
             names = ", ".join(cfg.controllers[c].name for c in g.cands)
             L.append(f"    // G{g.gid} lane{g.lanes[0]}~{g.lanes[-1]}: {names}, per-lane glitch-free select")
             for l in g.lanes:
-                port_of_cand = {}
+                ctrl_lane_of_cand = {}
                 for c in g.cands:
                     m = next(mm for mm in cfg.modes if g.owners[mm] == c)
-                    port_of_cand[c] = cfg.mapping[m][l][1]
+                    ctrl_lane_of_cand[c] = cfg.mapping[m][l][1]
                 L.append(f"    logic [{g.n-1}:0] pclk_gated_g{g.gid}_l{l};")
                 for i, c in enumerate(g.cands):
                     L.append(
                         f"    pipe_lane_clk_gate u_pclk_gate_g{g.gid}_l{l}_b{i} ("
-                        f".clk_in({cfg.controllers[c].lname}_pclk[{port_of_cand[c]}]), "
+                        f".clk_in({cfg.controllers[c].lname}_pclk[{ctrl_lane_of_cand[c]}]), "
                         f".en(seltgt_g{g.gid}_l{l}[{i}]), "
                         f".test_en(test_en), .clk_out(pclk_gated_g{g.gid}_l{l}[{i}]));"
                     )
@@ -956,7 +956,7 @@ def gen_clk_mux_phy_input(cfg, dpr=False):
     L.append("    // rx_clk: glitch-free per-lane select, using rxclk_en_g{gid}_l{l} from")
     L.append("    // sel_gen (already synchronized into rx_clk[l]'s own domain).")
     L.append("    //------------------------------------------------------------")
-    assigned_ports = set()
+    assigned_ctrl_lanes = set()
     for g in cfg.groups:
         if g.is_direct:
             c = g.cands[0]
@@ -968,32 +968,32 @@ def gen_clk_mux_phy_input(cfg, dpr=False):
                     f"    assign {cname}_rx_clk[{cl}] = rx_clk[{l}];"
                     f"  // G{g.gid} direct to {cfg.controllers[c].name}"
                 )
-                assigned_ports.add((c, cl))
+                assigned_ctrl_lanes.add((c, cl))
             L.append("")
         else:
             names = ", ".join(cfg.controllers[c].name for c in g.cands)
             L.append(f"    // G{g.gid} lane{g.lanes[0]}~{g.lanes[-1]}: {names}, per-lane glitch-free select")
             for l in g.lanes:
-                port_of_cand = {}
+                ctrl_lane_of_cand = {}
                 for c in g.cands:
                     m = next(mm for mm in cfg.modes if g.owners[mm] == c)
-                    port_of_cand[c] = cfg.mapping[m][l][1]
+                    ctrl_lane_of_cand[c] = cfg.mapping[m][l][1]
                 for i, c in enumerate(g.cands):
                     cname = cfg.controllers[c].lname
-                    cl = port_of_cand[c]
+                    cl = ctrl_lane_of_cand[c]
                     L.append(
                         f"    pipe_lane_clk_gate u_rxclk_gate_g{g.gid}_l{l}_b{i} ("
                         f".clk_in(rx_clk[{l}]), .en(rxclk_en_g{g.gid}_l{l}[{i}]), "
                         f".test_en(test_en), .clk_out({cname}_rx_clk[{cl}]));"
                     )
-                    assigned_ports.add((c, cl))
+                    assigned_ctrl_lanes.add((c, cl))
                 L.append("")
 
-    # Ports that never get a lane in any mode -- tie their rx_clk low.
+    # Ctrl lanes that never get a PHY lane in any mode -- tie their rx_clk low.
     for cid in sorted(cfg.controllers):
         c = cfg.controllers[cid]
         for cl in range(c.max_width):
-            if (cid, cl) not in assigned_ports:
+            if (cid, cl) not in assigned_ctrl_lanes:
                 L.append(f"    assign {c.lname}_rx_clk[{cl}] = 1'b0;  // never driven in any mode")
     L.append("")
     L.append("endmodule")
@@ -1078,7 +1078,7 @@ def gen_data_m2p(cfg, pclk_mode="pclk_as_phy_output", dpr=False):
     In pclk_mode="pclk_as_phy_input", each pipe_lane_data_mux's .sel comes
     from a per-lane seltgt_g{gid}_l{l} input instead of the group-shared
     sel_tgt -- see gen_sel_gen()'s docstring for why a group-shared select
-    is the wrong domain once {c.lname}_pclk is per-port.
+    is the wrong domain once {c.lname}_pclk is per ctrl lane.
 
     When --dpr, DPR is one more (the last) branch of every group's select
     -- see pipe_lane_sel_gen -- so every group needs a real mux here now,
@@ -1149,21 +1149,21 @@ def gen_data_m2p(cfg, pclk_mode="pclk_as_phy_output", dpr=False):
 
 
 def gen_data_p2m(cfg, pclk_mode="pclk_as_phy_output", dpr=False):
-    """phy2mac-direction data mux (converges by controller port).
+    """phy2mac-direction data mux (converges by controller lane).
 
     In pclk_mode="pclk_as_phy_input", there's no single group-shared select
-    to use per port: a converging port's candidates can each own a
+    to use per ctrl lane: a converging ctrl lane's candidates can each own a
     DIFFERENT physical lane within the group (each with its own per-lane
     seltgt_g{gid}_l{l}), so this mux's .sel is assembled bit-by-bit, one
     bit per branch, from that branch's own lane's own sync result -- see
     gen_sel_gen()'s docstring for why a group-shared select is the wrong
-    domain once {c.lname}_pclk is per-port.
+    domain once {c.lname}_pclk is per ctrl lane.
 
     Real controllers' own converge logic here is otherwise untouched by
-    --dpr: which lanes feed a given controller port is purely a
+    --dpr: which lanes feed a given controller lane is purely a
     lane_mapping.csv/mode fact, DPR is never in it -- there's no driver
     contention to arbitrate (DPR never competes to drive any of these
-    controller ports), so the real candidates' own muxes don't need an
+    controller lanes), so the real candidates' own muxes don't need an
     extra DPR branch: sel_tgt.gN/seltgt_gN_lL's real-candidate bits are
     already all 0 whenever DPR currently owns the group (one-hot), which
     already resolves to each mux's own safe/tie value for free.
@@ -1195,8 +1195,12 @@ def gen_data_p2m(cfg, pclk_mode="pclk_as_phy_output", dpr=False):
     phy_input_mode = pclk_mode == "pclk_as_phy_input"
     p2m_sigs_all = [s for s in cfg.signals if not s.is_m2p]
     L = [
-        "// PIPE lane mapper PHY->MAC data mux (converges by controller port).",
-        "// sel_tgt's mutual exclusivity is guaranteed by pipe_lane_sel_sync. Undriven ports are tied to the safe state.",
+        "// PIPE lane mapper PHY->MAC data mux (converges by controller lane).",
+        "// sel_tgt's mutual exclusivity is guaranteed by pipe_lane_sel_sync.",
+        "// Two distinct \"nothing valid to show\" values here, do not confuse them:",
+        "//   SAFE_P2M (from safe_state) -- this ctrl lane does have a driving PHY lane,",
+        "//                                 but no candidate owns it right now (NOV window).",
+        "//   {c}_p2m_tie (from tie_off)  -- this ctrl lane is never driven by any PHY lane.",
         "import pipe_lane_signal_pkg::*;",
         "",
         "module pipe_lane_data_p2m #(",
@@ -1220,19 +1224,19 @@ def gen_data_p2m(cfg, pclk_mode="pclk_as_phy_output", dpr=False):
     L.append(");")
     L.append("")
 
-    port_src = {}
+    lane_src = {}
     for m in cfg.modes:
         for l in range(LC):
             cid, cl = cfg.mapping[m][l]
             g = cfg.group_of_lane(l)
             b = 0 if g.is_direct else g.branch_of(cid)
-            port_src.setdefault((cid, cl), set()).add((l, g.gid, b))
+            lane_src.setdefault((cid, cl), set()).add((l, g.gid, b))
     for cid in sorted(cfg.controllers):
         c = cfg.controllers[cid]
         L.append(f"    // {c.name} x{c.max_width}")
 
         # Compute this controller's active lowest-numbered physical lane
-        # (used for safe alignment on unused ports)
+        # (used for safe alignment on unused ctrl lanes)
         cands = cfg.ctrl_pclk_cands()[c.id]
         base_lane = cands[0] if cands else 0
 
@@ -1256,7 +1260,7 @@ def gen_data_p2m(cfg, pclk_mode="pclk_as_phy_output", dpr=False):
         L.append("")
 
         for cl in range(c.max_width):
-            srcs = sorted(port_src.get((cid, cl), set()))
+            srcs = sorted(lane_src.get((cid, cl), set()))
             if not srcs:
                 L.append(
                     f"    assign {c.lname}_phy2mac[{cl}] = {c.lname}_p2m_tie;"
@@ -1299,7 +1303,7 @@ def gen_data_p2m(cfg, pclk_mode="pclk_as_phy_output", dpr=False):
                 sel_expr = f"sel_tgt.g{gid}"
             L.append(f"        .sel  ({sel_expr}),")
             L.append("        .din  ({" + ", ".join(reversed(din)) + "}),")
-            L.append(f"        .safe ({c.lname}_p2m_tie),")
+            L.append("        .safe (SAFE_P2M),")
             L.append(f"        .dout ({c.lname}_phy2mac[{cl}])")
             L.append("    );")
         L.append("")
@@ -1311,32 +1315,24 @@ def gen_data_p2m(cfg, pclk_mode="pclk_as_phy_output", dpr=False):
         L.append("    // lane\" bit that already gates phy_mac2phy/phy_pclk_in for it, not raw")
         L.append("    // v_lane_mask, so this tap's view of ownership stays in lockstep with")
         L.append("    // what the write side is actually doing (see this module's docstring).")
-        L.append("    // Each signal's safe/tie value (same tie_off convention as an unowned")
-        L.append("    // controller port) when not owned. tie_off=lane0 has no meaningful")
-        L.append("    // \"DPR's own base lane\" to fall back to (DPR's owned set is a live")
-        L.append("    // runtime value, not fixed), so it resolves to '0 for DPR specifically.")
+        L.append("    // Not-owned reads back SAFE_P2M, the same \"no owner right now\" value")
+        L.append("    // every real controller lane presents -- DPR has no fixed base lane of")
+        L.append("    // its own (its owned set is a live runtime value), so tie_off has")
+        L.append("    // nothing to resolve against here anyway.")
         L.append("    //------------------------------------------------------------")
-        dpr_tie_parts = [f"{s.name}: {s.tie_expr(None)}" for s in p2m_sigs_all if not s.tie_is_zero]
-        dpr_tie_parts.append("default: '0")
-        L.append("    phy2mac_lane_t dpr_p2m_tie;")
-        L.append("    assign dpr_p2m_tie = '{")
-        for part in dpr_tie_parts[:-1]:
-            L.append(f"        {part},")
-        L.append(f"        {dpr_tie_parts[-1]}")
-        L.append("    };")
         for l in range(LC):
             g = cfg.group_of_lane(l)
             own_expr = f"seltgt_g{g.gid}_l{l}[{g.n}:{g.n}]" if phy_input_mode else f"sel_tgt.g{g.gid}[{g.n}:{g.n}]"
             # Same pipe_lane_data_mux shape as every real single-candidate
-            # port above (e.g. a direct group's own u_p2m_{c.lname}_{cl}
+            # ctrl lane above (e.g. a direct group's own u_p2m_{c.lname}_{cl}
             # with .N(1)) -- DPR's own p2m tap is architecturally nothing
-            # but a single-candidate port converging from exactly one
+            # but a single-candidate ctrl lane converging from exactly one
             # source (this lane), so it reuses that exact same
             # instantiation instead of a bespoke ternary assign.
             L.append(f"    pipe_lane_data_mux #(.WIDTH(PHY2MAC_W), .N(1)) u_p2m_dpr_{l} (")
             L.append(f"        .sel  ({own_expr}),")
             L.append(f"        .din  ({{phy_phy2mac[{l}]}}),")
-            L.append("        .safe (dpr_p2m_tie),")
+            L.append("        .safe (SAFE_P2M),")
             L.append(f"        .dout (dpr_phy2mac[{l}])")
             L.append("    );")
         L.append("")
@@ -1470,7 +1466,7 @@ def gen_top(cfg, pclk_mode="pclk_as_phy_output", sel_mode="sync", dpr=False):
                 seltgt_lanes.append((g.gid, l, eff_n))
                 L.append(
                     f"    logic [{eff_n-1}:0] seltgt_g{g.gid}_l{l};"
-                    f"   // dec_tgt.g{g.gid} synchronized into this lane's owning candidate's own port clock"
+                    f"   // dec_tgt.g{g.gid} synchronized into the clock of the ctrl lane this lane routes to"
                 )
         for g in cfg.groups:
             if g.is_direct:
@@ -1874,12 +1870,13 @@ def gen_connection(cfg, pclk_mode="pclk_as_phy_output", dpr=False):
 def gen_filelist(cfg):
     """<set>/rtl/flist.f. Paths are resolved relative to flist.f's own directory.
 
-    The common modules are copied from tool/backend/common/ into <set>/rtl/common/
+    The common modules are copied from plm/core/common/ into <set>/rtl/common/
     at generation time, so flist.f can reference the sibling common/
     directory directly -- each config set is fully self-contained and
-    doesn't depend on tool/'s original location. The file set here doesn't
-    depend on --dpr -- DPR's overlay lives inside pipe_lane_mapper.sv
-    itself (see gen_dpr_overlay()), not a separate generated file.
+    doesn't depend on the installed package's own location. The file set here
+    doesn't depend on --dpr -- DPR is woven into the existing modules (an extra
+    candidate bit in gen_sel_gen/gen_clk_mux/gen_data_*), not a separate
+    generated file.
     """
     common = [
         "pipe_lane_sync2.sv",

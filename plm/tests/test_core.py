@@ -8,6 +8,7 @@ from plm.core import exporter
 from plm.core.model import Config
 from plm.core.paths import DOCS_DIR, WORKSPACE_MARKER, is_deletable_workspace
 from plm.core.workspace import (
+    read_gen_flags,
     load_default_signals,
     read_csv_rows,
     save_workspace_content,
@@ -26,7 +27,6 @@ def valid_payload():
             "direction": "mac2phy", "width": "8", "safe_state": "0", "tie_off": "0",
         }],
         "mapping": {"lane_count": 2, "rows": [{"mode": "0", "lane0": "0-0", "lane1": "0-1"}]},
-        "gen_flags": {},
     }
 
 
@@ -72,6 +72,48 @@ class ConfigValidationTests(unittest.TestCase):
         signal["safe_state"] = "-1"
         self.assert_config_error(signals=[signal])
 
+    def test_rejects_lane_whose_ctrl_lane_index_moves_between_modes(self):
+        """A phy lane must keep one ctrl lane index per owner across modes.
+
+        The generators resolve that index once, from the first mode the owner
+        appears in, and wire it for every mode -- so a lane that swaps port
+        index between two modes silently produces a mux wired to the wrong
+        port. Two lanes in one group can swap indices while still leaving every
+        port's drivers inside that single group, so the cross-group rule does
+        not catch this on its own.
+        """
+        cfg_dir = self.make_config(
+            controllers=[
+                {"ctrl_id": "0", "ctrl_name": "CtrlA", "max_width": "4"},
+                {"ctrl_id": "1", "ctrl_name": "CtrlB", "max_width": "2"},
+            ],
+            mapping={"lane_count": 4, "rows": [
+                {"mode": "0", "lane0": "0-0", "lane1": "0-1", "lane2": "0-2", "lane3": "0-3"},
+                {"mode": "1", "lane0": "0-0", "lane1": "0-1", "lane2": "1-0", "lane3": "1-1"},
+                {"mode": "2", "lane0": "0-0", "lane1": "0-1", "lane2": "1-1", "lane3": "1-0"},
+            ]},
+        )
+        errors = Config(cfg_dir).validate()
+        self.assertTrue(
+            any("maps to more than one CtrlB lane across modes" in e for e in errors),
+            f"expected the moving-port-index error, got: {errors}",
+        )
+
+    def test_accepts_lane_keeping_one_ctrl_lane_index_per_owner(self):
+        """The same shape without the swap must stay valid -- the new rule has
+        to reject a moving index, not a controller changing width."""
+        cfg_dir = self.make_config(
+            controllers=[
+                {"ctrl_id": "0", "ctrl_name": "CtrlA", "max_width": "4"},
+                {"ctrl_id": "1", "ctrl_name": "CtrlB", "max_width": "2"},
+            ],
+            mapping={"lane_count": 4, "rows": [
+                {"mode": "0", "lane0": "0-0", "lane1": "0-1", "lane2": "0-2", "lane3": "0-3"},
+                {"mode": "1", "lane0": "0-0", "lane1": "0-1", "lane2": "1-0", "lane3": "1-1"},
+            ]},
+        )
+        self.assertEqual(Config(cfg_dir).validate(), [])
+
     def test_rejects_non_sequential_lane_headers(self):
         cfg_dir = self.make_config()
         mapping = cfg_dir / "lane_mapping.csv"
@@ -111,22 +153,29 @@ class WorkspaceTests(unittest.TestCase):
         self.assertGreater(len(load_default_signals()), 20)
         self.assertTrue((DOCS_DIR / "tool_usage.md").is_file())
 
-    def test_packaged_tool_usage_matches_repo_copy(self):
-        """docs/tool_usage.md is the copy humans browse (design_notes.md and
-        the Makefile link to it); DOCS_DIR's is the one that ships in the
-        wheel and backs the GUI's Doc button. setuptools can only package
-        files living inside src/plm, so the two have to coexist -- this
-        catches an edit landing in only one of them."""
-        # Compared as text, not bytes: the repo is checked out with
-        # different line endings on different platforms, and that is not
-        # drift worth failing over.
-        packaged = (DOCS_DIR / "tool_usage.md").read_text(encoding="utf-8").splitlines()
-        repo_copy = (ROOT / "docs" / "tool_usage.md").read_text(encoding="utf-8").splitlines()
+    def test_user_docs_live_only_under_the_packaged_docs_dir(self):
+        """The docs a user reads ship in the wheel, so src/plm/docs is their
+        only home -- setuptools can only package files inside src/plm, and a
+        second copy at the repo root just drifts. Repo-root docs/ keeps the
+        ones that are not shipped (design notes, tool architecture, images).
+
+        This replaces an older byte-for-byte drift test between the two copies
+        of tool_usage.md: with one copy there is nothing to drift.
+        """
+        packaged = {p.name for p in DOCS_DIR.glob("*.md")}
+        self.assertIn("tool_usage.md", packaged)
+        self.assertIn("qt_frontend_guide.md", packaged)
+        stale = packaged & {p.name for p in (ROOT / "docs").glob("*.md")}
         self.assertEqual(
-            packaged,
-            repo_copy,
-            "docs/tool_usage.md and src/plm/docs/tool_usage.md have drifted apart",
+            stale, set(),
+            f"these docs exist in both docs/ and src/plm/docs/ and will drift: {sorted(stale)}",
         )
+
+    def test_every_packaged_doc_is_declared_as_package_data(self):
+        """`"plm" = ["docs/*.md"]` in pyproject.toml is what puts these in the
+        wheel; guard the glob against someone narrowing it to one filename."""
+        pyproject = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
+        self.assertIn('"plm" = ["docs/*.md"]', pyproject)
 
 
 class ExporterTests(unittest.TestCase):
@@ -143,6 +192,28 @@ class ExporterTests(unittest.TestCase):
             self.assertEqual(sentinel.read_text(encoding="utf-8"), "old output")
 
 
+# Non-default generation flags each bundled sample is meant to be generated
+# with. The CLI takes these as command-line arguments only, so the same fact is
+# written down in three places for three different consumers:
+#   - here, for this regression
+#   - SETFLAGS_<SET> in the top-level Makefile, for `make <SET>`
+#   - test/<SET>/config/gen_flags.txt, which only the Qt front end reads
+# test_sample_gen_flags_match_the_qt_workspace_files below pins the third
+# against this one so they cannot drift; the Makefile copy is checked by eye.
+# Add an entry here whenever a new sample needs a non-default flag, or that
+# sample silently gets generated with the defaults and stops covering whatever
+# it exists to demonstrate.
+SAMPLE_GEN_FLAGS = {
+    "maxpclk": {"pclk_mode": "pclk_as_phy_input"},
+    "dpr": {"dpr": True},
+}
+
+
+def sample_gen_kwargs(sample_name):
+    """export_rtl/export_tb kwargs for one bundled sample."""
+    return dict(SAMPLE_GEN_FLAGS.get(sample_name, {}))
+
+
 class SampleRegressionTests(unittest.TestCase):
     def test_all_bundled_samples_validate_and_generate(self):
         for source in sorted((ROOT / "test").iterdir()):
@@ -153,10 +224,50 @@ class SampleRegressionTests(unittest.TestCase):
                 shutil.copytree(source / "config", copied / "config")
                 cfg = Config(copied / "config")
                 self.assertEqual(cfg.validate(), [])
-                exporter.export_rtl(cfg, copied / "rtl", quiet=True)
-                exporter.export_tb(cfg, copied / "rtl", quiet=True)
+                kwargs = sample_gen_kwargs(source.name)
+                exporter.export_rtl(cfg, copied / "rtl", quiet=True, **kwargs)
+                exporter.export_tb(
+                    cfg, copied / "rtl", quiet=True,
+                    **{k: v for k, v in kwargs.items() if k != "sel_mode"},
+                )
                 self.assertTrue((copied / "rtl" / "flist.f").is_file())
                 self.assertTrue((copied / "tb" / "tb_pipe_lane_mapper.sv").is_file())
+
+    def test_sample_gen_flags_match_the_qt_workspace_files(self):
+        """A sample's gen_flags.txt is what the Qt front end shows when you
+        open it; SAMPLE_GEN_FLAGS is what this regression generates it with.
+        They describe the same intent, so they must agree -- otherwise opening
+        maxpclk in the GUI and hitting Generate produces different RTL than
+        `make maxpclk` does."""
+        for source in sorted((ROOT / "test").iterdir()):
+            if not (source / "config").is_dir():
+                continue
+            with self.subTest(sample=source.name):
+                on_disk = read_gen_flags(source / "config" / "gen_flags.txt")
+                expected = sample_gen_kwargs(source.name)
+                self.assertEqual(
+                    on_disk["pclk-mode"] or "pclk_as_phy_output",
+                    expected.get("pclk_mode", "pclk_as_phy_output"),
+                )
+                self.assertEqual(on_disk["dpr"], expected.get("dpr", False))
+
+    def test_samples_exercise_both_clock_architectures_and_dpr(self):
+        """Guard against the flags silently going unused again: the two most
+        intricate generator branches (gen_clk_mux_phy_input and every --dpr
+        path) only have coverage while some sample actually selects them."""
+        samples = {s.name for s in (ROOT / "test").iterdir() if (s / "config").is_dir()}
+        seen = {"pclk_as_phy_output"}  # the default, and no sample opts out of it entirely
+        for name in samples:
+            kwargs = sample_gen_kwargs(name)
+            seen.add(kwargs.get("pclk_mode", "pclk_as_phy_output"))
+            if kwargs.get("dpr"):
+                seen.add("dpr")
+        self.assertIn("pclk_as_phy_input", seen)
+        self.assertIn("dpr", seen)
+        self.assertLessEqual(
+            set(SAMPLE_GEN_FLAGS), samples,
+            "SAMPLE_GEN_FLAGS names a sample that no longer exists under test/",
+        )
 
 
 if __name__ == "__main__":

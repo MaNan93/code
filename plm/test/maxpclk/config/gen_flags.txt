@@ -1,6 +1,7 @@
-# 支持: arch      = original_pipe | serdes
-#       pclk-mode = pclk_as_phy_output | pclk_as_phy_input
-#       sel-mode  = sync | comb
-#       dpr       = true | false (dpr=true requires sel-mode=sync)
+# Written by the PLM Qt front end; the CLI does not read this file.
+# arch      = original_pipe | serdes
+# pclk-mode = pclk_as_phy_output | pclk_as_phy_input
+# sel-mode  = sync | comb
+# dpr       = true | false (dpr=true requires sel-mode=sync)
 arch = serdes
 pclk-mode = pclk_as_phy_input

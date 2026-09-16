@@ -25,6 +25,11 @@ sys.path.insert(0, str(Path(__file__).resolve().parent / "src"))
 def main(argv=None):
     argv = sys.argv[1:] if argv is None else argv
 
+    if argv[:1] == ["-gui"]:
+        sys.argv = [sys.argv[0]] + argv[1:]
+        from plm.frontend.qt.main import main as qt_main
+        return qt_main()
+
     from plm.cli.main import main as cli_main
     return cli_main(argv)
 

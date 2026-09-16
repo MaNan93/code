@@ -1,6 +1,9 @@
-# 对 test/ 下每一套配置集重新跑 `python -m plm.cli.main generate rtl/tb`。
-# 前提：先在仓库根目录跑一次 `pip install -e .`（一次性），把 plm 包装成
-# 可 import 的形式——不然这里的每条命令都会因为 import 失败而报错。
+# 对 test/ 下每一套配置集重新跑 `plm generate rtl/tb`。
+# 默认通过 uv 调用（见 CLAUDE.md：本仓库统一用 uv 管理 Python 环境，不要用
+# 裸 `python`）。uv run 会自己解析到本仓库的 .venv，不需要先手动激活，也不
+# 需要先 `pip install -e .`。
+# 如果确实要用别的解释器，覆盖 PYTHON 即可，例如：
+#   make all PYTHON="python3"      # 前提是该解释器已经能 import plm
 #
 # 用途：
 #   - CSV 或生成器脚本改完之后，一键把所有配置集的生成物刷新到最新，
@@ -34,16 +37,21 @@
 #   TB_GENFLAGS   只传给 generate tb
 #
 # 某个配置集本身就是为了演示某个非默认 flag 存在的（比如 maxpclk 演示
-# --pclk-mode pclk_as_phy_input），这种 flag 不在这里配置——写在那套配置集
-# 自己的 test/<SET>/config/gen_flags.txt 里（跟三个 CSV 放一起，两个
-# Python 工具都会读，各自只认自己认识的 key），这样配置集本身就是自包含的，
-# 不需要为了给它固定一个 flag 而回来改这个 Makefile。上面的 GENFLAGS 系列
-# 变量地位更高，可以临时覆盖任何配置集自带的 gen_flags.txt。
+# --pclk-mode pclk_as_phy_input），这种 flag 写在下面的 SETFLAGS_<SET> 变量里。
+# 以前它们放在 test/<SET>/config/gen_flags.txt、由 CLI 自动解析，那套机制已经
+# 去掉了：一个配置集就是三个 CSV，生成参数一律由调用方在命令行上给。
+# 加一套需要非默认 flag 的配置集时，记得在这里补一行 SETFLAGS_<SET>。
+# 上面的 GENFLAGS 系列变量追加在后面，所以可以临时覆盖这里的值。
 
-PYTHON       ?= python3
+PYTHON       ?= uv run python
 GENFLAGS     ?=
 RTL_GENFLAGS ?=
 TB_GENFLAGS  ?=
+
+# 各配置集自己要求的非默认生成 flag。没列出来的用 CLI 默认值
+# （--arch original_pipe --pclk-mode pclk_as_phy_output --sel-mode sync，不开 dpr）。
+SETFLAGS_maxpclk := --arch serdes --pclk-mode pclk_as_phy_input
+SETFLAGS_dpr     := --dpr
 
 # 自动发现 test/ 下的配置集：凡是 test/<name>/config/controllers.csv
 # 存在的 <name> 都算一个集，不用每加一套配置就手改 Makefile。
@@ -58,7 +66,7 @@ all: $(CONFIGS)
 ## repo's make.exe (conda-forge GNU Make on Windows) mangles non-ASCII
 ## text piped through its shell -- confirmed with a minimal isolated
 ## repro (a one-line makefile with `@echo "<Chinese>"` alone), so it's
-## the toolchain, not this file. See docs/tool_usage.md and this
+## the toolchain, not this file. See src/plm/docs/tool_usage.md and this
 ## file's own (Chinese) comments for the full write-up.
 help:
 	@echo "Usage:"
@@ -80,10 +88,10 @@ help:
 	@echo "  RTL_GENFLAGS  only to generate rtl"
 	@echo "  TB_GENFLAGS   only to generate tb"
 	@echo ""
-	@echo "A config set's own fixed flags go in test/<SET>/config/gen_flags.txt --"
-	@echo "both tools read it automatically, no need to pass it on the command line."
+	@echo "A config set that needs non-default flags lists them in this file as"
+	@echo "SETFLAGS_<SET> -- there is no per-config-set flags file any more."
 	@echo ""
-	@echo "See this file's own header comments and docs/tool_usage.md for more."
+	@echo "See this file's own header comments and src/plm/docs/tool_usage.md for more."
 
 # 每套配置集：RTL 和 testbench 都刷新。
 $(CONFIGS): %: rtl-% tb-%
@@ -92,10 +100,10 @@ $(CONFIGS): %: rtl-% tb-%
 # 重新跑（GNU make 对模式规则生成的目标不会那样处理），所以用经典的 FORCE
 # 依赖强制。
 rtl-%: FORCE
-	$(PYTHON) -m plm.cli.main generate rtl --config $* --quiet $(GENFLAGS) $(RTL_GENFLAGS)
+	$(PYTHON) -m plm.cli.main generate rtl --config $* --quiet $(SETFLAGS_$*) $(GENFLAGS) $(RTL_GENFLAGS)
 
 tb-%: FORCE
-	$(PYTHON) -m plm.cli.main generate tb --config $* --quiet $(GENFLAGS) $(TB_GENFLAGS)
+	$(PYTHON) -m plm.cli.main generate tb --config $* --quiet $(SETFLAGS_$*) $(GENFLAGS) $(TB_GENFLAGS)
 
 list:
 	@echo "Config sets found under test/: $(CONFIGS)"

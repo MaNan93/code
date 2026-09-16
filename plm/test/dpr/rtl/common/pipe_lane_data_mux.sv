@@ -1,7 +1,7 @@
 //=============================================================================
 // pipe_lane_data_mux -- one-hot select + polarity normalization
 //
-// When sel is all-zero (the non-overlap handoff window, or this port
+// When sel is all-zero (the non-overlap handoff window, or this ctrl lane
 // currently has no driving source), the output equals SAFE instead of
 // all-zero.
 //
@@ -21,17 +21,17 @@
 //   PowerDown                3'b010 -- P1
 //   everything else (TxData / RxValid / RxStatus / PhyStatus ...)  0
 //
-// safe is a runtime input port, not a parameter: most call sites pass a
-// compile-time constant, but for a tie_off=lane0 signal like
-// phy_mac_phystatus, its "safe state" has to follow base_lane's current
-// actual value (see *_p2m_tie in pipe_lane_data_p2m.sv) -- that's
-// only known at runtime, and doesn't satisfy the compile-time-constant
-// requirement of a parameter. To keep both call patterns legal on the same
-// module, safe is uniformly made a port.
+// safe is an input port rather than a parameter. Every call site the
+// generator currently emits passes a compile-time constant (SAFE_M2P,
+// SAFE_P2M, or 1'b0 for the reset mux), so a parameter would work today --
+// it did not always. It used to also carry pipe_lane_data_p2m's
+// *_p2m_tie, whose tie_off=lane0 fields follow a base lane's live value
+// and so cannot be a parameter. Keeping it a port costs nothing, keeps
+// that option open, and avoids churning every instantiation.
 //
-// The demux direction (one controller port receiving multiple phy lanes)
+// The demux direction (one controller lane receiving multiple phy lanes)
 // uses the same module -- the only difference is that sel's bits come from
-// different groups' NOV. The generator validates that a given port's
+// different groups' NOV. The generator validates that a given ctrl lane's
 // driving sources must all come from the same group, to guarantee sel's
 // mutual exclusivity.
 //=============================================================================

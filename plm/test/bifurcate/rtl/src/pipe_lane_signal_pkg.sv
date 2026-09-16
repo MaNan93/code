@@ -99,9 +99,9 @@ package pipe_lane_signal_pkg;
     // One one-hot select vector per lane group that needs NOV.
     // Direct groups don't appear here -- the type itself shows they have no choice to make.
     // G0 (lane0~3): direct to CtrlX16, no sel
-    // G1 (lane4~7): bit0=CtrlX16, bit1=CtrlX4b
-    // G2 (lane8~11): bit0=CtrlX16, bit1=CtrlX8
-    // G3 (lane12~15): bit0=CtrlX16, bit1=CtrlX8, bit2=CtrlX4a
+    // G1 (lane4~7): bit0=CtrlX16, bit1=CtrlX4a
+    // G2 (lane8~11): bit0=CtrlX16, bit1=CtrlX8asdfadssssss
+    // G3 (lane12~15): bit0=CtrlX16, bit1=CtrlX8asdfadssssss, bit2=CtrlX4b
     typedef struct packed {
         logic [1:0] g1;
         logic [1:0] g2;

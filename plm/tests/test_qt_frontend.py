@@ -85,7 +85,7 @@ class QtFrontendTests(unittest.TestCase):
         self.assertEqual(root_left, code_left)
         self.assertEqual(window.preview_toggle_btn.toolTip(), "Preview")
         self.assertEqual(window.preview_toggle_btn.accessibleName(), "Preview")
-        self.assertEqual(window.problems_tab_btn.height(), window.log_more.height())
+        self.assertEqual(window.log_tab_btn.height(), window.log_more.height())
         self.assertEqual(window.report_tab_btn.height(), window.log_toggle.height())
 
         def widget_bottom(widget):
@@ -203,7 +203,9 @@ class QtFrontendTests(unittest.TestCase):
         self.assertIn("--- previous/rtl/common/pipe_lane_clk_gate.sv", window.preview_code.toPlainText())
         self.assertIn("+  assign enabled = 1'b1;", window.preview_code.toPlainText())
 
-    def test_validation_errors_fill_problems_panel(self):
+    def test_validation_errors_go_to_the_log_page(self):
+        """The PROBLEMS tree is gone: validation output is plain log text now,
+        and Validate brings the LOG page forward to show it."""
         window = MainWindow()
         self.addCleanup(window.close)
         window.current_workspace = Path(self.temp.name) / "quad"
@@ -215,54 +217,28 @@ class QtFrontendTests(unittest.TestCase):
         ), mock.patch.object(main_window, "Config", return_value=config):
             window._on_validate()
 
-        self.assertEqual(window.problem_tree.topLevelItemCount(), 1)
-        problem = window.problem_tree.topLevelItem(0)
-        self.assertEqual(problem.text(0), "Error")
-        self.assertEqual(problem.text(1), "controller max_width must be positive")
-        self.assertEqual(problem.text(2), "config/controllers.csv")
-        self.assertEqual(window.problems_tab_btn.text(), "PROBLEMS 1")
-        self.assertIs(window.bottom_panel_stack.currentWidget(), window.problem_tree)
+        text = window.log.toPlainText()
+        self.assertIn("Config validation failed:", text)
+        self.assertIn("controller max_width must be positive", text)
+        self.assertIs(window.bottom_panel_stack.currentWidget(), window.log)
+        self.assertTrue(window.log_tab_btn.isChecked())
+        self.assertFalse(window.report_tab_btn.isChecked())
 
-    def test_generate_output_parser_extracts_source_location(self):
+    def test_config_parse_failure_is_logged_not_fatal(self):
+        """Config() raises SystemExit (a BaseException) on a parse failure --
+        it must be caught, or it takes the whole GUI down."""
         window = MainWindow()
         self.addCleanup(window.close)
+        window.current_workspace = Path(self.temp.name) / "quad"
 
-        window._capture_problem_line(
-            "rtl/common/pipe_lane_clk_gate.sv:12:3: error: syntax error"
-        )
+        with mock.patch.object(
+            window, "_save_before_action", return_value=True
+        ), mock.patch.object(
+            main_window, "Config", side_effect=SystemExit("line 3: missing ctrl_id")
+        ):
+            window._on_validate()
 
-        self.assertEqual(window.problem_tree.topLevelItemCount(), 1)
-        problem = window.problem_tree.topLevelItem(0)
-        self.assertEqual(problem.text(0), "Error")
-        self.assertEqual(problem.text(1), "syntax error")
-        self.assertEqual(problem.text(2), "rtl/common/pipe_lane_clk_gate.sv")
-        self.assertEqual(problem.text(3), "12:3")
-
-    def test_problem_double_click_opens_preview_at_line(self):
-        workspace = Path(self.temp.name) / "quad"
-        source = workspace / "rtl" / "broken.sv"
-        source.parent.mkdir(parents=True)
-        source.write_text(
-            "module broken;\n"
-            "  bad syntax here\n"
-            "endmodule\n",
-            encoding="utf-8",
-        )
-        window = MainWindow()
-        self.addCleanup(window.close)
-        window.current_workspace = workspace
-        window.show()
-        self.process_events()
-        window._add_problem(
-            "Generate", "Error", "syntax error", source, line=2, column=3
-        )
-
-        window._on_problem_activated(window.problem_tree.topLevelItem(0), 0)
-        self.process_events()
-
-        self.assertTrue(window.rtl_preview_panel.isVisible())
-        self.assertEqual(window._selected_preview_file, source)
-        self.assertEqual(window.preview_code.textCursor().blockNumber(), 1)
+        self.assertIn("line 3: missing ctrl_id", window.log.toPlainText())
 
     def test_generate_process_can_import_source_checkout(self):
         window = MainWindow()
@@ -521,25 +497,38 @@ class QtFrontendTests(unittest.TestCase):
         )
         self.assertTrue(window.recent_list.isEnabled())
 
-    def test_report_combines_topology_and_activity_log(self):
+    def test_bottom_panel_is_log_and_report(self):
+        """Two pages, one widget each: the activity log and Config.report().
+        The topology used to share the REPORT page under its own sub-header,
+        and there used to be a third PROBLEMS page -- both are gone."""
         window = MainWindow()
         self.addCleanup(window.close)
 
+        self.assertEqual(window.log_tab_btn.text(), "LOG")
         self.assertEqual(window.report_tab_btn.text(), "REPORT")
-        report_page = window.bottom_panel_stack.widget(1)
-        self.assertIs(
-            report_page.findChild(QtWidgets.QPlainTextEdit, "topologySummary"),
-            window.topology_summary,
-        )
-        self.assertIs(
-            report_page.findChild(QtWidgets.QPlainTextEdit, "logConsole"),
-            window.log,
-        )
+        self.assertEqual(window.bottom_panel_stack.count(), 2)
+        self.assertIs(window.bottom_panel_stack.widget(0), window.log)
+        self.assertIs(window.bottom_panel_stack.widget(1), window.topology_summary)
+        # LOG is what a fresh window shows -- it is where Validate/Generate write.
+        self.assertIs(window.bottom_panel_stack.currentWidget(), window.log)
+        self.assertFalse(hasattr(window, "problem_tree"))
         self.assertIsNone(
             window._generation_page.findChild(
                 QtWidgets.QPlainTextEdit, "topologySummary"
             )
         )
+
+    def test_report_page_shows_the_topology_report(self):
+        workspace = self._sample_workspace()
+        window = MainWindow()
+        self.addCleanup(window.close)
+        window._open_workspace(workspace)
+        self.process_events()
+
+        window.report_tab_btn.click()
+        self.process_events()
+        self.assertIs(window.bottom_panel_stack.currentWidget(), window.topology_summary)
+        self.assertIn("Lane groups", window.topology_summary.toPlainText())
 
     def test_reset_defaults_button_is_compact(self):
         dialog = SettingsDialog(None, DEFAULT_SETTINGS)

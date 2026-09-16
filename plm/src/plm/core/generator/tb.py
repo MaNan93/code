@@ -43,7 +43,7 @@ def gen_tb(cfg, pclk_mode="pclk_as_phy_output", dpr=False):
 
     Checks:
       1. Steady-state data routing matches lane_mapping.csv exactly
-      2. Unmapped controller ports read back SAFE_P2M
+      2. Unmapped controller lanes read back SAFE_P2M
       3. Group sel vectors are always one-hot0 (non-overlap)
       4. During the NOV handoff window (sel all-zero), phy lanes present the safe state
       5. phy_rst_n follows the current owner's ctrl_rst_n
@@ -78,7 +78,7 @@ def gen_tb(cfg, pclk_mode="pclk_as_phy_output", dpr=False):
         "//",
         "// Checks:",
         "//   1. Steady-state data routing matches lane_mapping.csv exactly",
-        "//   2. Unmapped controller ports read back SAFE_P2M",
+        "//   2. Unmapped controller lanes read back SAFE_P2M",
         "//   3. Group sel vectors are always one-hot0 (non-overlap)",
         "//   4. During the NOV handoff window (sel all-zero), phy lanes present the safe state (txelecidle=1)",
         "//   5. phy_rst_n follows the current owner's ctrl_rst_n",
@@ -131,7 +131,7 @@ def gen_tb(cfg, pclk_mode="pclk_as_phy_output", dpr=False):
             L.append(f"    logic [{c.max_width-1}:0] {c.lname}_rx_clk;")
             L.append(
                 f"    assign {c.lname}_pclk = {{{c.max_width}{{ctrl_ref_clk[{c.id}]}}}};"
-                f"  // no division modeled -- every port bit is the same undivided clock"
+                f"  // no division modeled -- every ctrl lane gets the same undivided clock"
             )
         L.append("")
     else:
@@ -236,13 +236,13 @@ def gen_tb(cfg, pclk_mode="pclk_as_phy_output", dpr=False):
 
     # ---- stimulus patterns
     L.append("    //------------------------------------------------------------ stimulus patterns")
-    L.append("    function automatic mac2phy_lane_t make_m2p(input int cid, input int port);")
+    L.append("    function automatic mac2phy_lane_t make_m2p(input int cid, input int ctrl_lane);")
     L.append("        mac2phy_lane_t v;")
     L.append("        v = SAFE_M2P;")
     if "mac_phy_txdata" in sig_names:
-        L.append("        v.mac_phy_txdata      = {4'(cid), 20'h0, 8'(port)};")
+        L.append("        v.mac_phy_txdata      = {4'(cid), 20'h0, 8'(ctrl_lane)};")
     if "mac_phy_txdatak" in sig_names:
-        L.append("        v.mac_phy_txdatak     = 4'(port);")
+        L.append("        v.mac_phy_txdatak     = 4'(ctrl_lane);")
     if "mac_phy_txdatavalid" in sig_names:
         L.append("        v.mac_phy_txdatavalid = 1'b1;")
     if "mac_phy_txelecidle" in sig_names:
@@ -307,7 +307,7 @@ def gen_tb(cfg, pclk_mode="pclk_as_phy_output", dpr=False):
     L.append("        endcase")
     L.append("    endfunction")
     L.append("")
-    L.append("    function automatic int port_of(input int m, input int l);")
+    L.append("    function automatic int ctrl_lane_of(input int m, input int l);")
     L.append("        case (m)")
     for m in cfg.modes:
         L.append(f"            {m}: case (l)")
@@ -399,64 +399,39 @@ def gen_tb(cfg, pclk_mode="pclk_as_phy_output", dpr=False):
             L.append(f"    localparam int G{g.gid}_LANES[{len(g.lanes)}] = " f"'{{{lanes_str}}};")
         L.append("")
 
-        # Independently (not by probing DUT internals) compute, per
-        # candidate controller of a muxed group, the p2m struct it should
-        # present when its group's sel is all-zero. Mirrors
-        # *_p2m_tie in gen_data_p2m(), built from the same
-        # Signal.tie_expr(), but kept as a separate tb-side computation so
-        # this is a real external check of the DUT's behavior, not a
-        # tautology against its own internal signal. With --dpr, every
-        # group is at least a 2-candidate one (real + DPR, see
-        # gen_data_p2m) even if it was a direct (single-candidate) group
-        # before DPR existed -- the dpr test below needs "should this
-        # candidate read SAFE_P2M while DPR owns its lane" for every
-        # controller, not just the ones already muxed absent DPR, so this
-        # covers every controller in that case instead of just
-        # muxed_ctrl_ids.
-        muxed_ctrl_ids = sorted({c for g in muxed for c in g.cands} | (set(cfg.controllers) if dpr else set()))
-        cc = cfg.ctrl_pclk_cands()
+        # Independently (not by probing DUT internals) compute the p2m struct
+        # a controller lane should present while no candidate owns it -- the
+        # NOV handoff window. That value is each signal's own safe_state, the
+        # p2m mirror of SAFE_M2P, and is a different thing from tie_off (what
+        # a ctrl lane that is NEVER driven in any mode reads back, checked
+        # separately below). Built here from the same safe_state column
+        # gen_pkg() builds SAFE_P2M from, but assembled tb-side rather than
+        # referencing the DUT's own localparam, so this stays a real external
+        # check instead of a tautology.
+        #
+        # One struct, not one per controller: unlike the tie value, the safe
+        # value has no per-controller base lane in it.
         p2m_signals = [s for s in cfg.signals if not s.is_m2p]
-        for cid in muxed_ctrl_ids:
-            c = cfg.controllers[cid]
-            cands = cc[cid]
-            base_lane = cands[0] if cands else 0
-            base_lane_expr = f"phy_phy2mac[{base_lane}]"
-            assign_parts = [
-                f"{s.name}: {s.tie_expr(base_lane_expr)}" for s in p2m_signals if not s.tie_is_zero
-            ]
-            assign_parts.append("default: '0")
-            L.append(f"    phy2mac_lane_t exp_safe_p2m_{c.lname};")
-            L.append(f"    assign exp_safe_p2m_{c.lname} = '{{")
-            for part in assign_parts[:-1]:
-                L.append(f"        {part},")
-            L.append(f"        {assign_parts[-1]}")
-            L.append("    };")
+        safe_parts = [
+            f"{s.name}: {s.sv_literal(s.safe_state)}" for s in p2m_signals if s.safe_state != 0
+        ]
+        safe_parts.append("default: '0")
+        L.append("    phy2mac_lane_t exp_safe_p2m;")
+        L.append("    assign exp_safe_p2m = '{")
+        for part in safe_parts[:-1]:
+            L.append(f"        {part},")
+        L.append(f"        {safe_parts[-1]}")
+        L.append("    };")
         L.append("")
 
-        if dpr:
-            # DPR's own tie value when it doesn't own a lane -- same
-            # tie_expr(None) used by gen_data_p2m()'s own dpr_p2m_tie
-            # (tie_off=lane0 has no meaningful "DPR's own base lane", so
-            # it resolves to '0 there too), computed independently here so
-            # the dpr test below is a real external check, not a
-            # tautology against the DUT's own internal tie constant.
-            dpr_tie_parts = [f"{s.name}: {s.tie_expr(None)}" for s in p2m_signals if not s.tie_is_zero]
-            dpr_tie_parts.append("default: '0")
-            L.append("    phy2mac_lane_t exp_dpr_tie;")
-            L.append("    assign exp_dpr_tie = '{")
-            for part in dpr_tie_parts[:-1]:
-                L.append(f"        {part},")
-            L.append(f"        {dpr_tie_parts[-1]}")
-            L.append("    };")
-            L.append("")
 
         if phy_input_mode:
             # sel_tgt doesn't exist as a group-level signal in this mode --
             # each BBM lane has its own independent seltgt_g{gid}_l{l}, so
             # the monitor is per lane, not per group. Every candidate's own
-            # designated port for that lane is checked individually against
+            # designated ctrl lane for that PHY lane is checked individually against
             # that candidate's own bit, not gated on the whole group being
-            # idle -- see gen_data_p2m()'s docstring: a port's mux output is
+            # idle -- see gen_data_p2m()'s docstring: a ctrl lane's mux output is
             # governed entirely by its own owning candidate's single bit.
             L.append("    //------------------------------------------------------------")
             L.append("    // NOV monitor: one per BBM lane (each lane's seltgt is its own")
@@ -464,10 +439,10 @@ def gen_tb(cfg, pclk_mode="pclk_as_phy_output", dpr=False):
             L.append("    //------------------------------------------------------------")
             for g in muxed:
                 for l in g.lanes:
-                    port_of_cand = {}
+                    ctrl_lane_of_cand = {}
                     for c in g.cands:
                         m = next(mm for mm in cfg.modes if g.owners[mm] == c)
-                        port_of_cand[c] = cfg.mapping[m][l][1]
+                        ctrl_lane_of_cand[c] = cfg.mapping[m][l][1]
                     n = g.n
                     L.append(f"    always @(dut.seltgt_g{g.gid}_l{l}) begin")
                     L.append("        if ($time == 0) begin")
@@ -498,12 +473,12 @@ def gen_tb(cfg, pclk_mode="pclk_as_phy_output", dpr=False):
                     L.append("")
                     for i, c in enumerate(g.cands):
                         cc_ = cfg.controllers[c]
-                        cl = port_of_cand[c]
+                        cl = ctrl_lane_of_cand[c]
                         L.append(
                             f"            if (sel_snap[{i}] == 1'b0 && dut.seltgt_g{g.gid}_l{l}[{i}] == 1'b0)"
                         )
                         L.append(
-                            f"                chk_p2m({cc_.lname}_phy2mac[{cl}], exp_safe_p2m_{cc_.lname},"
+                            f"                chk_p2m({cc_.lname}_phy2mac[{cl}], exp_safe_p2m,"
                         )
                         L.append(f'                    "G{g.gid} {cc_.name}[{cl}]: not owner");')
                     L.append("            err_safe_state += (err_count - err_before);")
@@ -513,16 +488,16 @@ def gen_tb(cfg, pclk_mode="pclk_as_phy_output", dpr=False):
             L.append("")
             muxed = []  # skip the group-level monitor below
 
-        # Precompute, per muxed group, which (controller, port) pairs are
-        # actually routed through it -- validate() guarantees a port's
+        # Precompute, per muxed group, which (controller, ctrl lane) pairs are
+        # actually routed through it -- validate() guarantees a ctrl lane's
         # drivers never span more than one group, so this is unambiguous.
-        port_group = {}
+        lane_group_of = {}
         for m in cfg.modes:
             for l in range(LC):
                 cid, cl = cfg.mapping[m][l]
                 g = cfg.group_of_lane(l)
                 if not g.is_direct:
-                    port_group[(cid, cl)] = g.gid
+                    lane_group_of[(cid, cl)] = g.gid
 
         if muxed:
             L.append("    always @(dut.sel_tgt) begin")
@@ -581,12 +556,12 @@ def gen_tb(cfg, pclk_mode="pclk_as_phy_output", dpr=False):
                 L.append(
                     f'                        $sformatf("G{g.gid} lane%0d: sel==0 NOV gap", G{g.gid}_LANES[i]));'
                 )
-                for (cid, cl), gid in sorted(port_group.items()):
+                for (cid, cl), gid in sorted(lane_group_of.items()):
                     if gid != g.gid:
                         continue
                     c = cfg.controllers[cid]
                     L.append(
-                        f"                chk_p2m({c.lname}_phy2mac[{cl}], exp_safe_p2m_{c.lname},"
+                        f"                chk_p2m({c.lname}_phy2mac[{cl}], exp_safe_p2m,"
                     )
                     L.append(f'                    "G{g.gid} {c.name}[{cl}]: sel==0 NOV gap");')
                 L.append("            end")
@@ -616,17 +591,17 @@ def gen_tb(cfg, pclk_mode="pclk_as_phy_output", dpr=False):
     L.append("    task automatic check_mode(input int m);")
     L.append("        mac2phy_lane_t exp_m2p;")
     L.append("        phy2mac_lane_t exp_p2m;")
-    L.append("        int cid, port;")
+    L.append("        int cid, ctrl_lane;")
     L.append("        int unsigned err_before;")
     L.append("")
     L.append("        for (int l = 0; l < NL; l++) begin")
     L.append("            cid  = owner_of(m, l);")
-    L.append("            port = port_of(m, l);")
-    L.append("            exp_m2p = make_m2p(cid, port);")
+    L.append("            ctrl_lane = ctrl_lane_of(m, l);")
+    L.append("            exp_m2p = make_m2p(cid, ctrl_lane);")
     L.append("            err_before = err_count;")
     L.append("            chk_m2p(phy_mac2phy[l], exp_m2p,")
     L.append(
-        '                $sformatf("mode%0d lane%0d: expected ctrl%0d port%0d", m, l, cid, port));'
+        '                $sformatf("mode%0d lane%0d: expected ctrl%0d lane%0d", m, l, cid, ctrl_lane));'
     )
     L.append("            err_m2p += (err_count - err_before);")
     L.append("")
@@ -663,23 +638,23 @@ def gen_tb(cfg, pclk_mode="pclk_as_phy_output", dpr=False):
     L.append("")
     if phy_input_mode:
         # rx_clk: one shallow pass over lanes (not nested inside the
-        # per-controller/per-port data loop below) -- a blocking @(posedge
+        # per-controller/per-ctrl-lane data loop below) -- a blocking @(posedge
         # ...) inside that loop's double for-nesting (c, then p) segfaulted
         # verilator's own runtime; a single for-loop here, same shape as
         # the per-controller pclk check below, doesn't.
         L.append("        for (int l = 0; l < NL; l++) begin")
-        L.append("            int cid, port;")
+        L.append("            int cid, ctrl_lane;")
         L.append("            cid  = owner_of(m, l);")
-        L.append("            port = port_of(m, l);")
+        L.append("            ctrl_lane = ctrl_lane_of(m, l);")
         L.append("            case (cid)")
         for c in ctrls:
             L.append(f"                {c.id}: begin")
             _emit_clk_period_chk(
                 L,
                 20,
-                f"{c.lname}_rx_clk[port]",
+                f"{c.lname}_rx_clk[ctrl_lane]",
                 "LANE_PERIOD_NS[l]",
-                f'$sformatf("mode%0d {c.lname}_rx_clk[%0d]", m, port)',
+                f'$sformatf("mode%0d {c.lname}_rx_clk[%0d]", m, ctrl_lane)',
             )
             L.append("                end")
         L.append("            endcase")
@@ -721,7 +696,7 @@ def gen_tb(cfg, pclk_mode="pclk_as_phy_output", dpr=False):
     L.append("                phy2mac_lane_t got;")
     L.append("                src_lane = -1;")
     L.append("                for (int l = 0; l < NL; l++)")
-    L.append("                    if (owner_of(m, l) == c && port_of(m, l) == p) src_lane = l;")
+    L.append("                    if (owner_of(m, l) == c && ctrl_lane_of(m, l) == p) src_lane = l;")
     L.append("")
     L.append("                case (c)")
     for c in ctrls:
@@ -806,7 +781,7 @@ def gen_tb(cfg, pclk_mode="pclk_as_phy_output", dpr=False):
         L.append("        foreach (test_lanes[k]) begin")
         L.append("            automatic int l = test_lanes[k];")
         L.append("            automatic int oid = owner_of(mode, l);")
-        L.append("            automatic int op = port_of(mode, l);")
+        L.append("            automatic int op = ctrl_lane_of(mode, l);")
         L.append("            automatic int unsigned err_before;")
         L.append("            v_lane_mask = '0;")
         L.append("            v_lane_mask[l] = 1'b1;")
@@ -814,7 +789,7 @@ def gen_tb(cfg, pclk_mode="pclk_as_phy_output", dpr=False):
         L.append("            err_before = err_count;")
         L.append("            case (oid)")
         for c in ctrls:
-            L.append(f"                {c.id}: chk_p2m({c.lname}_phy2mac[op], exp_safe_p2m_{c.lname},")
+            L.append(f"                {c.id}: chk_p2m({c.lname}_phy2mac[op], exp_safe_p2m,")
             L.append(
                 f'                    $sformatf("dpr claimed lane%0d: real owner {c.name}[%0d] should read SAFE_P2M", l, op));'
             )
@@ -829,7 +804,7 @@ def gen_tb(cfg, pclk_mode="pclk_as_phy_output", dpr=False):
         )
         L.append("            v_lane_mask = '0;")
         L.append("            #SETTLE;")
-        L.append("            chk(dpr_phy2mac[l] == exp_dpr_tie,")
+        L.append("            chk(dpr_phy2mac[l] == exp_safe_p2m,")
         L.append(
             '                $sformatf("dpr released lane%0d: dpr_phy2mac should revert to tie", l));'
         )

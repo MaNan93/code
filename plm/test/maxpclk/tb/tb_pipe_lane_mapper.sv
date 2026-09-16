@@ -4,7 +4,7 @@
 //
 // Checks:
 //   1. Steady-state data routing matches lane_mapping.csv exactly
-//   2. Unmapped controller ports read back SAFE_P2M
+//   2. Unmapped controller lanes read back SAFE_P2M
 //   3. Group sel vectors are always one-hot0 (non-overlap)
 //   4. During the NOV handoff window (sel all-zero), phy lanes present the safe state (txelecidle=1)
 //   5. phy_rst_n follows the current owner's ctrl_rst_n
@@ -61,16 +61,16 @@ module tb_pipe_lane_mapper;
 
     logic [11:0] ctrla_pclk;
     logic [11:0] ctrla_rx_clk;
-    assign ctrla_pclk = {12{ctrl_ref_clk[0]}};  // no division modeled -- every port bit is the same undivided clock
+    assign ctrla_pclk = {12{ctrl_ref_clk[0]}};  // no division modeled -- every ctrl lane gets the same undivided clock
     logic [5:0] ctrlb_pclk;
     logic [5:0] ctrlb_rx_clk;
-    assign ctrlb_pclk = {6{ctrl_ref_clk[1]}};  // no division modeled -- every port bit is the same undivided clock
+    assign ctrlb_pclk = {6{ctrl_ref_clk[1]}};  // no division modeled -- every ctrl lane gets the same undivided clock
     logic [7:0] ctrlc_pclk;
     logic [7:0] ctrlc_rx_clk;
-    assign ctrlc_pclk = {8{ctrl_ref_clk[2]}};  // no division modeled -- every port bit is the same undivided clock
+    assign ctrlc_pclk = {8{ctrl_ref_clk[2]}};  // no division modeled -- every ctrl lane gets the same undivided clock
     logic [2:0] ctrld_pclk;
     logic [2:0] ctrld_rx_clk;
-    assign ctrld_pclk = {3{ctrl_ref_clk[3]}};  // no division modeled -- every port bit is the same undivided clock
+    assign ctrld_pclk = {3{ctrl_ref_clk[3]}};  // no division modeled -- every ctrl lane gets the same undivided clock
 
     //------------------------------------------------------------ DUT IO
     logic [NL-1:0]      phy_phystatus_stim = '0;
@@ -127,11 +127,11 @@ module tb_pipe_lane_mapper;
     );
 
     //------------------------------------------------------------ stimulus patterns
-    function automatic mac2phy_lane_t make_m2p(input int cid, input int port);
+    function automatic mac2phy_lane_t make_m2p(input int cid, input int ctrl_lane);
         mac2phy_lane_t v;
         v = SAFE_M2P;
-        v.mac_phy_txdata      = {4'(cid), 20'h0, 8'(port)};
-        v.mac_phy_txdatak     = 4'(port);
+        v.mac_phy_txdata      = {4'(cid), 20'h0, 8'(ctrl_lane)};
+        v.mac_phy_txdatak     = 4'(ctrl_lane);
         v.mac_phy_txdatavalid = 1'b1;
         v.mac_phy_txelecidle  = 1'b0;   // non-idle (may differ from the signal's safe state)
         v.mac_phy_rxstandby   = 1'b0;   // non-idle (may differ from the signal's safe state)
@@ -227,7 +227,7 @@ module tb_pipe_lane_mapper;
         endcase
     endfunction
 
-    function automatic int port_of(input int m, input int l);
+    function automatic int ctrl_lane_of(input int m, input int l);
         case (m)
             0: case (l)
                 0: return 0;
@@ -390,28 +390,11 @@ module tb_pipe_lane_mapper;
     localparam int G2_LANES[3] = '{6, 7, 8};
     localparam int G3_LANES[3] = '{9, 10, 11};
 
-    phy2mac_lane_t exp_safe_p2m_ctrla;
-    assign exp_safe_p2m_ctrla = '{
+    phy2mac_lane_t exp_safe_p2m;
+    assign exp_safe_p2m = '{
+        phy_mac_rxelecidle: 1'b1,
+        phy_mac_rxstandbystatus: 1'b1,
         phy_mac_messagebus: 8'h50,
-        phy_mac_phystatus: phy_phy2mac[0].phy_mac_phystatus,
-        default: '0
-    };
-    phy2mac_lane_t exp_safe_p2m_ctrlb;
-    assign exp_safe_p2m_ctrlb = '{
-        phy_mac_messagebus: 8'h50,
-        phy_mac_phystatus: phy_phy2mac[3].phy_mac_phystatus,
-        default: '0
-    };
-    phy2mac_lane_t exp_safe_p2m_ctrlc;
-    assign exp_safe_p2m_ctrlc = '{
-        phy_mac_messagebus: 8'h50,
-        phy_mac_phystatus: phy_phy2mac[6].phy_mac_phystatus,
-        default: '0
-    };
-    phy2mac_lane_t exp_safe_p2m_ctrld;
-    assign exp_safe_p2m_ctrld = '{
-        phy_mac_messagebus: 8'h50,
-        phy_mac_phystatus: phy_phy2mac[9].phy_mac_phystatus,
         default: '0
     };
 
@@ -435,10 +418,10 @@ module tb_pipe_lane_mapper;
                     "G1 lane3: sel==0 NOV gap");
 
             if (sel_snap[0] == 1'b0 && dut.seltgt_g1_l3[0] == 1'b0)
-                chk_p2m(ctrla_phy2mac[3], exp_safe_p2m_ctrla,
+                chk_p2m(ctrla_phy2mac[3], exp_safe_p2m,
                     "G1 CtrlA[3]: not owner");
             if (sel_snap[1] == 1'b0 && dut.seltgt_g1_l3[1] == 1'b0)
-                chk_p2m(ctrlb_phy2mac[0], exp_safe_p2m_ctrlb,
+                chk_p2m(ctrlb_phy2mac[0], exp_safe_p2m,
                     "G1 CtrlB[0]: not owner");
             err_safe_state += (err_count - err_before);
         end
@@ -460,10 +443,10 @@ module tb_pipe_lane_mapper;
                     "G1 lane4: sel==0 NOV gap");
 
             if (sel_snap[0] == 1'b0 && dut.seltgt_g1_l4[0] == 1'b0)
-                chk_p2m(ctrla_phy2mac[4], exp_safe_p2m_ctrla,
+                chk_p2m(ctrla_phy2mac[4], exp_safe_p2m,
                     "G1 CtrlA[4]: not owner");
             if (sel_snap[1] == 1'b0 && dut.seltgt_g1_l4[1] == 1'b0)
-                chk_p2m(ctrlb_phy2mac[1], exp_safe_p2m_ctrlb,
+                chk_p2m(ctrlb_phy2mac[1], exp_safe_p2m,
                     "G1 CtrlB[1]: not owner");
             err_safe_state += (err_count - err_before);
         end
@@ -485,10 +468,10 @@ module tb_pipe_lane_mapper;
                     "G1 lane5: sel==0 NOV gap");
 
             if (sel_snap[0] == 1'b0 && dut.seltgt_g1_l5[0] == 1'b0)
-                chk_p2m(ctrla_phy2mac[5], exp_safe_p2m_ctrla,
+                chk_p2m(ctrla_phy2mac[5], exp_safe_p2m,
                     "G1 CtrlA[5]: not owner");
             if (sel_snap[1] == 1'b0 && dut.seltgt_g1_l5[1] == 1'b0)
-                chk_p2m(ctrlb_phy2mac[2], exp_safe_p2m_ctrlb,
+                chk_p2m(ctrlb_phy2mac[2], exp_safe_p2m,
                     "G1 CtrlB[2]: not owner");
             err_safe_state += (err_count - err_before);
         end
@@ -510,10 +493,10 @@ module tb_pipe_lane_mapper;
                     "G2 lane6: sel==0 NOV gap");
 
             if (sel_snap[0] == 1'b0 && dut.seltgt_g2_l6[0] == 1'b0)
-                chk_p2m(ctrla_phy2mac[6], exp_safe_p2m_ctrla,
+                chk_p2m(ctrla_phy2mac[6], exp_safe_p2m,
                     "G2 CtrlA[6]: not owner");
             if (sel_snap[1] == 1'b0 && dut.seltgt_g2_l6[1] == 1'b0)
-                chk_p2m(ctrlc_phy2mac[0], exp_safe_p2m_ctrlc,
+                chk_p2m(ctrlc_phy2mac[0], exp_safe_p2m,
                     "G2 CtrlC[0]: not owner");
             err_safe_state += (err_count - err_before);
         end
@@ -535,10 +518,10 @@ module tb_pipe_lane_mapper;
                     "G2 lane7: sel==0 NOV gap");
 
             if (sel_snap[0] == 1'b0 && dut.seltgt_g2_l7[0] == 1'b0)
-                chk_p2m(ctrla_phy2mac[7], exp_safe_p2m_ctrla,
+                chk_p2m(ctrla_phy2mac[7], exp_safe_p2m,
                     "G2 CtrlA[7]: not owner");
             if (sel_snap[1] == 1'b0 && dut.seltgt_g2_l7[1] == 1'b0)
-                chk_p2m(ctrlc_phy2mac[1], exp_safe_p2m_ctrlc,
+                chk_p2m(ctrlc_phy2mac[1], exp_safe_p2m,
                     "G2 CtrlC[1]: not owner");
             err_safe_state += (err_count - err_before);
         end
@@ -560,10 +543,10 @@ module tb_pipe_lane_mapper;
                     "G2 lane8: sel==0 NOV gap");
 
             if (sel_snap[0] == 1'b0 && dut.seltgt_g2_l8[0] == 1'b0)
-                chk_p2m(ctrla_phy2mac[8], exp_safe_p2m_ctrla,
+                chk_p2m(ctrla_phy2mac[8], exp_safe_p2m,
                     "G2 CtrlA[8]: not owner");
             if (sel_snap[1] == 1'b0 && dut.seltgt_g2_l8[1] == 1'b0)
-                chk_p2m(ctrlc_phy2mac[2], exp_safe_p2m_ctrlc,
+                chk_p2m(ctrlc_phy2mac[2], exp_safe_p2m,
                     "G2 CtrlC[2]: not owner");
             err_safe_state += (err_count - err_before);
         end
@@ -585,16 +568,16 @@ module tb_pipe_lane_mapper;
                     "G3 lane9: sel==0 NOV gap");
 
             if (sel_snap[0] == 1'b0 && dut.seltgt_g3_l9[0] == 1'b0)
-                chk_p2m(ctrla_phy2mac[9], exp_safe_p2m_ctrla,
+                chk_p2m(ctrla_phy2mac[9], exp_safe_p2m,
                     "G3 CtrlA[9]: not owner");
             if (sel_snap[1] == 1'b0 && dut.seltgt_g3_l9[1] == 1'b0)
-                chk_p2m(ctrlb_phy2mac[3], exp_safe_p2m_ctrlb,
+                chk_p2m(ctrlb_phy2mac[3], exp_safe_p2m,
                     "G3 CtrlB[3]: not owner");
             if (sel_snap[2] == 1'b0 && dut.seltgt_g3_l9[2] == 1'b0)
-                chk_p2m(ctrlc_phy2mac[3], exp_safe_p2m_ctrlc,
+                chk_p2m(ctrlc_phy2mac[3], exp_safe_p2m,
                     "G3 CtrlC[3]: not owner");
             if (sel_snap[3] == 1'b0 && dut.seltgt_g3_l9[3] == 1'b0)
-                chk_p2m(ctrld_phy2mac[0], exp_safe_p2m_ctrld,
+                chk_p2m(ctrld_phy2mac[0], exp_safe_p2m,
                     "G3 CtrlD[0]: not owner");
             err_safe_state += (err_count - err_before);
         end
@@ -616,16 +599,16 @@ module tb_pipe_lane_mapper;
                     "G3 lane10: sel==0 NOV gap");
 
             if (sel_snap[0] == 1'b0 && dut.seltgt_g3_l10[0] == 1'b0)
-                chk_p2m(ctrla_phy2mac[10], exp_safe_p2m_ctrla,
+                chk_p2m(ctrla_phy2mac[10], exp_safe_p2m,
                     "G3 CtrlA[10]: not owner");
             if (sel_snap[1] == 1'b0 && dut.seltgt_g3_l10[1] == 1'b0)
-                chk_p2m(ctrlb_phy2mac[4], exp_safe_p2m_ctrlb,
+                chk_p2m(ctrlb_phy2mac[4], exp_safe_p2m,
                     "G3 CtrlB[4]: not owner");
             if (sel_snap[2] == 1'b0 && dut.seltgt_g3_l10[2] == 1'b0)
-                chk_p2m(ctrlc_phy2mac[4], exp_safe_p2m_ctrlc,
+                chk_p2m(ctrlc_phy2mac[4], exp_safe_p2m,
                     "G3 CtrlC[4]: not owner");
             if (sel_snap[3] == 1'b0 && dut.seltgt_g3_l10[3] == 1'b0)
-                chk_p2m(ctrld_phy2mac[1], exp_safe_p2m_ctrld,
+                chk_p2m(ctrld_phy2mac[1], exp_safe_p2m,
                     "G3 CtrlD[1]: not owner");
             err_safe_state += (err_count - err_before);
         end
@@ -647,16 +630,16 @@ module tb_pipe_lane_mapper;
                     "G3 lane11: sel==0 NOV gap");
 
             if (sel_snap[0] == 1'b0 && dut.seltgt_g3_l11[0] == 1'b0)
-                chk_p2m(ctrla_phy2mac[11], exp_safe_p2m_ctrla,
+                chk_p2m(ctrla_phy2mac[11], exp_safe_p2m,
                     "G3 CtrlA[11]: not owner");
             if (sel_snap[1] == 1'b0 && dut.seltgt_g3_l11[1] == 1'b0)
-                chk_p2m(ctrlb_phy2mac[5], exp_safe_p2m_ctrlb,
+                chk_p2m(ctrlb_phy2mac[5], exp_safe_p2m,
                     "G3 CtrlB[5]: not owner");
             if (sel_snap[2] == 1'b0 && dut.seltgt_g3_l11[2] == 1'b0)
-                chk_p2m(ctrlc_phy2mac[5], exp_safe_p2m_ctrlc,
+                chk_p2m(ctrlc_phy2mac[5], exp_safe_p2m,
                     "G3 CtrlC[5]: not owner");
             if (sel_snap[3] == 1'b0 && dut.seltgt_g3_l11[3] == 1'b0)
-                chk_p2m(ctrld_phy2mac[2], exp_safe_p2m_ctrld,
+                chk_p2m(ctrld_phy2mac[2], exp_safe_p2m,
                     "G3 CtrlD[2]: not owner");
             err_safe_state += (err_count - err_before);
         end
@@ -668,16 +651,16 @@ module tb_pipe_lane_mapper;
     task automatic check_mode(input int m);
         mac2phy_lane_t exp_m2p;
         phy2mac_lane_t exp_p2m;
-        int cid, port;
+        int cid, ctrl_lane;
         int unsigned err_before;
 
         for (int l = 0; l < NL; l++) begin
             cid  = owner_of(m, l);
-            port = port_of(m, l);
-            exp_m2p = make_m2p(cid, port);
+            ctrl_lane = ctrl_lane_of(m, l);
+            exp_m2p = make_m2p(cid, ctrl_lane);
             err_before = err_count;
             chk_m2p(phy_mac2phy[l], exp_m2p,
-                $sformatf("mode%0d lane%0d: expected ctrl%0d port%0d", m, l, cid, port));
+                $sformatf("mode%0d lane%0d: expected ctrl%0d lane%0d", m, l, cid, ctrl_lane));
             err_m2p += (err_count - err_before);
 
             err_before = err_count;
@@ -701,9 +684,9 @@ module tb_pipe_lane_mapper;
         end
 
         for (int l = 0; l < NL; l++) begin
-            int cid, port;
+            int cid, ctrl_lane;
             cid  = owner_of(m, l);
-            port = port_of(m, l);
+            ctrl_lane = ctrl_lane_of(m, l);
             case (cid)
                 0: begin
                     begin
@@ -711,11 +694,11 @@ module tb_pipe_lane_mapper;
                         real got_ns, exp_ns;
                         int unsigned err_before;
                         exp_ns = LANE_PERIOD_NS[l];
-                        @(posedge ctrla_rx_clk[port]); t0 = $time;
-                        @(posedge ctrla_rx_clk[port]); got_ns = $time - t0;
+                        @(posedge ctrla_rx_clk[ctrl_lane]); t0 = $time;
+                        @(posedge ctrla_rx_clk[ctrl_lane]); got_ns = $time - t0;
                         err_before = err_count;
                         chk((got_ns > exp_ns * 0.8) && (got_ns < exp_ns * 1.2),
-                            $sformatf("%s: measured period %0.2fns, expected ~%0.2fns", $sformatf("mode%0d ctrla_rx_clk[%0d]", m, port), got_ns, exp_ns));
+                            $sformatf("%s: measured period %0.2fns, expected ~%0.2fns", $sformatf("mode%0d ctrla_rx_clk[%0d]", m, ctrl_lane), got_ns, exp_ns));
                         err_clock += (err_count - err_before);
                     end
                 end
@@ -725,11 +708,11 @@ module tb_pipe_lane_mapper;
                         real got_ns, exp_ns;
                         int unsigned err_before;
                         exp_ns = LANE_PERIOD_NS[l];
-                        @(posedge ctrlb_rx_clk[port]); t0 = $time;
-                        @(posedge ctrlb_rx_clk[port]); got_ns = $time - t0;
+                        @(posedge ctrlb_rx_clk[ctrl_lane]); t0 = $time;
+                        @(posedge ctrlb_rx_clk[ctrl_lane]); got_ns = $time - t0;
                         err_before = err_count;
                         chk((got_ns > exp_ns * 0.8) && (got_ns < exp_ns * 1.2),
-                            $sformatf("%s: measured period %0.2fns, expected ~%0.2fns", $sformatf("mode%0d ctrlb_rx_clk[%0d]", m, port), got_ns, exp_ns));
+                            $sformatf("%s: measured period %0.2fns, expected ~%0.2fns", $sformatf("mode%0d ctrlb_rx_clk[%0d]", m, ctrl_lane), got_ns, exp_ns));
                         err_clock += (err_count - err_before);
                     end
                 end
@@ -739,11 +722,11 @@ module tb_pipe_lane_mapper;
                         real got_ns, exp_ns;
                         int unsigned err_before;
                         exp_ns = LANE_PERIOD_NS[l];
-                        @(posedge ctrlc_rx_clk[port]); t0 = $time;
-                        @(posedge ctrlc_rx_clk[port]); got_ns = $time - t0;
+                        @(posedge ctrlc_rx_clk[ctrl_lane]); t0 = $time;
+                        @(posedge ctrlc_rx_clk[ctrl_lane]); got_ns = $time - t0;
                         err_before = err_count;
                         chk((got_ns > exp_ns * 0.8) && (got_ns < exp_ns * 1.2),
-                            $sformatf("%s: measured period %0.2fns, expected ~%0.2fns", $sformatf("mode%0d ctrlc_rx_clk[%0d]", m, port), got_ns, exp_ns));
+                            $sformatf("%s: measured period %0.2fns, expected ~%0.2fns", $sformatf("mode%0d ctrlc_rx_clk[%0d]", m, ctrl_lane), got_ns, exp_ns));
                         err_clock += (err_count - err_before);
                     end
                 end
@@ -753,11 +736,11 @@ module tb_pipe_lane_mapper;
                         real got_ns, exp_ns;
                         int unsigned err_before;
                         exp_ns = LANE_PERIOD_NS[l];
-                        @(posedge ctrld_rx_clk[port]); t0 = $time;
-                        @(posedge ctrld_rx_clk[port]); got_ns = $time - t0;
+                        @(posedge ctrld_rx_clk[ctrl_lane]); t0 = $time;
+                        @(posedge ctrld_rx_clk[ctrl_lane]); got_ns = $time - t0;
                         err_before = err_count;
                         chk((got_ns > exp_ns * 0.8) && (got_ns < exp_ns * 1.2),
-                            $sformatf("%s: measured period %0.2fns, expected ~%0.2fns", $sformatf("mode%0d ctrld_rx_clk[%0d]", m, port), got_ns, exp_ns));
+                            $sformatf("%s: measured period %0.2fns, expected ~%0.2fns", $sformatf("mode%0d ctrld_rx_clk[%0d]", m, ctrl_lane), got_ns, exp_ns));
                         err_clock += (err_count - err_before);
                     end
                 end
@@ -778,7 +761,7 @@ module tb_pipe_lane_mapper;
                 phy2mac_lane_t got;
                 src_lane = -1;
                 for (int l = 0; l < NL; l++)
-                    if (owner_of(m, l) == c && port_of(m, l) == p) src_lane = l;
+                    if (owner_of(m, l) == c && ctrl_lane_of(m, l) == p) src_lane = l;
 
                 case (c)
                     0: got = ctrla_phy2mac[p];

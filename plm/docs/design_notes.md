@@ -3,7 +3,7 @@
 本文档是 PIPE lane mapper 这套 RTL 的设计文档：记录几条不直接体现在
 模块代码注释里、但对理解整体架构至关重要的原理和约束。如何用生成器
 把这套设计实例化成具体的 RTL/testbench（命令行参数、配置文件格式等），
-见 [`tool_usage.md`](tool_usage.md)，本文档不涉及。
+见 [`src/plm/docs/tool_usage.md`](../src/plm/docs/tool_usage.md)（跟 wheel 一起打包，所以放在包里），本文档不涉及。
 
 结构：第 1 节讲清楚要解决什么问题、由此带来哪些硬约束；第 2 节讲这套
 设计支持哪些可选方案；第 3 节讲这些方案各自是怎么实现的；第 4 节汇总一批
@@ -33,12 +33,12 @@ NOV（non-overlap）切换窗口；owner 没有变化的 lane，其数据通路�
 必须满足几条硬约束——这些约束由 `Config.validate()` 强制检查，生成
 阶段直接报错拒绝不满足条件的配置。
 
-**约束 A：同一 controller 端口的所有驱动源，必须来自同一个 lane
+**约束 A：同一条 controller lane 的所有驱动源，必须来自同一个 lane
 group。** `Config._build_groups()` 按"每条 lane 在所有 mode 下的
 owner 序列"分组：两条 lane 只有在**所有 mode 下 owner 完全一致**时才
 会被分进同一个 group，每个 group 各自拥有一套独立的 `pipe_lane_sel_sync`，
 独立完成自己的 NOV 时序，group 之间互不感知、互不互锁。如果一个
-controller 端口由跨 group 的多路 lane 驱动，这些驱动源各自收敛的时刻
+controller lane 由跨 group 的多路 lane 驱动，这些驱动源各自收敛的时刻
 是独立的、没有互锁关系，可能出现短暂同时有效，导致下游汇聚 mux 把两路
 数据相或——这个代价在 RTL 层面很难低成本解决，所以在拓扑层面直接约束
 掉（详见 3.2 节分组算法、3.4 节"只扰动变化部分"是怎么由这条约束保证的）。
@@ -72,8 +72,8 @@ lane_count % g_min == 0                     # 否则无法被这个颗粒度均�
 len(controllers) == lane_count // g_min     # 数量必须与理想值一致
 ```
 
-现有的三套配置（`test_quad`：颗粒度 3、4 controller；`test_bifurcate`：
-颗粒度 4、4 controller；`test_finegrain`：颗粒度 1、6 controller）均满足
+现有的三套配置（`quad`：颗粒度 3、4 controller；`bifurcate`：
+颗粒度 4、4 controller；`finegrain`：颗粒度 1、6 controller）均满足
 此式。
 
 完整的校验规则清单见 4.3 节表 1。
@@ -93,7 +93,7 @@ PIPE 规范允许两种截然不同的 PCLK 归属方式，两者互斥，一次
 | | `pclk_as_phy_output`（默认方案） | `pclk_as_phy_input` |
 |---|---|---|
 | PCLK 由谁产生 | PHY 产生，驱动给 MAC | 每个 controller 自己有参考时钟（一般来自外部 PLL），driving 给 PHY |
-| controller 的工作时钟从哪来 | `pipe_lane_clk_mux` 从当前 owner 所在 lane 的 `phy_pclk_out` 里选一路，即 `ctrl_pclk` | controller 自己用参考时钟分频得到，按端口输出成 `{c}_pclk[]`，本设计不参与产生 |
+| controller 的工作时钟从哪来 | `pipe_lane_clk_mux` 从当前 owner 所在 lane 的 `phy_pclk_out` 里选一路，即 `ctrl_pclk` | controller 自己用参考时钟分频得到，按自己的 lane 输出成 `{c}_pclk[]`，本设计不参与产生 |
 | 有没有 `ctrl_pclk` 信号 | 有（顶层输出） | 没有（详见 3.5.2 节） |
 | 数据路径的同步粒度 | 按 group（`sel_tgt`，group 级信号） | 按物理 lane（`seltgt_gN_lL`，详见 3.5.2 节） |
 
@@ -212,8 +212,8 @@ lane 之间是共享的，PHY 侧仍然需要每条 lane 各自的值。`shared`
 | `dpr_mac2phy[NL]` / `dpr_phy2mac[NL]` | in/out | dpr | DPR 自己的数据端口，1:1 对应 lane |
 | `dpr_pclk` | out | dpr | DPR 内部派生出的工作时钟 |
 | `{c}_rst_n` | in | 每个 controller | 已在外部同步好 |
-| `{c}_mac2phy[max_width]` / `{c}_phy2mac[max_width]` | in/out | 每个 controller | struct 数组，按它自己端口数定宽 |
-| `{c}_pclk[max_width]` | in | 每个 controller + phy_as_phy_input | 每端口一位，controller 自己分频好送进来 |
+| `{c}_mac2phy[max_width]` / `{c}_phy2mac[max_width]` | in/out | 每个 controller | struct 数组，按它自己的 lane 数定宽 |
+| `{c}_pclk[max_width]` | in | 每个 controller + phy_as_phy_input | 每条 controller lane 一位，controller 自己分频好送进来 |
 | `{c}_rx_clk[max_width]` | out | 每个 controller + phy_as_phy_input | 无毛刺路由回给它的 rx_clk |
 | `{c}_pclk` | out | 每个 controller + phy_as_phy_output | controller 自己的单一工作时钟，标量 |
 
@@ -238,7 +238,7 @@ controller 的 `mac2phy`/`phy2mac` struct 数组按 `pipe_signals.csv` 逐行拆
 | `sel_tgt` (`lane_sel_t`) | out | phy_as_phy_output | 每 group 同步后的有效选择 |
 | `dec_tgt` (`lane_sel_t`) | out | 总是 | 译码器原始（未同步）选择，dpr 时已经把 DPR 合成进去 |
 | `pclk_tgt_c{cid}` | out | 每个多候选 controller | 传给 clk_mux 做自己时钟的无毛刺切换 |
-| `seltgt_g{gid}_l{l}` | out | phy_as_phy_input，每条非 direct（或 dpr 时全部）group 的每条 lane | 同步进该 lane 当前候选自己端口时钟域的选择位 |
+| `seltgt_g{gid}_l{l}` | out | phy_as_phy_input，每条非 direct（或 dpr 时全部）group 的每条 lane | 同步进该 lane 当前候选自己那条 controller lane 的时钟域的选择位 |
 | `rxclk_en_g{gid}_l{l}` | out | phy_as_phy_input，每条非 direct group 的每条 lane | 同步进 `rx_clk[l]` 域的选择位 |
 
 **`pipe_lane_clk_mux`**——parameter `NL`、`NC`；两种模式端口完全不同
@@ -253,6 +253,10 @@ controller 的 `{c}_pclk[max_width]`、每条非 direct（或 dpr 时全部）gr
 `rxclk_en_g{gid}_l{l}`、（dpr：`v_lane_mask[NL]`、`dpr_rst_n`）→
 `phy_pclk[NL]`、（dpr：`dpr_pclk`）、每个 controller 的
 `{c}_rx_clk[max_width]`。
+
+> 上面标 dpr 的那几个端口在这套架构下**生成不出来**：`plm generate`
+> 直接拒绝 `--dpr` + `--pclk-mode pclk_as_phy_input`（见 4.8 节）。
+> 生成器里那段代码还在，但走不到；列在这里是为了跟另一套架构对照。
 
 **`pipe_lane_rst_mux`**——parameter `NL`、`NC`
 
@@ -324,11 +328,11 @@ owner 没有变化的 group，它对应的选择信号在切换前后取值相�
 的性质；3.2 节的分组约束存在的意义，正是保证每个 group 能独立判断
 "要不要切"而不用跟别的 group 互锁。
 
-例（`test_quad`）：mode0→mode2 只切换 G2、G3，G0/G1 不受影响。若
+例（`quad`）：mode0→mode2 只切换 G2、G3，G0/G1 不受影响。若
 CtrlA 当时正靠 G0+G1（lane0~5）在跑，这次改 mode 完全不影响它，同时
 G2/G3 从 CtrlA 断开、切给 CtrlC。
 
-![test_quad 从 mode0 切到 mode2：只有 G2、G3 经历 NOV 窗口，G0/G1 全程不受扰动](images/group_independence.png)
+![quad 从 mode0 切到 mode2：只有 G2、G3 经历 NOV 窗口，G0/G1 全程不受扰动](images/group_independence.png)
 
 **图 2**：同一次 `mode0 → mode2` 切换里，G0/G1（图中合并为一行，owner
 全程是 CtrlA）从未离开过 CtrlA，`sel_tgt` 对应位不翻转，也就没有 NOV
@@ -371,7 +375,7 @@ owner"的窗口。
 `pipe_lane_mapper` 的顶层端口——它是外部 PLL 直接给 controller
 的信号，分频这一步发生在 `pipe_lane_mapper` 范围之外）。绿色——
 controller 自己做分频，
-分频结果按每个端口一位的形式输出成 `{c}_pclk[]`，格式和
+分频结果按自己每条 lane 一位的形式输出成 `{c}_pclk[]`，格式和
 `{c}_mac2phy` 完全一样。橙色——`pipe_lane_clk_mux` 负责两个方向的
 转换：`{c}_pclk[]` 经过无毛刺切换变成 `phy_pclk[l]` 送给 PHY；PHY 的
 `rx_clk[l]` 经过另一套独立的无毛刺切换变成 `{c}_rx_clk[]` 送回
@@ -381,29 +385,29 @@ controller。蓝色——PHY。
 wire）：`pclk_as_phy_output` 模式下 `ctrl_pclk` 是真实存在的一路信号，因为
 controller 自己造不出这路时钟，需要 `pipe_lane_clk_mux` 从
 `phy_pclk_out` 候选里选出来再喂给它；这套架构里恰好相反——controller
-自己已经用参考时钟分频出了工作时钟，并按端口送出来
+自己已经用参考时钟分频出了工作时钟，并按自己的 lane 送出来
 （`{c}_pclk[]`），`pipe_lane_clk_mux`/`pipe_lane_mapper` 不需要
-再算出一路 `ctrl_pclk` 还给 controller，那只是把某个端口位换个名字
+再算出一路 `ctrl_pclk` 还给 controller，那只是把某一位换个名字
 重新送回去、没有实际作用。`{c}_pclk[]` 才是唯一真实存在的时钟来源，
-而且是**按端口**的，不是按 controller 一根——这一点是这套架构里最
+而且是**按 controller 自己的 lane**的，不是按 controller 一根——这一点是这套架构里最
 重要的性质，直接决定了下面几段的实现方式（也是 4.5 节要重点强调的
 关键点）。
 
 **`seltgt_gN_lL`：数据路径的选择信号按物理 lane 拆分。** `pclk_as_phy_output`
 模式下选择信号是按 group 共用一份（`sel_tgt`），因为 `ctrl_pclk` 天生
 就是"这个 controller 唯一的一根内部时钟"。但 `pclk_as_phy_input`
-模式下 `{c}_pclk[]` 本来就是按端口给的（一个 x4/x8/x2 的配置，合计
+模式下 `{c}_pclk[]` 本来就是按 controller 自己的 lane 给的（一个 x4/x8/x2 的配置，合计
 就是 4+8+2=14 根，不是 3 根）——"controller 只有一根内部时钟"这个
 前提不成立，选择信号驱动的 `pipe_lane_data_mux` 输出最终会被
-controller 自己**那个具体端口**的 `{c}_pclk[port]` 采样，所以同步目标
-也必须是这个具体端口自己的域，不能用某个候选任意一个端口位（比如
+controller 自己**那条具体 lane** 的 `{c}_pclk[]` 采样，所以同步目标
+也必须是这条具体 lane 自己的域，不能用某个候选任意一位（比如
 `{c}_pclk[0]`）代表整个 controller。因此 `pipe_lane_sel_gen` 里每条
 BBM lane 单独建一棵 `pipe_lane_sel_sync`：
 
 ```systemverilog
 // pipe_lane_sel_gen 内部，每条 BBM lane 一个（不是每个 group 一个）：
 pipe_lane_sel_sync #(.N(n), .SYNC(sync_mode)) u_seltgt_sel_sync_gN_lL (
-    .branch_clk   ({ctrld_pclk[port_d], ctrlc_pclk[port_c], ...}),  // 每个候选自己在这条 lane 的端口位
+    .branch_clk   ({ctrld_pclk[port_d], ctrlc_pclk[port_c], ...}),  // 每个候选自己在这条 lane 上的那条 ctrl lane
     .branch_rst_n (...),
     .tgt          (dec_tgt.gN),
     .en           (seltgt_gN_lL)
@@ -412,7 +416,7 @@ pipe_lane_sel_sync #(.N(n), .SYNC(sync_mode)) u_seltgt_sel_sync_gN_lL (
 
 `gen_data_m2p()`（一条 lane 收敛多个候选）直接用这条 lane 自己的
 `seltgt_gN_lL` 当 `.sel`；`gen_data_p2m()`（多条 lane 收敛到一个
-controller 端口）按分支逐位拼：每个候选 `i` 只关心它自己那条
+controller lane）按分支逐位拼：每个候选 `i` 只关心它自己那条
 designated lane 的第 `i` 位（`seltgt_gN_l{它自己的lane}[i]`），拼成
 一个跟原来 `sel_tgt.gN` 形状一样的向量喂给 `pipe_lane_data_mux`。
 group 级的 `sel_tgt`（`lane_sel_t`）在这套架构里因此不存在，
@@ -425,11 +429,11 @@ group 级的 `sel_tgt`（`lane_sel_t`）在这套架构里因此不存在，
 `ctrl_pclk[c]`——每个 controller 只有一路，同一个候选 controller 在
 同一个 group 里对所有 lane 都是同一路时钟，可以共用一组
 `pipe_lane_clk_gate`。这套架构里 `phy_pclk` 选的是
-`{c}_pclk[port]`——按端口的，不是按 controller 的，所以每条物理 lane
+`{c}_pclk[]`——按 controller 自己的 lane 的，不是按 controller 的，所以每条物理 lane
 的 `pipe_lane_clk_gate` 都要独立一份，`clk_in` 接这条 lane 对应的那个
-具体端口位。但驱动这些 `clk_gate` 的 `en`，不需要再单独同步一次——
+具体那一位。但驱动这些 `clk_gate` 的 `en`，不需要再单独同步一次——
 上面 `seltgt_gN_lL` 本来就是拿同一组 `branch_clk`（每个候选自己在这条
-lane 的端口位）同步出来的，直接复用即可：
+lane 上那条 ctrl lane）同步出来的，直接复用即可：
 
 ```systemverilog
 // pipe_lane_clk_mux 内部，直接消费 sel_gen 传来的 seltgt_gN_lL，不再自己建同步树：
@@ -440,7 +444,7 @@ pipe_lane_clk_gate u_pclk_gate_gN_lL_bI (
 
 `dec_tgt` 因此只需要同步进两类域：这里（数据路径 + `phy_pclk` 共用）
 和下面的 `rx_clk[l]`，不是三类。当前（分频逻辑还没实现）同一个
-controller 所有端口位事实上是同一路时钟，这份"按 lane 独立"只是为了
+controller 所有 lane 事实上是同一路时钟，这份"按 lane 独立"只是为了
 从设计上保证正确——真的接上分频器之后不需要再改这部分电路。
 
 多个候选 `pipe_lane_clk_gate` 门控之后要合成一路，这个 OR 不直接用
@@ -453,7 +457,7 @@ cell）——多路已经无毛刺的时钟合成一路，在通用标准单元�
 
 **`rx_clk`：独立的第三个时钟域，需要自己单独一棵同步树。**
 `{c}_rx_clk[]` 的路由拓扑和 `{c}_pclk[]` 一样（同一个 mode 下、同一个
-owner、同一个端口号），但 `rx_clk[l]` 是这条物理 lane 自己的 PHY CDR
+owner、同一个 ctrl lane 下标），但 `rx_clk[l]` 是这条物理 lane 自己的 PHY CDR
 恢复时钟，跟 `{c}_pclk` 没有固定相位关系，是一个完全独立
 的时钟域——不能直接拿同步进 `{c}_pclk` 域的 `seltgt_gN_lL` 去门控
 `rx_clk[l]`，那样 `rx_clk[l]` 相对这个使能信号仍然是异步的，
@@ -468,32 +472,46 @@ owner、同一个端口号），但 `rx_clk[l]` 是这条物理 lane 自己的 P
 自己的 `rx_clk[l]`（把 `dec_tgt.gN` 同步进 `rx_clk[l]` 域，产生
 `rxclk_en_gN_lL`），再用 `pipe_lane_clk_gate`（`clk_in` = `rx_clk[l]`）
 给每个候选 controller 各自的 `{c}_rx_clk[port]` 门控——这里不需要像
-`phy_pclk` 那样最后 OR 起来，因为每个候选的输出端口本来就是各自独立
+`phy_pclk` 那样最后 OR 起来，因为每个候选的输出本来就是各自独立
 的线，不共享。direct group（没有切换）维持直接 `assign`，不用改。
 
 ### 3.6 `pipe_lane_data_mux` 与 `safe_state`/`tie_off`
 
 `pipe_signals.csv` 里每个信号都有 `safe_state` 和 `tie_off` 两列，
-两者是各自只对一个方向生效的独立机制，**不**做一致性校验，允许（也
-应该按需）独立取值。
+回答的是两个不同的问题——"正在换手时给什么"和"这条 controller lane
+根本没接过 PHY lane 时给什么"。两列**不**做一致性校验，允许（也应该
+按需）独立取值。
 
 **m2p 方向：`safe_state` 生效，`tie_off` 完全不读。**
 `pipe_lane_signal_pkg.sv` 里由所有 `mac_phy_*` 信号的 `safe_state`
 拼出 `SAFE_M2P`，直接接到每个 m2p `pipe_lane_data_mux` 的 `.safe()`
 端口（`gen_data_m2p()`）。`gen_data_m2p()` 里完全不会出现
 `tie_off`——它只按 lane 遍历（每条 phy lane 在每个 mode 下都必须有
-owner），不存在"controller 端口没有驱动源"这种情况，用不上 `tie_off`
+owner），不存在"controller lane 没有驱动源"这种情况，用不上 `tie_off`
 这种"没人用"的语义。
 
-**p2m 方向：`tie_off` 生效，`safe_state`/`SAFE_P2M` 是死代码。**
-`gen_data_p2m()` 里每个 controller 都有一个 `{c.lname}_p2m_tie`
-结构体，由 `tie_off`（通过 `Signal.tie_expr()`）逐字段算出来，用在
-两个地方：(1) 真正存在的 `pipe_lane_data_mux` 实例的 `.safe()` 端口
-（NOV 交接窗口用它）；(2) 端口从未被任何 lane 映射到时的直接
-`assign`（不经过 `pipe_lane_data_mux`，见 3.7 节）。`SAFE_P2M`
-（由 `safe_state` 拼出来）在这两处都没有被引用，只在
-`tb_pipe_lane_mapper.sv` 里当一个初始值用（马上会被逐字段覆盖），
-是彻头彻尾的死代码；p2m 方向的安全态完全由 `tie_off` 一列独立决定。
+**p2m 方向：两列都生效，但管的是两件不同的事。**
+`gen_data_p2m()` 里区分两种"现在没有有效值可给"：
+
+- **交接窗口**（这条 controller lane 有驱动源，只是此刻没有候选拥有它，
+  `sel` 全 0）→ `.safe(SAFE_P2M)`，和 m2p 侧的 `SAFE_M2P` 完全对称，
+  由 `safe_state` 一列拼出。
+- **从来没有驱动源**（这条 controller lane 在任何 mode 下都没被任何 phy
+  lane 映射到）→ 直接 `assign` 成 `{c.lname}_p2m_tie`，由 `tie_off`
+  （通过 `Signal.tie_expr()`）逐字段算出，不经过 `pipe_lane_data_mux`
+  （见 3.7 节）。
+
+早期版本里 p2m 的 `.safe()` 也接 `{c.lname}_p2m_tie`，于是 `safe_state`
+对 p2m 行完全不生效、`SAFE_P2M` 成了只被 TB 当初值用的死代码。那是个
+静默的坑：默认信号表里 `phy_mac_rxelecidle` / `phy_mac_rxstandbystatus`
+都写了 `safe_state=1`，但生成出来的 RTL 让它们在交接窗口落到 0——等于
+在换手期间告诉 MAC"链路不是电气空闲"，和配置表声明的意图相反。现在
+`safe_state` 对两个方向一视同仁，`SAFE_P2M` 是活的。
+
+注意一个连带的行为变化：`tie_off=lane0` 的信号（如 `phy_mac_phystatus`）
+在**交接窗口**里不再跟随 base lane，而是取它自己的 `safe_state`。未被
+映射的 controller lane 仍然跟随 base lane。这样更对：把别人的 PhyStatus 脉冲塞给一个
+此刻并不拥有这条 lane 的 controller 本来就是错的。
 
 **极性归一化电路：为什么 `sel` 全 0 时不会有毛刺。** 一个直观但有
 问题的写法（以 N=2、WIDTH=1 为例）：
@@ -536,13 +554,13 @@ OR）。全程只有两层异或——入口每路一次、出口一次，`sel` 
 窗口里，`dout` 干净地落在 `safe=1` 上，没有中间态毛刺。
 
 **p2m 方向复用同一个模块：demux 只是换个角度看 mux。**
-`gen_data_p2m()` 里每个 controller 端口都会实例化一个
+`gen_data_p2m()` 里每条 controller lane 都会实例化一个
 `pipe_lane_data_mux`，`.din` 的每一路对应这个 group 里的一个候选
-controller（branch）：如果那个 branch 正好就是这个端口自己的
+controller（branch）：如果那个 branch 正好就是这条 lane 自己的
 controller，`din` 接真实的 `phy_phy2mac[l]`；如果是别的 controller，
 `din` 直接填 `{c.lname}_p2m_tie`（安全值常量）。
 
-例如 `test_quad` 里 `ctrla_phy2mac[9]`（G3 是 CtrlA/B/C/D 四路 BBM，
+例如 `quad` 里 `ctrla_phy2mac[9]`（G3 是 CtrlA/B/C/D 四路 BBM，
 CtrlA 是 branch0）：
 
 ```verilog
@@ -567,12 +585,12 @@ pipe_lane_data_mux #(.WIDTH(PHY2MAC_W), .N(4)) u_p2m_ctrla_9 (
 `ctrl_pclk_cands()` 排序后最小候选）；在 1.3 节约束 B 的前提下，每个
 controller 的 pclk 候选数恒为 1，`base_lane` 天然稳定。
 
-### 3.7 Unused lane：端口有真实能力，只是暂时没分到 lane
+### 3.7 Unused lane：controller lane 有真实能力，只是暂时没分到 PHY lane
 
 一个 controller 在 `controllers.csv` 里声明的 `max_width` 是它的真实
 能力（比如 x4）。哪怕能力是 x4，某个 mode 下它可能只被分到 2 条 lane
-（相当于当 x2 用），端口 2、3 在这个 mode 下就是"未使用"；如果它在
-所有 mode 下都只用到 2 条，端口 2、3 就是永久未使用。
+（相当于当 x2 用），它自己的 lane 2、3 在这个 mode 下就是"未使用"；如果它在
+所有 mode 下都只用到 2 条，lane 2、3 就是永久未使用。
 
 这正是 `tie_off`/`p2m_tie` 机制要解决的问题——`pipe_lane_data_p2m.sv`
 里 `if not srcs: assign ... = p2m_tie`：不管是"这个 mode 没用到"还是
@@ -583,9 +601,9 @@ controller 的 pclk 候选数恒为 1，`base_lane` 天然稳定。
 出来的，用不用得上是下游（PHY 侧）的事，跟本设计无关；这种情况下
 m2p 输入端口会被空读。
 
-每个 controller 的端口数组都按它自己真实的 `max_width` 声明，不做
-统一 padding，所以不存在"声明宽度超过真实能力"这种端口——每一个声明
-出来的端口都对应真实硬件，区别只在于这个 mode 下有没有被分到 lane。
+每个 controller 的数组都按它自己真实的 `max_width` 声明，不做
+统一 padding，所以不存在"声明宽度超过真实能力"这种 lane——每一条声明
+出来的 controller lane 都对应真实硬件，区别只在于这个 mode 下有没有被分到 lane。
 
 ## 4. 关键点
 
@@ -601,7 +619,7 @@ m2p 输入端口会被空读。
 `seltgt_gN_lL`/`phy_pclk`/`rx_clk` 三处同步树的设计，是判断"能不能
 复用某个已同步信号"的唯一标准：能复用，当且仅当两处需要的
 `branch_clk` 完全相同（3.5.2 节 `phy_pclk` 复用 `seltgt_gN_lL` 正是
-因为两者的 `branch_clk` 都是"每个候选自己在这条 lane 的端口位"）；
+因为两者的 `branch_clk` 都是"每个候选自己在这条 lane 上的那条 ctrl lane"）；
 `branch_clk` 不同就必须单独建一棵同步树（`rx_clk` 必须自己建一棵，
 因为它的 `branch_clk` 是 `rx_clk[l]`，跟前两者完全不同）。
 
@@ -620,12 +638,13 @@ controller 逻辑连续工作，性价比低。这条原则被 `validate()` 强�
 |---|---|
 | mode 取值必须从 0 开始连续 | 避免译码器端口位宽不够，部分 mode 分支永远选不到 |
 | lane owner 的 ctrl_id/ctrl_lane 合法性 | 防止引用未定义 controller 或超过 max_width |
-| 同一 controller 端口不能被多条 lane 同时驱动 | 基本拓扑合法性 |
-| 同一 controller 端口的驱动源必须来自同一 group | 保证每个 group 能独立、无需互锁地完成 NOV 判断（1.3 节约束 A） |
+| 同一条 controller lane 不能被多条 PHY lane 同时驱动 | 基本拓扑合法性 |
+| 同一条 controller lane 的驱动源必须来自同一 group | 保证每个 group 能独立、无需互锁地完成 NOV 判断（1.3 节约束 A） |
 | controller 不能在所有 mode 下都没有 lane | 防止声明了但完全没用到的僵尸 controller |
 | controller 工作时钟候选数必须为 1 | 强制"工作时钟固定，只换宽度"（1.3 节约束 B / 4.2 节） |
 | controller 数量必须等于 `lane_count // g_min` | 数量与颗粒度对齐，避免僵尸 controller 或被迫破坏时钟固定约束（1.3 节约束 C） |
 | controller 的 `max_width` 不能超过 PHY 总 lane 数 | 超过总 lane 数的宽度在任何 mode 下都不可能被分满，声明了也用不到（3.7 节） |
+| 同一条 phy lane 在其 owner 持有它的所有 mode 下，ctrl lane 下标必须固定 | 生成器对每条 lane 只解析一次 ctrl lane 下标（取该 owner 出现的第一个 mode），之后所有 mode 共用这一个下标；下标会动就会在其余 mode 接错（4.7 节） |
 
 ### 4.4 `safe_state`/`tie_off` 只在 `sync` 模式下真正生效
 
@@ -644,26 +663,90 @@ controller 逻辑连续工作，性价比低。这条原则被 `validate()` 强�
 
 | | 生效方向 | 角色 | 是否跟同步策略有关 |
 |---|---|---|---|
-| `safe_state` | 仅 m2p（`SAFE_M2P`） | 喂给 `pipe_lane_data_mux.safe()` | 有关——只有 `sync` 策略下才会被呈现；p2m 方向完全死代码 |
-| `tie_off` (a) | 仅 p2m | unused lane 的硬 tie，纯 `assign` | 无关——任何策略下都一样生效 |
-| `tie_off` (b) | 仅 p2m | 喂给 `pipe_lane_data_mux.safe()`（端口有时会被映射到） | 有关——只有 `sync` 策略下才会被呈现 |
+| `safe_state` | m2p 和 p2m（`SAFE_M2P` / `SAFE_P2M`） | 喂给 `pipe_lane_data_mux.safe()`，即交接窗口的值 | 有关——只有 `sync` 策略下才会被呈现 |
+| `tie_off` | 仅 p2m | 从未被映射到的 controller lane 的硬 tie，纯 `assign` | 无关——任何策略下都一样生效 |
 
-### 4.5 `pclk_as_phy_input` 架构最容易踩的坑：`{c}_pclk[]` 是按端口的，不是按 controller 的
+### 4.5 `pclk_as_phy_input` 架构最容易踩的坑：`{c}_pclk[]` 是按 ctrl lane 的，不是按 controller 的
 
 `pclk_as_phy_output` 架构里 `ctrl_pclk` 天生是"这个 controller 唯一的一根
 内部时钟"，很多同步/选择逻辑可以安全地按 group/controller 共用一份。
 `pclk_as_phy_input` 架构里最容易顺着这个惯性错误地复用同一个思路——
-但 `{c}_pclk[]` 本来就是按端口给的（一个 x4/x8/x2 的配置，合计
-4+8+2=14 根，不是 3 根），任何地方如果拿"某个候选任意一个端口位"
+但 `{c}_pclk[]` 本来就是按 ctrl lane 给的（一个 x4/x8/x2 的配置，合计
+4+8+2=14 根，不是 3 根），任何地方如果拿"某个候选任意一位"
 （比如 `{c}_pclk[0]`）当"这个 controller 的代表时钟"去做同步，都是
 错的——不管是喂给 `phy_pclk` 的门控使能，还是数据路径 `pipe_lane_data_mux`
-的选择信号，最终采样/门控发生的地方都是**具体端口**自己的域，同步
-目标必须精确匹配到那个端口，见 3.5.2 节的详细展开。
+的选择信号，最终采样/门控发生的地方都是**那条具体 ctrl lane** 自己的域，同步
+目标必须精确匹配到它，见 3.5.2 节的详细展开。
 
 ### 4.6 `rx_clk` 是独立时钟域，不能复用其它域已同步好的使能
 
 `rx_clk[l]` 是 PHY 自己的 CDR 恢复时钟，跟 `{c}_pclk` 没有
 固定相位关系——即使 `{c}_rx_clk[]` 的路由拓扑（同一个 mode 下、同一个
-owner、同一个端口号）跟 `{c}_pclk[]` 完全一样，也不能直接复用为
+owner、同一个 ctrl lane 下标）跟 `{c}_pclk[]` 完全一样，也不能直接复用为
 `{c}_pclk` 域同步好的选择信号去门控 `rx_clk[l]`，必须单独建一棵以
 `rx_clk[l]` 自己为 `branch_clk` 的同步树（见 3.5.2 节、4.1 节原则）。
+
+### 4.7 phy lane 的 ctrl lane 下标必须跨 mode 固定
+
+生成器在为一条 lane 生成数据 mux 和时钟门控时，会先确定"候选 controller c
+的哪条 lane 对应这条 PHY lane"：
+
+```python
+m = next(mm for mm in cfg.modes if g.owners[mm] == c)
+port_of_cand[c] = cfg.mapping[m][l][1]
+```
+
+取的是 **c 拥有这个 group 的第一个 mode**，然后这一个 ctrl lane 下标就固定用于所有
+mode —— `pipe_lane_sel_gen` 的 `branch_clk`、`pipe_lane_clk_mux` 的
+`phy_pclk`/`rx_clk` 门控、`pipe_lane_data_m2p` 的 `din` 都是这样来的，
+`pipe_lane_data_p2m` 的 `hit[0]` 是同一件事的另一种写法。下游没有任何一处
+再按 mode 重新推导。
+
+所以一条 PHY lane 如果在不同 mode 下映射到同一个 controller 的不同 lane，
+除了第一个 mode 之外全都会接错，而且**不报任何错**。
+
+这条约束**不能**由"同一条 controller lane 的驱动源必须同组"（约束 A）推出来：同一个 group
+里的两条 lane 完全可以在两个 mode 之间互换 ctrl lane 下标，此时每条 controller lane 的驱动源
+仍然全部落在这一个 group 内，约束 A 照样通过。举例（能通过改动前的全部校验）：
+
+| mode | lane0 | lane1 | lane2 | lane3 |
+|---|---|---|---|---|
+| 0 | 0-0 | 0-1 | 0-2 | 0-3 |
+| 1 | 0-0 | 0-1 | 1-0 | 1-1 |
+| 2 | 0-0 | 0-1 | 1-1 | 1-0 |
+
+lane2 在 mode1 是 `CtrlB[0]`、mode2 是 `CtrlB[1]`，生成出来的
+`u_m2p_l2` 却一律接 `ctrlb_mac2phy[0]`。
+
+处理方式和约束 A 一致：在拓扑层禁止，而不是在生成器里做按 mode 展开的
+二级选择。理由也一样 —— controller 在 mode 切换时应当只改宽度，不应当把
+自己的 lane 重新编号；为这种用法多加一级 mux 是纯粹的成本。
+
+### 4.8 DPR overlay 只支持 `pclk_as_phy_output`
+
+`--dpr` 需要给 DPR 自己一个工作时钟 `dpr_pclk`，用于给
+`pipe_lane_sel_sync` 里 DPR 那一路分支打拍。
+
+在 `pclk_as_phy_output` 下这没问题：候选是 `phy_pclk_out[]`，PHY 无条件驱动，
+永远在跑，和 DPR 当前是否持有 lane 无关。
+
+在 `pclk_as_phy_input` 下则不存在这样一个自由跑的 per-lane 时钟 ——
+一条 lane 的时钟就是它当前 owner 的 `{c}_pclk[port]`。生成器只能退而求其次，
+从 `real_pclk[l]`（该 lane 真实候选的 `pipe_lane_clk_or` 输出）取时钟，
+而这个输出是**已经被门控过的**，于是形成死锁：
+
+1. `v_lane_mask[l]` 拉高 → `seltgt_gN_lL` 的 DPR bit 置位、real bits 清零
+2. real bits 全 0 → `real_pclk[l]` 停止翻转
+3. `dpr_pclk` 的时钟源就是 `real_pclk[l]` → `dpr_pclk` 停
+4. DPR 那一路分支寄存器由 `dpr_pclk` 打拍 → 再也不会翻转
+
+这条 lane 既没法被 DPR 真正使用，也没法交还给原 owner（交还同样要等
+`en[DPR]` 变 0，而那一位已经不再更新了）。
+
+因此 `plm generate rtl/tb/all` 直接拒绝 `--dpr` + `--pclk-mode
+pclk_as_phy_input` 这个组合，而不是生成一份能跑通仿真、直到第一次
+`v_lane_mask` 置位才挂死的 RTL。
+
+要在这个架构上支持 DPR，需要先解决"DPR 的时钟从哪来"这个架构问题
+（例如对各候选 controller 的原始 `{c}_pclk[port]` 做一次不受
+`seltgt` 门控的 N 选一），不是改几行生成器能解决的。

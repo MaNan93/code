@@ -28,15 +28,15 @@ module pipe_lane_sel_gen #(
     //------------------------------------------------------------
     // One pipe_lane_sel_sync per non-direct group (SYNC=SEL_SYNC).
     //------------------------------------------------------------
-    // G1 lane4~7: CtrlX16, CtrlX4b
+    // G1 lane4~7: CtrlX16, CtrlX4a
     pipe_lane_sel_sync #(.N(2), .SYNC(SEL_SYNC)) u_sel_sync_g1 (
-        .branch_clk   ({ctrl_pclk[3], ctrl_pclk[0]}),
-        .branch_rst_n ({ctrl_rst_n[3], ctrl_rst_n[0]}),
+        .branch_clk   ({ctrl_pclk[2], ctrl_pclk[0]}),
+        .branch_rst_n ({ctrl_rst_n[2], ctrl_rst_n[0]}),
         .tgt          (dec_tgt.g1),
         .en           (sel_tgt.g1)
     );
 
-    // G2 lane8~11: CtrlX16, CtrlX8
+    // G2 lane8~11: CtrlX16, CtrlX8asdfadssssss
     pipe_lane_sel_sync #(.N(2), .SYNC(SEL_SYNC)) u_sel_sync_g2 (
         .branch_clk   ({ctrl_pclk[1], ctrl_pclk[0]}),
         .branch_rst_n ({ctrl_rst_n[1], ctrl_rst_n[0]}),
@@ -44,10 +44,10 @@ module pipe_lane_sel_gen #(
         .en           (sel_tgt.g2)
     );
 
-    // G3 lane12~15: CtrlX16, CtrlX8, CtrlX4a
+    // G3 lane12~15: CtrlX16, CtrlX8asdfadssssss, CtrlX4b
     pipe_lane_sel_sync #(.N(3), .SYNC(SEL_SYNC)) u_sel_sync_g3 (
-        .branch_clk   ({ctrl_pclk[2], ctrl_pclk[1], ctrl_pclk[0]}),
-        .branch_rst_n ({ctrl_rst_n[2], ctrl_rst_n[1], ctrl_rst_n[0]}),
+        .branch_clk   ({ctrl_pclk[3], ctrl_pclk[1], ctrl_pclk[0]}),
+        .branch_rst_n ({ctrl_rst_n[3], ctrl_rst_n[1], ctrl_rst_n[0]}),
         .tgt          (dec_tgt.g3),
         .en           (sel_tgt.g3)
     );

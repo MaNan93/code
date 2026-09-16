@@ -23,13 +23,18 @@ module pipe_lane_mode_dec #(
             end
             1: begin
                 sel_tgt.g1 = 2'b01;  // CtrlX16
-                sel_tgt.g2 = 2'b10;  // CtrlX8
-                sel_tgt.g3 = 3'b010;  // CtrlX8
+                sel_tgt.g2 = 2'b10;  // CtrlX8asdfadssssss
+                sel_tgt.g3 = 3'b010;  // CtrlX8asdfadssssss
             end
             2: begin
-                sel_tgt.g1 = 2'b10;  // CtrlX4b
-                sel_tgt.g2 = 2'b10;  // CtrlX8
-                sel_tgt.g3 = 3'b100;  // CtrlX4a
+                sel_tgt.g1 = 2'b10;  // CtrlX4a
+                sel_tgt.g2 = 2'b10;  // CtrlX8asdfadssssss
+                sel_tgt.g3 = 3'b010;  // CtrlX8asdfadssssss
+            end
+            3: begin
+                sel_tgt.g1 = 2'b01;  // CtrlX16
+                sel_tgt.g2 = 2'b10;  // CtrlX8asdfadssssss
+                sel_tgt.g3 = 3'b100;  // CtrlX4b
             end
             default: begin
                 sel_tgt = '0;

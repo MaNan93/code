@@ -20,11 +20,11 @@ module pipe_lane_rst_mux #(
     assign phy_rst_n[1] = ctrl_rst_n[0];  // G0 direct to CtrlX16
     assign phy_rst_n[2] = ctrl_rst_n[0];  // G0 direct to CtrlX16
     assign phy_rst_n[3] = ctrl_rst_n[0];  // G0 direct to CtrlX16
-    // G1 lane4~7: CtrlX16, CtrlX4b
+    // G1 lane4~7: CtrlX16, CtrlX4a
     logic rst_n_g1;
     pipe_lane_data_mux #(.WIDTH(1), .N(2)) u_rst_g1 (
         .sel  (sel_tgt.g1),
-        .din  ({ctrl_rst_n[3], ctrl_rst_n[0]}),
+        .din  ({ctrl_rst_n[2], ctrl_rst_n[0]}),
         .safe (1'b0),
         .dout (rst_n_g1)
     );
@@ -32,7 +32,7 @@ module pipe_lane_rst_mux #(
     assign phy_rst_n[5] = rst_n_g1;
     assign phy_rst_n[6] = rst_n_g1;
     assign phy_rst_n[7] = rst_n_g1;
-    // G2 lane8~11: CtrlX16, CtrlX8
+    // G2 lane8~11: CtrlX16, CtrlX8asdfadssssss
     logic rst_n_g2;
     pipe_lane_data_mux #(.WIDTH(1), .N(2)) u_rst_g2 (
         .sel  (sel_tgt.g2),
@@ -44,11 +44,11 @@ module pipe_lane_rst_mux #(
     assign phy_rst_n[9] = rst_n_g2;
     assign phy_rst_n[10] = rst_n_g2;
     assign phy_rst_n[11] = rst_n_g2;
-    // G3 lane12~15: CtrlX16, CtrlX8, CtrlX4a
+    // G3 lane12~15: CtrlX16, CtrlX8asdfadssssss, CtrlX4b
     logic rst_n_g3;
     pipe_lane_data_mux #(.WIDTH(1), .N(3)) u_rst_g3 (
         .sel  (sel_tgt.g3),
-        .din  ({ctrl_rst_n[2], ctrl_rst_n[1], ctrl_rst_n[0]}),
+        .din  ({ctrl_rst_n[3], ctrl_rst_n[1], ctrl_rst_n[0]}),
         .safe (1'b0),
         .dout (rst_n_g3)
     );

@@ -16,6 +16,10 @@ as different combinations of the same optional flags.
                        [--verible-path P] [--verible-flags JSON] [--dpr] [--quiet]
     plm validate      --config X
 
+Every generation flag is passed on the command line. There is no per-config-set
+file pinning them -- a config set is exactly its three CSVs, and the caller
+(the Makefile, or the Qt front end's Generation page) supplies the flags.
+
 --config accepts either a bare config-set name (resolved under test/)
 or a full path -- resolve_set() already makes that transparent, see
 plm.core.paths.
@@ -36,7 +40,7 @@ import json
 import sys
 
 from plm.core.exporter import export_rtl, export_tb
-from plm.core.gen_flags import apply_set_flags, load_set_flags, validate_arch
+from plm.core.gen_flags import validate_arch
 from plm.core.model import load
 from plm.core.paths import resolve_set
 
@@ -100,20 +104,6 @@ def _add_shared_gen_args(ap, *, sel_mode):
     ap.add_argument("--quiet", action="store_true")
 
 
-def _resolve_with_set_flags(config_arg):
-    """The gen_flags.txt-as-argparse-defaults trick: resolve --config first
-    (via a throwaway pre-parse), load that config set's own gen_flags.txt,
-    and return (csv_dir, out_rtl, set_flags) for the caller to fold into
-    its real parse via apply_set_flags()."""
-    csv_dir, out_rtl = resolve_set(config_arg)
-    set_flags = load_set_flags(csv_dir)
-    return csv_dir, out_rtl, set_flags
-
-
-def _parse_subcommand(ap, argv, set_flags):
-    return ap.parse_args(apply_set_flags(ap, set_flags) + argv)
-
-
 def _parse_verible_flags(raw):
     if not raw:
         return None
@@ -126,26 +116,53 @@ def _parse_verible_flags(raw):
     return value
 
 
-def cmd_generate_rtl(argv):
-    pre_ap = argparse.ArgumentParser(add_help=False)
-    _add_config_arg(pre_ap)
-    pre_args, _ = pre_ap.parse_known_args(argv)
-    csv_dir, out_rtl, set_flags = _resolve_with_set_flags(pre_args.config)
+def validate_dpr(dpr, pclk_mode, sel_mode=None):
+    """Reject the --dpr combinations this generator can't produce working RTL
+    for. Shared by all three generate subcommands so `generate tb` can't
+    quietly accept a pairing `generate rtl` refuses.
 
-    ap = argparse.ArgumentParser(prog="plm generate rtl", description="Generate PIPE lane mapper RTL")
-    _add_config_arg(ap)
-    _add_shared_gen_args(ap, sel_mode=True)
-    a = _parse_subcommand(ap, argv, set_flags)
-
-    verible_flags = _parse_verible_flags(a.verible_flags)
-    validate_arch(a.arch, a.pclk_mode)
-    if a.dpr and a.sel_mode != "sync":
+    sel_mode is None for `generate tb`, which has no --sel-mode of its own.
+    """
+    if not dpr:
+        return
+    if sel_mode is not None and sel_mode != "sync":
         # DPR is merged into each group's own pipe_lane_sel_sync as one more
         # candidate branch, gated by the SAME SEL_SYNC parameter --sel-mode
         # drives for the group's real candidates -- --sel-mode comb is only
         # safe when every branch shares one clock domain, which DPR (v_lane_mask
         # driven independently of mode) can't guarantee.
-        raise SystemExit("--dpr requires --sel-mode sync (got --sel-mode comb)")
+        raise SystemExit(f"--dpr requires --sel-mode sync (got --sel-mode {sel_mode})")
+    if pclk_mode == "pclk_as_phy_input":
+        # In this scheme there is no free-running per-lane PHY clock for DPR to
+        # take its own working clock from. gen_clk_mux_phy_input would derive
+        # dpr_pclk from real_pclk[] -- the ALREADY-GATED clk_or output of the
+        # lane's real candidates -- which deadlocks: handing the lane to DPR
+        # gates every real branch off, real_pclk[] stops, dpr_pclk stops, and
+        # the DPR branch flop inside pipe_lane_sel_sync (clocked by dpr_pclk)
+        # can never change again, so the lane is neither usable by DPR nor
+        # releasable back to its real owner. pclk_as_phy_output has no such
+        # loop: there dpr_pclk comes from phy_pclk_out[], which PHY drives
+        # unconditionally. Refused here rather than emitting RTL that
+        # elaborates and simulates right up until the first v_lane_mask
+        # assertion. See design_notes.md 4.x.
+        raise SystemExit(
+            "--dpr is not supported with --pclk-mode pclk_as_phy_input: DPR has no "
+            "free-running clock source in that architecture, so the generated "
+            "dpr_pclk would stop the moment DPR takes a lane. Use --pclk-mode "
+            "pclk_as_phy_output (--arch original_pipe) for a DPR overlay."
+        )
+
+
+def cmd_generate_rtl(argv):
+    ap = argparse.ArgumentParser(prog="plm generate rtl", description="Generate PIPE lane mapper RTL")
+    _add_config_arg(ap)
+    _add_shared_gen_args(ap, sel_mode=True)
+    a = ap.parse_args(argv)
+    csv_dir, out_rtl = resolve_set(a.config)
+
+    verible_flags = _parse_verible_flags(a.verible_flags)
+    validate_arch(a.arch, a.pclk_mode)
+    validate_dpr(a.dpr, a.pclk_mode, a.sel_mode)
 
     cfg = load(csv_dir)
     print(f"Config: {csv_dir}")
@@ -157,18 +174,15 @@ def cmd_generate_rtl(argv):
 
 
 def cmd_generate_tb(argv):
-    pre_ap = argparse.ArgumentParser(add_help=False)
-    _add_config_arg(pre_ap)
-    pre_args, _ = pre_ap.parse_known_args(argv)
-    csv_dir, out_rtl, set_flags = _resolve_with_set_flags(pre_args.config)
-
     ap = argparse.ArgumentParser(prog="plm generate tb", description="Generate PIPE lane mapper testbench")
     _add_config_arg(ap)
     _add_shared_gen_args(ap, sel_mode=False)
-    a = _parse_subcommand(ap, argv, set_flags)
+    a = ap.parse_args(argv)
+    csv_dir, out_rtl = resolve_set(a.config)
 
     verible_flags = _parse_verible_flags(a.verible_flags)
     validate_arch(a.arch, a.pclk_mode)
+    validate_dpr(a.dpr, a.pclk_mode)
 
     cfg = load(csv_dir)
     print(f"Config: {csv_dir}")
@@ -180,20 +194,15 @@ def cmd_generate_tb(argv):
 
 
 def cmd_generate_all(argv):
-    pre_ap = argparse.ArgumentParser(add_help=False)
-    _add_config_arg(pre_ap)
-    pre_args, _ = pre_ap.parse_known_args(argv)
-    csv_dir, out_rtl, set_flags = _resolve_with_set_flags(pre_args.config)
-
     ap = argparse.ArgumentParser(prog="plm generate all", description="Generate PIPE lane mapper RTL + testbench")
     _add_config_arg(ap)
     _add_shared_gen_args(ap, sel_mode=True)
-    a = _parse_subcommand(ap, argv, set_flags)
+    a = ap.parse_args(argv)
+    csv_dir, out_rtl = resolve_set(a.config)
 
     verible_flags = _parse_verible_flags(a.verible_flags)
     validate_arch(a.arch, a.pclk_mode)
-    if a.dpr and a.sel_mode != "sync":
-        raise SystemExit("--dpr requires --sel-mode sync (got --sel-mode comb)")
+    validate_dpr(a.dpr, a.pclk_mode, a.sel_mode)
 
     cfg = load(csv_dir)
     print(f"Config: {csv_dir}")

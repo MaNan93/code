@@ -100,47 +100,47 @@ module pipe_lane_mapper_connection #(
     output logic [5:0] ctrlx16_phy_mac_dirfeedback [0:15],
     output logic [7:0] ctrlx16_phy_mac_fomfeedback [0:15],
     output logic ctrlx16_pclk,
-    // CtrlX8 x8
-    input logic ctrlx8_rst_n,
-    input logic [31:0] ctrlx8_mac_phy_txdata [0:7],
-    input logic [3:0] ctrlx8_mac_phy_txdatak [0:7],
-    input logic [0:0] ctrlx8_mac_phy_txdatavalid [0:7],
-    input logic [0:0] ctrlx8_mac_phy_txstartblock [0:7],
-    input logic [1:0] ctrlx8_mac_phy_txsyncheader [0:7],
-    input logic [0:0] ctrlx8_mac_phy_txdetectrx_loopback [0:7],
-    input logic [0:0] ctrlx8_mac_phy_txelecidle [0:7],
-    input logic [0:0] ctrlx8_mac_phy_txcompliance [0:7],
-    input logic [17:0] ctrlx8_mac_phy_txdeemph [0:7],
-    input logic [0:0] ctrlx8_mac_phy_rxpolarity [0:7],
-    input logic [0:0] ctrlx8_mac_phy_rxstandby [0:7],
-    input logic [7:0] ctrlx8_mac_phy_messagebus [0:7],
-    input logic [2:0] ctrlx8_mac_phy_rxpresethint [0:7],
-    input logic [4:0] ctrlx8_mac_phy_local_pset_index [0:7],
-    input logic [0:0] ctrlx8_mac_phy_getlocal_pset_coef [0:7],
-    input logic [0:0] ctrlx8_mac_phy_invalid_req [0:7],
-    input logic [0:0] ctrlx8_mac_phy_rxeqeval [0:7],
-    input logic [5:0] ctrlx8_mac_phy_fs [0:7],
-    input logic [5:0] ctrlx8_mac_phy_lf [0:7],
-    input logic [0:0] ctrlx8_mac_phy_dirchange [0:7],
-    input logic [0:0] ctrlx8_mac_phy_rxeqinprogress [0:7],
-    output logic [31:0] ctrlx8_phy_mac_rxdata [0:7],
-    output logic [3:0] ctrlx8_phy_mac_rxdatak [0:7],
-    output logic [0:0] ctrlx8_phy_mac_rxdatavalid [0:7],
-    output logic [0:0] ctrlx8_phy_mac_rxstartblock [0:7],
-    output logic [1:0] ctrlx8_phy_mac_rxsyncheader [0:7],
-    output logic [0:0] ctrlx8_phy_mac_rxvalid [0:7],
-    output logic [2:0] ctrlx8_phy_mac_rxstatus [0:7],
-    output logic [0:0] ctrlx8_phy_mac_rxelecidle [0:7],
-    output logic [0:0] ctrlx8_phy_mac_rxstandbystatus [0:7],
-    output logic [7:0] ctrlx8_phy_mac_messagebus [0:7],
-    output logic [0:0] ctrlx8_phy_mac_phystatus [0:7],
-    output logic [0:0] ctrlx8_phy_mac_local_tx_coef_valid [0:7],
-    output logic [17:0] ctrlx8_phy_mac_local_tx_pset_coef [0:7],
-    output logic [5:0] ctrlx8_phy_mac_localfs [0:7],
-    output logic [5:0] ctrlx8_phy_mac_locallf [0:7],
-    output logic [5:0] ctrlx8_phy_mac_dirfeedback [0:7],
-    output logic [7:0] ctrlx8_phy_mac_fomfeedback [0:7],
-    output logic ctrlx8_pclk,
+    // CtrlX8asdfadssssss x8
+    input logic ctrlx8asdfadssssss_rst_n,
+    input logic [31:0] ctrlx8asdfadssssss_mac_phy_txdata [0:7],
+    input logic [3:0] ctrlx8asdfadssssss_mac_phy_txdatak [0:7],
+    input logic [0:0] ctrlx8asdfadssssss_mac_phy_txdatavalid [0:7],
+    input logic [0:0] ctrlx8asdfadssssss_mac_phy_txstartblock [0:7],
+    input logic [1:0] ctrlx8asdfadssssss_mac_phy_txsyncheader [0:7],
+    input logic [0:0] ctrlx8asdfadssssss_mac_phy_txdetectrx_loopback [0:7],
+    input logic [0:0] ctrlx8asdfadssssss_mac_phy_txelecidle [0:7],
+    input logic [0:0] ctrlx8asdfadssssss_mac_phy_txcompliance [0:7],
+    input logic [17:0] ctrlx8asdfadssssss_mac_phy_txdeemph [0:7],
+    input logic [0:0] ctrlx8asdfadssssss_mac_phy_rxpolarity [0:7],
+    input logic [0:0] ctrlx8asdfadssssss_mac_phy_rxstandby [0:7],
+    input logic [7:0] ctrlx8asdfadssssss_mac_phy_messagebus [0:7],
+    input logic [2:0] ctrlx8asdfadssssss_mac_phy_rxpresethint [0:7],
+    input logic [4:0] ctrlx8asdfadssssss_mac_phy_local_pset_index [0:7],
+    input logic [0:0] ctrlx8asdfadssssss_mac_phy_getlocal_pset_coef [0:7],
+    input logic [0:0] ctrlx8asdfadssssss_mac_phy_invalid_req [0:7],
+    input logic [0:0] ctrlx8asdfadssssss_mac_phy_rxeqeval [0:7],
+    input logic [5:0] ctrlx8asdfadssssss_mac_phy_fs [0:7],
+    input logic [5:0] ctrlx8asdfadssssss_mac_phy_lf [0:7],
+    input logic [0:0] ctrlx8asdfadssssss_mac_phy_dirchange [0:7],
+    input logic [0:0] ctrlx8asdfadssssss_mac_phy_rxeqinprogress [0:7],
+    output logic [31:0] ctrlx8asdfadssssss_phy_mac_rxdata [0:7],
+    output logic [3:0] ctrlx8asdfadssssss_phy_mac_rxdatak [0:7],
+    output logic [0:0] ctrlx8asdfadssssss_phy_mac_rxdatavalid [0:7],
+    output logic [0:0] ctrlx8asdfadssssss_phy_mac_rxstartblock [0:7],
+    output logic [1:0] ctrlx8asdfadssssss_phy_mac_rxsyncheader [0:7],
+    output logic [0:0] ctrlx8asdfadssssss_phy_mac_rxvalid [0:7],
+    output logic [2:0] ctrlx8asdfadssssss_phy_mac_rxstatus [0:7],
+    output logic [0:0] ctrlx8asdfadssssss_phy_mac_rxelecidle [0:7],
+    output logic [0:0] ctrlx8asdfadssssss_phy_mac_rxstandbystatus [0:7],
+    output logic [7:0] ctrlx8asdfadssssss_phy_mac_messagebus [0:7],
+    output logic [0:0] ctrlx8asdfadssssss_phy_mac_phystatus [0:7],
+    output logic [0:0] ctrlx8asdfadssssss_phy_mac_local_tx_coef_valid [0:7],
+    output logic [17:0] ctrlx8asdfadssssss_phy_mac_local_tx_pset_coef [0:7],
+    output logic [5:0] ctrlx8asdfadssssss_phy_mac_localfs [0:7],
+    output logic [5:0] ctrlx8asdfadssssss_phy_mac_locallf [0:7],
+    output logic [5:0] ctrlx8asdfadssssss_phy_mac_dirfeedback [0:7],
+    output logic [7:0] ctrlx8asdfadssssss_phy_mac_fomfeedback [0:7],
+    output logic ctrlx8asdfadssssss_pclk,
     // CtrlX4a x4
     input logic ctrlx4a_rst_n,
     input logic [31:0] ctrlx4a_mac_phy_txdata [0:3],
@@ -229,8 +229,8 @@ module pipe_lane_mapper_connection #(
     phy2mac_lane_t [NL-1:0] w_phy_phy2mac;
     mac2phy_lane_t [15:0] w_ctrlx16_mac2phy;
     phy2mac_lane_t [15:0] w_ctrlx16_phy2mac;
-    mac2phy_lane_t [7:0] w_ctrlx8_mac2phy;
-    phy2mac_lane_t [7:0] w_ctrlx8_phy2mac;
+    mac2phy_lane_t [7:0] w_ctrlx8asdfadssssss_mac2phy;
+    phy2mac_lane_t [7:0] w_ctrlx8asdfadssssss_phy2mac;
     mac2phy_lane_t [3:0] w_ctrlx4a_mac2phy;
     phy2mac_lane_t [3:0] w_ctrlx4a_phy2mac;
     mac2phy_lane_t [3:0] w_ctrlx4b_mac2phy;
@@ -885,152 +885,152 @@ module pipe_lane_mapper_connection #(
     assign ctrlx16_phy_mac_fomfeedback[15] = w_ctrlx16_phy2mac[15].phy_mac_fomfeedback;
 
     //------------------------------------------------------------
-    // CtrlX8 (x8)
+    // CtrlX8asdfadssssss (x8)
     //------------------------------------------------------------
-    assign w_ctrlx8_mac2phy[0] = '{mac_phy_txdata: ctrlx8_mac_phy_txdata[0], mac_phy_txdatak: ctrlx8_mac_phy_txdatak[0], mac_phy_txdatavalid: ctrlx8_mac_phy_txdatavalid[0], mac_phy_txstartblock: ctrlx8_mac_phy_txstartblock[0], mac_phy_txsyncheader: ctrlx8_mac_phy_txsyncheader[0], mac_phy_txdetectrx_loopback: ctrlx8_mac_phy_txdetectrx_loopback[0], mac_phy_txelecidle: ctrlx8_mac_phy_txelecidle[0], mac_phy_txcompliance: ctrlx8_mac_phy_txcompliance[0], mac_phy_txdeemph: ctrlx8_mac_phy_txdeemph[0], mac_phy_rxpolarity: ctrlx8_mac_phy_rxpolarity[0], mac_phy_rxstandby: ctrlx8_mac_phy_rxstandby[0], mac_phy_messagebus: ctrlx8_mac_phy_messagebus[0], mac_phy_rxpresethint: ctrlx8_mac_phy_rxpresethint[0], mac_phy_local_pset_index: ctrlx8_mac_phy_local_pset_index[0], mac_phy_getlocal_pset_coef: ctrlx8_mac_phy_getlocal_pset_coef[0], mac_phy_invalid_req: ctrlx8_mac_phy_invalid_req[0], mac_phy_rxeqeval: ctrlx8_mac_phy_rxeqeval[0], mac_phy_fs: ctrlx8_mac_phy_fs[0], mac_phy_lf: ctrlx8_mac_phy_lf[0], mac_phy_dirchange: ctrlx8_mac_phy_dirchange[0], mac_phy_rxeqinprogress: ctrlx8_mac_phy_rxeqinprogress[0]};
-    assign w_ctrlx8_mac2phy[1] = '{mac_phy_txdata: ctrlx8_mac_phy_txdata[1], mac_phy_txdatak: ctrlx8_mac_phy_txdatak[1], mac_phy_txdatavalid: ctrlx8_mac_phy_txdatavalid[1], mac_phy_txstartblock: ctrlx8_mac_phy_txstartblock[1], mac_phy_txsyncheader: ctrlx8_mac_phy_txsyncheader[1], mac_phy_txdetectrx_loopback: ctrlx8_mac_phy_txdetectrx_loopback[1], mac_phy_txelecidle: ctrlx8_mac_phy_txelecidle[1], mac_phy_txcompliance: ctrlx8_mac_phy_txcompliance[1], mac_phy_txdeemph: ctrlx8_mac_phy_txdeemph[1], mac_phy_rxpolarity: ctrlx8_mac_phy_rxpolarity[1], mac_phy_rxstandby: ctrlx8_mac_phy_rxstandby[1], mac_phy_messagebus: ctrlx8_mac_phy_messagebus[1], mac_phy_rxpresethint: ctrlx8_mac_phy_rxpresethint[1], mac_phy_local_pset_index: ctrlx8_mac_phy_local_pset_index[1], mac_phy_getlocal_pset_coef: ctrlx8_mac_phy_getlocal_pset_coef[1], mac_phy_invalid_req: ctrlx8_mac_phy_invalid_req[1], mac_phy_rxeqeval: ctrlx8_mac_phy_rxeqeval[1], mac_phy_fs: ctrlx8_mac_phy_fs[1], mac_phy_lf: ctrlx8_mac_phy_lf[1], mac_phy_dirchange: ctrlx8_mac_phy_dirchange[1], mac_phy_rxeqinprogress: ctrlx8_mac_phy_rxeqinprogress[1]};
-    assign w_ctrlx8_mac2phy[2] = '{mac_phy_txdata: ctrlx8_mac_phy_txdata[2], mac_phy_txdatak: ctrlx8_mac_phy_txdatak[2], mac_phy_txdatavalid: ctrlx8_mac_phy_txdatavalid[2], mac_phy_txstartblock: ctrlx8_mac_phy_txstartblock[2], mac_phy_txsyncheader: ctrlx8_mac_phy_txsyncheader[2], mac_phy_txdetectrx_loopback: ctrlx8_mac_phy_txdetectrx_loopback[2], mac_phy_txelecidle: ctrlx8_mac_phy_txelecidle[2], mac_phy_txcompliance: ctrlx8_mac_phy_txcompliance[2], mac_phy_txdeemph: ctrlx8_mac_phy_txdeemph[2], mac_phy_rxpolarity: ctrlx8_mac_phy_rxpolarity[2], mac_phy_rxstandby: ctrlx8_mac_phy_rxstandby[2], mac_phy_messagebus: ctrlx8_mac_phy_messagebus[2], mac_phy_rxpresethint: ctrlx8_mac_phy_rxpresethint[2], mac_phy_local_pset_index: ctrlx8_mac_phy_local_pset_index[2], mac_phy_getlocal_pset_coef: ctrlx8_mac_phy_getlocal_pset_coef[2], mac_phy_invalid_req: ctrlx8_mac_phy_invalid_req[2], mac_phy_rxeqeval: ctrlx8_mac_phy_rxeqeval[2], mac_phy_fs: ctrlx8_mac_phy_fs[2], mac_phy_lf: ctrlx8_mac_phy_lf[2], mac_phy_dirchange: ctrlx8_mac_phy_dirchange[2], mac_phy_rxeqinprogress: ctrlx8_mac_phy_rxeqinprogress[2]};
-    assign w_ctrlx8_mac2phy[3] = '{mac_phy_txdata: ctrlx8_mac_phy_txdata[3], mac_phy_txdatak: ctrlx8_mac_phy_txdatak[3], mac_phy_txdatavalid: ctrlx8_mac_phy_txdatavalid[3], mac_phy_txstartblock: ctrlx8_mac_phy_txstartblock[3], mac_phy_txsyncheader: ctrlx8_mac_phy_txsyncheader[3], mac_phy_txdetectrx_loopback: ctrlx8_mac_phy_txdetectrx_loopback[3], mac_phy_txelecidle: ctrlx8_mac_phy_txelecidle[3], mac_phy_txcompliance: ctrlx8_mac_phy_txcompliance[3], mac_phy_txdeemph: ctrlx8_mac_phy_txdeemph[3], mac_phy_rxpolarity: ctrlx8_mac_phy_rxpolarity[3], mac_phy_rxstandby: ctrlx8_mac_phy_rxstandby[3], mac_phy_messagebus: ctrlx8_mac_phy_messagebus[3], mac_phy_rxpresethint: ctrlx8_mac_phy_rxpresethint[3], mac_phy_local_pset_index: ctrlx8_mac_phy_local_pset_index[3], mac_phy_getlocal_pset_coef: ctrlx8_mac_phy_getlocal_pset_coef[3], mac_phy_invalid_req: ctrlx8_mac_phy_invalid_req[3], mac_phy_rxeqeval: ctrlx8_mac_phy_rxeqeval[3], mac_phy_fs: ctrlx8_mac_phy_fs[3], mac_phy_lf: ctrlx8_mac_phy_lf[3], mac_phy_dirchange: ctrlx8_mac_phy_dirchange[3], mac_phy_rxeqinprogress: ctrlx8_mac_phy_rxeqinprogress[3]};
-    assign w_ctrlx8_mac2phy[4] = '{mac_phy_txdata: ctrlx8_mac_phy_txdata[4], mac_phy_txdatak: ctrlx8_mac_phy_txdatak[4], mac_phy_txdatavalid: ctrlx8_mac_phy_txdatavalid[4], mac_phy_txstartblock: ctrlx8_mac_phy_txstartblock[4], mac_phy_txsyncheader: ctrlx8_mac_phy_txsyncheader[4], mac_phy_txdetectrx_loopback: ctrlx8_mac_phy_txdetectrx_loopback[4], mac_phy_txelecidle: ctrlx8_mac_phy_txelecidle[4], mac_phy_txcompliance: ctrlx8_mac_phy_txcompliance[4], mac_phy_txdeemph: ctrlx8_mac_phy_txdeemph[4], mac_phy_rxpolarity: ctrlx8_mac_phy_rxpolarity[4], mac_phy_rxstandby: ctrlx8_mac_phy_rxstandby[4], mac_phy_messagebus: ctrlx8_mac_phy_messagebus[4], mac_phy_rxpresethint: ctrlx8_mac_phy_rxpresethint[4], mac_phy_local_pset_index: ctrlx8_mac_phy_local_pset_index[4], mac_phy_getlocal_pset_coef: ctrlx8_mac_phy_getlocal_pset_coef[4], mac_phy_invalid_req: ctrlx8_mac_phy_invalid_req[4], mac_phy_rxeqeval: ctrlx8_mac_phy_rxeqeval[4], mac_phy_fs: ctrlx8_mac_phy_fs[4], mac_phy_lf: ctrlx8_mac_phy_lf[4], mac_phy_dirchange: ctrlx8_mac_phy_dirchange[4], mac_phy_rxeqinprogress: ctrlx8_mac_phy_rxeqinprogress[4]};
-    assign w_ctrlx8_mac2phy[5] = '{mac_phy_txdata: ctrlx8_mac_phy_txdata[5], mac_phy_txdatak: ctrlx8_mac_phy_txdatak[5], mac_phy_txdatavalid: ctrlx8_mac_phy_txdatavalid[5], mac_phy_txstartblock: ctrlx8_mac_phy_txstartblock[5], mac_phy_txsyncheader: ctrlx8_mac_phy_txsyncheader[5], mac_phy_txdetectrx_loopback: ctrlx8_mac_phy_txdetectrx_loopback[5], mac_phy_txelecidle: ctrlx8_mac_phy_txelecidle[5], mac_phy_txcompliance: ctrlx8_mac_phy_txcompliance[5], mac_phy_txdeemph: ctrlx8_mac_phy_txdeemph[5], mac_phy_rxpolarity: ctrlx8_mac_phy_rxpolarity[5], mac_phy_rxstandby: ctrlx8_mac_phy_rxstandby[5], mac_phy_messagebus: ctrlx8_mac_phy_messagebus[5], mac_phy_rxpresethint: ctrlx8_mac_phy_rxpresethint[5], mac_phy_local_pset_index: ctrlx8_mac_phy_local_pset_index[5], mac_phy_getlocal_pset_coef: ctrlx8_mac_phy_getlocal_pset_coef[5], mac_phy_invalid_req: ctrlx8_mac_phy_invalid_req[5], mac_phy_rxeqeval: ctrlx8_mac_phy_rxeqeval[5], mac_phy_fs: ctrlx8_mac_phy_fs[5], mac_phy_lf: ctrlx8_mac_phy_lf[5], mac_phy_dirchange: ctrlx8_mac_phy_dirchange[5], mac_phy_rxeqinprogress: ctrlx8_mac_phy_rxeqinprogress[5]};
-    assign w_ctrlx8_mac2phy[6] = '{mac_phy_txdata: ctrlx8_mac_phy_txdata[6], mac_phy_txdatak: ctrlx8_mac_phy_txdatak[6], mac_phy_txdatavalid: ctrlx8_mac_phy_txdatavalid[6], mac_phy_txstartblock: ctrlx8_mac_phy_txstartblock[6], mac_phy_txsyncheader: ctrlx8_mac_phy_txsyncheader[6], mac_phy_txdetectrx_loopback: ctrlx8_mac_phy_txdetectrx_loopback[6], mac_phy_txelecidle: ctrlx8_mac_phy_txelecidle[6], mac_phy_txcompliance: ctrlx8_mac_phy_txcompliance[6], mac_phy_txdeemph: ctrlx8_mac_phy_txdeemph[6], mac_phy_rxpolarity: ctrlx8_mac_phy_rxpolarity[6], mac_phy_rxstandby: ctrlx8_mac_phy_rxstandby[6], mac_phy_messagebus: ctrlx8_mac_phy_messagebus[6], mac_phy_rxpresethint: ctrlx8_mac_phy_rxpresethint[6], mac_phy_local_pset_index: ctrlx8_mac_phy_local_pset_index[6], mac_phy_getlocal_pset_coef: ctrlx8_mac_phy_getlocal_pset_coef[6], mac_phy_invalid_req: ctrlx8_mac_phy_invalid_req[6], mac_phy_rxeqeval: ctrlx8_mac_phy_rxeqeval[6], mac_phy_fs: ctrlx8_mac_phy_fs[6], mac_phy_lf: ctrlx8_mac_phy_lf[6], mac_phy_dirchange: ctrlx8_mac_phy_dirchange[6], mac_phy_rxeqinprogress: ctrlx8_mac_phy_rxeqinprogress[6]};
-    assign w_ctrlx8_mac2phy[7] = '{mac_phy_txdata: ctrlx8_mac_phy_txdata[7], mac_phy_txdatak: ctrlx8_mac_phy_txdatak[7], mac_phy_txdatavalid: ctrlx8_mac_phy_txdatavalid[7], mac_phy_txstartblock: ctrlx8_mac_phy_txstartblock[7], mac_phy_txsyncheader: ctrlx8_mac_phy_txsyncheader[7], mac_phy_txdetectrx_loopback: ctrlx8_mac_phy_txdetectrx_loopback[7], mac_phy_txelecidle: ctrlx8_mac_phy_txelecidle[7], mac_phy_txcompliance: ctrlx8_mac_phy_txcompliance[7], mac_phy_txdeemph: ctrlx8_mac_phy_txdeemph[7], mac_phy_rxpolarity: ctrlx8_mac_phy_rxpolarity[7], mac_phy_rxstandby: ctrlx8_mac_phy_rxstandby[7], mac_phy_messagebus: ctrlx8_mac_phy_messagebus[7], mac_phy_rxpresethint: ctrlx8_mac_phy_rxpresethint[7], mac_phy_local_pset_index: ctrlx8_mac_phy_local_pset_index[7], mac_phy_getlocal_pset_coef: ctrlx8_mac_phy_getlocal_pset_coef[7], mac_phy_invalid_req: ctrlx8_mac_phy_invalid_req[7], mac_phy_rxeqeval: ctrlx8_mac_phy_rxeqeval[7], mac_phy_fs: ctrlx8_mac_phy_fs[7], mac_phy_lf: ctrlx8_mac_phy_lf[7], mac_phy_dirchange: ctrlx8_mac_phy_dirchange[7], mac_phy_rxeqinprogress: ctrlx8_mac_phy_rxeqinprogress[7]};
-    assign ctrlx8_phy_mac_rxdata[0] = w_ctrlx8_phy2mac[0].phy_mac_rxdata;
-    assign ctrlx8_phy_mac_rxdata[1] = w_ctrlx8_phy2mac[1].phy_mac_rxdata;
-    assign ctrlx8_phy_mac_rxdata[2] = w_ctrlx8_phy2mac[2].phy_mac_rxdata;
-    assign ctrlx8_phy_mac_rxdata[3] = w_ctrlx8_phy2mac[3].phy_mac_rxdata;
-    assign ctrlx8_phy_mac_rxdata[4] = w_ctrlx8_phy2mac[4].phy_mac_rxdata;
-    assign ctrlx8_phy_mac_rxdata[5] = w_ctrlx8_phy2mac[5].phy_mac_rxdata;
-    assign ctrlx8_phy_mac_rxdata[6] = w_ctrlx8_phy2mac[6].phy_mac_rxdata;
-    assign ctrlx8_phy_mac_rxdata[7] = w_ctrlx8_phy2mac[7].phy_mac_rxdata;
-    assign ctrlx8_phy_mac_rxdatak[0] = w_ctrlx8_phy2mac[0].phy_mac_rxdatak;
-    assign ctrlx8_phy_mac_rxdatak[1] = w_ctrlx8_phy2mac[1].phy_mac_rxdatak;
-    assign ctrlx8_phy_mac_rxdatak[2] = w_ctrlx8_phy2mac[2].phy_mac_rxdatak;
-    assign ctrlx8_phy_mac_rxdatak[3] = w_ctrlx8_phy2mac[3].phy_mac_rxdatak;
-    assign ctrlx8_phy_mac_rxdatak[4] = w_ctrlx8_phy2mac[4].phy_mac_rxdatak;
-    assign ctrlx8_phy_mac_rxdatak[5] = w_ctrlx8_phy2mac[5].phy_mac_rxdatak;
-    assign ctrlx8_phy_mac_rxdatak[6] = w_ctrlx8_phy2mac[6].phy_mac_rxdatak;
-    assign ctrlx8_phy_mac_rxdatak[7] = w_ctrlx8_phy2mac[7].phy_mac_rxdatak;
-    assign ctrlx8_phy_mac_rxdatavalid[0] = w_ctrlx8_phy2mac[0].phy_mac_rxdatavalid;
-    assign ctrlx8_phy_mac_rxdatavalid[1] = w_ctrlx8_phy2mac[1].phy_mac_rxdatavalid;
-    assign ctrlx8_phy_mac_rxdatavalid[2] = w_ctrlx8_phy2mac[2].phy_mac_rxdatavalid;
-    assign ctrlx8_phy_mac_rxdatavalid[3] = w_ctrlx8_phy2mac[3].phy_mac_rxdatavalid;
-    assign ctrlx8_phy_mac_rxdatavalid[4] = w_ctrlx8_phy2mac[4].phy_mac_rxdatavalid;
-    assign ctrlx8_phy_mac_rxdatavalid[5] = w_ctrlx8_phy2mac[5].phy_mac_rxdatavalid;
-    assign ctrlx8_phy_mac_rxdatavalid[6] = w_ctrlx8_phy2mac[6].phy_mac_rxdatavalid;
-    assign ctrlx8_phy_mac_rxdatavalid[7] = w_ctrlx8_phy2mac[7].phy_mac_rxdatavalid;
-    assign ctrlx8_phy_mac_rxstartblock[0] = w_ctrlx8_phy2mac[0].phy_mac_rxstartblock;
-    assign ctrlx8_phy_mac_rxstartblock[1] = w_ctrlx8_phy2mac[1].phy_mac_rxstartblock;
-    assign ctrlx8_phy_mac_rxstartblock[2] = w_ctrlx8_phy2mac[2].phy_mac_rxstartblock;
-    assign ctrlx8_phy_mac_rxstartblock[3] = w_ctrlx8_phy2mac[3].phy_mac_rxstartblock;
-    assign ctrlx8_phy_mac_rxstartblock[4] = w_ctrlx8_phy2mac[4].phy_mac_rxstartblock;
-    assign ctrlx8_phy_mac_rxstartblock[5] = w_ctrlx8_phy2mac[5].phy_mac_rxstartblock;
-    assign ctrlx8_phy_mac_rxstartblock[6] = w_ctrlx8_phy2mac[6].phy_mac_rxstartblock;
-    assign ctrlx8_phy_mac_rxstartblock[7] = w_ctrlx8_phy2mac[7].phy_mac_rxstartblock;
-    assign ctrlx8_phy_mac_rxsyncheader[0] = w_ctrlx8_phy2mac[0].phy_mac_rxsyncheader;
-    assign ctrlx8_phy_mac_rxsyncheader[1] = w_ctrlx8_phy2mac[1].phy_mac_rxsyncheader;
-    assign ctrlx8_phy_mac_rxsyncheader[2] = w_ctrlx8_phy2mac[2].phy_mac_rxsyncheader;
-    assign ctrlx8_phy_mac_rxsyncheader[3] = w_ctrlx8_phy2mac[3].phy_mac_rxsyncheader;
-    assign ctrlx8_phy_mac_rxsyncheader[4] = w_ctrlx8_phy2mac[4].phy_mac_rxsyncheader;
-    assign ctrlx8_phy_mac_rxsyncheader[5] = w_ctrlx8_phy2mac[5].phy_mac_rxsyncheader;
-    assign ctrlx8_phy_mac_rxsyncheader[6] = w_ctrlx8_phy2mac[6].phy_mac_rxsyncheader;
-    assign ctrlx8_phy_mac_rxsyncheader[7] = w_ctrlx8_phy2mac[7].phy_mac_rxsyncheader;
-    assign ctrlx8_phy_mac_rxvalid[0] = w_ctrlx8_phy2mac[0].phy_mac_rxvalid;
-    assign ctrlx8_phy_mac_rxvalid[1] = w_ctrlx8_phy2mac[1].phy_mac_rxvalid;
-    assign ctrlx8_phy_mac_rxvalid[2] = w_ctrlx8_phy2mac[2].phy_mac_rxvalid;
-    assign ctrlx8_phy_mac_rxvalid[3] = w_ctrlx8_phy2mac[3].phy_mac_rxvalid;
-    assign ctrlx8_phy_mac_rxvalid[4] = w_ctrlx8_phy2mac[4].phy_mac_rxvalid;
-    assign ctrlx8_phy_mac_rxvalid[5] = w_ctrlx8_phy2mac[5].phy_mac_rxvalid;
-    assign ctrlx8_phy_mac_rxvalid[6] = w_ctrlx8_phy2mac[6].phy_mac_rxvalid;
-    assign ctrlx8_phy_mac_rxvalid[7] = w_ctrlx8_phy2mac[7].phy_mac_rxvalid;
-    assign ctrlx8_phy_mac_rxstatus[0] = w_ctrlx8_phy2mac[0].phy_mac_rxstatus;
-    assign ctrlx8_phy_mac_rxstatus[1] = w_ctrlx8_phy2mac[1].phy_mac_rxstatus;
-    assign ctrlx8_phy_mac_rxstatus[2] = w_ctrlx8_phy2mac[2].phy_mac_rxstatus;
-    assign ctrlx8_phy_mac_rxstatus[3] = w_ctrlx8_phy2mac[3].phy_mac_rxstatus;
-    assign ctrlx8_phy_mac_rxstatus[4] = w_ctrlx8_phy2mac[4].phy_mac_rxstatus;
-    assign ctrlx8_phy_mac_rxstatus[5] = w_ctrlx8_phy2mac[5].phy_mac_rxstatus;
-    assign ctrlx8_phy_mac_rxstatus[6] = w_ctrlx8_phy2mac[6].phy_mac_rxstatus;
-    assign ctrlx8_phy_mac_rxstatus[7] = w_ctrlx8_phy2mac[7].phy_mac_rxstatus;
-    assign ctrlx8_phy_mac_rxelecidle[0] = w_ctrlx8_phy2mac[0].phy_mac_rxelecidle;
-    assign ctrlx8_phy_mac_rxelecidle[1] = w_ctrlx8_phy2mac[1].phy_mac_rxelecidle;
-    assign ctrlx8_phy_mac_rxelecidle[2] = w_ctrlx8_phy2mac[2].phy_mac_rxelecidle;
-    assign ctrlx8_phy_mac_rxelecidle[3] = w_ctrlx8_phy2mac[3].phy_mac_rxelecidle;
-    assign ctrlx8_phy_mac_rxelecidle[4] = w_ctrlx8_phy2mac[4].phy_mac_rxelecidle;
-    assign ctrlx8_phy_mac_rxelecidle[5] = w_ctrlx8_phy2mac[5].phy_mac_rxelecidle;
-    assign ctrlx8_phy_mac_rxelecidle[6] = w_ctrlx8_phy2mac[6].phy_mac_rxelecidle;
-    assign ctrlx8_phy_mac_rxelecidle[7] = w_ctrlx8_phy2mac[7].phy_mac_rxelecidle;
-    assign ctrlx8_phy_mac_rxstandbystatus[0] = w_ctrlx8_phy2mac[0].phy_mac_rxstandbystatus;
-    assign ctrlx8_phy_mac_rxstandbystatus[1] = w_ctrlx8_phy2mac[1].phy_mac_rxstandbystatus;
-    assign ctrlx8_phy_mac_rxstandbystatus[2] = w_ctrlx8_phy2mac[2].phy_mac_rxstandbystatus;
-    assign ctrlx8_phy_mac_rxstandbystatus[3] = w_ctrlx8_phy2mac[3].phy_mac_rxstandbystatus;
-    assign ctrlx8_phy_mac_rxstandbystatus[4] = w_ctrlx8_phy2mac[4].phy_mac_rxstandbystatus;
-    assign ctrlx8_phy_mac_rxstandbystatus[5] = w_ctrlx8_phy2mac[5].phy_mac_rxstandbystatus;
-    assign ctrlx8_phy_mac_rxstandbystatus[6] = w_ctrlx8_phy2mac[6].phy_mac_rxstandbystatus;
-    assign ctrlx8_phy_mac_rxstandbystatus[7] = w_ctrlx8_phy2mac[7].phy_mac_rxstandbystatus;
-    assign ctrlx8_phy_mac_messagebus[0] = w_ctrlx8_phy2mac[0].phy_mac_messagebus;
-    assign ctrlx8_phy_mac_messagebus[1] = w_ctrlx8_phy2mac[1].phy_mac_messagebus;
-    assign ctrlx8_phy_mac_messagebus[2] = w_ctrlx8_phy2mac[2].phy_mac_messagebus;
-    assign ctrlx8_phy_mac_messagebus[3] = w_ctrlx8_phy2mac[3].phy_mac_messagebus;
-    assign ctrlx8_phy_mac_messagebus[4] = w_ctrlx8_phy2mac[4].phy_mac_messagebus;
-    assign ctrlx8_phy_mac_messagebus[5] = w_ctrlx8_phy2mac[5].phy_mac_messagebus;
-    assign ctrlx8_phy_mac_messagebus[6] = w_ctrlx8_phy2mac[6].phy_mac_messagebus;
-    assign ctrlx8_phy_mac_messagebus[7] = w_ctrlx8_phy2mac[7].phy_mac_messagebus;
-    assign ctrlx8_phy_mac_phystatus[0] = w_ctrlx8_phy2mac[0].phy_mac_phystatus;
-    assign ctrlx8_phy_mac_phystatus[1] = w_ctrlx8_phy2mac[1].phy_mac_phystatus;
-    assign ctrlx8_phy_mac_phystatus[2] = w_ctrlx8_phy2mac[2].phy_mac_phystatus;
-    assign ctrlx8_phy_mac_phystatus[3] = w_ctrlx8_phy2mac[3].phy_mac_phystatus;
-    assign ctrlx8_phy_mac_phystatus[4] = w_ctrlx8_phy2mac[4].phy_mac_phystatus;
-    assign ctrlx8_phy_mac_phystatus[5] = w_ctrlx8_phy2mac[5].phy_mac_phystatus;
-    assign ctrlx8_phy_mac_phystatus[6] = w_ctrlx8_phy2mac[6].phy_mac_phystatus;
-    assign ctrlx8_phy_mac_phystatus[7] = w_ctrlx8_phy2mac[7].phy_mac_phystatus;
-    assign ctrlx8_phy_mac_local_tx_coef_valid[0] = w_ctrlx8_phy2mac[0].phy_mac_local_tx_coef_valid;
-    assign ctrlx8_phy_mac_local_tx_coef_valid[1] = w_ctrlx8_phy2mac[1].phy_mac_local_tx_coef_valid;
-    assign ctrlx8_phy_mac_local_tx_coef_valid[2] = w_ctrlx8_phy2mac[2].phy_mac_local_tx_coef_valid;
-    assign ctrlx8_phy_mac_local_tx_coef_valid[3] = w_ctrlx8_phy2mac[3].phy_mac_local_tx_coef_valid;
-    assign ctrlx8_phy_mac_local_tx_coef_valid[4] = w_ctrlx8_phy2mac[4].phy_mac_local_tx_coef_valid;
-    assign ctrlx8_phy_mac_local_tx_coef_valid[5] = w_ctrlx8_phy2mac[5].phy_mac_local_tx_coef_valid;
-    assign ctrlx8_phy_mac_local_tx_coef_valid[6] = w_ctrlx8_phy2mac[6].phy_mac_local_tx_coef_valid;
-    assign ctrlx8_phy_mac_local_tx_coef_valid[7] = w_ctrlx8_phy2mac[7].phy_mac_local_tx_coef_valid;
-    assign ctrlx8_phy_mac_local_tx_pset_coef[0] = w_ctrlx8_phy2mac[0].phy_mac_local_tx_pset_coef;
-    assign ctrlx8_phy_mac_local_tx_pset_coef[1] = w_ctrlx8_phy2mac[1].phy_mac_local_tx_pset_coef;
-    assign ctrlx8_phy_mac_local_tx_pset_coef[2] = w_ctrlx8_phy2mac[2].phy_mac_local_tx_pset_coef;
-    assign ctrlx8_phy_mac_local_tx_pset_coef[3] = w_ctrlx8_phy2mac[3].phy_mac_local_tx_pset_coef;
-    assign ctrlx8_phy_mac_local_tx_pset_coef[4] = w_ctrlx8_phy2mac[4].phy_mac_local_tx_pset_coef;
-    assign ctrlx8_phy_mac_local_tx_pset_coef[5] = w_ctrlx8_phy2mac[5].phy_mac_local_tx_pset_coef;
-    assign ctrlx8_phy_mac_local_tx_pset_coef[6] = w_ctrlx8_phy2mac[6].phy_mac_local_tx_pset_coef;
-    assign ctrlx8_phy_mac_local_tx_pset_coef[7] = w_ctrlx8_phy2mac[7].phy_mac_local_tx_pset_coef;
-    assign ctrlx8_phy_mac_localfs[0] = w_ctrlx8_phy2mac[0].phy_mac_localfs;
-    assign ctrlx8_phy_mac_localfs[1] = w_ctrlx8_phy2mac[1].phy_mac_localfs;
-    assign ctrlx8_phy_mac_localfs[2] = w_ctrlx8_phy2mac[2].phy_mac_localfs;
-    assign ctrlx8_phy_mac_localfs[3] = w_ctrlx8_phy2mac[3].phy_mac_localfs;
-    assign ctrlx8_phy_mac_localfs[4] = w_ctrlx8_phy2mac[4].phy_mac_localfs;
-    assign ctrlx8_phy_mac_localfs[5] = w_ctrlx8_phy2mac[5].phy_mac_localfs;
-    assign ctrlx8_phy_mac_localfs[6] = w_ctrlx8_phy2mac[6].phy_mac_localfs;
-    assign ctrlx8_phy_mac_localfs[7] = w_ctrlx8_phy2mac[7].phy_mac_localfs;
-    assign ctrlx8_phy_mac_locallf[0] = w_ctrlx8_phy2mac[0].phy_mac_locallf;
-    assign ctrlx8_phy_mac_locallf[1] = w_ctrlx8_phy2mac[1].phy_mac_locallf;
-    assign ctrlx8_phy_mac_locallf[2] = w_ctrlx8_phy2mac[2].phy_mac_locallf;
-    assign ctrlx8_phy_mac_locallf[3] = w_ctrlx8_phy2mac[3].phy_mac_locallf;
-    assign ctrlx8_phy_mac_locallf[4] = w_ctrlx8_phy2mac[4].phy_mac_locallf;
-    assign ctrlx8_phy_mac_locallf[5] = w_ctrlx8_phy2mac[5].phy_mac_locallf;
-    assign ctrlx8_phy_mac_locallf[6] = w_ctrlx8_phy2mac[6].phy_mac_locallf;
-    assign ctrlx8_phy_mac_locallf[7] = w_ctrlx8_phy2mac[7].phy_mac_locallf;
-    assign ctrlx8_phy_mac_dirfeedback[0] = w_ctrlx8_phy2mac[0].phy_mac_dirfeedback;
-    assign ctrlx8_phy_mac_dirfeedback[1] = w_ctrlx8_phy2mac[1].phy_mac_dirfeedback;
-    assign ctrlx8_phy_mac_dirfeedback[2] = w_ctrlx8_phy2mac[2].phy_mac_dirfeedback;
-    assign ctrlx8_phy_mac_dirfeedback[3] = w_ctrlx8_phy2mac[3].phy_mac_dirfeedback;
-    assign ctrlx8_phy_mac_dirfeedback[4] = w_ctrlx8_phy2mac[4].phy_mac_dirfeedback;
-    assign ctrlx8_phy_mac_dirfeedback[5] = w_ctrlx8_phy2mac[5].phy_mac_dirfeedback;
-    assign ctrlx8_phy_mac_dirfeedback[6] = w_ctrlx8_phy2mac[6].phy_mac_dirfeedback;
-    assign ctrlx8_phy_mac_dirfeedback[7] = w_ctrlx8_phy2mac[7].phy_mac_dirfeedback;
-    assign ctrlx8_phy_mac_fomfeedback[0] = w_ctrlx8_phy2mac[0].phy_mac_fomfeedback;
-    assign ctrlx8_phy_mac_fomfeedback[1] = w_ctrlx8_phy2mac[1].phy_mac_fomfeedback;
-    assign ctrlx8_phy_mac_fomfeedback[2] = w_ctrlx8_phy2mac[2].phy_mac_fomfeedback;
-    assign ctrlx8_phy_mac_fomfeedback[3] = w_ctrlx8_phy2mac[3].phy_mac_fomfeedback;
-    assign ctrlx8_phy_mac_fomfeedback[4] = w_ctrlx8_phy2mac[4].phy_mac_fomfeedback;
-    assign ctrlx8_phy_mac_fomfeedback[5] = w_ctrlx8_phy2mac[5].phy_mac_fomfeedback;
-    assign ctrlx8_phy_mac_fomfeedback[6] = w_ctrlx8_phy2mac[6].phy_mac_fomfeedback;
-    assign ctrlx8_phy_mac_fomfeedback[7] = w_ctrlx8_phy2mac[7].phy_mac_fomfeedback;
+    assign w_ctrlx8asdfadssssss_mac2phy[0] = '{mac_phy_txdata: ctrlx8asdfadssssss_mac_phy_txdata[0], mac_phy_txdatak: ctrlx8asdfadssssss_mac_phy_txdatak[0], mac_phy_txdatavalid: ctrlx8asdfadssssss_mac_phy_txdatavalid[0], mac_phy_txstartblock: ctrlx8asdfadssssss_mac_phy_txstartblock[0], mac_phy_txsyncheader: ctrlx8asdfadssssss_mac_phy_txsyncheader[0], mac_phy_txdetectrx_loopback: ctrlx8asdfadssssss_mac_phy_txdetectrx_loopback[0], mac_phy_txelecidle: ctrlx8asdfadssssss_mac_phy_txelecidle[0], mac_phy_txcompliance: ctrlx8asdfadssssss_mac_phy_txcompliance[0], mac_phy_txdeemph: ctrlx8asdfadssssss_mac_phy_txdeemph[0], mac_phy_rxpolarity: ctrlx8asdfadssssss_mac_phy_rxpolarity[0], mac_phy_rxstandby: ctrlx8asdfadssssss_mac_phy_rxstandby[0], mac_phy_messagebus: ctrlx8asdfadssssss_mac_phy_messagebus[0], mac_phy_rxpresethint: ctrlx8asdfadssssss_mac_phy_rxpresethint[0], mac_phy_local_pset_index: ctrlx8asdfadssssss_mac_phy_local_pset_index[0], mac_phy_getlocal_pset_coef: ctrlx8asdfadssssss_mac_phy_getlocal_pset_coef[0], mac_phy_invalid_req: ctrlx8asdfadssssss_mac_phy_invalid_req[0], mac_phy_rxeqeval: ctrlx8asdfadssssss_mac_phy_rxeqeval[0], mac_phy_fs: ctrlx8asdfadssssss_mac_phy_fs[0], mac_phy_lf: ctrlx8asdfadssssss_mac_phy_lf[0], mac_phy_dirchange: ctrlx8asdfadssssss_mac_phy_dirchange[0], mac_phy_rxeqinprogress: ctrlx8asdfadssssss_mac_phy_rxeqinprogress[0]};
+    assign w_ctrlx8asdfadssssss_mac2phy[1] = '{mac_phy_txdata: ctrlx8asdfadssssss_mac_phy_txdata[1], mac_phy_txdatak: ctrlx8asdfadssssss_mac_phy_txdatak[1], mac_phy_txdatavalid: ctrlx8asdfadssssss_mac_phy_txdatavalid[1], mac_phy_txstartblock: ctrlx8asdfadssssss_mac_phy_txstartblock[1], mac_phy_txsyncheader: ctrlx8asdfadssssss_mac_phy_txsyncheader[1], mac_phy_txdetectrx_loopback: ctrlx8asdfadssssss_mac_phy_txdetectrx_loopback[1], mac_phy_txelecidle: ctrlx8asdfadssssss_mac_phy_txelecidle[1], mac_phy_txcompliance: ctrlx8asdfadssssss_mac_phy_txcompliance[1], mac_phy_txdeemph: ctrlx8asdfadssssss_mac_phy_txdeemph[1], mac_phy_rxpolarity: ctrlx8asdfadssssss_mac_phy_rxpolarity[1], mac_phy_rxstandby: ctrlx8asdfadssssss_mac_phy_rxstandby[1], mac_phy_messagebus: ctrlx8asdfadssssss_mac_phy_messagebus[1], mac_phy_rxpresethint: ctrlx8asdfadssssss_mac_phy_rxpresethint[1], mac_phy_local_pset_index: ctrlx8asdfadssssss_mac_phy_local_pset_index[1], mac_phy_getlocal_pset_coef: ctrlx8asdfadssssss_mac_phy_getlocal_pset_coef[1], mac_phy_invalid_req: ctrlx8asdfadssssss_mac_phy_invalid_req[1], mac_phy_rxeqeval: ctrlx8asdfadssssss_mac_phy_rxeqeval[1], mac_phy_fs: ctrlx8asdfadssssss_mac_phy_fs[1], mac_phy_lf: ctrlx8asdfadssssss_mac_phy_lf[1], mac_phy_dirchange: ctrlx8asdfadssssss_mac_phy_dirchange[1], mac_phy_rxeqinprogress: ctrlx8asdfadssssss_mac_phy_rxeqinprogress[1]};
+    assign w_ctrlx8asdfadssssss_mac2phy[2] = '{mac_phy_txdata: ctrlx8asdfadssssss_mac_phy_txdata[2], mac_phy_txdatak: ctrlx8asdfadssssss_mac_phy_txdatak[2], mac_phy_txdatavalid: ctrlx8asdfadssssss_mac_phy_txdatavalid[2], mac_phy_txstartblock: ctrlx8asdfadssssss_mac_phy_txstartblock[2], mac_phy_txsyncheader: ctrlx8asdfadssssss_mac_phy_txsyncheader[2], mac_phy_txdetectrx_loopback: ctrlx8asdfadssssss_mac_phy_txdetectrx_loopback[2], mac_phy_txelecidle: ctrlx8asdfadssssss_mac_phy_txelecidle[2], mac_phy_txcompliance: ctrlx8asdfadssssss_mac_phy_txcompliance[2], mac_phy_txdeemph: ctrlx8asdfadssssss_mac_phy_txdeemph[2], mac_phy_rxpolarity: ctrlx8asdfadssssss_mac_phy_rxpolarity[2], mac_phy_rxstandby: ctrlx8asdfadssssss_mac_phy_rxstandby[2], mac_phy_messagebus: ctrlx8asdfadssssss_mac_phy_messagebus[2], mac_phy_rxpresethint: ctrlx8asdfadssssss_mac_phy_rxpresethint[2], mac_phy_local_pset_index: ctrlx8asdfadssssss_mac_phy_local_pset_index[2], mac_phy_getlocal_pset_coef: ctrlx8asdfadssssss_mac_phy_getlocal_pset_coef[2], mac_phy_invalid_req: ctrlx8asdfadssssss_mac_phy_invalid_req[2], mac_phy_rxeqeval: ctrlx8asdfadssssss_mac_phy_rxeqeval[2], mac_phy_fs: ctrlx8asdfadssssss_mac_phy_fs[2], mac_phy_lf: ctrlx8asdfadssssss_mac_phy_lf[2], mac_phy_dirchange: ctrlx8asdfadssssss_mac_phy_dirchange[2], mac_phy_rxeqinprogress: ctrlx8asdfadssssss_mac_phy_rxeqinprogress[2]};
+    assign w_ctrlx8asdfadssssss_mac2phy[3] = '{mac_phy_txdata: ctrlx8asdfadssssss_mac_phy_txdata[3], mac_phy_txdatak: ctrlx8asdfadssssss_mac_phy_txdatak[3], mac_phy_txdatavalid: ctrlx8asdfadssssss_mac_phy_txdatavalid[3], mac_phy_txstartblock: ctrlx8asdfadssssss_mac_phy_txstartblock[3], mac_phy_txsyncheader: ctrlx8asdfadssssss_mac_phy_txsyncheader[3], mac_phy_txdetectrx_loopback: ctrlx8asdfadssssss_mac_phy_txdetectrx_loopback[3], mac_phy_txelecidle: ctrlx8asdfadssssss_mac_phy_txelecidle[3], mac_phy_txcompliance: ctrlx8asdfadssssss_mac_phy_txcompliance[3], mac_phy_txdeemph: ctrlx8asdfadssssss_mac_phy_txdeemph[3], mac_phy_rxpolarity: ctrlx8asdfadssssss_mac_phy_rxpolarity[3], mac_phy_rxstandby: ctrlx8asdfadssssss_mac_phy_rxstandby[3], mac_phy_messagebus: ctrlx8asdfadssssss_mac_phy_messagebus[3], mac_phy_rxpresethint: ctrlx8asdfadssssss_mac_phy_rxpresethint[3], mac_phy_local_pset_index: ctrlx8asdfadssssss_mac_phy_local_pset_index[3], mac_phy_getlocal_pset_coef: ctrlx8asdfadssssss_mac_phy_getlocal_pset_coef[3], mac_phy_invalid_req: ctrlx8asdfadssssss_mac_phy_invalid_req[3], mac_phy_rxeqeval: ctrlx8asdfadssssss_mac_phy_rxeqeval[3], mac_phy_fs: ctrlx8asdfadssssss_mac_phy_fs[3], mac_phy_lf: ctrlx8asdfadssssss_mac_phy_lf[3], mac_phy_dirchange: ctrlx8asdfadssssss_mac_phy_dirchange[3], mac_phy_rxeqinprogress: ctrlx8asdfadssssss_mac_phy_rxeqinprogress[3]};
+    assign w_ctrlx8asdfadssssss_mac2phy[4] = '{mac_phy_txdata: ctrlx8asdfadssssss_mac_phy_txdata[4], mac_phy_txdatak: ctrlx8asdfadssssss_mac_phy_txdatak[4], mac_phy_txdatavalid: ctrlx8asdfadssssss_mac_phy_txdatavalid[4], mac_phy_txstartblock: ctrlx8asdfadssssss_mac_phy_txstartblock[4], mac_phy_txsyncheader: ctrlx8asdfadssssss_mac_phy_txsyncheader[4], mac_phy_txdetectrx_loopback: ctrlx8asdfadssssss_mac_phy_txdetectrx_loopback[4], mac_phy_txelecidle: ctrlx8asdfadssssss_mac_phy_txelecidle[4], mac_phy_txcompliance: ctrlx8asdfadssssss_mac_phy_txcompliance[4], mac_phy_txdeemph: ctrlx8asdfadssssss_mac_phy_txdeemph[4], mac_phy_rxpolarity: ctrlx8asdfadssssss_mac_phy_rxpolarity[4], mac_phy_rxstandby: ctrlx8asdfadssssss_mac_phy_rxstandby[4], mac_phy_messagebus: ctrlx8asdfadssssss_mac_phy_messagebus[4], mac_phy_rxpresethint: ctrlx8asdfadssssss_mac_phy_rxpresethint[4], mac_phy_local_pset_index: ctrlx8asdfadssssss_mac_phy_local_pset_index[4], mac_phy_getlocal_pset_coef: ctrlx8asdfadssssss_mac_phy_getlocal_pset_coef[4], mac_phy_invalid_req: ctrlx8asdfadssssss_mac_phy_invalid_req[4], mac_phy_rxeqeval: ctrlx8asdfadssssss_mac_phy_rxeqeval[4], mac_phy_fs: ctrlx8asdfadssssss_mac_phy_fs[4], mac_phy_lf: ctrlx8asdfadssssss_mac_phy_lf[4], mac_phy_dirchange: ctrlx8asdfadssssss_mac_phy_dirchange[4], mac_phy_rxeqinprogress: ctrlx8asdfadssssss_mac_phy_rxeqinprogress[4]};
+    assign w_ctrlx8asdfadssssss_mac2phy[5] = '{mac_phy_txdata: ctrlx8asdfadssssss_mac_phy_txdata[5], mac_phy_txdatak: ctrlx8asdfadssssss_mac_phy_txdatak[5], mac_phy_txdatavalid: ctrlx8asdfadssssss_mac_phy_txdatavalid[5], mac_phy_txstartblock: ctrlx8asdfadssssss_mac_phy_txstartblock[5], mac_phy_txsyncheader: ctrlx8asdfadssssss_mac_phy_txsyncheader[5], mac_phy_txdetectrx_loopback: ctrlx8asdfadssssss_mac_phy_txdetectrx_loopback[5], mac_phy_txelecidle: ctrlx8asdfadssssss_mac_phy_txelecidle[5], mac_phy_txcompliance: ctrlx8asdfadssssss_mac_phy_txcompliance[5], mac_phy_txdeemph: ctrlx8asdfadssssss_mac_phy_txdeemph[5], mac_phy_rxpolarity: ctrlx8asdfadssssss_mac_phy_rxpolarity[5], mac_phy_rxstandby: ctrlx8asdfadssssss_mac_phy_rxstandby[5], mac_phy_messagebus: ctrlx8asdfadssssss_mac_phy_messagebus[5], mac_phy_rxpresethint: ctrlx8asdfadssssss_mac_phy_rxpresethint[5], mac_phy_local_pset_index: ctrlx8asdfadssssss_mac_phy_local_pset_index[5], mac_phy_getlocal_pset_coef: ctrlx8asdfadssssss_mac_phy_getlocal_pset_coef[5], mac_phy_invalid_req: ctrlx8asdfadssssss_mac_phy_invalid_req[5], mac_phy_rxeqeval: ctrlx8asdfadssssss_mac_phy_rxeqeval[5], mac_phy_fs: ctrlx8asdfadssssss_mac_phy_fs[5], mac_phy_lf: ctrlx8asdfadssssss_mac_phy_lf[5], mac_phy_dirchange: ctrlx8asdfadssssss_mac_phy_dirchange[5], mac_phy_rxeqinprogress: ctrlx8asdfadssssss_mac_phy_rxeqinprogress[5]};
+    assign w_ctrlx8asdfadssssss_mac2phy[6] = '{mac_phy_txdata: ctrlx8asdfadssssss_mac_phy_txdata[6], mac_phy_txdatak: ctrlx8asdfadssssss_mac_phy_txdatak[6], mac_phy_txdatavalid: ctrlx8asdfadssssss_mac_phy_txdatavalid[6], mac_phy_txstartblock: ctrlx8asdfadssssss_mac_phy_txstartblock[6], mac_phy_txsyncheader: ctrlx8asdfadssssss_mac_phy_txsyncheader[6], mac_phy_txdetectrx_loopback: ctrlx8asdfadssssss_mac_phy_txdetectrx_loopback[6], mac_phy_txelecidle: ctrlx8asdfadssssss_mac_phy_txelecidle[6], mac_phy_txcompliance: ctrlx8asdfadssssss_mac_phy_txcompliance[6], mac_phy_txdeemph: ctrlx8asdfadssssss_mac_phy_txdeemph[6], mac_phy_rxpolarity: ctrlx8asdfadssssss_mac_phy_rxpolarity[6], mac_phy_rxstandby: ctrlx8asdfadssssss_mac_phy_rxstandby[6], mac_phy_messagebus: ctrlx8asdfadssssss_mac_phy_messagebus[6], mac_phy_rxpresethint: ctrlx8asdfadssssss_mac_phy_rxpresethint[6], mac_phy_local_pset_index: ctrlx8asdfadssssss_mac_phy_local_pset_index[6], mac_phy_getlocal_pset_coef: ctrlx8asdfadssssss_mac_phy_getlocal_pset_coef[6], mac_phy_invalid_req: ctrlx8asdfadssssss_mac_phy_invalid_req[6], mac_phy_rxeqeval: ctrlx8asdfadssssss_mac_phy_rxeqeval[6], mac_phy_fs: ctrlx8asdfadssssss_mac_phy_fs[6], mac_phy_lf: ctrlx8asdfadssssss_mac_phy_lf[6], mac_phy_dirchange: ctrlx8asdfadssssss_mac_phy_dirchange[6], mac_phy_rxeqinprogress: ctrlx8asdfadssssss_mac_phy_rxeqinprogress[6]};
+    assign w_ctrlx8asdfadssssss_mac2phy[7] = '{mac_phy_txdata: ctrlx8asdfadssssss_mac_phy_txdata[7], mac_phy_txdatak: ctrlx8asdfadssssss_mac_phy_txdatak[7], mac_phy_txdatavalid: ctrlx8asdfadssssss_mac_phy_txdatavalid[7], mac_phy_txstartblock: ctrlx8asdfadssssss_mac_phy_txstartblock[7], mac_phy_txsyncheader: ctrlx8asdfadssssss_mac_phy_txsyncheader[7], mac_phy_txdetectrx_loopback: ctrlx8asdfadssssss_mac_phy_txdetectrx_loopback[7], mac_phy_txelecidle: ctrlx8asdfadssssss_mac_phy_txelecidle[7], mac_phy_txcompliance: ctrlx8asdfadssssss_mac_phy_txcompliance[7], mac_phy_txdeemph: ctrlx8asdfadssssss_mac_phy_txdeemph[7], mac_phy_rxpolarity: ctrlx8asdfadssssss_mac_phy_rxpolarity[7], mac_phy_rxstandby: ctrlx8asdfadssssss_mac_phy_rxstandby[7], mac_phy_messagebus: ctrlx8asdfadssssss_mac_phy_messagebus[7], mac_phy_rxpresethint: ctrlx8asdfadssssss_mac_phy_rxpresethint[7], mac_phy_local_pset_index: ctrlx8asdfadssssss_mac_phy_local_pset_index[7], mac_phy_getlocal_pset_coef: ctrlx8asdfadssssss_mac_phy_getlocal_pset_coef[7], mac_phy_invalid_req: ctrlx8asdfadssssss_mac_phy_invalid_req[7], mac_phy_rxeqeval: ctrlx8asdfadssssss_mac_phy_rxeqeval[7], mac_phy_fs: ctrlx8asdfadssssss_mac_phy_fs[7], mac_phy_lf: ctrlx8asdfadssssss_mac_phy_lf[7], mac_phy_dirchange: ctrlx8asdfadssssss_mac_phy_dirchange[7], mac_phy_rxeqinprogress: ctrlx8asdfadssssss_mac_phy_rxeqinprogress[7]};
+    assign ctrlx8asdfadssssss_phy_mac_rxdata[0] = w_ctrlx8asdfadssssss_phy2mac[0].phy_mac_rxdata;
+    assign ctrlx8asdfadssssss_phy_mac_rxdata[1] = w_ctrlx8asdfadssssss_phy2mac[1].phy_mac_rxdata;
+    assign ctrlx8asdfadssssss_phy_mac_rxdata[2] = w_ctrlx8asdfadssssss_phy2mac[2].phy_mac_rxdata;
+    assign ctrlx8asdfadssssss_phy_mac_rxdata[3] = w_ctrlx8asdfadssssss_phy2mac[3].phy_mac_rxdata;
+    assign ctrlx8asdfadssssss_phy_mac_rxdata[4] = w_ctrlx8asdfadssssss_phy2mac[4].phy_mac_rxdata;
+    assign ctrlx8asdfadssssss_phy_mac_rxdata[5] = w_ctrlx8asdfadssssss_phy2mac[5].phy_mac_rxdata;
+    assign ctrlx8asdfadssssss_phy_mac_rxdata[6] = w_ctrlx8asdfadssssss_phy2mac[6].phy_mac_rxdata;
+    assign ctrlx8asdfadssssss_phy_mac_rxdata[7] = w_ctrlx8asdfadssssss_phy2mac[7].phy_mac_rxdata;
+    assign ctrlx8asdfadssssss_phy_mac_rxdatak[0] = w_ctrlx8asdfadssssss_phy2mac[0].phy_mac_rxdatak;
+    assign ctrlx8asdfadssssss_phy_mac_rxdatak[1] = w_ctrlx8asdfadssssss_phy2mac[1].phy_mac_rxdatak;
+    assign ctrlx8asdfadssssss_phy_mac_rxdatak[2] = w_ctrlx8asdfadssssss_phy2mac[2].phy_mac_rxdatak;
+    assign ctrlx8asdfadssssss_phy_mac_rxdatak[3] = w_ctrlx8asdfadssssss_phy2mac[3].phy_mac_rxdatak;
+    assign ctrlx8asdfadssssss_phy_mac_rxdatak[4] = w_ctrlx8asdfadssssss_phy2mac[4].phy_mac_rxdatak;
+    assign ctrlx8asdfadssssss_phy_mac_rxdatak[5] = w_ctrlx8asdfadssssss_phy2mac[5].phy_mac_rxdatak;
+    assign ctrlx8asdfadssssss_phy_mac_rxdatak[6] = w_ctrlx8asdfadssssss_phy2mac[6].phy_mac_rxdatak;
+    assign ctrlx8asdfadssssss_phy_mac_rxdatak[7] = w_ctrlx8asdfadssssss_phy2mac[7].phy_mac_rxdatak;
+    assign ctrlx8asdfadssssss_phy_mac_rxdatavalid[0] = w_ctrlx8asdfadssssss_phy2mac[0].phy_mac_rxdatavalid;
+    assign ctrlx8asdfadssssss_phy_mac_rxdatavalid[1] = w_ctrlx8asdfadssssss_phy2mac[1].phy_mac_rxdatavalid;
+    assign ctrlx8asdfadssssss_phy_mac_rxdatavalid[2] = w_ctrlx8asdfadssssss_phy2mac[2].phy_mac_rxdatavalid;
+    assign ctrlx8asdfadssssss_phy_mac_rxdatavalid[3] = w_ctrlx8asdfadssssss_phy2mac[3].phy_mac_rxdatavalid;
+    assign ctrlx8asdfadssssss_phy_mac_rxdatavalid[4] = w_ctrlx8asdfadssssss_phy2mac[4].phy_mac_rxdatavalid;
+    assign ctrlx8asdfadssssss_phy_mac_rxdatavalid[5] = w_ctrlx8asdfadssssss_phy2mac[5].phy_mac_rxdatavalid;
+    assign ctrlx8asdfadssssss_phy_mac_rxdatavalid[6] = w_ctrlx8asdfadssssss_phy2mac[6].phy_mac_rxdatavalid;
+    assign ctrlx8asdfadssssss_phy_mac_rxdatavalid[7] = w_ctrlx8asdfadssssss_phy2mac[7].phy_mac_rxdatavalid;
+    assign ctrlx8asdfadssssss_phy_mac_rxstartblock[0] = w_ctrlx8asdfadssssss_phy2mac[0].phy_mac_rxstartblock;
+    assign ctrlx8asdfadssssss_phy_mac_rxstartblock[1] = w_ctrlx8asdfadssssss_phy2mac[1].phy_mac_rxstartblock;
+    assign ctrlx8asdfadssssss_phy_mac_rxstartblock[2] = w_ctrlx8asdfadssssss_phy2mac[2].phy_mac_rxstartblock;
+    assign ctrlx8asdfadssssss_phy_mac_rxstartblock[3] = w_ctrlx8asdfadssssss_phy2mac[3].phy_mac_rxstartblock;
+    assign ctrlx8asdfadssssss_phy_mac_rxstartblock[4] = w_ctrlx8asdfadssssss_phy2mac[4].phy_mac_rxstartblock;
+    assign ctrlx8asdfadssssss_phy_mac_rxstartblock[5] = w_ctrlx8asdfadssssss_phy2mac[5].phy_mac_rxstartblock;
+    assign ctrlx8asdfadssssss_phy_mac_rxstartblock[6] = w_ctrlx8asdfadssssss_phy2mac[6].phy_mac_rxstartblock;
+    assign ctrlx8asdfadssssss_phy_mac_rxstartblock[7] = w_ctrlx8asdfadssssss_phy2mac[7].phy_mac_rxstartblock;
+    assign ctrlx8asdfadssssss_phy_mac_rxsyncheader[0] = w_ctrlx8asdfadssssss_phy2mac[0].phy_mac_rxsyncheader;
+    assign ctrlx8asdfadssssss_phy_mac_rxsyncheader[1] = w_ctrlx8asdfadssssss_phy2mac[1].phy_mac_rxsyncheader;
+    assign ctrlx8asdfadssssss_phy_mac_rxsyncheader[2] = w_ctrlx8asdfadssssss_phy2mac[2].phy_mac_rxsyncheader;
+    assign ctrlx8asdfadssssss_phy_mac_rxsyncheader[3] = w_ctrlx8asdfadssssss_phy2mac[3].phy_mac_rxsyncheader;
+    assign ctrlx8asdfadssssss_phy_mac_rxsyncheader[4] = w_ctrlx8asdfadssssss_phy2mac[4].phy_mac_rxsyncheader;
+    assign ctrlx8asdfadssssss_phy_mac_rxsyncheader[5] = w_ctrlx8asdfadssssss_phy2mac[5].phy_mac_rxsyncheader;
+    assign ctrlx8asdfadssssss_phy_mac_rxsyncheader[6] = w_ctrlx8asdfadssssss_phy2mac[6].phy_mac_rxsyncheader;
+    assign ctrlx8asdfadssssss_phy_mac_rxsyncheader[7] = w_ctrlx8asdfadssssss_phy2mac[7].phy_mac_rxsyncheader;
+    assign ctrlx8asdfadssssss_phy_mac_rxvalid[0] = w_ctrlx8asdfadssssss_phy2mac[0].phy_mac_rxvalid;
+    assign ctrlx8asdfadssssss_phy_mac_rxvalid[1] = w_ctrlx8asdfadssssss_phy2mac[1].phy_mac_rxvalid;
+    assign ctrlx8asdfadssssss_phy_mac_rxvalid[2] = w_ctrlx8asdfadssssss_phy2mac[2].phy_mac_rxvalid;
+    assign ctrlx8asdfadssssss_phy_mac_rxvalid[3] = w_ctrlx8asdfadssssss_phy2mac[3].phy_mac_rxvalid;
+    assign ctrlx8asdfadssssss_phy_mac_rxvalid[4] = w_ctrlx8asdfadssssss_phy2mac[4].phy_mac_rxvalid;
+    assign ctrlx8asdfadssssss_phy_mac_rxvalid[5] = w_ctrlx8asdfadssssss_phy2mac[5].phy_mac_rxvalid;
+    assign ctrlx8asdfadssssss_phy_mac_rxvalid[6] = w_ctrlx8asdfadssssss_phy2mac[6].phy_mac_rxvalid;
+    assign ctrlx8asdfadssssss_phy_mac_rxvalid[7] = w_ctrlx8asdfadssssss_phy2mac[7].phy_mac_rxvalid;
+    assign ctrlx8asdfadssssss_phy_mac_rxstatus[0] = w_ctrlx8asdfadssssss_phy2mac[0].phy_mac_rxstatus;
+    assign ctrlx8asdfadssssss_phy_mac_rxstatus[1] = w_ctrlx8asdfadssssss_phy2mac[1].phy_mac_rxstatus;
+    assign ctrlx8asdfadssssss_phy_mac_rxstatus[2] = w_ctrlx8asdfadssssss_phy2mac[2].phy_mac_rxstatus;
+    assign ctrlx8asdfadssssss_phy_mac_rxstatus[3] = w_ctrlx8asdfadssssss_phy2mac[3].phy_mac_rxstatus;
+    assign ctrlx8asdfadssssss_phy_mac_rxstatus[4] = w_ctrlx8asdfadssssss_phy2mac[4].phy_mac_rxstatus;
+    assign ctrlx8asdfadssssss_phy_mac_rxstatus[5] = w_ctrlx8asdfadssssss_phy2mac[5].phy_mac_rxstatus;
+    assign ctrlx8asdfadssssss_phy_mac_rxstatus[6] = w_ctrlx8asdfadssssss_phy2mac[6].phy_mac_rxstatus;
+    assign ctrlx8asdfadssssss_phy_mac_rxstatus[7] = w_ctrlx8asdfadssssss_phy2mac[7].phy_mac_rxstatus;
+    assign ctrlx8asdfadssssss_phy_mac_rxelecidle[0] = w_ctrlx8asdfadssssss_phy2mac[0].phy_mac_rxelecidle;
+    assign ctrlx8asdfadssssss_phy_mac_rxelecidle[1] = w_ctrlx8asdfadssssss_phy2mac[1].phy_mac_rxelecidle;
+    assign ctrlx8asdfadssssss_phy_mac_rxelecidle[2] = w_ctrlx8asdfadssssss_phy2mac[2].phy_mac_rxelecidle;
+    assign ctrlx8asdfadssssss_phy_mac_rxelecidle[3] = w_ctrlx8asdfadssssss_phy2mac[3].phy_mac_rxelecidle;
+    assign ctrlx8asdfadssssss_phy_mac_rxelecidle[4] = w_ctrlx8asdfadssssss_phy2mac[4].phy_mac_rxelecidle;
+    assign ctrlx8asdfadssssss_phy_mac_rxelecidle[5] = w_ctrlx8asdfadssssss_phy2mac[5].phy_mac_rxelecidle;
+    assign ctrlx8asdfadssssss_phy_mac_rxelecidle[6] = w_ctrlx8asdfadssssss_phy2mac[6].phy_mac_rxelecidle;
+    assign ctrlx8asdfadssssss_phy_mac_rxelecidle[7] = w_ctrlx8asdfadssssss_phy2mac[7].phy_mac_rxelecidle;
+    assign ctrlx8asdfadssssss_phy_mac_rxstandbystatus[0] = w_ctrlx8asdfadssssss_phy2mac[0].phy_mac_rxstandbystatus;
+    assign ctrlx8asdfadssssss_phy_mac_rxstandbystatus[1] = w_ctrlx8asdfadssssss_phy2mac[1].phy_mac_rxstandbystatus;
+    assign ctrlx8asdfadssssss_phy_mac_rxstandbystatus[2] = w_ctrlx8asdfadssssss_phy2mac[2].phy_mac_rxstandbystatus;
+    assign ctrlx8asdfadssssss_phy_mac_rxstandbystatus[3] = w_ctrlx8asdfadssssss_phy2mac[3].phy_mac_rxstandbystatus;
+    assign ctrlx8asdfadssssss_phy_mac_rxstandbystatus[4] = w_ctrlx8asdfadssssss_phy2mac[4].phy_mac_rxstandbystatus;
+    assign ctrlx8asdfadssssss_phy_mac_rxstandbystatus[5] = w_ctrlx8asdfadssssss_phy2mac[5].phy_mac_rxstandbystatus;
+    assign ctrlx8asdfadssssss_phy_mac_rxstandbystatus[6] = w_ctrlx8asdfadssssss_phy2mac[6].phy_mac_rxstandbystatus;
+    assign ctrlx8asdfadssssss_phy_mac_rxstandbystatus[7] = w_ctrlx8asdfadssssss_phy2mac[7].phy_mac_rxstandbystatus;
+    assign ctrlx8asdfadssssss_phy_mac_messagebus[0] = w_ctrlx8asdfadssssss_phy2mac[0].phy_mac_messagebus;
+    assign ctrlx8asdfadssssss_phy_mac_messagebus[1] = w_ctrlx8asdfadssssss_phy2mac[1].phy_mac_messagebus;
+    assign ctrlx8asdfadssssss_phy_mac_messagebus[2] = w_ctrlx8asdfadssssss_phy2mac[2].phy_mac_messagebus;
+    assign ctrlx8asdfadssssss_phy_mac_messagebus[3] = w_ctrlx8asdfadssssss_phy2mac[3].phy_mac_messagebus;
+    assign ctrlx8asdfadssssss_phy_mac_messagebus[4] = w_ctrlx8asdfadssssss_phy2mac[4].phy_mac_messagebus;
+    assign ctrlx8asdfadssssss_phy_mac_messagebus[5] = w_ctrlx8asdfadssssss_phy2mac[5].phy_mac_messagebus;
+    assign ctrlx8asdfadssssss_phy_mac_messagebus[6] = w_ctrlx8asdfadssssss_phy2mac[6].phy_mac_messagebus;
+    assign ctrlx8asdfadssssss_phy_mac_messagebus[7] = w_ctrlx8asdfadssssss_phy2mac[7].phy_mac_messagebus;
+    assign ctrlx8asdfadssssss_phy_mac_phystatus[0] = w_ctrlx8asdfadssssss_phy2mac[0].phy_mac_phystatus;
+    assign ctrlx8asdfadssssss_phy_mac_phystatus[1] = w_ctrlx8asdfadssssss_phy2mac[1].phy_mac_phystatus;
+    assign ctrlx8asdfadssssss_phy_mac_phystatus[2] = w_ctrlx8asdfadssssss_phy2mac[2].phy_mac_phystatus;
+    assign ctrlx8asdfadssssss_phy_mac_phystatus[3] = w_ctrlx8asdfadssssss_phy2mac[3].phy_mac_phystatus;
+    assign ctrlx8asdfadssssss_phy_mac_phystatus[4] = w_ctrlx8asdfadssssss_phy2mac[4].phy_mac_phystatus;
+    assign ctrlx8asdfadssssss_phy_mac_phystatus[5] = w_ctrlx8asdfadssssss_phy2mac[5].phy_mac_phystatus;
+    assign ctrlx8asdfadssssss_phy_mac_phystatus[6] = w_ctrlx8asdfadssssss_phy2mac[6].phy_mac_phystatus;
+    assign ctrlx8asdfadssssss_phy_mac_phystatus[7] = w_ctrlx8asdfadssssss_phy2mac[7].phy_mac_phystatus;
+    assign ctrlx8asdfadssssss_phy_mac_local_tx_coef_valid[0] = w_ctrlx8asdfadssssss_phy2mac[0].phy_mac_local_tx_coef_valid;
+    assign ctrlx8asdfadssssss_phy_mac_local_tx_coef_valid[1] = w_ctrlx8asdfadssssss_phy2mac[1].phy_mac_local_tx_coef_valid;
+    assign ctrlx8asdfadssssss_phy_mac_local_tx_coef_valid[2] = w_ctrlx8asdfadssssss_phy2mac[2].phy_mac_local_tx_coef_valid;
+    assign ctrlx8asdfadssssss_phy_mac_local_tx_coef_valid[3] = w_ctrlx8asdfadssssss_phy2mac[3].phy_mac_local_tx_coef_valid;
+    assign ctrlx8asdfadssssss_phy_mac_local_tx_coef_valid[4] = w_ctrlx8asdfadssssss_phy2mac[4].phy_mac_local_tx_coef_valid;
+    assign ctrlx8asdfadssssss_phy_mac_local_tx_coef_valid[5] = w_ctrlx8asdfadssssss_phy2mac[5].phy_mac_local_tx_coef_valid;
+    assign ctrlx8asdfadssssss_phy_mac_local_tx_coef_valid[6] = w_ctrlx8asdfadssssss_phy2mac[6].phy_mac_local_tx_coef_valid;
+    assign ctrlx8asdfadssssss_phy_mac_local_tx_coef_valid[7] = w_ctrlx8asdfadssssss_phy2mac[7].phy_mac_local_tx_coef_valid;
+    assign ctrlx8asdfadssssss_phy_mac_local_tx_pset_coef[0] = w_ctrlx8asdfadssssss_phy2mac[0].phy_mac_local_tx_pset_coef;
+    assign ctrlx8asdfadssssss_phy_mac_local_tx_pset_coef[1] = w_ctrlx8asdfadssssss_phy2mac[1].phy_mac_local_tx_pset_coef;
+    assign ctrlx8asdfadssssss_phy_mac_local_tx_pset_coef[2] = w_ctrlx8asdfadssssss_phy2mac[2].phy_mac_local_tx_pset_coef;
+    assign ctrlx8asdfadssssss_phy_mac_local_tx_pset_coef[3] = w_ctrlx8asdfadssssss_phy2mac[3].phy_mac_local_tx_pset_coef;
+    assign ctrlx8asdfadssssss_phy_mac_local_tx_pset_coef[4] = w_ctrlx8asdfadssssss_phy2mac[4].phy_mac_local_tx_pset_coef;
+    assign ctrlx8asdfadssssss_phy_mac_local_tx_pset_coef[5] = w_ctrlx8asdfadssssss_phy2mac[5].phy_mac_local_tx_pset_coef;
+    assign ctrlx8asdfadssssss_phy_mac_local_tx_pset_coef[6] = w_ctrlx8asdfadssssss_phy2mac[6].phy_mac_local_tx_pset_coef;
+    assign ctrlx8asdfadssssss_phy_mac_local_tx_pset_coef[7] = w_ctrlx8asdfadssssss_phy2mac[7].phy_mac_local_tx_pset_coef;
+    assign ctrlx8asdfadssssss_phy_mac_localfs[0] = w_ctrlx8asdfadssssss_phy2mac[0].phy_mac_localfs;
+    assign ctrlx8asdfadssssss_phy_mac_localfs[1] = w_ctrlx8asdfadssssss_phy2mac[1].phy_mac_localfs;
+    assign ctrlx8asdfadssssss_phy_mac_localfs[2] = w_ctrlx8asdfadssssss_phy2mac[2].phy_mac_localfs;
+    assign ctrlx8asdfadssssss_phy_mac_localfs[3] = w_ctrlx8asdfadssssss_phy2mac[3].phy_mac_localfs;
+    assign ctrlx8asdfadssssss_phy_mac_localfs[4] = w_ctrlx8asdfadssssss_phy2mac[4].phy_mac_localfs;
+    assign ctrlx8asdfadssssss_phy_mac_localfs[5] = w_ctrlx8asdfadssssss_phy2mac[5].phy_mac_localfs;
+    assign ctrlx8asdfadssssss_phy_mac_localfs[6] = w_ctrlx8asdfadssssss_phy2mac[6].phy_mac_localfs;
+    assign ctrlx8asdfadssssss_phy_mac_localfs[7] = w_ctrlx8asdfadssssss_phy2mac[7].phy_mac_localfs;
+    assign ctrlx8asdfadssssss_phy_mac_locallf[0] = w_ctrlx8asdfadssssss_phy2mac[0].phy_mac_locallf;
+    assign ctrlx8asdfadssssss_phy_mac_locallf[1] = w_ctrlx8asdfadssssss_phy2mac[1].phy_mac_locallf;
+    assign ctrlx8asdfadssssss_phy_mac_locallf[2] = w_ctrlx8asdfadssssss_phy2mac[2].phy_mac_locallf;
+    assign ctrlx8asdfadssssss_phy_mac_locallf[3] = w_ctrlx8asdfadssssss_phy2mac[3].phy_mac_locallf;
+    assign ctrlx8asdfadssssss_phy_mac_locallf[4] = w_ctrlx8asdfadssssss_phy2mac[4].phy_mac_locallf;
+    assign ctrlx8asdfadssssss_phy_mac_locallf[5] = w_ctrlx8asdfadssssss_phy2mac[5].phy_mac_locallf;
+    assign ctrlx8asdfadssssss_phy_mac_locallf[6] = w_ctrlx8asdfadssssss_phy2mac[6].phy_mac_locallf;
+    assign ctrlx8asdfadssssss_phy_mac_locallf[7] = w_ctrlx8asdfadssssss_phy2mac[7].phy_mac_locallf;
+    assign ctrlx8asdfadssssss_phy_mac_dirfeedback[0] = w_ctrlx8asdfadssssss_phy2mac[0].phy_mac_dirfeedback;
+    assign ctrlx8asdfadssssss_phy_mac_dirfeedback[1] = w_ctrlx8asdfadssssss_phy2mac[1].phy_mac_dirfeedback;
+    assign ctrlx8asdfadssssss_phy_mac_dirfeedback[2] = w_ctrlx8asdfadssssss_phy2mac[2].phy_mac_dirfeedback;
+    assign ctrlx8asdfadssssss_phy_mac_dirfeedback[3] = w_ctrlx8asdfadssssss_phy2mac[3].phy_mac_dirfeedback;
+    assign ctrlx8asdfadssssss_phy_mac_dirfeedback[4] = w_ctrlx8asdfadssssss_phy2mac[4].phy_mac_dirfeedback;
+    assign ctrlx8asdfadssssss_phy_mac_dirfeedback[5] = w_ctrlx8asdfadssssss_phy2mac[5].phy_mac_dirfeedback;
+    assign ctrlx8asdfadssssss_phy_mac_dirfeedback[6] = w_ctrlx8asdfadssssss_phy2mac[6].phy_mac_dirfeedback;
+    assign ctrlx8asdfadssssss_phy_mac_dirfeedback[7] = w_ctrlx8asdfadssssss_phy2mac[7].phy_mac_dirfeedback;
+    assign ctrlx8asdfadssssss_phy_mac_fomfeedback[0] = w_ctrlx8asdfadssssss_phy2mac[0].phy_mac_fomfeedback;
+    assign ctrlx8asdfadssssss_phy_mac_fomfeedback[1] = w_ctrlx8asdfadssssss_phy2mac[1].phy_mac_fomfeedback;
+    assign ctrlx8asdfadssssss_phy_mac_fomfeedback[2] = w_ctrlx8asdfadssssss_phy2mac[2].phy_mac_fomfeedback;
+    assign ctrlx8asdfadssssss_phy_mac_fomfeedback[3] = w_ctrlx8asdfadssssss_phy2mac[3].phy_mac_fomfeedback;
+    assign ctrlx8asdfadssssss_phy_mac_fomfeedback[4] = w_ctrlx8asdfadssssss_phy2mac[4].phy_mac_fomfeedback;
+    assign ctrlx8asdfadssssss_phy_mac_fomfeedback[5] = w_ctrlx8asdfadssssss_phy2mac[5].phy_mac_fomfeedback;
+    assign ctrlx8asdfadssssss_phy_mac_fomfeedback[6] = w_ctrlx8asdfadssssss_phy2mac[6].phy_mac_fomfeedback;
+    assign ctrlx8asdfadssssss_phy_mac_fomfeedback[7] = w_ctrlx8asdfadssssss_phy2mac[7].phy_mac_fomfeedback;
 
     //------------------------------------------------------------
     // CtrlX4a (x4)
@@ -1203,10 +1203,10 @@ module pipe_lane_mapper_connection #(
         .ctrlx16_mac2phy (w_ctrlx16_mac2phy),
         .ctrlx16_phy2mac (w_ctrlx16_phy2mac),
         .ctrlx16_pclk (ctrlx16_pclk),
-        .ctrlx8_rst_n   (ctrlx8_rst_n),
-        .ctrlx8_mac2phy (w_ctrlx8_mac2phy),
-        .ctrlx8_phy2mac (w_ctrlx8_phy2mac),
-        .ctrlx8_pclk (ctrlx8_pclk),
+        .ctrlx8asdfadssssss_rst_n   (ctrlx8asdfadssssss_rst_n),
+        .ctrlx8asdfadssssss_mac2phy (w_ctrlx8asdfadssssss_mac2phy),
+        .ctrlx8asdfadssssss_phy2mac (w_ctrlx8asdfadssssss_phy2mac),
+        .ctrlx8asdfadssssss_pclk (ctrlx8asdfadssssss_pclk),
         .ctrlx4a_rst_n   (ctrlx4a_rst_n),
         .ctrlx4a_mac2phy (w_ctrlx4a_mac2phy),
         .ctrlx4a_phy2mac (w_ctrlx4a_phy2mac),

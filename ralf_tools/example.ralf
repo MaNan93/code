@@ -1,0 +1,153 @@
+# ---------------------------------------------------------------------------
+# example.ralf -- 覆盖 RALF 主要构件的样例 (用于验证 ralf2xlsx.py)
+# ---------------------------------------------------------------------------
+
+set NCHAN 4
+
+# ---- 独立 field 定义, 可被多个 register 复用 ----
+field PAR {
+   bits 2;
+   reset 2'b11;
+   access rw;
+   constraint valid {
+      value != 2'b00;
+   }
+   doc { parity mode }
+}
+
+# ---- 独立 register 定义 ----
+register CTRL {
+   bytes 2;
+   doc { UART control register }
+   field TXE {
+      bits 1;
+      access rw;
+      reset 1'b0;
+      doc { transmit enable }
+   }
+   field RXE {}
+   field PAR;
+   field MODE @4 {
+      bits 3;
+      access rw;
+      reset 3'h2;
+      enum { OFF = 0, LOOPBACK = 1, NORMAL = 2, TEST = 7 }
+   }
+   field unused @7 { bits 4; }
+   field DTR @11 { access rw; }
+   field CTS {
+      access rw;
+      reset 1;
+   }
+}
+
+register STATUS {
+   bytes 4;
+   field busy      { bits 1; access ro; }
+   field fifo_lvl  { bits 6; access ro; }
+   field err_code  { bits 4; access w1c; reset 4'h0; }
+   field ver       { bits 8; access ro; reset 8'h12; }
+}
+
+memory tx_bfr {
+   bits    16;
+   size    1024;
+   access  ro;
+   initial 0++;
+}
+
+memory dma_bfr {
+   bits 8;
+   size 64k;
+}
+
+# ---- regfile: DMA 通道寄存器组 ----
+regfile chan {
+   register src {
+      bytes 4;
+      field addr { bits 32; access rw; }
+   }
+   register dst {
+      bytes 4;
+      field addr { bits 32; access rw; }
+   }
+   register count {
+      bytes 4;
+      field n_bytes { bits 16; access rw; }
+      field prio    { bits 2;  access rw; reset 2'b01; }
+   }
+   register cfg {
+      bytes 4;
+      field go   { bits 1; access w1s; }
+      field done { bits 1; access ro;  }
+      field irq_en[4] @8 { bits 1; access rw; }
+   }
+}
+
+# ---- UART block ----
+block uart {
+   bytes 4;
+   endian little;
+   register CTRL      (u_uart.ctrl_reg)  @'h00;
+   register STATUS    (u_uart.stat_reg)  @'h04;
+   register INT_EN @'h08 {
+      bytes 4;
+      field tx_done { bits 1; access rw; }
+      field rx_done { bits 1; access rw; }
+      field ovf     { bits 1; access rw; }
+   };
+   memory tx_bfr (u_uart.txram) @'h100;
+}
+
+# ---- DMA block: regfile 数组 + Tcl for 循环生成的寄存器 ----
+block dma {
+   bytes 4;
+   endian little;
+
+   regfile chan[4] (u_dma.ch%d) @'h000 +'h10;
+
+   register GLOBAL_CTRL @'h100 {
+      bytes 4;
+      field en     { bits 1; access rw; }
+      field reset_ { bits 1; access w1s; }
+   };
+
+   for {set i 0} {$i < $NCHAN} {incr i} {
+      register CH_IRQ_$i @[expr 288 + $i * 4] {
+         bytes 4;
+         field pending { bits 1; access w1c; }
+         field mask    { bits 1; access rw; reset 1'b1; }
+      };
+   }
+
+   memory dma_bfr @'h1000;
+}
+
+# ---- 双 domain 的桥 ----
+register data_xfer {
+   bytes 4;
+   field data { bits 32; access rw; }
+   shared;
+}
+
+block bridge {
+   domain pci {
+      bytes 4;
+      register data_xfer=to_ahb  @'h0 write;
+      register data_xfer=frm_ahb @'h4 read;
+   }
+   domain ahb {
+      bytes 4;
+      register data_xfer=to_pci  @'h0 write;
+      register data_xfer=frm_pci @'h4 read;
+   }
+}
+
+# ---- 顶层 system ----
+system soc {
+   bytes 4;
+   endian little;
+   block uart[2] @'h4000 +'h400;
+   block dma     @'h8000;
+   block bridge  @'hC000;
+}

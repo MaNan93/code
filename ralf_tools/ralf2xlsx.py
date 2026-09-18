@@ -8,7 +8,7 @@ ralf2xlsx.py -- Synopsys RALF (Register Abstraction Layer File) -> Excel 寄存�
 支持的 RALF 构件 (对齐 UVM RAL Generator User Guide, Appendix A):
     field / register / regfile / memory / virtual register / block / system / domain
     属性: bits bytes access reset hard_reset soft_reset volatile enum constraint doc
-          attributes endian left_to_right shared cover size initial coverpoint cross
+          attributes endian left_to_right shared cover size initial coverpoint cross change_reset
     Tcl : # 注释, set / incr, source, [expr ...], 简单 for / if, 反斜杠续行
 
 命令按 Tcl 语义在换行/分号处结束, 所以 "source x.ralf" / "bits 8" 这种不写分号的
@@ -33,7 +33,7 @@ import re
 import sys
 from collections import OrderedDict
 
-VERSION = '2.0'
+VERSION = '2.1'
 
 # ============================================================================
 # 词法分析
@@ -237,6 +237,7 @@ class RegFile(object):
         self.shared = None
         self.doc = ''
         self.constraints = OrderedDict()
+        self.change_resets = []          # [(target_path, (value, raw))]
         self.insts = []                  # register 实例
 
 
@@ -272,6 +273,7 @@ class Map(object):
         self.constraints = OrderedDict()
         self.attributes = OrderedDict()
         self.cover = []
+        self.change_resets = []          # [(target_path, (value, raw))]
         self.insts = []
 
 
@@ -281,6 +283,7 @@ class Block(object):
         self.is_system = is_system
         self.doc = ''
         self.attributes = OrderedDict()
+        self.change_resets = []          # block-scope change_reset rules
         self.maps = OrderedDict()        # domain name -> Map
 
     def default_map(self):
@@ -751,6 +754,24 @@ class Parser(object):
         vals = [self.subst(t.val) for t in hdr]
         v0 = vals[0] if vals else ''
 
+        # 单接口 block/system 的 bytes/endian 属于其默认 physical interface。
+        # domain 内 ctx 本身就是 Map。
+        prop_ctx = ctx.default_map() if isinstance(ctx, Block) and kw in ('bytes', 'endian') else ctx
+
+        if kw == 'change_reset':
+            if opened:
+                self.skip_block_raw()
+            if len(vals) < 2:
+                self.warn('change_reset 缺少 target/value', kw_tok)
+                return
+            target, raw = vals[0], vals[1]
+            rule = (target, (parse_num(raw)[0], raw))
+            if hasattr(ctx, 'change_resets'):
+                ctx.change_resets.append(rule)
+            else:
+                self.warn('change_reset 出现在不支持的上下文中', kw_tok)
+            return
+
         if kw == 'constraint':
             body = self.skip_block_raw() if opened else ''
             if hasattr(ctx, 'constraints'):
@@ -786,7 +807,7 @@ class Parser(object):
         if kw == 'bits':
             ctx.bits = self.num(v0)
         elif kw == 'bytes':
-            ctx.bytes = self.num(v0)
+            prop_ctx.bytes = self.num(v0)
         elif kw == 'size':
             ctx.size = parse_size(v0)
         elif kw == 'access':
@@ -802,7 +823,7 @@ class Parser(object):
         elif kw == 'left_to_right':
             ctx.left_to_right = True
         elif kw == 'endian':
-            ctx.endian = v0
+            prop_ctx.endian = v0
         elif kw == 'shared':
             ctx.shared = v0 or 'yes'
         elif kw == 'cover':
@@ -859,6 +880,7 @@ class Elaborator(object):
         self.blk_rows = []
         self.warnings = []
         self._seen = set()
+        self.reset_rules = []             # [(full_target, value, raw)]
 
     def warn(self, m):
         if m not in self.warnings:
@@ -921,28 +943,34 @@ class Elaborator(object):
                     last = base + (inst.arr[1] - inst.arr[0]) * incr
                 nxt = last + bits
         else:
-            # left_to_right: 从最高位侧开始拼接, 但整体向最低位对齐
-            # (UG Example A-6 与 Example A-5 等价), 基准是字段总位宽而不是寄存器位宽
-            total = sum((fd.bits or 1) * ((inst.arr[1] - inst.arr[0] + 1) if inst.arr else 1)
-                        for inst, fd in items)
-            pos = total
+            # left_to_right: offset 是“从最高有效位向右”的距离。先在这个
+            # top-relative 坐标系中完成布局（包含显式 gap），再整体向 LSB 对齐。
+            # 不能简单用 sum(field bits) 作为 total，否则 @offset 产生的 gap 会丢失。
+            top_items = []                       # (name, fd, top_off, bits)
+            nxt_top = 0
+            span = 0
             for inst, fd in items:
                 bits = fd.bits or 1
                 off = (self.p.num(inst.offset)
                        if inst.offset not in (None, 'none', '') else None)
+                base = nxt_top if off is None else off
                 incr = (self.p.num(inst.incr) or bits) if inst.incr else bits
                 lo = inst.arr[0] if inst.arr else 0
                 cnt = (inst.arr[1] - inst.arr[0] + 1) if inst.arr else 1
-                shown = self.idxs(inst.arr)
-                for k in shown:
+
+                for k in self.idxs(inst.arr):
                     j = (k - lo) if k is not None else 0
-                    if off is not None:          # @offset = 距最高有效位的偏移
-                        pos = total - (off + j * incr) - bits
-                    else:
-                        pos -= bits
-                    out.append((self.anm(inst.name, inst.arr, k), fd, max(pos, 0), bits))
-                if off is None and not self.expand and cnt > 1:
-                    pos -= bits * (cnt - 1)      # 未展开时补上剩余元素占位
+                    top_off = base + j * incr
+                    top_items.append((self.anm(inst.name, inst.arr, k), fd, top_off, bits))
+
+                # 即使 --no-expand-arrays，也必须把未显示元素算进实际跨度。
+                last_top = base + (cnt - 1) * incr
+                nxt_top = last_top + bits
+                span = max(span, nxt_top)
+
+            for nm, fd, top_off, bits in top_items:
+                lsb = span - (top_off + bits)
+                out.append((nm, fd, max(lsb, 0), bits))
 
         if width is None:
             msb = max([l + b for _, _, l, b in out] or [8])
@@ -953,16 +981,54 @@ class Elaborator(object):
     def _reg_def(self, inst):
         return inst.definition or self.p.defs['register'].get(inst.defname)
 
+    def add_reset_rules(self, base_path, rules):
+        for target, (value, raw) in (rules or []):
+            if not self.expand and re.search(r'\[\d+\]', target):
+                self.warn('数组未展开时无法精确表示 change_reset %s; 保留原 reset' % target)
+            full = '%s.%s' % (base_path, target) if base_path else target
+            self.reset_rules.append((full, value, raw))
+
+    def reset_override(self, reg_path, field_path, lsb, bits):
+        """Return (value, raw) for the most specific/latest matching change_reset.
+
+        A register-level rule is sliced down to the field bits; a field-level rule
+        directly supplies the field reset value.
+        """
+        for target, value, raw in reversed(self.reset_rules):
+            if target == field_path:
+                return value, raw
+            if target == reg_path:
+                if value is None:
+                    return None, raw
+                mask = (1 << bits) - 1
+                return (value >> lsb) & mask, raw
+        return None
+
     # ---------- 层次遍历 ----------
-    def walk_block(self, blk, path, base_byte, parent_bytes):
-        key = (id(blk), path)
+    def walk_block(self, blk, path, base_byte, parent_bytes, domain=''):
+        key = (id(blk), path, domain)
         if key in self._seen:
             self.warn('检测到重复/递归实例化, 已跳过: %s' % path)
             return
         self._seen.add(key)
-        for mname, mp in blk.maps.items():
+
+        # block-scope change_reset 以该 block 实例路径为基准。
+        self.add_reset_rules(path, getattr(blk, 'change_resets', []))
+
+        if domain:
+            if domain not in blk.maps:
+                self.warn('找不到 domain %s (in %s)' % (domain, path))
+                return
+            maps = [(domain, blk.maps[domain])]
+        else:
+            maps = list(blk.maps.items())
+
+        for mname, mp in maps:
             bus = mp.bytes or parent_bytes or 4
             bpath = path if not mname else '%s.%s' % (path, mname)
+            if bpath != path:
+                self.add_reset_rules(bpath, getattr(blk, 'change_resets', []))
+            self.add_reset_rules(bpath, getattr(mp, 'change_resets', []))
             self.blk_rows.append(dict(block=bpath, kind='system' if blk.is_system else 'block',
                                       bus_bytes=bus, endian=mp.endian, base=base_byte,
                                       items=len(mp.insts), doc=blk.doc))
@@ -1004,7 +1070,7 @@ class Elaborator(object):
                     j = (k - lo) if k is not None else 0
                     b = base_byte + ((unit or 0) + j * (incr or 0)) * self.ubytes(bus)
                     self.walk_block(sub, '%s.%s' % (bpath, self.anm(inst.name, inst.arr, k)),
-                                    b, bus)
+                                    b, bus, inst.domain)
 
     # ---------- register ----------
     def emit_register(self, inst, bpath, base_byte, bus, prefix, unit, nxt_unit, endian):
@@ -1052,10 +1118,17 @@ class Elaborator(object):
                      constr='', fdoc='')
             self.rows.append(r)
             return
+        reg_path = '%s.%s%s' % (bpath, prefix, nm)
         for fname, fd, lsb, bits in fields:
             msb = lsb + bits - 1
             acc = (fd.access or ('ro' if fd.name in ('unused', 'reserved') else 'rw')).upper()
-            if fd.reset and fd.reset[0] is not None:
+            field_path = '%s.%s' % (reg_path, fname)
+            ov = self.reset_override(reg_path, field_path, lsb, bits)
+            if ov is not None:
+                ov_val, ov_raw = ov
+                rst = hexs(ov_val, bits) if ov_val is not None else ov_raw
+                rst_raw = ov_raw
+            elif fd.reset and fd.reset[0] is not None:
                 rst, rst_raw = hexs(fd.reset[0], bits), fd.reset[1]
             elif fd.reset:
                 rst, rst_raw = fd.reset[1], fd.reset[1]
@@ -1089,6 +1162,9 @@ class Elaborator(object):
             j = (k - lo) if k is not None else 0
             nm = self.anm(inst.name, inst.arr, k)
             u = None if unit is None else unit + j * incr
+            # regfile-scope change_reset 相对该 regfile 实例路径。
+            rf_base_path = '%s.%s%s' % (bpath, prefix, nm)
+            self.add_reset_rules(rf_base_path, getattr(rf, 'change_resets', []))
             sub_next = 0
             for ri in rf.insts:
                 if ri.kind != 'register':
@@ -1427,8 +1503,8 @@ def main(argv=None):
     ap.add_argument('--csv', help='同时输出一份 CSV (字段表)')
     ap.add_argument('--base', default='0', help='顶层基地址 (缺省 0), 支持 0x / Verilog 格式')
     ap.add_argument('--addr-mode', choices=('byte', 'word'), default='byte',
-                    help='RALF 里 @offset 的含义: byte=字节偏移(缺省); '
-                         'word=地址单元个数(= 所在 block 的 bytes), 即 ralgen 不加 -B 的语义')
+                    help='RALF 里 @offset 的含义: byte=字节偏移(缺省, 对应 ralgen -B / byte addressing); '
+                         'word=地址单元个数(= 所在 block 的 bytes), 对应 ralgen 默认地址语义')
     ap.add_argument('--sort', choices=('source', 'addr'), default='source',
                     help='行顺序: source=按 RALF 出现顺序(缺省), addr=按地址')
     ap.add_argument('--no-expand-arrays', action='store_true',
@@ -1503,7 +1579,11 @@ def main(argv=None):
     meta = dict(src=os.path.abspath(args.ralf), nfiles=len(p.files),
                 top=', '.join(tops),
                 time=datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-                addr_mode='%s offsets, base=%s' % (args.addr_mode, hexs(base or 0)),
+                addr_mode='%s offsets (%s), base=%s' %
+                          (args.addr_mode,
+                           'ralgen -B / byte addressing' if args.addr_mode == 'byte'
+                           else 'ralgen default / address units',
+                           hexs(base or 0)),
                 arrays='collapsed' if args.no_expand_arrays else 'expanded')
     try:
         write_xlsx(out, ela, meta, warn_rows, sheet_per_block=args.sheet_per_block)

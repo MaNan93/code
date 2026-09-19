@@ -287,6 +287,8 @@ interface dwc_pcie_native_common_bfm #(
     end else if (h.addr_align_en) begin
       if(is_completion(h.tlp_type))
         protocol_error("XALI address alignment must be off for Completions");
+      if(h.td)
+        protocol_error("XALI address alignment must be off for TLPs carrying ECRC (TD=1)");
       wh.byte_en='0;
       wh.byte_len=logical_len;
       wire_payload=new[payload.size()];
@@ -404,6 +406,8 @@ interface dwc_pcie_native_common_bfm #(
       else if(!pcb.xadm_client0_halt) begin
         if(checker_enable&&active&&!pcb.client0_tlp_dv)
           protocol_error("XALI payload bubble while not halted");
+        if(checker_enable&&pcb.client0_tlp_dv&&!active&&!pcb.client0_tlp_hv)
+          protocol_error("XALI DV observed outside a TLP");
         if(pcb.client0_tlp_hv) begin
           if(checker_enable&&active)protocol_error("XALI HV before EOT");
           p.header='{pcb.client0_addr_align_en,pcb.client0_tlp_byte_en,
@@ -472,6 +476,8 @@ interface dwc_pcie_native_common_bfm #(
             expected=p.header.fmt[1]?decode_dw_length(p.header.dw_len)*4:0;
             active=1;
           end
+          if(checker_enable&&pcb.radm_trgt1_dv&&!active&&!pcb.radm_trgt1_hv)
+            protocol_error("RTRGT1 DV observed outside a TLP");
           // Databook L.1: dwen is unreliable on a DLLP-aborted EOT beat.
           if(pcb.radm_trgt1_dv&&active&&
               !(pcb.radm_trgt1_eot&&pcb.radm_trgt1_dllp_abort))begin

@@ -5,10 +5,51 @@ ralf2xlsx.py -- Synopsys RALF (Register Abstraction Layer File) -> Excel 寄存�
 
     python ralf2xlsx.py top.ralf -t <topname> -o regs.xlsx [-I incdir]...
 
-支持的 RALF 构件 (对齐 UVM RAL Generator User Guide, Appendix A):
+Version History
+---------------
+v2.4
+  - Fix Tcl '#' comment lexing: '#' starts a comment only at command start;
+    literal '#' inside words/doc text no longer truncates the line or loses braces.
+  - Catch XLSX/CSV output errors and return a clean tool error instead of traceback.
+
+v2.3
+  - Fix field access-mode validation: UVM and VMM RALF use different tables
+    (only rw/ro/wo/w1/w1c/rc overlap). Accept the union by default; --flavor
+    selects a single dialect.
+  - Fix mixed-language backdoor paths: keep ONE path chain and pick the
+    separator per appended segment, so a Verilog hierarchy ending in a VHDL
+    signal yields a complete path instead of two halves plus a bogus warning.
+    The either/or rule is enforced per construct, as the UG states.
+  - Fix O(n^2) xlsx writing: assign merged ranges in bulk instead of calling
+    openpyxl merge_cells() once per range.
+  - Report property statements at global scope as a warning instead of an
+    AttributeError traceback; main() no longer lets exceptions escape.
+  - Accept "hdl_path = (...)" / "vhdl_path = (...)" with spaces around '='.
+
+v2.2
+  - Support static virtual-register address elaboration (memory/offset/increment).
+  - Propagate regfile read/write restrictions to contained registers.
+  - Build hierarchical Verilog HDL paths and add local/backdoor path columns.
+  - Support VHDL vhdl_path hierarchy.
+  - Add Shared/Domain-oriented review data and access-mode validation.
+  - Ignore user_code safely; improve doc HTML-to-text conversion.
+  - Preserve v2.1 fixes: block.domain selection, left_to_right gaps, change_reset,
+    and single-interface bytes/endian handling.
+
+v2.1
+  - Fix block.domain elaboration.
+  - Fix left_to_right field layout with explicit gaps.
+  - Support change_reset overrides.
+  - Fix single-interface bytes/endian handling.
+
+v2.0
+  - Lexer/parser/elaborator based RALF -> XLSX implementation.
+
+支持的 RALF 构件 (对齐 RAL User Guide / Appendix A):
     field / register / regfile / memory / virtual register / block / system / domain
     属性: bits bytes access reset hard_reset soft_reset volatile enum constraint doc
-          attributes endian left_to_right shared cover size initial coverpoint cross change_reset
+          attributes endian left_to_right shared cover size initial coverpoint cross
+          change_reset hdl_path vhdl_path user_code
     Tcl : # 注释, set / incr, source, [expr ...], 简单 for / if, 反斜杠续行
 
 命令按 Tcl 语义在换行/分号处结束, 所以 "source x.ralf" / "bits 8" 这种不写分号的
@@ -33,7 +74,7 @@ import re
 import sys
 from collections import OrderedDict
 
-VERSION = '2.1'
+VERSION = '2.4'
 
 # ============================================================================
 # 词法分析
@@ -60,28 +101,37 @@ def tokenize(text, fname):
 
     行号是 *逻辑* 行号: 反斜杠续行不算换行, 这样上层可以按 Tcl 语义
     "一条命令到行尾结束" 来切分。
+
+    Tcl 的 '#' 只有位于一条 command 的起始位置时才开始注释。比如
+    "doc {status #1 register}" 里的 '#' 是普通文本，不能吞掉后面的 '}'。
     """
     toks = []
     i, n, line = 0, len(text), 1
+    cmd_start = True
     while i < n:
         c = text[i]
-        if c == '\\' and i + 1 < n and text[i + 1] == '\n':   # 续行
+        if c == '\\' and i + 1 < n and text[i + 1] == '\n':   # 续行: 不结束 command
             i += 2
             continue
         if c == '\n':
             line += 1
             i += 1
+            cmd_start = True
             continue
         if c in ' \t\r':
             i += 1
             continue
-        if c == '#':                                   # Tcl 单行注释
+        if c == '#' and cmd_start:                     # Tcl comment: command start only
             j = text.find('\n', i)
             i = n if j < 0 else j
             continue
         if c in SPECIAL:
             toks.append(Tok(c, c, line, fname))
             i += 1
+            if c in (';', '{'):
+                cmd_start = True
+            elif c == '}':
+                cmd_start = False
             continue
         if c == '"':                                   # 带引号字符串
             j, buf = i + 1, []
@@ -96,6 +146,7 @@ def tokenize(text, fname):
                 j += 1
             toks.append(Tok('word', ''.join(buf), line, fname))
             i = j + 1
+            cmd_start = False
             continue
         if c == '(':                                   # (hdl_path) 整体作为一个 token
             depth, j = 0, i
@@ -111,10 +162,11 @@ def tokenize(text, fname):
                 j += 1
             toks.append(Tok('paren', text[i:j + 1], line, fname))
             i = j + 1
+            cmd_start = False
             continue
         # 裸 word: 读到空白/特殊字符; '[' ... ']' 内部允许空白 (数组下标 / [expr ..])
         j = i
-        while j < n and text[j] not in ' \t\r\n{};(#"':
+        while j < n and text[j] not in ' \t\r\n{};("':
             if text[j] == '\\' and j + 1 < n and text[j + 1] == '\n':
                 break
             if text[j] == '[':
@@ -134,6 +186,7 @@ def tokenize(text, fname):
             j += 1
         toks.append(Tok('word', text[i:j], line, fname))
         i = j
+        cmd_start = False
     return toks
 
 
@@ -195,8 +248,24 @@ def hexs(v, bits=32):
 
 
 def norm_doc(s):
-    """doc {} 里是 HTML 片段, 转成一行纯文本"""
-    return ' '.join(html.unescape(s or '').split())
+    """doc {} 里允许 HTML: 去标签、反转义并压成一行纯文本。"""
+    text = html.unescape(s or '')
+    text = re.sub(r'(?is)<br\s*/?>|</p\s*>|</div\s*>|</li\s*>', ' ', text)
+    text = re.sub(r'(?is)<[^>]+>', ' ', text)
+    return ' '.join(text.split())
+
+
+# RALF 两套方言的 field access 表并不相同, 交集只有 rw/ro/wo/w1/w1c/rc。
+# UVM: UVM RAL Generator User Guide, Appendix A "field"
+UVM_ACCESS = set((
+    'rw ro wo w1 w1c rc rs wrc wrs wc ws wsrc wcrs w1s w1t w0c w0s w0t '
+    'w1src w1crs w0src w0crs woc wos wo1'
+).split())
+# VMM: VMM RAL User Guide, Appendix A "field"
+VMM_ACCESS = set((
+    'rw ro wo w1 ru w1c rc a1 a0 other user0 user1 user2 user3 dc'
+).split())
+ACCESS_SETS = {'uvm': UVM_ACCESS, 'vmm': VMM_ACCESS, 'auto': UVM_ACCESS | VMM_ACCESS}
 
 
 # ============================================================================
@@ -216,6 +285,8 @@ class Field(object):
         self.doc = ''
         self.cover = []
         self.attributes = OrderedDict()
+        self.hdl = ''
+        self.vhdl = ''
 
 
 class Register(object):
@@ -229,6 +300,8 @@ class Register(object):
         self.attributes = OrderedDict()
         self.constraints = OrderedDict()
         self.insts = []                  # field 实例 (Inst)
+        self.hdl = ''
+        self.vhdl = ''
 
 
 class RegFile(object):
@@ -239,6 +312,8 @@ class RegFile(object):
         self.constraints = OrderedDict()
         self.change_resets = []          # [(target_path, (value, raw))]
         self.insts = []                  # register 实例
+        self.hdl = ''
+        self.vhdl = ''
 
 
 class Memory(object):
@@ -251,6 +326,8 @@ class Memory(object):
         self.shared = None
         self.doc = ''
         self.attributes = OrderedDict()
+        self.hdl = ''
+        self.vhdl = ''
 
 
 class VReg(object):
@@ -260,6 +337,8 @@ class VReg(object):
         self.left_to_right = False
         self.doc = ''
         self.insts = []
+        self.hdl = ''
+        self.vhdl = ''
 
 
 class Map(object):
@@ -275,6 +354,8 @@ class Map(object):
         self.cover = []
         self.change_resets = []          # [(target_path, (value, raw))]
         self.insts = []
+        self.hdl = ''
+        self.vhdl = ''
 
 
 class Block(object):
@@ -285,6 +366,8 @@ class Block(object):
         self.attributes = OrderedDict()
         self.change_resets = []          # block-scope change_reset rules
         self.maps = OrderedDict()        # domain name -> Map
+        self.hdl = ''
+        self.vhdl = ''
 
     def default_map(self):
         if not self.maps:
@@ -302,7 +385,8 @@ class Inst(object):
         self.defname = defname
         self.name = defname              # =rename 之后的实例名
         self.arr = None                  # (lo, hi) 或 None
-        self.hdl = ''
+        self.hdl = ''                   # Verilog local path
+        self.vhdl = ''                  # VHDL local path
         self.offset = None               # 原始字符串 (地址单元 / bit)
         self.incr = None
         self.access_restrict = ''        # read / write
@@ -322,8 +406,10 @@ class ParseError(Exception):
 
 
 class Parser(object):
-    def __init__(self, incdirs=None):
+    def __init__(self, incdirs=None, flavor='auto'):
         self.incdirs = list(incdirs or [])
+        self.flavor = flavor if flavor in ACCESS_SETS else 'auto'
+        self.access_set = ACCESS_SETS[self.flavor]
         self.toks = []
         self.pos = 0
         self.env = {}
@@ -360,6 +446,21 @@ class Parser(object):
         else:
             where = os.path.basename(self.cur_file)
         self.warnings.append((where, msg))
+
+    def check_access(self, acc, raw, kw_tok):
+        """UVM / VMM 的 access 表不同; auto 模式接受两者的并集。
+
+        UVM 还允许 uvm_reg_field::define_access() 注册自定义 policy, 所以
+        这里只告警, 不当成错误。
+        """
+        if acc in self.access_set:
+            return
+        other = 'vmm' if self.flavor == 'uvm' else ('uvm' if self.flavor == 'vmm' else None)
+        if other and acc in ACCESS_SETS[other]:
+            self.warn('access mode %s 属于 %s 方言, 当前按 --flavor %s 检查'
+                      % (raw, other.upper(), self.flavor), kw_tok)
+        else:
+            self.warn('未知 field access mode: %s' % raw, kw_tok)
 
     # ---------------- 变量 / 表达式 ----------------
     def subst(self, s):
@@ -481,12 +582,34 @@ class Parser(object):
         return out
 
     # ---------------- header 解码 ----------------
+    def norm_header_tokens(self, hdr):
+        """把 "vhdl_path = (..)" 里被空格拆开的 '=' 合回 'vhdl_path='。
+
+        只对这两个关键字做, 避免动到 "name=rename" 的重命名语法。
+        """
+        out, i, n = [], 0, len(hdr)
+        while i < n:
+            t = hdr[i]
+            if (t.kind == 'word' and t.val in ('hdl_path', 'vhdl_path')
+                    and i + 1 < n and hdr[i + 1].kind == 'word' and hdr[i + 1].val == '='):
+                out.append(Tok('word', t.val + '=', t.line, t.file))
+                i += 2
+                continue
+            out.append(t)
+            i += 1
+        return out
+
     def decode_header(self, hdr):
-        """name[=rename][[n]|[m:n]] [(hdl)] [@off[+incr]] [+incr] [read|write] [mem@off]"""
-        d = dict(name=None, rename=None, arr=None, hdl='', offset=None, incr=None,
+        """Decode a RALF construct header.
+
+        Supports legacy positional (hdl_path) plus explicit
+        hdl_path=(...) / vhdl_path=(...) forms.
+        """
+        d = dict(name=None, rename=None, arr=None, hdl='', vhdl='', offset=None, incr=None,
                  access='', mem=None, extra=[], domain='')
         if not hdr:
             return d
+        hdr = self.norm_header_tokens(hdr)
         first = self.subst(hdr[0].val)
         m = re.match(r'^([^\[\]=@]+)(?:=([^\[\]@]+))?(?:\[([^\]]*)\])?$', first)
         if m:
@@ -499,10 +622,28 @@ class Parser(object):
         if d['name'] and '.' in d['name']:
             base, dom = d['name'].split('.', 1)
             d['name'], d['domain'] = base, dom
-        for t in hdr[1:]:
+
+        i = 1
+        while i < len(hdr):
+            t = hdr[i]
             v = self.subst(t.val)
+            # Newer RALF spelling: hdl_path=(...) / vhdl_path=(...)
+            if t.kind == 'word' and v in ('hdl_path=', 'vhdl_path='):
+                if i + 1 < len(hdr) and hdr[i + 1].kind == 'paren':
+                    pv = self.subst(hdr[i + 1].val)[1:-1].strip()
+                    d['hdl' if v.startswith('hdl_') else 'vhdl'] = pv
+                    i += 2
+                    continue
+                d['extra'].append(v)
+                i += 1
+                continue
             if t.kind == 'paren':
-                d['hdl'] = v[1:-1].strip()
+                # Legacy positional path is Verilog hdl_path.
+                if not d['hdl']:
+                    d['hdl'] = v[1:-1].strip()
+                else:
+                    d['extra'].append(v)
+                i += 1
                 continue
             if v.startswith('@'):
                 body = v[1:]
@@ -510,12 +651,15 @@ class Parser(object):
                     body, inc = body.split('+', 1)
                     d['incr'] = inc
                 d['offset'] = body
+                i += 1
                 continue
             if v.startswith('+'):
                 d['incr'] = v[1:]
+                i += 1
                 continue
             if v in ('read', 'write'):
                 d['access'] = v
+                i += 1
                 continue
             if '@' in v:                        # vreg: mem@offset[+incr]
                 mem, off = v.split('@', 1)
@@ -525,8 +669,10 @@ class Parser(object):
                 mm = re.match(r'^([^\[]+)\[([^\]]*)\]$', mem)
                 d['mem'] = mm.group(1) if mm else mem
                 d['offset'] = off
+                i += 1
                 continue
             d['extra'].append(v)
+            i += 1
         return d
 
     def decode_range(self, s):
@@ -591,6 +737,20 @@ class Parser(object):
                 self.do_construct(kw, ctx, kw_tok)
             elif kw == 'domain':
                 self.do_domain(ctx, kw_tok)
+            elif kw in ('hdl_path=', 'vhdl_path='):
+                # Accept property-style path assignment inside a construct.
+                nt = self.peek()
+                target = ctx.default_map() if isinstance(ctx, Block) else ctx
+                if nt and nt.kind == 'paren' and nt.line == kw_tok.line and hasattr(target, 'hdl'):
+                    val = self.next().val[1:-1].strip()
+                    if kw.startswith('hdl_'):
+                        target.hdl = val
+                    else:
+                        target.vhdl = val
+                    if self.peek() and self.peek().kind == ';':
+                        self.next()
+                else:
+                    self.warn('无法解析的 %s' % kw.rstrip('='), kw_tok)
             else:
                 self.do_property(kw, ctx, kw_tok)
 
@@ -698,6 +858,9 @@ class Parser(object):
         obj = None
         if opened:
             obj = self.new_def(kind, name)
+            if hasattr(obj, 'hdl'):
+                obj.hdl = d.get('hdl', '')
+                obj.vhdl = d.get('vhdl', '')
             self.parse_body(obj)
             self.expect('}')
 
@@ -715,6 +878,7 @@ class Parser(object):
         inst.name = d['rename'] or name
         inst.arr = d['arr']
         inst.hdl = d['hdl']
+        inst.vhdl = d.get('vhdl', '')
         inst.offset = d['offset']
         inst.incr = d['incr']
         inst.access_restrict = d['access']
@@ -752,11 +916,26 @@ class Parser(object):
     def do_property(self, kw, ctx, kw_tok):
         hdr, opened = self.read_header(kw_tok.line)
         vals = [self.subst(t.val) for t in hdr]
+        if vals and vals[0] == '=':                   # "hdl_path = (..)" 带空格
+            vals = vals[1:]
         v0 = vals[0] if vals else ''
+
+        if ctx is None:
+            # 全局作用域没有可以承载属性的对象, 多半是花括号不匹配。
+            self.warn('顶层作用域不支持属性语句 "%s" (检查花括号是否配对)' % kw, kw_tok)
+            if opened:
+                self.skip_block_raw()
+            return
 
         # 单接口 block/system 的 bytes/endian 属于其默认 physical interface。
         # domain 内 ctx 本身就是 Map。
         prop_ctx = ctx.default_map() if isinstance(ctx, Block) and kw in ('bytes', 'endian') else ctx
+
+        if kw == 'user_code':
+            # User code affects generated model classes, not register-map extraction.
+            if opened:
+                self.skip_block_raw()
+            return
 
         if kw == 'change_reset':
             if opened:
@@ -812,6 +991,10 @@ class Parser(object):
             ctx.size = parse_size(v0)
         elif kw == 'access':
             ctx.access = v0.lower()
+            if isinstance(ctx, Field):
+                self.check_access(ctx.access, v0, kw_tok)
+            elif ctx.access not in ('rw', 'ro'):          # memory 只有 RAM/ROM
+                self.warn('memory access 只能是 rw|ro, 得到: %s' % v0, kw_tok)
         elif kw in ('reset', 'hard_reset'):
             ctx.reset = (parse_num(v0)[0], v0)
         elif kw == 'soft_reset':
@@ -825,12 +1008,28 @@ class Parser(object):
         elif kw == 'endian':
             prop_ctx.endian = v0
         elif kw == 'shared':
-            ctx.shared = v0 or 'yes'
+            ctx.shared = 'yes'
+            # Legacy shared (hdl_path) form: read_header preserves paren text in vals.
+            if v0.startswith('(') and v0.endswith(')') and hasattr(ctx, 'hdl'):
+                ctx.hdl = v0[1:-1].strip()
+            elif v0:
+                ctx.shared = v0
         elif kw == 'cover':
             if hasattr(ctx, 'cover'):
                 ctx.cover.extend(vals)
-        elif kw in ('noise', 'hdl_path', 'individually_accessible'):
+        elif kw in ('noise', 'individually_accessible'):
             pass
+        elif kw in ('hdl_path', 'vhdl_path'):
+            # Usually encoded in the construct header; accept property spelling too.
+            target = ctx.default_map() if isinstance(ctx, Block) else ctx
+            if hasattr(target, 'hdl'):
+                val = v0
+                if val.startswith('(') and val.endswith(')'):
+                    val = val[1:-1].strip()
+                if kw == 'hdl_path':
+                    target.hdl = val
+                else:
+                    target.vhdl = val
         else:
             self.warn('忽略未知属性: %s %s' % (kw, ' '.join(vals)), kw_tok)
 
@@ -861,26 +1060,20 @@ class Parser(object):
 # ============================================================================
 
 class Elaborator(object):
-    """把定义 + 实例展开成扁平的寄存器/字段表
-
-    addr_mode:
-      'byte' -- RALF 里的 @offset 直接当字节偏移 (手写 / IP-XACT 转来的 RALF 最常见)
-      'word' -- @offset 是地址单元(= 所在 block 的 bytes)个数, 即 ralgen 不加 -B 时的语义
-    expand_arrays:
-      False 时数组只出一行, 名字写成 name[lo:hi], 地址取第 lo 个元素
-    """
+    """把定义 + 实例展开成扁平的寄存器/字段表。"""
 
     def __init__(self, parser, addr_mode='byte', expand_arrays=True):
         self.p = parser
         self.addr_mode = addr_mode
         self.expand = expand_arrays
-        self.rows = []                   # 字段级行
-        self.reg_rows = []               # 寄存器级行
+        self.rows = []
+        self.reg_rows = []
         self.mem_rows = []
         self.blk_rows = []
         self.warnings = []
         self._seen = set()
         self.reset_rules = []             # [(full_target, value, raw)]
+        self.memory_index = {}            # (block_path, memory instance/def name) -> info
 
     def warn(self, m):
         if m not in self.warnings:
@@ -888,13 +1081,69 @@ class Elaborator(object):
 
     # ---------- 地址单位 ----------
     def ubytes(self, bus):
-        """一个 "地址单元" 对应多少字节"""
         return 1 if self.addr_mode == 'byte' else bus
 
     def stride(self, width_bits, bus):
-        """一个 width_bits 宽的寄存器占用多少地址单元 (总线对齐)"""
         words = max(1, int(math.ceil((width_bits / 8.0) / bus)))
         return words * bus if self.addr_mode == 'byte' else words
+
+    # ---------- path ----------
+    def fmt_path(self, path, idx=None):
+        path = path or ''
+        if idx is not None:
+            path = path.replace('%d', str(idx)).replace('%g', str(idx))
+        return path
+
+    def seg_of(self, hdl, vhdl, owner=''):
+        """一个 construct 最多贡献一个路径段, 返回 (text, lang)。
+
+        UG 的 "either a vhdl_path or a Verilog hdl_path (not both)" 是针对
+        *单个 construct* 的; Verilog 层次里挂一个 VHDL 末端信号是合法的
+        混合语言设计, 不该告警。
+        """
+        if hdl and vhdl:
+            self.warn('%s 同时指定了 hdl_path 和 vhdl_path; 同一 construct 只能二选一, '
+                      '已采用 vhdl_path' % (owner or 'construct'))
+            return vhdl, 'VHDL'
+        if vhdl:
+            return vhdl, 'VHDL'
+        if hdl:
+            return hdl, 'Verilog'
+        return '', ''
+
+    def seg_for(self, inst_hdl, inst_vhdl, def_hdl, def_vhdl, owner=''):
+        """实例上的路径优先于定义上的; 两者是不同 construct, 不能混判。"""
+        if inst_hdl or inst_vhdl:
+            return self.seg_of(inst_hdl, inst_vhdl, owner)
+        return self.seg_of(def_hdl, def_vhdl, owner)
+
+    def join_seg(self, parent, seg_text, seg_lang, idx=None):
+        """(text, lang) 追加一段 -> (text, lang)。
+
+        分隔符取 *被追加段* 的语言: VHDL 用 ':' , Verilog 用 '.'
+        (UG Example 10-7: vhd_top_mod:dut_blk + reg -> vhd_top_mod:dut_blk:reg)。
+        混合层次因此得到一条完整路径, 例如 u_top.u_mixed:vhd_reg。
+        """
+        ptext, plang = parent or ('', '')
+        seg_text = self.fmt_path(seg_text, idx)
+        if not seg_text:
+            return ptext, plang
+        if not ptext:
+            return seg_text, seg_lang
+        sep = ':' if seg_lang == 'VHDL' else '.'
+        return ptext.rstrip('.:') + sep + seg_text.lstrip('.:'), seg_lang
+
+    def path_cols(self, path, local_text=''):
+        """(text, lang) -> (Backdoor, HDL Path, VHDL Path, Local Path)
+
+        完整路径只落在末端语言对应的那一列, 不再劈成两半。
+        """
+        text, lang = path or ('', '')
+        if not text:
+            return '', '', '', ''
+        if lang == 'VHDL':
+            return 'VHDL', '', text, local_text
+        return 'Verilog', text, '', local_text
 
     # ---------- 数组 ----------
     def idxs(self, arr):
@@ -911,9 +1160,8 @@ class Elaborator(object):
 
     # ---------- field 布局 ----------
     def layout(self, reg):
-        """返回 ([(inst_name, Field, lsb, bits)], 寄存器位宽)"""
-        out = []
-        items = []
+        """返回 ([(inst_name, Field, lsb, bits, field_inst)], register_width_bits)。"""
+        out, items = [], []
         for inst in reg.insts:
             if inst.kind != 'field':
                 continue
@@ -924,7 +1172,6 @@ class Elaborator(object):
             items.append((inst, fd))
 
         width = reg.bytes * 8 if reg.bytes else None
-
         if not reg.left_to_right:
             nxt = 0
             for inst, fd in items:
@@ -934,46 +1181,35 @@ class Elaborator(object):
                     base = nxt
                 incr = (self.p.num(inst.incr) or bits) if inst.incr else bits
                 lo = inst.arr[0] if inst.arr else 0
-                last = base
+                cnt = (inst.arr[1] - inst.arr[0] + 1) if inst.arr else 1
                 for k in self.idxs(inst.arr):
-                    lsb = base + ((k - lo) if k is not None else 0) * incr
-                    out.append((self.anm(inst.name, inst.arr, k), fd, lsb, bits))
-                    last = lsb
-                if inst.arr and not self.expand:
-                    last = base + (inst.arr[1] - inst.arr[0]) * incr
-                nxt = last + bits
+                    j = (k - lo) if k is not None else 0
+                    lsb = base + j * incr
+                    out.append((self.anm(inst.name, inst.arr, k), fd, lsb, bits, inst))
+                nxt = base + (cnt - 1) * incr + bits
         else:
-            # left_to_right: offset 是“从最高有效位向右”的距离。先在这个
-            # top-relative 坐标系中完成布局（包含显式 gap），再整体向 LSB 对齐。
-            # 不能简单用 sum(field bits) 作为 total，否则 @offset 产生的 gap 会丢失。
-            top_items = []                       # (name, fd, top_off, bits)
-            nxt_top = 0
-            span = 0
+            # RALF left_to_right 的 @offset 是从最高有效位向右的距离。
+            # 先构造 top-relative offsets 并计算包含 gap 的实际 span，再向 LSB 对齐。
+            top_items, nxt_top, span = [], 0, 0
             for inst, fd in items:
                 bits = fd.bits or 1
-                off = (self.p.num(inst.offset)
-                       if inst.offset not in (None, 'none', '') else None)
+                off = self.p.num(inst.offset) if inst.offset not in (None, 'none', '') else None
                 base = nxt_top if off is None else off
                 incr = (self.p.num(inst.incr) or bits) if inst.incr else bits
                 lo = inst.arr[0] if inst.arr else 0
                 cnt = (inst.arr[1] - inst.arr[0] + 1) if inst.arr else 1
-
                 for k in self.idxs(inst.arr):
                     j = (k - lo) if k is not None else 0
                     top_off = base + j * incr
-                    top_items.append((self.anm(inst.name, inst.arr, k), fd, top_off, bits))
-
-                # 即使 --no-expand-arrays，也必须把未显示元素算进实际跨度。
+                    top_items.append((self.anm(inst.name, inst.arr, k), fd, top_off, bits, inst))
                 last_top = base + (cnt - 1) * incr
                 nxt_top = last_top + bits
                 span = max(span, nxt_top)
-
-            for nm, fd, top_off, bits in top_items:
-                lsb = span - (top_off + bits)
-                out.append((nm, fd, max(lsb, 0), bits))
+            for nm, fd, top_off, bits, inst in top_items:
+                out.append((nm, fd, max(span - (top_off + bits), 0), bits, inst))
 
         if width is None:
-            msb = max([l + b for _, _, l, b in out] or [8])
+            msb = max([l + b for _, _, l, b, _ in out] or [8])
             width = int(math.ceil(msb / 8.0)) * 8
         out.sort(key=lambda x: x[2])
         return out, width
@@ -981,6 +1217,7 @@ class Elaborator(object):
     def _reg_def(self, inst):
         return inst.definition or self.p.defs['register'].get(inst.defname)
 
+    # ---------- reset override ----------
     def add_reset_rules(self, base_path, rules):
         for target, (value, raw) in (rules or []):
             if not self.expand and re.search(r'\[\d+\]', target):
@@ -989,31 +1226,29 @@ class Elaborator(object):
             self.reset_rules.append((full, value, raw))
 
     def reset_override(self, reg_path, field_path, lsb, bits):
-        """Return (value, raw) for the most specific/latest matching change_reset.
-
-        A register-level rule is sliced down to the field bits; a field-level rule
-        directly supplies the field reset value.
-        """
         for target, value, raw in reversed(self.reset_rules):
             if target == field_path:
                 return value, raw
             if target == reg_path:
                 if value is None:
                     return None, raw
-                mask = (1 << bits) - 1
-                return (value >> lsb) & mask, raw
+                return (value >> lsb) & ((1 << bits) - 1), raw
         return None
 
     # ---------- 层次遍历 ----------
-    def walk_block(self, blk, path, base_byte, parent_bytes, domain=''):
+    def walk_block(self, blk, path, base_byte, parent_bytes, domain='', hpath=None):
         key = (id(blk), path, domain)
         if key in self._seen:
             self.warn('检测到重复/递归实例化, 已跳过: %s' % path)
             return
         self._seen.add(key)
-
-        # block-scope change_reset 以该 block 实例路径为基准。
         self.add_reset_rules(path, getattr(blk, 'change_resets', []))
+
+        # 顶层独立定义自身也可能带路径 (实例化时已在 walk_map 里拼过)
+        hpath = hpath or ('', '')
+        if not hpath[0]:
+            seg, lang = self.seg_of(getattr(blk, 'hdl', ''), getattr(blk, 'vhdl', ''), path)
+            hpath = self.join_seg(hpath, seg, lang)
 
         if domain:
             if domain not in blk.maps:
@@ -1029,13 +1264,16 @@ class Elaborator(object):
             if bpath != path:
                 self.add_reset_rules(bpath, getattr(blk, 'change_resets', []))
             self.add_reset_rules(bpath, getattr(mp, 'change_resets', []))
+            bd, hdl_c, vhdl_c, _ = self.path_cols(hpath)
             self.blk_rows.append(dict(block=bpath, kind='system' if blk.is_system else 'block',
-                                      bus_bytes=bus, endian=mp.endian, base=base_byte,
-                                      items=len(mp.insts), doc=blk.doc))
-            self.walk_map(mp, bpath, base_byte, bus, '')
+                                      domain=mname, bus_bytes=bus, endian=mp.endian, base=base_byte,
+                                      items=len(mp.insts), doc=blk.doc,
+                                      backdoor=bd, hdl=hdl_c, vhdl=vhdl_c))
+            self.walk_map(mp, bpath, base_byte, bus, '', mname, hpath)
 
-    def walk_map(self, mp, bpath, base_byte, bus, prefix):
-        nxt_unit = 0                                  # 下一个可用地址单元
+    def walk_map(self, mp, bpath, base_byte, bus, prefix, domain, hpath):
+        nxt_unit = 0
+        pending_vregs = []
         for inst in mp.insts:
             off = inst.offset
             explicit = off not in (None, 'none', '')
@@ -1047,16 +1285,18 @@ class Elaborator(object):
                 unit = nxt_unit
 
             if inst.kind == 'register':
-                nxt_unit = self.emit_register(inst, bpath, base_byte, bus, prefix,
-                                              unit, nxt_unit, mp.endian)
+                nxt_unit = self.emit_register(inst, bpath, base_byte, bus, prefix, domain,
+                                              unit, nxt_unit, mp.endian, hpath)
             elif inst.kind == 'regfile':
-                nxt_unit = self.emit_regfile(inst, bpath, base_byte, bus, prefix,
-                                             unit, nxt_unit, mp.endian)
+                nxt_unit = self.emit_regfile(inst, bpath, base_byte, bus, prefix, domain,
+                                             unit, nxt_unit, mp.endian, hpath)
             elif inst.kind == 'memory':
-                nxt_unit = self.emit_memory(inst, bpath, base_byte, bus, prefix,
-                                            unit, nxt_unit)
+                nxt_unit = self.emit_memory(inst, bpath, base_byte, bus, prefix, domain,
+                                            unit, nxt_unit, hpath)
             elif inst.kind == 'vreg':
-                self.emit_vreg(inst, bpath, base_byte, bus, prefix, mp.endian)
+                # Virtual registers do not consume block address space. Defer until all
+                # memories in this map are known so source order does not matter.
+                pending_vregs.append(inst)
             elif inst.kind in ('block', 'system'):
                 sub = (inst.definition or self.p.defs[inst.kind].get(inst.defname)
                        or self.p.defs['block'].get(inst.defname)
@@ -1066,14 +1306,21 @@ class Elaborator(object):
                     continue
                 incr = self.p.num(inst.incr) if inst.incr else 0
                 lo = inst.arr[0] if inst.arr else 0
+                seg, lang = self.seg_for(inst.hdl, inst.vhdl, getattr(sub, 'hdl', ''),
+                                         getattr(sub, 'vhdl', ''),
+                                         '%s.%s' % (bpath, inst.name))
                 for k in self.idxs(inst.arr):
                     j = (k - lo) if k is not None else 0
                     b = base_byte + ((unit or 0) + j * (incr or 0)) * self.ubytes(bus)
                     self.walk_block(sub, '%s.%s' % (bpath, self.anm(inst.name, inst.arr, k)),
-                                    b, bus, inst.domain)
+                                    b, bus, inst.domain, self.join_seg(hpath, seg, lang, k))
+
+        for inst in pending_vregs:
+            self.emit_vreg(inst, bpath, base_byte, bus, prefix, domain, mp.endian, hpath)
 
     # ---------- register ----------
-    def emit_register(self, inst, bpath, base_byte, bus, prefix, unit, nxt_unit, endian):
+    def emit_register(self, inst, bpath, base_byte, bus, prefix, domain,
+                      unit, nxt_unit, endian, parent_path):
         rd = self._reg_def(inst)
         if rd is None:
             self.warn('找不到 register 定义: %s' % inst.defname)
@@ -1083,29 +1330,58 @@ class Elaborator(object):
         incr = (self.p.num(inst.incr) or naddr) if inst.incr else naddr
         lo = inst.arr[0] if inst.arr else 0
         last = unit
+        # shared 寄存器用定义里的 hdl_path, 而不是实例化处的 (UG: "used instead of")
+        if getattr(rd, 'shared', None) and (getattr(rd, 'hdl', '') or getattr(rd, 'vhdl', '')):
+            seg, seg_lang = self.seg_of(rd.hdl, rd.vhdl, rd.name)
+        else:
+            seg, seg_lang = self.seg_for(inst.hdl, inst.vhdl, getattr(rd, 'hdl', ''),
+                                         getattr(rd, 'vhdl', ''), rd.name)
         for k in self.idxs(inst.arr):
             j = (k - lo) if k is not None else 0
             u = None if unit is None else unit + j * incr
             last = u
             self.emit_reg_rows(rd, self.anm(inst.name, inst.arr, k), fields, width,
-                               bpath, prefix, base_byte, bus, u, inst, endian)
+                               bpath, prefix, domain, base_byte, bus, u, inst, endian,
+                               parent_path, seg, seg_lang, k,
+                               effective_restrict=inst.access_restrict,
+                               shared=bool(getattr(rd, 'shared', None)))
         if unit is None:
             return nxt_unit
         if inst.arr and not self.expand:
             last = unit + (inst.arr[1] - inst.arr[0]) * incr
         return (last if last is not None else unit) + naddr
 
-    def emit_reg_rows(self, rd, nm, fields, width, bpath, prefix, base_byte, bus,
-                      u, inst, endian):
-        byte_off = None if u is None else u * self.ubytes(bus)
-        absaddr = None if u is None else base_byte + byte_off
-        rdoc = (rd.doc + (' [shared]' if getattr(rd, 'shared', None) else '')).strip()
-        common = dict(block=bpath, reg=prefix + nm, regtype=rd.name,
-                      byte_off='' if byte_off is None else hexs(byte_off),
-                      addr='' if absaddr is None else hexs(absaddr),
-                      width=width, hdl=inst.hdl,
-                      restrict=inst.access_restrict, rdoc=rdoc,
-                      _addr=absaddr if absaddr is not None else -1)
+    def emit_reg_rows(self, rd, nm, fields, width, bpath, prefix, domain, base_byte, bus,
+                      u, inst, endian, parent_path=None, seg='', seg_lang='',
+                      arr_idx=None, effective_restrict='', shared=False,
+                      memory='', mem_offset='', absaddr_override=None, byte_off_override=None,
+                      kind='register', allow_parent_path=False):
+        byte_off = (None if u is None else u * self.ubytes(bus))
+        absaddr = (None if u is None else base_byte + byte_off)
+        if absaddr_override is not None:
+            absaddr = absaddr_override
+        if byte_off_override is not None:
+            byte_off = byte_off_override
+
+        parent_path = parent_path or ('', '')
+        seg = self.fmt_path(seg, arr_idx)
+        reg_base = self.join_seg(parent_path, seg, seg_lang)
+        # 光有父层次路径不构成完整的寄存器 backdoor path,
+        # 只有本级自己带 leaf path 时才填这几列。
+        if seg:
+            backdoor, reg_hdl, reg_vhdl, local_path = self.path_cols(reg_base, seg)
+        elif allow_parent_path and parent_path[0]:
+            backdoor, reg_hdl, reg_vhdl, local_path = self.path_cols(parent_path, '')
+        else:
+            backdoor, reg_hdl, reg_vhdl, local_path = '', '', '', ''
+        rdoc = rd.doc
+        common = dict(block=bpath, domain=domain, reg=prefix + nm, regtype=rd.name,
+                      kind=kind, byte_off='' if byte_off is None else hexs(byte_off),
+                      addr='' if absaddr is None else hexs(absaddr), width=width,
+                      shared='Yes' if shared else '', restrict=effective_restrict or '',
+                      backdoor=backdoor, hdl=reg_hdl, vhdl=reg_vhdl,
+                      local_path=local_path, memory=memory, mem_offset=mem_offset,
+                      rdoc=rdoc, _addr=absaddr if absaddr is not None else -1)
         self.reg_rows.append(dict(common, bytes=width // 8, endian=endian,
                                   nfields=len(fields),
                                   attrs=', '.join('%s=%s' % kv for kv in rd.attributes.items()),
@@ -1118,8 +1394,9 @@ class Elaborator(object):
                      constr='', fdoc='')
             self.rows.append(r)
             return
+
         reg_path = '%s.%s%s' % (bpath, prefix, nm)
-        for fname, fd, lsb, bits in fields:
+        for fname, fd, lsb, bits, finst in fields:
             msb = lsb + bits - 1
             acc = (fd.access or ('ro' if fd.name in ('unused', 'reserved') else 'rw')).upper()
             field_path = '%s.%s' % (reg_path, fname)
@@ -1138,18 +1415,33 @@ class Elaborator(object):
                 srst = hexs(fd.soft_reset[0], bits)
             else:
                 srst = fd.soft_reset[1] if fd.soft_reset else ''
+
+            # 字段的 hdl_path 接在寄存器路径之后
+            fseg, flang = self.seg_for(finst.hdl, finst.vhdl, getattr(fd, 'hdl', ''),
+                                       getattr(fd, 'vhdl', ''), fname)
+            fidx = None
+            if finst.arr and '[' in fname:
+                try:
+                    fidx = int(fname.rsplit('[', 1)[1].rstrip(']'))
+                except ValueError:
+                    pass
+            fseg = self.fmt_path(fseg, fidx)
             r = dict(common)
+            if fseg:
+                fb, fh, fv, floc = self.path_cols(
+                    self.join_seg(reg_base, fseg, flang), fseg)
+                r.update(backdoor=fb, hdl=fh, vhdl=fv, local_path=floc)
             r.update(field=fname, msb=msb, lsb=lsb,
                      bits='[%d:%d]' % (msb, lsb) if bits > 1 else '[%d]' % lsb,
                      fwidth=bits, access=acc, reset=rst, reset_raw=rst_raw,
                      soft_reset=srst, volatile=fd.volatile,
                      enum=', '.join('%s=%s' % (n, hexs(v, bits)) for n, v in fd.enum),
-                     constr='; '.join(fd.constraints.keys()),
-                     fdoc=fd.doc)
+                     constr='; '.join(fd.constraints.keys()), fdoc=fd.doc)
             self.rows.append(r)
 
     # ---------- regfile ----------
-    def emit_regfile(self, inst, bpath, base_byte, bus, prefix, unit, nxt_unit, endian):
+    def emit_regfile(self, inst, bpath, base_byte, bus, prefix, domain,
+                     unit, nxt_unit, endian, parent_path):
         rf = inst.definition or self.p.defs['regfile'].get(inst.defname)
         if rf is None:
             self.warn('找不到 regfile 定义: %s' % inst.defname)
@@ -1158,11 +1450,16 @@ class Elaborator(object):
         incr = (self.p.num(inst.incr) or span) if inst.incr else span
         lo = inst.arr[0] if inst.arr else 0
         last_end = nxt_unit
+        if getattr(rf, 'shared', None) and (getattr(rf, 'hdl', '') or getattr(rf, 'vhdl', '')):
+            rf_seg, rf_lang = self.seg_of(rf.hdl, rf.vhdl, rf.name)
+        else:
+            rf_seg, rf_lang = self.seg_for(inst.hdl, inst.vhdl, getattr(rf, 'hdl', ''),
+                                           getattr(rf, 'vhdl', ''), rf.name)
         for k in self.idxs(inst.arr):
             j = (k - lo) if k is not None else 0
             nm = self.anm(inst.name, inst.arr, k)
             u = None if unit is None else unit + j * incr
-            # regfile-scope change_reset 相对该 regfile 实例路径。
+            rf_path = self.join_seg(parent_path, rf_seg, rf_lang, k)
             rf_base_path = '%s.%s%s' % (bpath, prefix, nm)
             self.add_reset_rules(rf_base_path, getattr(rf, 'change_resets', []))
             sub_next = 0
@@ -1184,12 +1481,17 @@ class Elaborator(object):
                 naddr = self.stride(width, bus)
                 rincr = (self.p.num(ri.incr) or naddr) if ri.incr else naddr
                 rlo = ri.arr[0] if ri.arr else 0
+                r_seg, r_lang = self.seg_for(ri.hdl, ri.vhdl, getattr(rd, 'hdl', ''),
+                                             getattr(rd, 'vhdl', ''), rd.name)
+                eff_restrict = ri.access_restrict or inst.access_restrict
+                eff_shared = bool(getattr(rd, 'shared', None) or getattr(rf, 'shared', None))
                 for m in self.idxs(ri.arr):
                     jj = (m - rlo) if m is not None else 0
                     uu = None if abs_unit is None else abs_unit + jj * rincr
                     self.emit_reg_rows(rd, self.anm(ri.name, ri.arr, m), fields, width,
-                                       bpath, prefix + nm + '.', base_byte, bus, uu,
-                                       ri, endian)
+                                       bpath, prefix + nm + '.', domain, base_byte, bus, uu,
+                                       ri, endian, rf_path, r_seg, r_lang, m,
+                                       effective_restrict=eff_restrict, shared=eff_shared)
                 if runit is not None:
                     cnt = (ri.arr[1] - ri.arr[0]) if ri.arr else 0
                     sub_next = runit + cnt * rincr + naddr
@@ -1202,7 +1504,6 @@ class Elaborator(object):
         return last_end
 
     def rf_span(self, rf, bus):
-        """regfile 占用的地址单元数"""
         nxt = 0
         for ri in rf.insts:
             if ri.kind != 'register':
@@ -1220,8 +1521,9 @@ class Elaborator(object):
             nxt = base + cnt * incr + naddr
         return max(1, nxt)
 
-    # ---------- memory / vreg ----------
-    def emit_memory(self, inst, bpath, base_byte, bus, prefix, unit, nxt_unit):
+    # ---------- memory / virtual register ----------
+    def emit_memory(self, inst, bpath, base_byte, bus, prefix, domain,
+                    unit, nxt_unit, parent_path):
         md = inst.definition or self.p.defs['memory'].get(inst.defname)
         if md is None:
             self.warn('找不到 memory 定义: %s' % inst.defname)
@@ -1229,22 +1531,42 @@ class Elaborator(object):
         loc_units = self.stride(md.bits or 8, bus)
         naddr = (md.size or 0) * loc_units
         byte_off = None if unit is None else unit * self.ubytes(bus)
+        absaddr = None if unit is None else base_byte + byte_off
         total = ''
         if md.size and md.bits:
             nbytes = md.size * md.bits / 8.0
             total = '%.3g KB' % (nbytes / 1024.0) if nbytes >= 1024 else '%d B' % nbytes
-        self.mem_rows.append(dict(
-            block=bpath, name=prefix + inst.name, memtype=md.name,
-            addr='' if unit is None else hexs(base_byte + byte_off),
-            byte_off='' if unit is None else hexs(byte_off),
-            size=md.size, bits=md.bits, total=total,
-            access=(inst.access_restrict or md.access or 'rw').upper(),
-            initial=md.initial or '', hdl=inst.hdl, doc=md.doc))
+        if getattr(md, 'shared', None) and (getattr(md, 'hdl', '') or getattr(md, 'vhdl', '')):
+            mseg, mlang = self.seg_of(md.hdl, md.vhdl, md.name)
+        else:
+            mseg, mlang = self.seg_for(inst.hdl, inst.vhdl, getattr(md, 'hdl', ''),
+                                       getattr(md, 'vhdl', ''), md.name)
+        if mseg:
+            mem_path = self.join_seg(parent_path, mseg, mlang)
+            backdoor, full_hdl, full_vhdl, local_path = self.path_cols(mem_path, mseg)
+        else:
+            mem_path = ('', '')
+            backdoor, full_hdl, full_vhdl, local_path = '', '', '', ''
+        shared = bool(getattr(md, 'shared', None))
+        row = dict(block=bpath, domain=domain, name=prefix + inst.name, memtype=md.name,
+                   addr='' if absaddr is None else hexs(absaddr),
+                   byte_off='' if byte_off is None else hexs(byte_off),
+                   size=md.size, bits=md.bits, total=total,
+                   access=(inst.access_restrict or md.access or 'rw').upper(),
+                   restrict=inst.access_restrict, shared='Yes' if shared else '',
+                   initial=md.initial or '', backdoor=backdoor, hdl=full_hdl,
+                   vhdl=full_vhdl, local_path=local_path, doc=md.doc)
+        self.mem_rows.append(row)
+        info = dict(row, _absaddr=absaddr, _byte_off=byte_off, _md=md, _path=mem_path,
+                    _loc_byte_stride=loc_units * self.ubytes(bus),
+                    _effective_access=(inst.access_restrict or md.access or 'rw').upper())
+        self.memory_index[(bpath, inst.name)] = info
+        self.memory_index.setdefault((bpath, inst.defname), info)
         if unit is None:
             return nxt_unit
         return unit + naddr
 
-    def emit_vreg(self, inst, bpath, base_byte, bus, prefix, endian):
+    def emit_vreg(self, inst, bpath, base_byte, bus, prefix, domain, endian, parent_path):
         vd = inst.definition or self.p.defs['vreg'].get(inst.defname)
         if vd is None:
             self.warn('找不到 virtual register 定义: %s' % inst.defname)
@@ -1253,12 +1575,57 @@ class Elaborator(object):
         shim.insts = vd.insts
         shim.bytes = vd.bytes
         shim.left_to_right = vd.left_to_right
-        shim.doc = ('virtual register in memory "%s"%s' %
-                    (inst.mem or '?', (' - ' + vd.doc) if vd.doc else ''))
+        shim.doc = vd.doc
+        shim.attributes = OrderedDict()
         fields, width = self.layout(shim)
+
+        mem = self.memory_index.get((bpath, inst.mem)) if inst.mem else None
+        if inst.mem and mem is None:
+            self.warn('virtual register %s 找不到关联 memory: %s (in %s)' %
+                      (inst.name, inst.mem, bpath))
+        if mem and (mem['_md'].bits or 0) <= 0:
+            self.warn('virtual register %s 的关联 memory %s 缺少 bits' % (inst.name, inst.mem))
+            mem = None
+
+        base_mem_off = self.p.num(inst.offset) if inst.offset not in (None, '') else 0
+        if base_mem_off is None:
+            self.warn('virtual register %s 无法解析 memory offset @%s' % (inst.name, inst.offset))
+            base_mem_off = 0
+        if mem:
+            locs_per_vreg = max(1, int(math.ceil(float(width) / float(mem['_md'].bits))))
+        else:
+            locs_per_vreg = 1
+        parsed_incr = self.p.num(inst.incr) if inst.incr else 0
+        vincr = parsed_incr if parsed_incr else locs_per_vreg
+        lo = inst.arr[0] if inst.arr else 0
+        v_seg, v_lang = self.seg_for(inst.hdl, inst.vhdl, getattr(vd, 'hdl', ''),
+                                     getattr(vd, 'vhdl', ''), vd.name)
+
         for k in self.idxs(inst.arr):
+            j = (k - lo) if k is not None else 0
+            moff = base_mem_off + j * vincr
+            absaddr = None
+            byte_off = None
+            memname = inst.mem or ''
+            eff_restrict = ''
+            shared = False
+            v_parent = parent_path
+            if mem:
+                if mem['_absaddr'] is not None:
+                    absaddr = mem['_absaddr'] + moff * mem['_loc_byte_stride']
+                if mem['_byte_off'] is not None:
+                    byte_off = mem['_byte_off'] + moff * mem['_loc_byte_stride']
+                eff_restrict = mem.get('restrict', '')
+                shared = bool(mem.get('shared'))
+                # 静态 virtual register 物理上就在这块 memory 里
+                v_parent = mem.get('_path', ('', ''))
             self.emit_reg_rows(shim, self.anm(inst.name, inst.arr, k), fields, width,
-                               bpath, prefix, base_byte, bus, None, inst, endian)
+                               bpath, prefix, domain, base_byte, bus, None, inst, endian,
+                               v_parent, v_seg, v_lang, k,
+                               effective_restrict=eff_restrict, shared=shared,
+                               memory=memname, mem_offset=hexs(moff),
+                               absaddr_override=absaddr, byte_off_override=byte_off,
+                               kind='virtual', allow_parent_path=True)
 
 
 # ============================================================================
@@ -1266,51 +1633,65 @@ class Elaborator(object):
 # ============================================================================
 
 REG_COLS = [
-    ('block',      'Block',          22),
-    ('reg',        'Register',       30),
-    ('addr',       'Address',        14),
-    ('byte_off',   'Offset',         12),
-    ('width',      'Width(bit)',      9),
-    ('field',      'Field',          22),
-    ('bits',       'Bits',           10),
-    ('msb',        'MSB',             6),
-    ('lsb',        'LSB',             6),
-    ('fwidth',     'Size',            6),
-    ('access',     'Access',          9),
-    ('reset',      'Reset',          12),
-    ('reset_raw',  'Reset(RALF)',    13),
-    ('soft_reset', 'Soft Reset',     12),
-    ('volatile',   'Volatile',        9),
-    ('enum',       'Enum',           26),
-    ('constr',     'Constraint',     14),
-    ('restrict',   'R/W Limit',      10),
-    ('hdl',        'HDL Path',       26),
-    ('fdoc',       'Field Desc',     34),
-    ('rdoc',       'Register Desc',  30),
+    ('block',       'Block',          24),
+    ('domain',      'Domain',         12),
+    ('reg',         'Register',       30),
+    ('kind',        'Kind',           10),
+    ('addr',        'Address',        14),
+    ('byte_off',    'Offset',         12),
+    ('width',       'Width(bit)',      9),
+    ('field',       'Field',          22),
+    ('bits',        'Bits',           10),
+    ('msb',         'MSB',             6),
+    ('lsb',         'LSB',             6),
+    ('fwidth',      'Size',            6),
+    ('access',      'Access',          9),
+    ('reset',       'Reset',          12),
+    ('reset_raw',   'Reset(RALF)',    13),
+    ('soft_reset',  'Soft Reset',     12),
+    ('volatile',    'Volatile',        9),
+    ('enum',        'Enum',           26),
+    ('constr',      'Constraint',     14),
+    ('shared',      'Shared',          8),
+    ('restrict',    'R/W Limit',      10),
+    ('memory',      'Memory',         18),
+    ('mem_offset',  'Memory Offset',  14),
+    ('backdoor',    'Backdoor',       10),
+    ('hdl',         'HDL Path',       32),
+    ('vhdl',        'VHDL Path',      32),
+    ('local_path',  'Local Path',     24),
+    ('fdoc',        'Field Desc',     34),
+    ('rdoc',        'Register Desc',  30),
 ]
-MERGE_KEYS = ('block', 'reg', 'addr', 'byte_off', 'width', 'restrict', 'hdl', 'rdoc')
-CENTER_KEYS = ('addr', 'byte_off', 'width', 'bits', 'msb', 'lsb', 'fwidth', 'access',
-               'reset', 'reset_raw', 'soft_reset', 'volatile', 'size', 'total', 'value',
-               'bytes', 'nfields', 'endian')
-MONO_KEYS = ('addr', 'byte_off', 'reset', 'reset_raw', 'bits', 'value')
+MERGE_KEYS = ('block', 'domain', 'reg', 'kind', 'addr', 'byte_off', 'width', 'shared',
+              'restrict', 'memory', 'mem_offset', 'backdoor', 'hdl', 'vhdl', 'rdoc')
+CENTER_KEYS = ('domain', 'kind', 'addr', 'byte_off', 'width', 'bits', 'msb', 'lsb', 'fwidth',
+               'access', 'reset', 'reset_raw', 'soft_reset', 'volatile', 'shared', 'restrict',
+               'mem_offset', 'backdoor', 'size', 'total', 'value', 'bytes', 'nfields', 'endian')
+MONO_KEYS = ('addr', 'byte_off', 'reset', 'reset_raw', 'bits', 'value', 'mem_offset')
 
 REGSUM_COLS = [
-    ('block', 'Block', 22), ('reg', 'Register', 30), ('regtype', 'Type', 20),
-    ('addr', 'Address', 14), ('byte_off', 'Offset', 12), ('bytes', 'Bytes', 7),
-    ('width', 'Width(bit)', 10), ('nfields', 'Fields', 7), ('endian', 'Endian', 9),
-    ('restrict', 'R/W Limit', 10), ('attrs', 'Attributes', 20),
-    ('hdl', 'HDL Path', 26), ('rdoc', 'Description', 40), ('where', 'Source', 18),
+    ('block', 'Block', 24), ('domain', 'Domain', 12), ('reg', 'Register', 30),
+    ('regtype', 'Type', 20), ('kind', 'Kind', 10), ('addr', 'Address', 14),
+    ('byte_off', 'Offset', 12), ('bytes', 'Bytes', 7), ('width', 'Width(bit)', 10),
+    ('nfields', 'Fields', 7), ('endian', 'Endian', 9), ('shared', 'Shared', 8),
+    ('restrict', 'R/W Limit', 10), ('memory', 'Memory', 18),
+    ('mem_offset', 'Memory Offset', 14), ('attrs', 'Attributes', 20),
+    ('backdoor', 'Backdoor', 10), ('hdl', 'HDL Path', 32), ('vhdl', 'VHDL Path', 32),
+    ('local_path', 'Local Path', 24), ('rdoc', 'Description', 40), ('where', 'Source', 18),
 ]
 
 MEM_COLS = [
-    ('block', 'Block', 22), ('name', 'Memory', 24), ('memtype', 'Type', 18),
-    ('addr', 'Address', 14), ('byte_off', 'Offset', 12), ('size', 'Size(locs)', 12),
-    ('bits', 'Width(bit)', 10), ('total', 'Total', 12), ('access', 'Access', 9),
-    ('initial', 'Initial', 10), ('hdl', 'HDL Path', 26), ('doc', 'Description', 30),
+    ('block', 'Block', 24), ('domain', 'Domain', 12), ('name', 'Memory', 24),
+    ('memtype', 'Type', 18), ('addr', 'Address', 14), ('byte_off', 'Offset', 12),
+    ('size', 'Size(locs)', 12), ('bits', 'Width(bit)', 10), ('total', 'Total', 12),
+    ('access', 'Access', 9), ('shared', 'Shared', 8), ('restrict', 'R/W Limit', 10),
+    ('initial', 'Initial', 10), ('backdoor', 'Backdoor', 10), ('hdl', 'HDL Path', 32),
+    ('vhdl', 'VHDL Path', 32), ('local_path', 'Local Path', 24), ('doc', 'Description', 30),
 ]
 
-ENUM_COLS = [('block', 'Block', 22), ('reg', 'Register', 28), ('field', 'Field', 22),
-             ('name', 'Enum Name', 24), ('value', 'Value', 12)]
+ENUM_COLS = [('block', 'Block', 22), ('domain', 'Domain', 12), ('reg', 'Register', 28),
+             ('field', 'Field', 22), ('name', 'Enum Name', 24), ('value', 'Value', 12)]
 
 WARN_COLS = [('kind', 'Stage', 10), ('where', 'Where', 26), ('msg', 'Warning', 100)]
 
@@ -1327,6 +1708,7 @@ def write_xlsx(path, ela, meta, warn_rows, sheet_per_block=False):
     from openpyxl import Workbook
     from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
     from openpyxl.utils import get_column_letter
+    from openpyxl.worksheet.cell_range import CellRange, MultiCellRange
 
     hdr_font = Font(bold=True, color='FFFFFF', size=10)
     hdr_fill = PatternFill('solid', fgColor='2F5597')
@@ -1363,6 +1745,7 @@ def write_xlsx(path, ela, meta, warn_rows, sheet_per_block=False):
         idx = dict((k, j) for j, (k, _, _) in enumerate(cols, 1))
         n = len(rows)
         start = 2
+        ranges = []
         for i in range(2, n + 2):
             cur = rows[i - 2]
             nxt = rows[i - 1] if i - 1 < n else None
@@ -1373,12 +1756,19 @@ def write_xlsx(path, ela, meta, warn_rows, sheet_per_block=False):
                 if i > start:
                     for k in MERGE_KEYS:
                         if k in idx:
-                            ws.merge_cells(start_row=start, end_row=i,
-                                           start_column=idx[k], end_column=idx[k])
+                            c = idx[k]
+                            ranges.append(CellRange(min_col=c, max_col=c,
+                                                    min_row=start, max_row=i))
+                            for r in range(start + 1, i + 1):
+                                ws.cell(r, c).value = None      # merge_cells 会做的事
                 for k in ('block', 'reg', 'addr'):
                     if k in idx:
                         ws.cell(start, idx[k]).fill = reg_fill
                 start = i + 1
+        if ranges:
+            # openpyxl 的 merge_cells() 是 O(n^2) 的 (每次都要跟已有区间比对),
+            # 几千行就能拖到几十秒。一次性赋值: 6000 个区间 6.3s -> 0.02s。
+            ws.merged_cells = MultiCellRange(ranges)
 
     # ---- Summary ----
     ws = wb.active
@@ -1390,21 +1780,23 @@ def write_xlsx(path, ela, meta, warn_rows, sheet_per_block=False):
             ('Tool', 'ralf2xlsx %s' % VERSION),
             ('Registers', len(ela.reg_rows)), ('Field rows', len(ela.rows)),
             ('Memories', len(ela.mem_rows)), ('Warnings', len(warn_rows)),
-            ('Address mode', meta['addr_mode']), ('Arrays', meta['arrays'])]
+            ('Address mode', meta['addr_mode']), ('Arrays', meta['arrays']),
+            ('Access dialect', meta.get('flavor', 'auto'))]
     for i, (k, v) in enumerate(info, start=3):
         ws.cell(i, 1, k).font = Font(bold=True)
         ws.cell(i, 2, v)
     r0 = 3 + len(info) + 1
-    for j, h in enumerate(['Block', 'Kind', 'Base Addr', 'Bus Bytes', 'Endian', 'Items'], 1):
+    for j, h in enumerate(['Block', 'Kind', 'Domain', 'Base Addr', 'Bus Bytes', 'Endian', 'Items', 'Backdoor', 'HDL Path', 'VHDL Path'], 1):
         c = ws.cell(r0, j, h)
         c.font, c.fill, c.alignment, c.border = hdr_font, hdr_fill, center, border
     for i, b in enumerate(ela.blk_rows, start=r0 + 1):
-        for j, v in enumerate([b['block'], b['kind'], hexs(b['base']),
-                               b['bus_bytes'], b['endian'], b['items']], 1):
+        for j, v in enumerate([b['block'], b['kind'], b.get('domain', ''), hexs(b['base']),
+                               b['bus_bytes'], b['endian'], b['items'], b.get('backdoor', ''),
+                               b.get('hdl', ''), b.get('vhdl', '')], 1):
             c = ws.cell(i, j, v)
             c.border = border
             c.alignment = left if j == 1 else center
-    for j, w in enumerate([40, 10, 14, 11, 10, 8], 1):
+    for j, w in enumerate([40, 10, 12, 14, 11, 10, 8, 10, 32, 32], 1):
         ws.column_dimensions[get_column_letter(j)].width = w
     ws.column_dimensions['B'].width = 46
 
@@ -1422,7 +1814,7 @@ def write_xlsx(path, ela, meta, warn_rows, sheet_per_block=False):
             for item in r['enum'].split(', '):
                 if '=' in item:
                     nm, vv = item.split('=', 1)
-                    enum_rows.append(dict(block=r['block'], reg=r['reg'],
+                    enum_rows.append(dict(block=r['block'], domain=r.get('domain', ''), reg=r['reg'],
                                           field=r['field'], name=nm, value=vv))
     if enum_rows:
         dump(wb.create_sheet('Enums'), enum_rows, ENUM_COLS)
@@ -1505,6 +1897,9 @@ def main(argv=None):
     ap.add_argument('--addr-mode', choices=('byte', 'word'), default='byte',
                     help='RALF 里 @offset 的含义: byte=字节偏移(缺省, 对应 ralgen -B / byte addressing); '
                          'word=地址单元个数(= 所在 block 的 bytes), 对应 ralgen 默认地址语义')
+    ap.add_argument('--flavor', choices=('auto', 'uvm', 'vmm'), default='auto',
+                    help='field access mode 按哪套方言校验: auto=UVM|VMM 并集(缺省), '
+                         'uvm=只接受 UVM 表, vmm=只接受 VMM 表')
     ap.add_argument('--sort', choices=('source', 'addr'), default='source',
                     help='行顺序: source=按 RALF 出现顺序(缺省), addr=按地址')
     ap.add_argument('--no-expand-arrays', action='store_true',
@@ -1518,11 +1913,14 @@ def main(argv=None):
     if not os.path.isfile(args.ralf):
         ap.error('文件不存在: %s' % args.ralf)
 
-    p = Parser(incdirs=args.incdir)
+    p = Parser(incdirs=args.incdir, flavor=args.flavor)
     try:
         p.parse_file(args.ralf)
     except (ParseError, OSError) as e:
         sys.stderr.write('RALF 解析失败: %s\n' % e)
+        return 2
+    except Exception as e:                      # 兼容性兼底: 不向用户抛 traceback
+        sys.stderr.write('RALF 解析出错 (%s): %s\n' % (type(e).__name__, e))
         return 2
 
     tops = list(args.top)
@@ -1546,7 +1944,11 @@ def main(argv=None):
             sys.stderr.write('找不到 top: %s (可用: %s)\n' %
                              (t, ', '.join('%s %s' % (k, n) for k, n in p.order)))
             return 2
-        ela.walk_block(topdef, topdef.name, base or 0, None)
+        try:
+            ela.walk_block(topdef, topdef.name, base or 0, None)
+        except Exception as e:
+            sys.stderr.write('展开 %s 出错 (%s): %s\n' % (t, type(e).__name__, e))
+            return 2
 
     if args.sort == 'addr':
         ela.rows.sort(key=lambda r: (r['block'], r['_addr'], r['reg'],
@@ -1584,14 +1986,29 @@ def main(argv=None):
                            'ralgen -B / byte addressing' if args.addr_mode == 'byte'
                            else 'ralgen default / address units',
                            hexs(base or 0)),
-                arrays='collapsed' if args.no_expand_arrays else 'expanded')
+                arrays='collapsed' if args.no_expand_arrays else 'expanded',
+                flavor=args.flavor)
     try:
         write_xlsx(out, ela, meta, warn_rows, sheet_per_block=args.sheet_per_block)
     except ImportError:
         sys.stderr.write('ERROR: 需要 openpyxl, 请先 pip install openpyxl\n')
         return 2
+    except (OSError, IOError) as e:
+        sys.stderr.write('ERROR: 无法写入 XLSX %s: %s\n' % (out, e))
+        return 2
+    except Exception as e:
+        sys.stderr.write('ERROR: Excel 输出失败 (%s): %s\n' % (type(e).__name__, e))
+        return 2
+
     if args.csv:
-        write_csv(args.csv, ela.rows, REG_COLS)
+        try:
+            write_csv(args.csv, ela.rows, REG_COLS)
+        except (OSError, IOError) as e:
+            sys.stderr.write('ERROR: 无法写入 CSV %s: %s\n' % (args.csv, e))
+            return 2
+        except Exception as e:
+            sys.stderr.write('ERROR: CSV 输出失败 (%s): %s\n' % (type(e).__name__, e))
+            return 2
 
     print('[ok] %s' % out)
     return 0

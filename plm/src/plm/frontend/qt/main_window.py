@@ -412,6 +412,60 @@ def valid_name(name):
     return name
 
 
+class _NewWorkspaceDialog(QtWidgets.QDialog):
+    """Collect a workspace name and parent directory in one place."""
+
+    def __init__(self, default_location, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("New workspace")
+        self.setModal(True)
+        self.setMinimumWidth(520)
+
+        layout = QtWidgets.QVBoxLayout(self)
+        form = QtWidgets.QFormLayout()
+        form.setFieldGrowthPolicy(QtWidgets.QFormLayout.AllNonFixedFieldsGrow)
+
+        self.name_edit = QtWidgets.QLineEdit()
+        self.name_edit.setObjectName("newWorkspaceName")
+        self.name_edit.setPlaceholderText("Project name")
+        form.addRow("Project name", self.name_edit)
+
+        location_row = QtWidgets.QWidget()
+        location_layout = QtWidgets.QHBoxLayout(location_row)
+        location_layout.setContentsMargins(0, 0, 0, 0)
+        location_layout.setSpacing(6)
+        self.location_edit = QtWidgets.QLineEdit(str(default_location))
+        self.location_edit.setObjectName("newWorkspaceLocation")
+        self.location_edit.setPlaceholderText("Parent directory")
+        location_layout.addWidget(self.location_edit, stretch=1)
+        self.browse_btn = QtWidgets.QPushButton("Browse")
+        self.browse_btn.setObjectName("newWorkspaceBrowse")
+        self.browse_btn.setIcon(_svg_icon(_SVG_OPEN, size=18))
+        self.browse_btn.clicked.connect(self._browse)
+        location_layout.addWidget(self.browse_btn)
+        form.addRow("Location", location_row)
+        layout.addLayout(form)
+
+        self.buttons = QtWidgets.QDialogButtonBox(
+            QtWidgets.QDialogButtonBox.Ok | QtWidgets.QDialogButtonBox.Cancel
+        )
+        self.buttons.accepted.connect(self.accept)
+        self.buttons.rejected.connect(self.reject)
+        layout.addWidget(self.buttons)
+        self.name_edit.setFocus()
+
+    def _browse(self):
+        start = self.location_edit.text().strip() or str(Path.home())
+        selected = QtWidgets.QFileDialog.getExistingDirectory(
+            self, "Choose workspace location", start
+        )
+        if selected:
+            self.location_edit.setText(selected)
+
+    def values(self):
+        return self.name_edit.text(), self.location_edit.text()
+
+
 class MainWindow(QtWidgets.QMainWindow):
     def __init__(self):
         super().__init__()
@@ -2608,21 +2662,25 @@ class MainWindow(QtWidgets.QMainWindow):
     def _on_new(self):
         if not self._confirm_discard_changes():
             return
-        # "New" creates a config set -- it's a naming action, not a
-        # "browse to a location" one: just ask for a
-        # name, land it next to whatever's currently open (or
-        # CONFIGS_ROOT/home when nothing is).
-        name, ok = QtWidgets.QInputDialog.getText(self, "New workspace", "New config name:")
-        if not ok:
+        default_parent = self.current_workspace.parent if self.current_workspace else (
+            CONFIGS_ROOT if CONFIGS_ROOT.is_dir() else Path.home()
+        )
+        dialog = _NewWorkspaceDialog(default_parent, self)
+        if dialog.exec_() != QtWidgets.QDialog.Accepted:
             return
+        name, location = dialog.values()
         try:
             name = valid_name(name)
         except ValueError as e:
             QtWidgets.QMessageBox.warning(self, "Invalid name", str(e))
             return
-        parent = self.current_workspace.parent if self.current_workspace else (
-            CONFIGS_ROOT if CONFIGS_ROOT.is_dir() else Path.home()
-        )
+        location = location.strip()
+        if not location:
+            QtWidgets.QMessageBox.warning(
+                self, "Invalid location", "Choose a parent directory for the workspace."
+            )
+            return
+        parent = Path(location).expanduser()
         ws = parent / name
         if ws.exists():
             QtWidgets.QMessageBox.warning(self, "New workspace", f"{ws} already exists.")

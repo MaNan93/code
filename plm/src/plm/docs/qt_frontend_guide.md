@@ -87,7 +87,8 @@ mode=0  lane0=0-0  lane1=0-1  lane2=1-0
 
 ## 操作步骤
 
-1. 侧边栏点 **Open** 选 `test/<SET>/config/` 的上一级目录（或点 **New** 新建）
+1. 侧边栏点 **Open** 选 `test/<SET>/config/` 的上一级目录；或点 **New**，填写
+   Project name，并在 Location 中输入/浏览选择任意父目录后新建
 2. Controllers tab：填 controller 信息
 3. Lane Mapping tab：填 mode 和 lane 分配
 4. Pipe Signals tab：用默认值或自己改

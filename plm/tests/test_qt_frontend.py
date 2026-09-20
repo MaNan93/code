@@ -12,7 +12,7 @@ from PyQt5 import QtCore, QtGui, QtTest, QtWidgets
 
 from plm.frontend.qt import main_window
 from plm.frontend.qt.main import APP_ICON_PATH
-from plm.frontend.qt.main_window import MainWindow
+from plm.frontend.qt.main_window import MainWindow, _NewWorkspaceDialog
 from plm.frontend.qt.widgets.lanegrid import LaneGrid
 from plm.frontend.qt.widgets.settings import DEFAULT_SETTINGS, SettingsDialog
 from plm.frontend.qt.widgets.tables import EditableTable
@@ -573,15 +573,38 @@ class QtFrontendTests(unittest.TestCase):
         self.addCleanup(window.close)
         window._open_workspace(workspace)
 
+        target_parent = Path(self.temp.name) / "chosen-location"
         with mock.patch.object(
             window, "_confirm_discard_changes", return_value=True
         ) as confirm, mock.patch.object(
-            QtWidgets.QInputDialog, "getText", return_value=("new_quad", True)
+            _NewWorkspaceDialog, "exec_", return_value=QtWidgets.QDialog.Accepted
+        ), mock.patch.object(
+            _NewWorkspaceDialog,
+            "values",
+            return_value=("new_quad", str(target_parent)),
         ):
             window._on_new()
 
         confirm.assert_called_once()
         self.assertEqual(window.current_workspace.name, "new_quad")
+        self.assertEqual(window.current_workspace.parent, target_parent)
+
+    def test_new_workspace_dialog_browses_for_a_custom_parent(self):
+        initial = Path(self.temp.name) / "initial"
+        selected = Path(self.temp.name) / "selected"
+        dialog = _NewWorkspaceDialog(initial)
+        self.addCleanup(dialog.close)
+
+        self.assertEqual(dialog.location_edit.text(), str(initial))
+        with mock.patch.object(
+            QtWidgets.QFileDialog,
+            "getExistingDirectory",
+            return_value=str(selected),
+        ) as browse:
+            dialog.browse_btn.click()
+
+        browse.assert_called_once()
+        self.assertEqual(dialog.location_edit.text(), str(selected))
 
     def test_invalid_topology_is_reported_without_calling_report(self):
         workspace = self._sample_workspace()

@@ -183,7 +183,13 @@ def gen_tb(cfg, pclk_mode="pclk_as_phy_output", dpr=False):
         L.append("    logic dpr_rst_n = 1'b1;")
         L.append("    mac2phy_lane_t [NL-1:0] dpr_mac2phy = '0;")
         L.append("    phy2mac_lane_t [NL-1:0] dpr_phy2mac;")
-        L.append("    logic dpr_pclk;   // DPR's own derived working clock, DUT output")
+        if phy_input_mode:
+            L.append("    localparam int DPR_PERIOD_NS = 11;")
+            L.append("    logic dpr_pclk = 0;")
+            L.append("    always #(DPR_PERIOD_NS/2.0) dpr_pclk = ~dpr_pclk;")
+            L.append("    logic [NL-1:0] dpr_rx_clk;")
+        else:
+            L.append("    logic dpr_pclk;   // derived working clock, DUT output")
         L.append("")
 
     # ---- DUT instance
@@ -205,6 +211,7 @@ def gen_tb(cfg, pclk_mode="pclk_as_phy_output", dpr=False):
             L.append("        .dpr_mac2phy    (dpr_mac2phy),")
             L.append("        .dpr_phy2mac    (dpr_phy2mac),")
             L.append("        .dpr_pclk       (dpr_pclk),")
+            L.append("        .dpr_rx_clk     (dpr_rx_clk),")
         for c in ctrls:
             L.append(f"        .{c.lname}_rst_n   (ctrl_rst_n[{c.id}]),")
             L.append(f"        .{c.lname}_mac2phy ({c.lname}_mac2phy),")
@@ -474,8 +481,9 @@ def gen_tb(cfg, pclk_mode="pclk_as_phy_output", dpr=False):
                     for i, c in enumerate(g.cands):
                         cc_ = cfg.controllers[c]
                         cl = ctrl_lane_of_cand[c]
+                        rx_sel = f"dut.rxclk_en_g{g.gid}_l{l}[{i}]" if dpr else f"dut.seltgt_g{g.gid}_l{l}[{i}]"
                         L.append(
-                            f"            if (sel_snap[{i}] == 1'b0 && dut.seltgt_g{g.gid}_l{l}[{i}] == 1'b0)"
+                            f"            if (sel_snap[{i}] == 1'b0 && {rx_sel} == 1'b0)"
                         )
                         L.append(
                             f"                chk_p2m({cc_.lname}_phy2mac[{cl}], exp_safe_p2m,"
@@ -784,7 +792,11 @@ def gen_tb(cfg, pclk_mode="pclk_as_phy_output", dpr=False):
         L.append("            automatic int op = ctrl_lane_of(mode, l);")
         L.append("            automatic int unsigned err_before;")
         L.append("            v_lane_mask = '0;")
-        L.append("            v_lane_mask[l] = 1'b1;")
+        L.append("            case (l)")
+        for g in cfg.groups:
+            mask = sum(1 << lane for lane in g.lanes)
+            L.append(f"                {g.lanes[0]}: v_lane_mask = NL'({mask});")
+        L.append("            endcase")
         L.append("            #SETTLE;")
         L.append("            err_before = err_count;")
         L.append("            case (oid)")
@@ -799,6 +811,17 @@ def gen_tb(cfg, pclk_mode="pclk_as_phy_output", dpr=False):
         L.append(
             '                $sformatf("dpr claimed lane%0d: dpr_phy2mac should mirror live phy_phy2mac", l));'
         )
+        if phy_input_mode:
+            L.append("            for (int lane = 0; lane < NL; lane++) begin")
+            L.append("                if (v_lane_mask[lane]) begin")
+            L.append('                    chk_m2p(phy_mac2phy[lane], dpr_mac2phy[lane], "DPR TX route");')
+            L.append('                    chk_p2m(dpr_phy2mac[lane], phy_phy2mac[lane], "DPR RX route");')
+            _emit_clk_period_chk(L, 20, "phy_pclk[lane]", "DPR_PERIOD_NS", '"DPR PCLK"')
+            _emit_clk_period_chk(L, 20, "dpr_rx_clk[lane]", "LANE_PERIOD_NS[lane]", '"DPR RXCLK"')
+            L.append("                end else begin")
+            L.append('                    chk(dpr_rx_clk[lane] == 0, "unowned DPR RXCLK is off");')
+            L.append("                end")
+            L.append("            end")
         L.append(
             '            $display("%0t: dpr claimed lane%0d (%0d cumulative errors)", $time, l, err_count);'
         )
@@ -808,6 +831,9 @@ def gen_tb(cfg, pclk_mode="pclk_as_phy_output", dpr=False):
         L.append(
             '                $sformatf("dpr released lane%0d: dpr_phy2mac should revert to tie", l));'
         )
+        if phy_input_mode:
+            L.append('            chk(dpr_rx_clk == 0, "released DPR RXCLK is off");')
+            L.append("            check_mode(mode);")
         L.append(
             '            $display("%0t: dpr released lane%0d (%0d cumulative errors)", $time, l, err_count);'
         )
@@ -842,9 +868,13 @@ def gen_tb(cfg, pclk_mode="pclk_as_phy_output", dpr=False):
     L.append("`endif")
     L.append("")
     L.append("        ctrl_rst_n = '0;")
+    if dpr:
+        L.append("        dpr_rst_n = 0;")
     L.append("        mode = '0;")
     L.append("        #100;")
     L.append("        ctrl_rst_n = '1;")
+    if dpr:
+        L.append("        dpr_rst_n = 1;")
     L.append("        #SETTLE;")
     L.append("")
     for i, m in enumerate(cfg.modes):

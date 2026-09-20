@@ -340,7 +340,7 @@ def gen_sel_gen(cfg, sel_mode="sync", pclk_mode="pclk_as_phy_output", dpr=False)
     if dpr:
         L.append("    input logic [NL-1:0] v_lane_mask,")
         L.append("    input logic dpr_rst_n,")
-        L.append("    input logic dpr_pclk,   // DPR's own working clock, from clk_mux")
+        L.append("    input logic dpr_pclk,   // external in PHY-input mode; derived in PHY-output mode")
     # Same as gen_decoder: code and comment are assembled separately, comma
     # goes at the end of the code, before the comment.
     ports = [
@@ -375,13 +375,12 @@ def gen_sel_gen(cfg, sel_mode="sync", pclk_mode="pclk_as_phy_output", dpr=False)
                         f"   // dec_tgt.g{g.gid} synchronized into this lane's owning candidate's own ctrl lane's clock; used by data_m2p/data_p2m",
                     )
                 )
-        for g in cfg.groups:
-            if g.is_direct:
-                continue
+        for g in (cfg.groups if dpr else [g for g in cfg.groups if not g.is_direct]):
+            eff_n = g.n + 1 if dpr else g.n
             for l in g.lanes:
                 ports.append(
                     (
-                        f"    output logic [{g.n-1}:0] rxclk_en_g{g.gid}_l{l}",
+                        f"    output logic [{eff_n-1}:0] rxclk_en_g{g.gid}_l{l}",
                         f"   // dec_tgt.g{g.gid} synchronized into rx_clk[{l}]'s own domain, for clk_mux's rx_clk gating",
                     )
                 )
@@ -487,28 +486,21 @@ def gen_sel_gen(cfg, sel_mode="sync", pclk_mode="pclk_as_phy_output", dpr=False)
         L.append("    // relation to {c}_pclk, unlike the rest of the PIPE-level signals).")
         L.append("    // clk_mux does the final pipe_lane_clk_gate + assign with this enable.")
         L.append("    //------------------------------------------------------------")
-        for g in cfg.groups:
-            if g.is_direct:
-                continue
+        for g in (cfg.groups if dpr else [g for g in cfg.groups if not g.is_direct]):
             for l in g.lanes:
-                n = g.n
+                n = g.n + 1 if dpr else g.n
                 L.append(f"    pipe_lane_sel_sync #(.N({n}), .SYNC(1'b1)) u_rxclk_sel_sync_g{g.gid}_l{l} (")
                 L.append(f"        .branch_clk   ({{{n}{{rx_clk[{l}]}}}}),")
                 L.append(
                     "        .branch_rst_n ({"
+                    + ("dpr_rst_n, " if dpr else "")
                     + ", ".join(f"ctrl_rst_n[{c}]" for c in reversed(g.cands))
                     + "}),"
                 )
-                # dec_tgt.gN is DPR-combined when --dpr (g.n+1 bits: real
-                # candidates in the low g.n bits, DPR at bit g.n), but rx_clk
-                # is never routed to DPR (no dpr_rx_clk port), so this
-                # instance stays at the real, non-widened N(n) above -- slice
-                # to the low n bits explicitly, rather than let the port
-                # connection truncate implicitly. Those low bits are already
-                # all-zero whenever the sliced-off DPR bit is the one set
-                # (dec_tgt.gN is one-hot), so this correctly gates every real
-                # candidate's rxclk_en off while DPR owns the lane.
-                tgt_expr = f"dec_tgt.g{g.gid}[{g.n-1}:0]" if dpr else f"dec_tgt.g{g.gid}"
+                # RX follows the effective PCLK-domain ownership, then
+                # synchronizes it into the recovered-clock domain. RX data
+                # uses this same enable; no PCLK-domain select gates RX data.
+                tgt_expr = f"seltgt_g{g.gid}_l{l}" if dpr else f"dec_tgt.g{g.gid}"
                 L.append(f"        .tgt          ({tgt_expr}),")
                 L.append(f"        .en           (rxclk_en_g{g.gid}_l{l})")
                 L.append("    );")
@@ -548,13 +540,12 @@ def gen_glitch_free_clk_select(L, prefix, cand_clks, rst_n_expr, tgt_expr, defau
 
     This is the one shape every "pick exactly one of N candidate clocks,
     glitch-free" site in the generator needs: a real multi-candidate
-    controller's own pclk (pclk_as_phy_output's ctrl_pclk) and DPR's own
-    working clock (either pclk mode) are architecturally the same circuit
-    -- DPR is nothing but one more N-candidate glitch-free clock select,
-    just with every PHY lane (or every lane's real_pclk[]) as its candidate
-    set instead of one controller's own handful of lanes. Sharing this one
-    function keeps that true in the generator's own code, instead of DPR's
-    version being a hand-duplicated near-copy of the real-controller one.
+    controller's own pclk and pclk_as_phy_output DPR clock are architecturally
+    the same circuit -- DPR is one more N-candidate glitch-free clock select,
+    with every PHY output PCLK as its candidate set instead of one controller's
+    own handful of lanes. Sharing this helper avoids a hand-duplicated DPR
+    implementation. In pclk_as_phy_input mode DPR instead supplies one
+    external free-running dpr_pclk, so this helper is not needed for it.
 
     cand_clks: candidate clock SV expressions, in bit order (index i is tgt
                bit i / candidate i).
@@ -815,20 +806,14 @@ def gen_clk_mux_phy_input(cfg, dpr=False):
                 f"    input logic [{eff_n-1}:0] seltgt_g{g.gid}_l{l},"
                 f"   // dec_tgt.g{g.gid} already synchronized into this lane's owning candidate's own ctrl lane's clock, from sel_gen -- also gates phy_pclk"
             )
-    for g in cfg.groups:
-        if g.is_direct:
-            continue
+    for g in (cfg.groups if dpr else [g for g in cfg.groups if not g.is_direct]):
+        n = g.n + 1 if dpr else g.n
         for l in g.lanes:
-            L.append(
-                f"    input logic [{g.n-1}:0] rxclk_en_g{g.gid}_l{l},"
-                f"   // dec_tgt.g{g.gid} already synchronized into rx_clk[{l}]'s domain, from sel_gen"
-            )
+            L.append(f"    input logic [{n-1}:0] rxclk_en_g{g.gid}_l{l},")
     if dpr:
-        L.append("    input logic [NL-1:0] v_lane_mask,")
-        L.append("    input logic dpr_rst_n,")
+        L.append("    input logic dpr_pclk,   // external, running throughout takeover/release")
+        L.append("    output logic [NL-1:0] dpr_rx_clk,")
     L.append("    output logic [NL-1:0] phy_pclk,")
-    if dpr:
-        L.append("    output logic dpr_pclk,   // DPR's own working clock, derived below")
     for cid in sorted(cfg.controllers):
         c = cfg.controllers[cid]
         L.append(f"    output logic [{c.max_width-1}:0] {c.lname}_rx_clk,")
@@ -836,115 +821,33 @@ def gen_clk_mux_phy_input(cfg, dpr=False):
     L.append(");")
     L.append("")
 
-    # phy_pclk: glitch-free, per physical lane (not per group). This first
-    # computes each lane's REAL-candidates-only glitch-free clock (exactly
-    # what this section already computed pre-DPR) into real_pclk[l] -- with
-    # --dpr, DPR's own working clock is itself derived from these real_pclk[]
-    # values (see below), and the final phy_pclk[l] is a 2-way overlay
-    # between real_pclk[l] and dpr_pclk, reusing sel_gen's already-
-    # synchronized seltgt_gN_lL (its real-candidate bits and its DPR bit are
-    # already mutually exclusive -- one-hot by construction -- so no extra
-    # synchronizer is needed just for this overlay).
-    L.append("    //------------------------------------------------------------")
-    L.append("    // phy_pclk: glitch-free per-lane select among the owning group's")
-    L.append("    // candidate controllers' own per-ctrl-lane pclk.")
-    L.append("    //------------------------------------------------------------")
-    real_pclk_expr = {}  # lane -> SV expression for that lane's real-candidates-only clock
+    # One gate per original source, followed by one clock OR. In particular,
+    # DPR never derives its clock from an already gated Controller branch.
     for g in cfg.groups:
-        if g.is_direct:
-            c = g.cands[0]
-            cname = cfg.controllers[c].lname
-            m0 = cfg.modes[0]
-            for l in g.lanes:
-                cl = cfg.mapping[m0][l][1]
-                real_pclk_expr[l] = f"{cname}_pclk[{cl}]"
-                if not dpr:
-                    L.append(
-                        f"    assign phy_pclk[{l}] = {real_pclk_expr[l]};"
-                        f"  // G{g.gid} direct to {cfg.controllers[c].name}"
-                    )
+        for l in g.lanes:
+            sources = []
+            for cid in g.cands:
+                m = next(mm for mm in cfg.modes if g.owners[mm] == cid)
+                cl = cfg.mapping[m][l][1]
+                sources.append(f"{cfg.controllers[cid].lname}_pclk[{cl}]")
+            if g.is_direct and not dpr:
+                L.append(f"    assign phy_pclk[{l}] = {sources[0]};")
+                continue
+            if dpr:
+                sources.append("dpr_pclk")
+            n = len(sources)
+            L.append(f"    logic [{n-1}:0] pclk_gated_g{g.gid}_l{l};")
+            for i, source in enumerate(sources):
+                L.append(
+                    f"    pipe_lane_clk_gate u_pclk_gate_g{g.gid}_l{l}_b{i} ("
+                    f".clk_in({source}), .en(seltgt_g{g.gid}_l{l}[{i}]), "
+                    f".test_en(test_en), .clk_out(pclk_gated_g{g.gid}_l{l}[{i}]));"
+                )
+            L.append(
+                f"    pipe_lane_clk_or #(.N({n})) u_pclk_or_g{g.gid}_l{l} "
+                f"(.clk_in(pclk_gated_g{g.gid}_l{l}), .clk_out(phy_pclk[{l}]));"
+            )
             L.append("")
-        else:
-            names = ", ".join(cfg.controllers[c].name for c in g.cands)
-            L.append(f"    // G{g.gid} lane{g.lanes[0]}~{g.lanes[-1]}: {names}, per-lane glitch-free select")
-            for l in g.lanes:
-                ctrl_lane_of_cand = {}
-                for c in g.cands:
-                    m = next(mm for mm in cfg.modes if g.owners[mm] == c)
-                    ctrl_lane_of_cand[c] = cfg.mapping[m][l][1]
-                L.append(f"    logic [{g.n-1}:0] pclk_gated_g{g.gid}_l{l};")
-                for i, c in enumerate(g.cands):
-                    L.append(
-                        f"    pipe_lane_clk_gate u_pclk_gate_g{g.gid}_l{l}_b{i} ("
-                        f".clk_in({cfg.controllers[c].lname}_pclk[{ctrl_lane_of_cand[c]}]), "
-                        f".en(seltgt_g{g.gid}_l{l}[{i}]), "
-                        f".test_en(test_en), .clk_out(pclk_gated_g{g.gid}_l{l}[{i}]));"
-                    )
-                if dpr:
-                    L.append(f"    logic real_pclk_g{g.gid}_l{l};")
-                    L.append(
-                        f"    pipe_lane_clk_or #(.N({g.n})) u_pclk_or_g{g.gid}_l{l} "
-                        f"(.clk_in(pclk_gated_g{g.gid}_l{l}), .clk_out(real_pclk_g{g.gid}_l{l}));"
-                    )
-                    real_pclk_expr[l] = f"real_pclk_g{g.gid}_l{l}"
-                else:
-                    L.append(
-                        f"    pipe_lane_clk_or #(.N({g.n})) u_pclk_or_g{g.gid}_l{l} "
-                        f"(.clk_in(pclk_gated_g{g.gid}_l{l}), .clk_out(phy_pclk[{l}]));"
-                    )
-                L.append("")
-
-    if dpr:
-        default_lane = cfg.groups[-1].lanes[0]  # last group's lowest lane
-        L.append("    //------------------------------------------------------------")
-        L.append("    // DPR's own working clock: from the lowest-numbered currently-masked")
-        L.append("    // lane's own real-candidates-only clock (real_pclk[] above) -- same")
-        L.append("    // glitch-free multi-candidate select pattern a multi-candidate")
-        L.append("    // controller's own pclk generation uses in pclk_as_phy_output mode,")
-        L.append("    // just with real_pclk[] as candidates instead of phy_pclk_out[].")
-        L.append(f"    // Defaults to lane{default_lane} (last group's lowest lane) when idle.")
-        L.append("    //------------------------------------------------------------")
-        L.append("    logic [NL-1:0] real_pclk;")
-        for l in range(LC):
-            L.append(f"    assign real_pclk[{l}] = {real_pclk_expr[l]};")
-        L.append("    logic [NL-1:0] dpr_pclk_tgt;")
-        L.append("    // isolate the lowest set bit: v_lane_mask & (-v_lane_mask)")
-        L.append("    assign dpr_pclk_tgt = v_lane_mask & (~v_lane_mask + 1'b1);")
-        L.append("")
-        gen_glitch_free_clk_select(
-            L,
-            "dpr_pclk",
-            [f"real_pclk[{l}]" for l in range(LC)],
-            "dpr_rst_n",
-            "dpr_pclk_tgt",
-            default_lane,
-            "dpr_pclk",
-        )
-        L.append("")
-
-        L.append("    //------------------------------------------------------------")
-        L.append("    // Final phy_pclk: real_pclk[l] (branch 0) vs dpr_pclk (branch 1),")
-        L.append("    // reusing sel_gen's already-synchronized seltgt_gN_lL directly --")
-        L.append("    // no separate synchronizer needed for this overlay.")
-        L.append("    //------------------------------------------------------------")
-        for g in cfg.groups:
-            for l in g.lanes:
-                L.append(f"    logic [1:0] dpr_pclk_ovl_l{l};")
-                L.append(
-                    f"    pipe_lane_clk_gate u_dpr_pclk_ovl_gate_l{l}_b0 (.clk_in({real_pclk_expr[l]}), "
-                    f".en(|seltgt_g{g.gid}_l{l}[{g.n-1}:0]), .test_en(test_en), "
-                    f".clk_out(dpr_pclk_ovl_l{l}[0]));"
-                )
-                L.append(
-                    f"    pipe_lane_clk_gate u_dpr_pclk_ovl_gate_l{l}_b1 (.clk_in(dpr_pclk), "
-                    f".en(seltgt_g{g.gid}_l{l}[{g.n}]), .test_en(test_en), "
-                    f".clk_out(dpr_pclk_ovl_l{l}[1]));"
-                )
-                L.append(
-                    f"    pipe_lane_clk_or #(.N(2)) u_dpr_pclk_ovl_or_l{l} "
-                    f"(.clk_in(dpr_pclk_ovl_l{l}), .clk_out(phy_pclk[{l}]));"
-                )
-                L.append("")
 
     # rx_clk: glitch-free, per physical lane. rx_clk[l] is its own recovered
     # clock domain (no fixed phase relation to ctrl_pclk or to any
@@ -958,7 +861,7 @@ def gen_clk_mux_phy_input(cfg, dpr=False):
     L.append("    //------------------------------------------------------------")
     assigned_ctrl_lanes = set()
     for g in cfg.groups:
-        if g.is_direct:
+        if g.is_direct and not dpr:
             c = g.cands[0]
             cname = cfg.controllers[c].lname
             m0 = cfg.modes[0]
@@ -987,6 +890,12 @@ def gen_clk_mux_phy_input(cfg, dpr=False):
                         f".test_en(test_en), .clk_out({cname}_rx_clk[{cl}]));"
                     )
                     assigned_ctrl_lanes.add((c, cl))
+                if dpr:
+                    L.append(
+                        f"    pipe_lane_clk_gate u_rxclk_gate_g{g.gid}_l{l}_dpr ("
+                        f".clk_in(rx_clk[{l}]), .en(rxclk_en_g{g.gid}_l{l}[{g.n}]), "
+                        f".test_en(test_en), .clk_out(dpr_rx_clk[{l}]));"
+                    )
                 L.append("")
 
     # Ctrl lanes that never get a PHY lane in any mode -- tie their rx_clk low.
@@ -1191,6 +1100,8 @@ def gen_data_p2m(cfg, pclk_mode="pclk_as_phy_output", dpr=False):
     gen_data_m2p()'s docstring for the parallel reasoning on the write
     side, where those same now-2-candidate groups need a real mux too.
     """
+    # With PHY-input DPR, these select ports receive rxclk_en from the top.
+    # This is routing only, not an asynchronous FIFO or RX-to-PCLK crossing.
     LC = cfg.lane_count
     phy_input_mode = pclk_mode == "pclk_as_phy_input"
     p2m_sigs_all = [s for s in cfg.signals if not s.is_m2p]
@@ -1411,7 +1322,11 @@ def gen_top(cfg, pclk_mode="pclk_as_phy_output", sel_mode="sync", dpr=False):
         L.append("    input logic dpr_rst_n,")
         L.append("    input mac2phy_lane_t [NL-1:0] dpr_mac2phy,")
         L.append("    output phy2mac_lane_t [NL-1:0] dpr_phy2mac,")
-        L.append("    output logic dpr_pclk,   // DPR's own working clock, so external logic can sync to it")
+        if phy_input_mode:
+            L.append("    input logic dpr_pclk,   // externally supplied DPR working clock")
+            L.append("    output logic [NL-1:0] dpr_rx_clk,")
+        else:
+            L.append("    output logic dpr_pclk,   // derived from PHY output clocks")
     L.append("    // Controller side. Each controller's ports are declared at its own real max_width.")
     for cid in sorted(cfg.controllers):
         c = cfg.controllers[cid]
@@ -1468,13 +1383,12 @@ def gen_top(cfg, pclk_mode="pclk_as_phy_output", sel_mode="sync", dpr=False):
                     f"    logic [{eff_n-1}:0] seltgt_g{g.gid}_l{l};"
                     f"   // dec_tgt.g{g.gid} synchronized into the clock of the ctrl lane this lane routes to"
                 )
-        for g in cfg.groups:
-            if g.is_direct:
-                continue
+        for g in (cfg.groups if dpr else [g for g in cfg.groups if not g.is_direct]):
+            n = g.n + 1 if dpr else g.n
             for l in g.lanes:
-                rxclk_lanes.append((g.gid, l, g.n))
+                rxclk_lanes.append((g.gid, l, n))
                 L.append(
-                    f"    logic [{g.n-1}:0] rxclk_en_g{g.gid}_l{l};"
+                    f"    logic [{n-1}:0] rxclk_en_g{g.gid}_l{l};"
                     f"   // dec_tgt.g{g.gid} synchronized into rx_clk[{l}]'s domain"
                 )
     L.append("")
@@ -1545,9 +1459,8 @@ def gen_top(cfg, pclk_mode="pclk_as_phy_output", sel_mode="sync", dpr=False):
         for gid, l, _n in rxclk_lanes:
             L.append(f"        .rxclk_en_g{gid}_l{l} (rxclk_en_g{gid}_l{l}),")
         if dpr:
-            L.append("        .v_lane_mask  (v_lane_mask),")
-            L.append("        .dpr_rst_n    (dpr_rst_n),")
             L.append("        .dpr_pclk     (dpr_pclk),")
+            L.append("        .dpr_rx_clk   (dpr_rx_clk),")
         L.append("        .phy_pclk     (phy_pclk),")
         for cid in sorted(cfg.controllers):
             c = cfg.controllers[cid]
@@ -1633,7 +1546,8 @@ def gen_top(cfg, pclk_mode="pclk_as_phy_output", sel_mode="sync", dpr=False):
         # already includes previously-direct groups once --dpr widens them
         # into 2-candidate NOV groups).
         for gid, l, _n in seltgt_lanes:
-            L.append(f"        .seltgt_g{gid}_l{l} (seltgt_g{gid}_l{l}),")
+            source = f"rxclk_en_g{gid}_l{l}" if dpr else f"seltgt_g{gid}_l{l}"
+            L.append(f"        .seltgt_g{gid}_l{l} ({source}),")
     else:
         L.append("        .sel_tgt      (sel_tgt),")
     L.append("        .phy_phy2mac  (phy_phy2mac),")
@@ -1727,7 +1641,11 @@ def gen_connection(cfg, pclk_mode="pclk_as_phy_output", dpr=False):
                 L.append(f"    output logic [{s.width-1}:0] dpr_{s.name},")
             else:
                 L.append(f"    output logic [{s.width-1}:0] dpr_{s.name} [0:NL-1],")
-        L.append("    output logic dpr_pclk,")
+        if phy_input_mode:
+            L.append("    input logic dpr_pclk,")
+            L.append("    output logic [NL-1:0] dpr_rx_clk,")
+        else:
+            L.append("    output logic dpr_pclk,")
     L.append("    // Controller side. Each controller's ports are declared at its own real max_width.")
     for cid in sorted(cfg.controllers):
         c = cfg.controllers[cid]
@@ -1847,6 +1765,8 @@ def gen_connection(cfg, pclk_mode="pclk_as_phy_output", dpr=False):
         L.append("        .dpr_mac2phy  (w_dpr_mac2phy),")
         L.append("        .dpr_phy2mac  (w_dpr_phy2mac),")
         L.append("        .dpr_pclk     (dpr_pclk),")
+        if phy_input_mode:
+            L.append("        .dpr_rx_clk   (dpr_rx_clk),")
     for cid in sorted(cfg.controllers):
         c = cfg.controllers[cid]
         L.append(f"        .{c.lname}_rst_n   ({c.lname}_rst_n),")

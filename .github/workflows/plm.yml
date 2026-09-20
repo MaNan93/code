@@ -37,6 +37,20 @@ jobs:
       - run: python -m compileall -q src run.py tests
       - run: python -m unittest discover -s tests -v
 
+  rtl-sim:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: plm
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: sudo apt-get update && sudo apt-get install -y verilator
+      - run: python -m pip install -e .
+      - run: PLM_RUN_RTL_SIM=1 python -m unittest -v tests.test_dpr_phy_input
+
   wheel:
     runs-on: ubuntu-latest
     defaults:

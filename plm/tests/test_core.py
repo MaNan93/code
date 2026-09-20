@@ -208,6 +208,16 @@ SAMPLE_GEN_FLAGS = {
     "dpr": {"dpr": True},
 }
 
+# Deliberately invalid configurations used to prove that topology validation
+# rejects unsafe mappings.  They are regression fixtures, not generation
+# samples, so the positive generation sweep below must not try to export them.
+NEGATIVE_SAMPLES = {
+    "quad": (
+        "driving sources span multiple lane groups",
+        "working clock comes from different lanes",
+    ),
+}
+
 
 def sample_gen_kwargs(sample_name):
     """export_rtl/export_tb kwargs for one bundled sample."""
@@ -218,6 +228,8 @@ class SampleRegressionTests(unittest.TestCase):
     def test_all_bundled_samples_validate_and_generate(self):
         for source in sorted((ROOT / "test").iterdir()):
             if not (source / "config").is_dir():
+                continue
+            if source.name in NEGATIVE_SAMPLES:
                 continue
             with self.subTest(sample=source.name), tempfile.TemporaryDirectory() as td:
                 copied = Path(td) / source.name
@@ -232,6 +244,15 @@ class SampleRegressionTests(unittest.TestCase):
                 )
                 self.assertTrue((copied / "rtl" / "flist.f").is_file())
                 self.assertTrue((copied / "tb" / "tb_pipe_lane_mapper.sv").is_file())
+
+    def test_negative_samples_are_rejected_for_the_expected_reason(self):
+        for sample_name, expected_messages in NEGATIVE_SAMPLES.items():
+            with self.subTest(sample=sample_name):
+                errors = Config(ROOT / "test" / sample_name / "config").validate()
+                self.assertTrue(errors, f"{sample_name} unexpectedly became valid")
+                joined = "\n".join(errors)
+                for message in expected_messages:
+                    self.assertIn(message, joined)
 
     def test_sample_gen_flags_match_the_qt_workspace_files(self):
         """A sample's gen_flags.txt is what the Qt front end shows when you

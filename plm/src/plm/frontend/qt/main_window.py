@@ -2835,7 +2835,10 @@ class MainWindow(QtWidgets.QMainWindow):
             button.setEnabled(enabled)
         for button, _label in getattr(self, "sidebar_action_buttons", []):
             button.setEnabled(enabled)
-        if getattr(self, "recent_list", None):
+        # An empty QListWidget is false-y, so a truth-value check silently
+        # skips the lock exactly when the recent list has no rows.  Test
+        # object existence explicitly, like the other optional widgets.
+        if getattr(self, "recent_list", None) is not None:
             self.recent_list.setEnabled(enabled)
 
     def _refresh_topology_summary(self):

@@ -65,7 +65,7 @@ mode=0  lane0=0-0  lane1=0-1  lane2=1-0
 | `arch` | `original_pipe` / `serdes` |
 | `pclk-mode` | `pclk_as_phy_output` / `pclk_as_phy_input` |
 | `sel-mode` | `sync` / `comb`（勾了 dpr 会被锁成 `sync`） |
-| `dpr` | 勾选或不勾。只支持 `pclk_as_phy_output` |
+| `dpr` | 勾选或不勾。两种 PCLK 模式都支持；`pclk_as_phy_input` 会生成外部 `dpr_pclk` 输入和逐 lane `dpr_rx_clk` 输出 |
 
 `arch` 和 `pclk-mode` 互相联动，改一个另一个跟着变。
 

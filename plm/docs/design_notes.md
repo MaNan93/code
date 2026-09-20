@@ -210,7 +210,9 @@ lane 之间是共享的，PHY 侧仍然需要每条 lane 各自的值。`shared`
 | `phy_mac2phy[NL]` / `phy_phy2mac[NL]` | out/in | 总是 | PHY 侧数据，struct 数组 |
 | `v_lane_mask[NL]` / `dpr_rst_n` | in | dpr | DPR 的实时掩码、复位 |
 | `dpr_mac2phy[NL]` / `dpr_phy2mac[NL]` | in/out | dpr | DPR 自己的数据端口，1:1 对应 lane |
-| `dpr_pclk` | out | dpr | DPR 内部派生出的工作时钟 |
+| `dpr_pclk` | out | dpr + phy_as_phy_output | 从 PHY 输出 PCLK 中无毛刺选出的 DPR 工作时钟 |
+| `dpr_pclk` | in | dpr + phy_as_phy_input | DPR 外部提供的自由运行工作时钟；接管前后都不能停 |
+| `dpr_rx_clk[NL]` | out | dpr + phy_as_phy_input | DPR 接管 lane 后收到的逐 lane PHY 恢复时钟；未接管时为 0 |
 | `{c}_rst_n` | in | 每个 controller | 已在外部同步好 |
 | `{c}_mac2phy[max_width]` / `{c}_phy2mac[max_width]` | in/out | 每个 controller | struct 数组，按它自己的 lane 数定宽 |
 | `{c}_pclk[max_width]` | in | 每个 controller + phy_as_phy_input | 每条 controller lane 一位，controller 自己分频好送进来 |
@@ -239,7 +241,7 @@ controller 的 `mac2phy`/`phy2mac` struct 数组按 `pipe_signals.csv` 逐行拆
 | `dec_tgt` (`lane_sel_t`) | out | 总是 | 译码器原始（未同步）选择，dpr 时已经把 DPR 合成进去 |
 | `pclk_tgt_c{cid}` | out | 每个多候选 controller | 传给 clk_mux 做自己时钟的无毛刺切换 |
 | `seltgt_g{gid}_l{l}` | out | phy_as_phy_input，每条非 direct（或 dpr 时全部）group 的每条 lane | 同步进该 lane 当前候选自己那条 controller lane 的时钟域的选择位 |
-| `rxclk_en_g{gid}_l{l}` | out | phy_as_phy_input，每条非 direct group 的每条 lane | 同步进 `rx_clk[l]` 域的选择位 |
+| `rxclk_en_g{gid}_l{l}` | out | phy_as_phy_input，每条非 direct（或 dpr 时全部）group 的每条 lane | 同步进 `rx_clk[l]` 域的选择位；同时控制 RX 时钟和 PHY→MAC 数据归属 |
 
 **`pipe_lane_clk_mux`**——parameter `NL`、`NC`；两种模式端口完全不同
 
@@ -249,14 +251,9 @@ phy_as_phy_output：`phy_pclk_out[NL]`、`test_en`、`ctrl_rst_n[NC]`、每个�
 
 phy_as_phy_input：`test_en`、`ctrl_rst_n[NC]`、`rx_clk[NL]`、每个
 controller 的 `{c}_pclk[max_width]`、每条非 direct（或 dpr 时全部）group
-每条 lane 的 `seltgt_g{gid}_l{l}`、每条非 direct group 每条 lane 的
-`rxclk_en_g{gid}_l{l}`、（dpr：`v_lane_mask[NL]`、`dpr_rst_n`）→
-`phy_pclk[NL]`、（dpr：`dpr_pclk`）、每个 controller 的
-`{c}_rx_clk[max_width]`。
-
-> 上面标 dpr 的那几个端口在这套架构下**生成不出来**：`plm generate`
-> 直接拒绝 `--dpr` + `--pclk-mode pclk_as_phy_input`（见 4.8 节）。
-> 生成器里那段代码还在，但走不到；列在这里是为了跟另一套架构对照。
+每条 lane 的 `seltgt_g{gid}_l{l}`、每条非 direct（或 dpr 时全部）group 每条
+lane 的 `rxclk_en_g{gid}_l{l}`、（dpr：外部 `dpr_pclk`）→ `phy_pclk[NL]`、
+每个 controller 的 `{c}_rx_clk[max_width]`、（dpr：`dpr_rx_clk[NL]`）。
 
 **`pipe_lane_rst_mux`**——parameter `NL`、`NC`
 
@@ -722,7 +719,7 @@ lane2 在 mode1 是 `CtrlB[0]`、mode2 是 `CtrlB[1]`，生成出来的
 二级选择。理由也一样 —— controller 在 mode 切换时应当只改宽度，不应当把
 自己的 lane 重新编号；为这种用法多加一级 mux 是纯粹的成本。
 
-### 4.8 DPR overlay 只支持 `pclk_as_phy_output`
+### 4.8 DPR overlay 在两种 PCLK 架构下的时钟来源
 
 `--dpr` 需要给 DPR 自己一个工作时钟 `dpr_pclk`，用于给
 `pipe_lane_sel_sync` 里 DPR 那一路分支打拍。
@@ -730,23 +727,15 @@ lane2 在 mode1 是 `CtrlB[0]`、mode2 是 `CtrlB[1]`，生成出来的
 在 `pclk_as_phy_output` 下这没问题：候选是 `phy_pclk_out[]`，PHY 无条件驱动，
 永远在跑，和 DPR 当前是否持有 lane 无关。
 
-在 `pclk_as_phy_input` 下则不存在这样一个自由跑的 per-lane 时钟 ——
-一条 lane 的时钟就是它当前 owner 的 `{c}_pclk[port]`。生成器只能退而求其次，
-从 `real_pclk[l]`（该 lane 真实候选的 `pipe_lane_clk_or` 输出）取时钟，
-而这个输出是**已经被门控过的**，于是形成死锁：
+在 `pclk_as_phy_input` 下，DPR 不能从已经门控的真实 owner PCLK 反向派生
+自己的时钟，否则真实分支关闭后会形成自锁。顶层因此增加一个输入
+`dpr_pclk`，由系统外部持续提供；每条 `phy_pclk[l]` 直接在各真实 controller
+原始 `{c}_pclk[port]` 与该 `dpr_pclk` 之间做无毛刺切换。
 
-1. `v_lane_mask[l]` 拉高 → `seltgt_gN_lL` 的 DPR bit 置位、real bits 清零
-2. real bits 全 0 → `real_pclk[l]` 停止翻转
-3. `dpr_pclk` 的时钟源就是 `real_pclk[l]` → `dpr_pclk` 停
-4. DPR 那一路分支寄存器由 `dpr_pclk` 打拍 → 再也不会翻转
+PHY 的 `rx_clk[l]` 走相反方向：`rxclk_en_gN_lL` 在该恢复时钟域内完成所有权
+切换，然后同时控制 controller 的 `{c}_rx_clk[port]`、DPR 的
+`dpr_rx_clk[l]` 以及 PHY→MAC 数据路由。这样 DPR 接管时，数据和对应的 RX
+时钟不会分属不同 owner；释放后 `dpr_rx_clk[l]` 回到 0。
 
-这条 lane 既没法被 DPR 真正使用，也没法交还给原 owner（交还同样要等
-`en[DPR]` 变 0，而那一位已经不再更新了）。
-
-因此 `plm generate rtl/tb/all` 直接拒绝 `--dpr` + `--pclk-mode
-pclk_as_phy_input` 这个组合，而不是生成一份能跑通仿真、直到第一次
-`v_lane_mask` 置位才挂死的 RTL。
-
-要在这个架构上支持 DPR，需要先解决"DPR 的时钟从哪来"这个架构问题
-（例如对各候选 controller 的原始 `{c}_pclk[port]` 做一次不受
-`seltgt` 门控的 N 选一），不是改几行生成器能解决的。
+`v_lane_mask` 仍是按 lane 暴露的接口，但 mapper 的选择单元按 group 工作，
+所以调用方必须一次设置或清除同一 group 的全部 mask bit。

@@ -225,6 +225,35 @@ def sample_gen_kwargs(sample_name):
 
 
 class SampleRegressionTests(unittest.TestCase):
+    def test_mode_transitions_only_affect_groups_whose_owner_changes(self):
+        """A global mode update must not widen into a global lane interruption."""
+        for source in sorted((ROOT / "test").iterdir()):
+            if not (source / "config").is_dir() or source.name in NEGATIVE_SAMPLES:
+                continue
+            cfg = Config(source / "config")
+            with self.subTest(sample=source.name):
+                for old_mode in cfg.modes:
+                    for new_mode in cfg.modes:
+                        if old_mode == new_mode:
+                            continue
+                        changed_lanes = {
+                            lane
+                            for lane in range(cfg.lane_count)
+                            if cfg.mapping[old_mode][lane][0]
+                            != cfg.mapping[new_mode][lane][0]
+                        }
+                        grouped_changed_lanes = {
+                            lane
+                            for group in cfg.groups
+                            if group.owners[old_mode] != group.owners[new_mode]
+                            for lane in group.lanes
+                        }
+                        self.assertEqual(
+                            grouped_changed_lanes,
+                            changed_lanes,
+                            f"mode {old_mode}->{new_mode} disturbs an unchanged lane",
+                        )
+
     def test_all_bundled_samples_validate_and_generate(self):
         for source in sorted((ROOT / "test").iterdir()):
             if not (source / "config").is_dir():

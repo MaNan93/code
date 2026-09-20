@@ -41,8 +41,8 @@ plm.cli.main` 或 `plm` console-script 找到。安装后也可以直接运行 `
 参数，不会传漏。分开跑 `generate rtl` / `generate tb` 时，`--pclk-mode`
 （和 `--dpr`）必须自己保证两边一样。
 
-架构设计本身（为什么这样设计、各模块的原理）不在本文档范围内，见仓库里的
-`docs/design_notes.md`（设计笔记不随 wheel 打包，只在源码仓库里）。
+关键架构约束和 mode 切换规则见本文第 0.5、0.6 节；各生成模块的实现细节
+记录在生成器源码和生成 RTL 的模块头注释中。
 
 ## 0. 应用场景
 
@@ -119,9 +119,42 @@ lane 归属要在运行时随 mode 切换，夹在 controller 和 PHY 中间的�
 - **配置非法直接报错**。拓扑上做不出正确硬件的配置在生成前就被拒绝，
   不会产出一份能编过、跑起来才错的 RTL。
 
+#### 0.5.1 mode 切换的基本运行规则
+
+mode 切换不是让一条正在传输的 PCIe Link 瞬间换到另一个 controller，也不是
+要求整个 mapper 一起停机。系统必须先让 **ownership 将发生变化的 Group 所涉及的
+controller** 停止使用对应 PIPE lane；这些 lane 在切换期间的数据没有功能意义，
+随后由该 Group 自己完成 break-before-make，等选择、时钟和复位稳定后，新 owner
+才能重新启动链路训练。
+
+与此同时，起始 mode 和目标 mode 之间 **owner 没有变化的 Group 是独立的**：
+
+- 它的有效选择保持不变，不进入全 0 handoff 空窗；
+- 它的 PCLK/RXCLK 不应停顿，复位不应因其他 Group 切换而改变；
+- 它的 M2P/P2M 数据通路保持连续，因此其他已经工作的 PCIe Link 可以继续工作。
+
+换句话说，`mode` 虽然是一个全局输入，但切换动作的最小影响范围是 owner 真正变化的
+Group，不是整个 mapper。配置报告中的 `switches` / `unaffected` 列表就是这个边界。
+
+上层还必须保证 `mode` 从一个合法值稳定地更新到另一个合法值，并在整个切换收敛期间
+保持不变；不能让多 bit `mode` 在 mapper 输入端出现非法值或组合毛刺。生成器能隔离合法
+mode A → mode B 所影响的 Group，但不能从一个不连贯的外部 `mode` 波形推断真实目标。
+
+#### 0.5.2 DPR 屏蔽/解除屏蔽规则
+
+DPR 的 `v_lane_mask` 同样不是要求数据瞬时切换。mask 置位后，被屏蔽 lane 按 DPR
+controller 的要求通信；mask 清零后，原 controller 也要等选择、时钟、复位以及自身状态
+恢复完成才重新使用该 lane。接管和归还允许存在毫秒级过渡期，过渡期间该 lane 的数据
+不要求有效。
+
+DPR 的隔离要求是：**只允许扰动 mask 状态发生变化的 lane**。对于始终满足
+`v_lane_mask[lane] == 0` 的未屏蔽 lane，其他 lane 的 DPR 接管或归还不得改变它的原
+controller 选择、PCLK/RXCLK、复位和 M2P/P2M 数据通路；该 lane 上已经工作的 PCIe
+Link 必须能够继续工作。
+
 ### 0.6 硬性限制
 
-下面这些不满足，`validate` 会直接报错（完整列表见仓库里的 `docs/design_notes.md` 4.3 节）：
+下面这些不满足，`validate` 会直接报错：
 
 | 限制 | 原因 |
 |---|---|
@@ -140,7 +173,7 @@ lane 归属要在运行时随 mode 切换，夹在 controller 和 PHY 中间的�
   所以空窗值永远观察不到。只有候选 controller 确实在同一个时钟域才能用 `comb`。
 - **`--dpr` + `pclk_as_phy_input` 需要外部自由运行的 `dpr_pclk`**。生成顶层还会
   输出逐 lane 的 `dpr_rx_clk`；DPR 接管一个 group 时，数据、PCLK 和 RXCLK
-  使用同一所有权切换。原因见 `docs/design_notes.md` 4.8 节。
+  使用同一所有权切换，避免时钟与数据属于不同 owner。
 
 ## 1. 项目布局
 
@@ -185,9 +218,9 @@ plm/
 │     └─ tb/                 `plm generate tb` 的输出
 │        ├─ tb_pipe_lane_mapper.sv
 │        └─ makefile          从 plm.core 的 tb_makefile.mk 复制来的（VCS 仿真用）
-├─ docs/
-│  ├─ design_notes.md      架构设计文档
-│  └─ tool_usage.md         本文档
+│     └─ docs/
+│        ├─ tool_usage.md       本文档
+│        └─ qt_frontend_guide.md Qt 前端操作说明
 └─ Makefile                 批量生成所有配置集（对每套配置集各调用一次 `plm generate`）
 ```
 
@@ -251,7 +284,8 @@ phy_mac_messagebus,perlane,phy2mac,8,0x50,0x50
 | `tie_off` | p2m 方向没分到 PHY lane 的那条 controller lane 应该 tie 成什么。要么是字面量 `lane0`（意为"跟随最低编号 lane 的值"），要么是整数字面量（同 `safe_state` 的格式），必须落在 `[0, 2^width)` 范围内 |
 
 `safe_state` 与 `tie_off` 是两个方向各自独立生效的机制，不需要
-（也不应该假设）两者取值一致——细节见 design_notes.md 第 3.6 节。
+（也不应该假设）两者取值一致：前者用于 Group 的无 owner 空窗，后者用于
+某条 controller lane 在当前 mode 没分到 PHY lane 时的固定读值。
 
 复位信号（`phy_rst_n`/`ctrl_rst_n`）是独立端口，不放在这张表里。
 
@@ -279,7 +313,6 @@ CLI 不读任何文件来拿它们。
 配置目录下还有个 `gen_flags.txt`，但那是 **Qt 前端自己的记忆**：前端保存时写、
 打开 workspace 时读回来恢复上次的选择。CLI 不看它，`make` 也不看它，
 所以手敲命令行或跑 `make` 时改这个文件没有任何效果。
-（历史原因见仓库里 `docs/tool_architecture.md` 第 5 节。）
 
 不传就是 CLI 默认值：`--arch original_pipe --pclk-mode pclk_as_phy_output
 --sel-mode sync`，不开 dpr。
@@ -296,8 +329,8 @@ plm generate rtl --config <SET> [其它参数]
 |---|---|---|
 | `--config SET` | 无（必填） | 配置集名字或路径。先按 `test/<SET>/` 找，找不到再当作直接给的路径（相对/绝对都可）；不给这个参数会列出 `test/` 下已有的配置集名字然后报错退出 |
 | `--arch {original_pipe,serdes}` | `original_pipe` | 这套配置集针对哪种 PHY 宏：`original_pipe`（经典 PIPE PHY）只支持 `--pclk-mode pclk_as_phy_output`，`serdes`（SerDes 风格宏）只支持 `--pclk-mode pclk_as_phy_input`。纯粹是跟 `--pclk-mode` 的一致性校验，两者不匹配直接报错退出，不生成任何文件 |
-| `--pclk-mode {pclk_as_phy_output,pclk_as_phy_input}` | `pclk_as_phy_output` | 选择哪种 PCLK 归属架构；两者互斥，生成的顶层端口/内部信号完全不同。含义见 design_notes.md 2.1 节。**必须和 `--arch`、以及 `generate tb` 用的值一致** |
-| `--sel-mode {sync,comb}` | `sync` | 顶层 `pipe_lane_mapper` 的 `SEL_SYNC` 参数取什么默认值（也就是数据路径上 `pipe_lane_sel_sync` 的 `SYNC`）；`comb` 只在候选 controller 真的共享时钟域时才安全。这只是设置默认值——`SEL_SYNC` 仍然是个普通的 RTL 参数，例化时不改代码也能覆盖。含义见 design_notes.md 2.2 节。只影响 RTL，`generate tb` 没有这个参数。**`--dpr` 打开时必须是 `sync`**（DPR 作为 group 的额外候选分支，跟真实候选共用同一个 `SEL_SYNC`；`comb` 无法保证 DPR 分支和真实候选共享时钟域，`--dpr`+`--sel-mode comb` 会直接报错退出） |
+| `--pclk-mode {pclk_as_phy_output,pclk_as_phy_input}` | `pclk_as_phy_output` | 选择哪种 PCLK 归属架构；两者互斥，生成的顶层端口/内部信号完全不同。`output` 模式由 PHY 提供 PCLK，`input` 模式由 controller 提供逐 lane PCLK。**必须和 `--arch`、以及 `generate tb` 用的值一致** |
+| `--sel-mode {sync,comb}` | `sync` | 顶层 `pipe_lane_mapper` 的 `SEL_SYNC` 参数取什么默认值（也就是数据路径上 `pipe_lane_sel_sync` 的 `SYNC`）；`comb` 只在候选 controller 真的共享时钟域且 `mode` 无毛刺时才安全。这只是设置默认值——`SEL_SYNC` 仍然是个普通的 RTL 参数，例化时不改代码也能覆盖。只影响 RTL，`generate tb` 没有这个参数。**`--dpr` 打开时必须是 `sync`**（DPR 作为 group 的额外候选分支，跟真实候选共用同一个 `SEL_SYNC`；`comb` 无法保证 DPR 分支和真实候选共享时钟域，`--dpr`+`--sel-mode comb` 会直接报错退出） |
 | `--verible-path PATH` | 无 | `verible-verilog-format` 的路径，用来给生成的 `.sv` 文件自动格式化。查找优先级：`--verible-path` 显式指定 > 当前工作目录下同名文件 > `PATH` 环境变量；三处都找不到就跳过格式化（生成物功能不受影响，只是排版保持生成器原样） |
 | `--quiet` | 关闭 | 不打印每个文件的生成日志和配置报告（`Config.report()`），只在出错时输出 |
 
@@ -490,5 +523,4 @@ verilator --binary -f flist.f ../tb/tb_pipe_lane_mapper.sv --top-module tb_pipe_
 各自运行时都会打印（`--quiet` 时都不打印）。
 
 配置不满足 `Config.validate()` 里的任何一条硬性检查时，生成会直接
-报错退出，不会写出任何文件；各条检查项的目的见 design_notes.md 4.3
-节表 1。
+报错退出，不会写出任何文件；主要拓扑限制及其原因见第 0.6 节。

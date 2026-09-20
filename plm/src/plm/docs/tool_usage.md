@@ -138,8 +138,9 @@ lane 归属要在运行时随 mode 切换，夹在 controller 和 PHY 中间的�
   不是真实拓扑。
 - **`--sel-mode comb` 下 `safe_state` / `tie_off` 不会真正出现**。组合直通没有全 0 空窗，
   所以空窗值永远观察不到。只有候选 controller 确实在同一个时钟域才能用 `comb`。
-- **`--dpr` 只支持 `pclk_as_phy_output`**。另一套架构里 DPR 没有自由跑的时钟源可用，
-  这个组合会被直接拒绝，原因见 `docs/design_notes.md` 4.8 节。
+- **`--dpr` + `pclk_as_phy_input` 需要外部自由运行的 `dpr_pclk`**。生成顶层还会
+  输出逐 lane 的 `dpr_rx_clk`；DPR 接管一个 group 时，数据、PCLK 和 RXCLK
+  使用同一所有权切换。原因见 `docs/design_notes.md` 4.8 节。
 
 ## 1. 项目布局
 

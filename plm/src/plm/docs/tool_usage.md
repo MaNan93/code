@@ -74,7 +74,7 @@ lane 归属要在运行时随 mode 切换，夹在 controller 和 PHY 中间的�
 | 多个 controller 共享一个 PHY macro | 几个独立 controller 分块占用同一组 lane，分法随 mode 变 |
 | 需要运行时切换 lane 归属 | 不断电、不复位整条链路的前提下改分配 |
 | 归属其实是静态的，但组合太多 | 每种组合单独维护一版 RTL 不现实，用一份配置生成一份带 `mode` 输入的 RTL |
-| 需要诊断探针 | `--dpr` 生成一个虚拟 controller，用 `v_lane_mask` 临时接管任意几条 lane 做观测 |
+| 需要诊断探针 | `--dpr` 生成一个虚拟 controller，用 `v_lane_mask` 按 Group 临时接管 lane 做观测 |
 
 ### 0.3 什么时候不用
 
@@ -147,10 +147,13 @@ controller 的要求通信；mask 清零后，原 controller 也要等选择、�
 恢复完成才重新使用该 lane。接管和归还允许存在毫秒级过渡期，过渡期间该 lane 的数据
 不要求有效。
 
-DPR 的隔离要求是：**只允许扰动 mask 状态发生变化的 lane**。对于始终满足
-`v_lane_mask[lane] == 0` 的未屏蔽 lane，其他 lane 的 DPR 接管或归还不得改变它的原
-controller 选择、PCLK/RXCLK、复位和 M2P/P2M 数据通路；该 lane 上已经工作的 PCIe
-Link 必须能够继续工作。
+DPR 按 lane Group（即配置的最小分配颗粒度）屏蔽，不支持 Group 内逐 bit 独立屏蔽。
+同一 Group 的 `v_lane_mask` 位必须全 0 或全 1；例如颗粒度为 x2 时只允许 `00`/`11`，
+不允许 `01`/`10`。RTL 使用该 Group 最低编号 lane 的 mask bit 作为整个 Group 的代表位。
+
+DPR 的隔离要求是：**只允许扰动 mask 状态发生变化的 Group**。对于 mask 保持全 0 的
+未屏蔽 Group，其他 Group 的 DPR 接管或归还不得改变它的原 controller 选择、
+PCLK/RXCLK、复位和 M2P/P2M 数据通路；该 Group 上已经工作的 PCIe Link 必须继续工作。
 
 ### 0.6 硬性限制
 

@@ -29,8 +29,8 @@ elaboration or simulation failure:
   - RTL and testbench for one config set must be generated with the same
     --pclk-mode and --dpr. `generate all` does that for you; generating them
     separately does not.
-  - --dpr requires --sel-mode sync, and only works with pclk_as_phy_output
-    (see design_notes.md 4.8 for why the other architecture deadlocks).
+  - --dpr requires --sel-mode sync. PHY-input mode needs an external
+    dpr_pclk and returns per-lane dpr_rx_clk (see design_notes.md 4.8).
 
 These flags are read from the command line and nowhere else. A config set may
 also contain gen_flags.txt, but that belongs to the Qt front end -- it is how
@@ -78,7 +78,7 @@ VERIBLE_FLAGS_HELP = (
 )
 DPR_HELP = (
     "Also generate (RTL) / instantiate (testbench) the DPR diagnostic-probe "
-    "overlay. Requires --sel-mode sync and --pclk-mode pclk_as_phy_output, and "
+    "overlay. Requires --sel-mode sync; PHY-input mode needs an external dpr_pclk, and "
     "must match between an rtl and tb generated for the same config set."
 )
 
@@ -138,25 +138,6 @@ def validate_dpr(dpr, pclk_mode, sel_mode=None):
         # safe when every branch shares one clock domain, which DPR (v_lane_mask
         # driven independently of mode) can't guarantee.
         raise SystemExit(f"--dpr requires --sel-mode sync (got --sel-mode {sel_mode})")
-    if pclk_mode == "pclk_as_phy_input":
-        # In this scheme there is no free-running per-lane PHY clock for DPR to
-        # take its own working clock from. gen_clk_mux_phy_input would derive
-        # dpr_pclk from real_pclk[] -- the ALREADY-GATED clk_or output of the
-        # lane's real candidates -- which deadlocks: handing the lane to DPR
-        # gates every real branch off, real_pclk[] stops, dpr_pclk stops, and
-        # the DPR branch flop inside pipe_lane_sel_sync (clocked by dpr_pclk)
-        # can never change again, so the lane is neither usable by DPR nor
-        # releasable back to its real owner. pclk_as_phy_output has no such
-        # loop: there dpr_pclk comes from phy_pclk_out[], which PHY drives
-        # unconditionally. Refused here rather than emitting RTL that
-        # elaborates and simulates right up until the first v_lane_mask
-        # assertion. See design_notes.md 4.x.
-        raise SystemExit(
-            "--dpr is not supported with --pclk-mode pclk_as_phy_input: DPR has no "
-            "free-running clock source in that architecture, so the generated "
-            "dpr_pclk would stop the moment DPR takes a lane. Use --pclk-mode "
-            "pclk_as_phy_output (--arch original_pipe) for a DPR overlay."
-        )
 
 
 def cmd_generate_rtl(argv):

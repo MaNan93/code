@@ -1195,8 +1195,19 @@ def gen_data_p2m(cfg, pclk_mode="pclk_as_phy_output", dpr=False):
                     din.append(f"phy_phy2mac[{hit[0][0]}]")
                     sel_bits.append(f"seltgt_g{gid}_l{hit[0][0]}[{i}]")
                 else:
+                    # Branch i belongs to a DIFFERENT candidate than this
+                    # port's own controller, so it never feeds this port's
+                    # din -- but branch i can still be the group's CURRENT
+                    # owner (some other real candidate actively using this
+                    # lane right now), and this sel vector must say so, or
+                    # every branch but this port's own reads as "nobody
+                    # home" (the transient NOV gap) even in the steady
+                    # state where another candidate genuinely owns the
+                    # lane. Any lane in the group carries the same
+                    # per-branch ownership bit (they share one dec_tgt.gN
+                    # input), so g.lanes[0]'s own seltgt is as good as any.
                     din.append(f"{c.lname}_p2m_tie")
-                    sel_bits.append("1'b0")
+                    sel_bits.append(f"seltgt_g{gid}_l{g.lanes[0]}[{i}]")
             L.append(
                 f"    pipe_lane_data_mux #(.WIDTH(PHY2MAC_W), "
                 f".N({g.n})) u_p2m_{c.lname}_{cl} ("

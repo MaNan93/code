@@ -74,7 +74,7 @@ module tb_pipe_lane_mapper;
     logic dpr_rst_n = 1'b1;
     mac2phy_lane_t [NL-1:0] dpr_mac2phy = '0;
     phy2mac_lane_t [NL-1:0] dpr_phy2mac;
-    logic dpr_pclk;   // DPR's own derived working clock, DUT output
+    logic dpr_pclk;   // derived working clock, DUT output
 
     pipe_lane_mapper #(
         .NL (NL),
@@ -669,7 +669,12 @@ module tb_pipe_lane_mapper;
             automatic int op = ctrl_lane_of(mode, l);
             automatic int unsigned err_before;
             v_lane_mask = '0;
-            v_lane_mask[l] = 1'b1;
+            case (l)
+                0: v_lane_mask = NL'(7);
+                3: v_lane_mask = NL'(56);
+                6: v_lane_mask = NL'(448);
+                9: v_lane_mask = NL'(3584);
+            endcase
             #SETTLE;
             err_before = err_count;
             case (oid)
@@ -708,9 +713,11 @@ module tb_pipe_lane_mapper;
 `endif
 
         ctrl_rst_n = '0;
+        dpr_rst_n = 0;
         mode = '0;
         #100;
         ctrl_rst_n = '1;
+        dpr_rst_n = 1;
         #SETTLE;
 
         check_mode(0);

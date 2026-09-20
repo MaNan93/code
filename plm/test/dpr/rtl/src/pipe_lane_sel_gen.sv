@@ -17,7 +17,7 @@ module pipe_lane_sel_gen #(
     input logic [NC-1:0] ctrl_rst_n,
     input logic [NL-1:0] v_lane_mask,
     input logic dpr_rst_n,
-    input logic dpr_pclk,   // DPR's own working clock, from clk_mux
+    input logic dpr_pclk,   // external in PHY-input mode; derived in PHY-output mode
     output lane_sel_t sel_tgt,   // final effective selection after pipe_lane_sel_sync synchronization; used by clk_mux/data mux
     output lane_sel_t dec_tgt   // decoder's raw (unsynchronized) target, DPR-combined; used by rst_mux
 );

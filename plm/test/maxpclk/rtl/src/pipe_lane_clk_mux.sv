@@ -25,15 +25,15 @@ module pipe_lane_clk_mux #(
     input logic [3:0] seltgt_g3_l9,   // dec_tgt.g3 already synchronized into this lane's owning candidate's own ctrl lane's clock, from sel_gen -- also gates phy_pclk
     input logic [3:0] seltgt_g3_l10,   // dec_tgt.g3 already synchronized into this lane's owning candidate's own ctrl lane's clock, from sel_gen -- also gates phy_pclk
     input logic [3:0] seltgt_g3_l11,   // dec_tgt.g3 already synchronized into this lane's owning candidate's own ctrl lane's clock, from sel_gen -- also gates phy_pclk
-    input logic [1:0] rxclk_en_g1_l3,   // dec_tgt.g1 already synchronized into rx_clk[3]'s domain, from sel_gen
-    input logic [1:0] rxclk_en_g1_l4,   // dec_tgt.g1 already synchronized into rx_clk[4]'s domain, from sel_gen
-    input logic [1:0] rxclk_en_g1_l5,   // dec_tgt.g1 already synchronized into rx_clk[5]'s domain, from sel_gen
-    input logic [1:0] rxclk_en_g2_l6,   // dec_tgt.g2 already synchronized into rx_clk[6]'s domain, from sel_gen
-    input logic [1:0] rxclk_en_g2_l7,   // dec_tgt.g2 already synchronized into rx_clk[7]'s domain, from sel_gen
-    input logic [1:0] rxclk_en_g2_l8,   // dec_tgt.g2 already synchronized into rx_clk[8]'s domain, from sel_gen
-    input logic [3:0] rxclk_en_g3_l9,   // dec_tgt.g3 already synchronized into rx_clk[9]'s domain, from sel_gen
-    input logic [3:0] rxclk_en_g3_l10,   // dec_tgt.g3 already synchronized into rx_clk[10]'s domain, from sel_gen
-    input logic [3:0] rxclk_en_g3_l11,   // dec_tgt.g3 already synchronized into rx_clk[11]'s domain, from sel_gen
+    input logic [1:0] rxclk_en_g1_l3,
+    input logic [1:0] rxclk_en_g1_l4,
+    input logic [1:0] rxclk_en_g1_l5,
+    input logic [1:0] rxclk_en_g2_l6,
+    input logic [1:0] rxclk_en_g2_l7,
+    input logic [1:0] rxclk_en_g2_l8,
+    input logic [3:0] rxclk_en_g3_l9,
+    input logic [3:0] rxclk_en_g3_l10,
+    input logic [3:0] rxclk_en_g3_l11,
     output logic [NL-1:0] phy_pclk,
     output logic [11:0] ctrla_rx_clk,
     output logic [5:0] ctrlb_rx_clk,
@@ -41,15 +41,9 @@ module pipe_lane_clk_mux #(
     output logic [2:0] ctrld_rx_clk
 );
 
-    //------------------------------------------------------------
-    // phy_pclk: glitch-free per-lane select among the owning group's
-    // candidate controllers' own per-ctrl-lane pclk.
-    //------------------------------------------------------------
-    assign phy_pclk[0] = ctrla_pclk[0];  // G0 direct to CtrlA
-    assign phy_pclk[1] = ctrla_pclk[1];  // G0 direct to CtrlA
-    assign phy_pclk[2] = ctrla_pclk[2];  // G0 direct to CtrlA
-
-    // G1 lane3~5: CtrlA, CtrlB, per-lane glitch-free select
+    assign phy_pclk[0] = ctrla_pclk[0];
+    assign phy_pclk[1] = ctrla_pclk[1];
+    assign phy_pclk[2] = ctrla_pclk[2];
     logic [1:0] pclk_gated_g1_l3;
     pipe_lane_clk_gate u_pclk_gate_g1_l3_b0 (.clk_in(ctrla_pclk[3]), .en(seltgt_g1_l3[0]), .test_en(test_en), .clk_out(pclk_gated_g1_l3[0]));
     pipe_lane_clk_gate u_pclk_gate_g1_l3_b1 (.clk_in(ctrlb_pclk[0]), .en(seltgt_g1_l3[1]), .test_en(test_en), .clk_out(pclk_gated_g1_l3[1]));
@@ -65,7 +59,6 @@ module pipe_lane_clk_mux #(
     pipe_lane_clk_gate u_pclk_gate_g1_l5_b1 (.clk_in(ctrlb_pclk[2]), .en(seltgt_g1_l5[1]), .test_en(test_en), .clk_out(pclk_gated_g1_l5[1]));
     pipe_lane_clk_or #(.N(2)) u_pclk_or_g1_l5 (.clk_in(pclk_gated_g1_l5), .clk_out(phy_pclk[5]));
 
-    // G2 lane6~8: CtrlA, CtrlC, per-lane glitch-free select
     logic [1:0] pclk_gated_g2_l6;
     pipe_lane_clk_gate u_pclk_gate_g2_l6_b0 (.clk_in(ctrla_pclk[6]), .en(seltgt_g2_l6[0]), .test_en(test_en), .clk_out(pclk_gated_g2_l6[0]));
     pipe_lane_clk_gate u_pclk_gate_g2_l6_b1 (.clk_in(ctrlc_pclk[0]), .en(seltgt_g2_l6[1]), .test_en(test_en), .clk_out(pclk_gated_g2_l6[1]));
@@ -81,7 +74,6 @@ module pipe_lane_clk_mux #(
     pipe_lane_clk_gate u_pclk_gate_g2_l8_b1 (.clk_in(ctrlc_pclk[2]), .en(seltgt_g2_l8[1]), .test_en(test_en), .clk_out(pclk_gated_g2_l8[1]));
     pipe_lane_clk_or #(.N(2)) u_pclk_or_g2_l8 (.clk_in(pclk_gated_g2_l8), .clk_out(phy_pclk[8]));
 
-    // G3 lane9~11: CtrlA, CtrlB, CtrlC, CtrlD, per-lane glitch-free select
     logic [3:0] pclk_gated_g3_l9;
     pipe_lane_clk_gate u_pclk_gate_g3_l9_b0 (.clk_in(ctrla_pclk[9]), .en(seltgt_g3_l9[0]), .test_en(test_en), .clk_out(pclk_gated_g3_l9[0]));
     pipe_lane_clk_gate u_pclk_gate_g3_l9_b1 (.clk_in(ctrlb_pclk[3]), .en(seltgt_g3_l9[1]), .test_en(test_en), .clk_out(pclk_gated_g3_l9[1]));

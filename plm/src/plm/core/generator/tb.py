@@ -437,9 +437,16 @@ def gen_tb(cfg, pclk_mode="pclk_as_phy_output", dpr=False):
             # each BBM lane has its own independent seltgt_g{gid}_l{l}, so
             # the monitor is per lane, not per group. Every candidate's own
             # designated ctrl lane for that PHY lane is checked individually against
-            # that candidate's own bit, not gated on the whole group being
-            # idle -- see gen_data_p2m()'s docstring: a ctrl lane's mux output is
-            # governed entirely by its own owning candidate's single bit.
+            # SAFE_P2M is only the group's output during the true all-zero NOV
+            # gap (every candidate's own bit 0 at once) -- see gen_data_p2m():
+            # a non-owning candidate's own din slot is that candidate's TIE
+            # value, not SAFE_P2M, so a candidate whose own bit is 0 while a
+            # DIFFERENT real candidate's bit is 1 (the steady-state case, not
+            # a handoff) reads its tie value, not SAFE_P2M. So this checks
+            # every candidate together, gated on the same all-zero condition
+            # the M2P check above already uses -- not per-candidate on that
+            # candidate's own bit alone, which is also 0 throughout the
+            # entire time some OTHER candidate owns the lane.
             L.append("    //------------------------------------------------------------")
             L.append("    // NOV monitor: one per BBM lane (each lane's seltgt is its own")
             L.append("    // independent sync result, not shared across the group).")
@@ -474,21 +481,20 @@ def gen_tb(cfg, pclk_mode="pclk_as_phy_output", dpr=False):
                         f'            chk($onehot0(sel_snap), "seltgt_g{g.gid}_l{l} not one-hot0 (>1 branch enabled)");'
                     )
                     L.append("")
-                    L.append(f"            if (sel_snap == '0 && dut.seltgt_g{g.gid}_l{l} == '0)")
+                    rx_vector = f"{{{', '.join(f'dut.rxclk_en_g{g.gid}_l{l}[{i}]' for i in reversed(range(n)))}}}" if dpr else f"dut.seltgt_g{g.gid}_l{l}"
+                    L.append(f"            if (sel_snap == '0 && dut.seltgt_g{g.gid}_l{l} == '0) begin")
                     L.append(f"                chk_m2p(phy_mac2phy[{l}], SAFE_M2P,")
                     L.append(f'                    "G{g.gid} lane{l}: sel==0 NOV gap");')
-                    L.append("")
-                    for i, c in enumerate(g.cands):
+                    L.append(f"                if ({rx_vector} == '0) begin")
+                    for c in g.cands:
                         cc_ = cfg.controllers[c]
                         cl = ctrl_lane_of_cand[c]
-                        rx_sel = f"dut.rxclk_en_g{g.gid}_l{l}[{i}]" if dpr else f"dut.seltgt_g{g.gid}_l{l}[{i}]"
                         L.append(
-                            f"            if (sel_snap[{i}] == 1'b0 && {rx_sel} == 1'b0)"
+                            f"                    chk_p2m({cc_.lname}_phy2mac[{cl}], exp_safe_p2m,"
                         )
-                        L.append(
-                            f"                chk_p2m({cc_.lname}_phy2mac[{cl}], exp_safe_p2m,"
-                        )
-                        L.append(f'                    "G{g.gid} {cc_.name}[{cl}]: not owner");')
+                        L.append(f'                        "G{g.gid} {cc_.name}[{cl}]: not owner");')
+                    L.append("                end")
+                    L.append("            end")
                     L.append("            err_safe_state += (err_count - err_before);")
                     L.append("        end")
                     L.append("    end")

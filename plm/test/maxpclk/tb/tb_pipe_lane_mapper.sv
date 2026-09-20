@@ -413,16 +413,16 @@ module tb_pipe_lane_mapper;
             err_before = err_count;
             chk($onehot0(sel_snap), "seltgt_g1_l3 not one-hot0 (>1 branch enabled)");
 
-            if (sel_snap == '0 && dut.seltgt_g1_l3 == '0)
+            if (sel_snap == '0 && dut.seltgt_g1_l3 == '0) begin
                 chk_m2p(phy_mac2phy[3], SAFE_M2P,
                     "G1 lane3: sel==0 NOV gap");
-
-            if (sel_snap[0] == 1'b0 && dut.seltgt_g1_l3[0] == 1'b0)
-                chk_p2m(ctrla_phy2mac[3], exp_safe_p2m,
-                    "G1 CtrlA[3]: not owner");
-            if (sel_snap[1] == 1'b0 && dut.seltgt_g1_l3[1] == 1'b0)
-                chk_p2m(ctrlb_phy2mac[0], exp_safe_p2m,
-                    "G1 CtrlB[0]: not owner");
+                if (dut.seltgt_g1_l3 == '0) begin
+                    chk_p2m(ctrla_phy2mac[3], exp_safe_p2m,
+                        "G1 CtrlA[3]: not owner");
+                    chk_p2m(ctrlb_phy2mac[0], exp_safe_p2m,
+                        "G1 CtrlB[0]: not owner");
+                end
+            end
             err_safe_state += (err_count - err_before);
         end
     end
@@ -438,16 +438,16 @@ module tb_pipe_lane_mapper;
             err_before = err_count;
             chk($onehot0(sel_snap), "seltgt_g1_l4 not one-hot0 (>1 branch enabled)");
 
-            if (sel_snap == '0 && dut.seltgt_g1_l4 == '0)
+            if (sel_snap == '0 && dut.seltgt_g1_l4 == '0) begin
                 chk_m2p(phy_mac2phy[4], SAFE_M2P,
                     "G1 lane4: sel==0 NOV gap");
-
-            if (sel_snap[0] == 1'b0 && dut.seltgt_g1_l4[0] == 1'b0)
-                chk_p2m(ctrla_phy2mac[4], exp_safe_p2m,
-                    "G1 CtrlA[4]: not owner");
-            if (sel_snap[1] == 1'b0 && dut.seltgt_g1_l4[1] == 1'b0)
-                chk_p2m(ctrlb_phy2mac[1], exp_safe_p2m,
-                    "G1 CtrlB[1]: not owner");
+                if (dut.seltgt_g1_l4 == '0) begin
+                    chk_p2m(ctrla_phy2mac[4], exp_safe_p2m,
+                        "G1 CtrlA[4]: not owner");
+                    chk_p2m(ctrlb_phy2mac[1], exp_safe_p2m,
+                        "G1 CtrlB[1]: not owner");
+                end
+            end
             err_safe_state += (err_count - err_before);
         end
     end
@@ -463,16 +463,16 @@ module tb_pipe_lane_mapper;
             err_before = err_count;
             chk($onehot0(sel_snap), "seltgt_g1_l5 not one-hot0 (>1 branch enabled)");
 
-            if (sel_snap == '0 && dut.seltgt_g1_l5 == '0)
+            if (sel_snap == '0 && dut.seltgt_g1_l5 == '0) begin
                 chk_m2p(phy_mac2phy[5], SAFE_M2P,
                     "G1 lane5: sel==0 NOV gap");
-
-            if (sel_snap[0] == 1'b0 && dut.seltgt_g1_l5[0] == 1'b0)
-                chk_p2m(ctrla_phy2mac[5], exp_safe_p2m,
-                    "G1 CtrlA[5]: not owner");
-            if (sel_snap[1] == 1'b0 && dut.seltgt_g1_l5[1] == 1'b0)
-                chk_p2m(ctrlb_phy2mac[2], exp_safe_p2m,
-                    "G1 CtrlB[2]: not owner");
+                if (dut.seltgt_g1_l5 == '0) begin
+                    chk_p2m(ctrla_phy2mac[5], exp_safe_p2m,
+                        "G1 CtrlA[5]: not owner");
+                    chk_p2m(ctrlb_phy2mac[2], exp_safe_p2m,
+                        "G1 CtrlB[2]: not owner");
+                end
+            end
             err_safe_state += (err_count - err_before);
         end
     end
@@ -488,16 +488,16 @@ module tb_pipe_lane_mapper;
             err_before = err_count;
             chk($onehot0(sel_snap), "seltgt_g2_l6 not one-hot0 (>1 branch enabled)");
 
-            if (sel_snap == '0 && dut.seltgt_g2_l6 == '0)
+            if (sel_snap == '0 && dut.seltgt_g2_l6 == '0) begin
                 chk_m2p(phy_mac2phy[6], SAFE_M2P,
                     "G2 lane6: sel==0 NOV gap");
-
-            if (sel_snap[0] == 1'b0 && dut.seltgt_g2_l6[0] == 1'b0)
-                chk_p2m(ctrla_phy2mac[6], exp_safe_p2m,
-                    "G2 CtrlA[6]: not owner");
-            if (sel_snap[1] == 1'b0 && dut.seltgt_g2_l6[1] == 1'b0)
-                chk_p2m(ctrlc_phy2mac[0], exp_safe_p2m,
-                    "G2 CtrlC[0]: not owner");
+                if (dut.seltgt_g2_l6 == '0) begin
+                    chk_p2m(ctrla_phy2mac[6], exp_safe_p2m,
+                        "G2 CtrlA[6]: not owner");
+                    chk_p2m(ctrlc_phy2mac[0], exp_safe_p2m,
+                        "G2 CtrlC[0]: not owner");
+                end
+            end
             err_safe_state += (err_count - err_before);
         end
     end
@@ -513,16 +513,16 @@ module tb_pipe_lane_mapper;
             err_before = err_count;
             chk($onehot0(sel_snap), "seltgt_g2_l7 not one-hot0 (>1 branch enabled)");
 
-            if (sel_snap == '0 && dut.seltgt_g2_l7 == '0)
+            if (sel_snap == '0 && dut.seltgt_g2_l7 == '0) begin
                 chk_m2p(phy_mac2phy[7], SAFE_M2P,
                     "G2 lane7: sel==0 NOV gap");
-
-            if (sel_snap[0] == 1'b0 && dut.seltgt_g2_l7[0] == 1'b0)
-                chk_p2m(ctrla_phy2mac[7], exp_safe_p2m,
-                    "G2 CtrlA[7]: not owner");
-            if (sel_snap[1] == 1'b0 && dut.seltgt_g2_l7[1] == 1'b0)
-                chk_p2m(ctrlc_phy2mac[1], exp_safe_p2m,
-                    "G2 CtrlC[1]: not owner");
+                if (dut.seltgt_g2_l7 == '0) begin
+                    chk_p2m(ctrla_phy2mac[7], exp_safe_p2m,
+                        "G2 CtrlA[7]: not owner");
+                    chk_p2m(ctrlc_phy2mac[1], exp_safe_p2m,
+                        "G2 CtrlC[1]: not owner");
+                end
+            end
             err_safe_state += (err_count - err_before);
         end
     end
@@ -538,16 +538,16 @@ module tb_pipe_lane_mapper;
             err_before = err_count;
             chk($onehot0(sel_snap), "seltgt_g2_l8 not one-hot0 (>1 branch enabled)");
 
-            if (sel_snap == '0 && dut.seltgt_g2_l8 == '0)
+            if (sel_snap == '0 && dut.seltgt_g2_l8 == '0) begin
                 chk_m2p(phy_mac2phy[8], SAFE_M2P,
                     "G2 lane8: sel==0 NOV gap");
-
-            if (sel_snap[0] == 1'b0 && dut.seltgt_g2_l8[0] == 1'b0)
-                chk_p2m(ctrla_phy2mac[8], exp_safe_p2m,
-                    "G2 CtrlA[8]: not owner");
-            if (sel_snap[1] == 1'b0 && dut.seltgt_g2_l8[1] == 1'b0)
-                chk_p2m(ctrlc_phy2mac[2], exp_safe_p2m,
-                    "G2 CtrlC[2]: not owner");
+                if (dut.seltgt_g2_l8 == '0) begin
+                    chk_p2m(ctrla_phy2mac[8], exp_safe_p2m,
+                        "G2 CtrlA[8]: not owner");
+                    chk_p2m(ctrlc_phy2mac[2], exp_safe_p2m,
+                        "G2 CtrlC[2]: not owner");
+                end
+            end
             err_safe_state += (err_count - err_before);
         end
     end
@@ -563,22 +563,20 @@ module tb_pipe_lane_mapper;
             err_before = err_count;
             chk($onehot0(sel_snap), "seltgt_g3_l9 not one-hot0 (>1 branch enabled)");
 
-            if (sel_snap == '0 && dut.seltgt_g3_l9 == '0)
+            if (sel_snap == '0 && dut.seltgt_g3_l9 == '0) begin
                 chk_m2p(phy_mac2phy[9], SAFE_M2P,
                     "G3 lane9: sel==0 NOV gap");
-
-            if (sel_snap[0] == 1'b0 && dut.seltgt_g3_l9[0] == 1'b0)
-                chk_p2m(ctrla_phy2mac[9], exp_safe_p2m,
-                    "G3 CtrlA[9]: not owner");
-            if (sel_snap[1] == 1'b0 && dut.seltgt_g3_l9[1] == 1'b0)
-                chk_p2m(ctrlb_phy2mac[3], exp_safe_p2m,
-                    "G3 CtrlB[3]: not owner");
-            if (sel_snap[2] == 1'b0 && dut.seltgt_g3_l9[2] == 1'b0)
-                chk_p2m(ctrlc_phy2mac[3], exp_safe_p2m,
-                    "G3 CtrlC[3]: not owner");
-            if (sel_snap[3] == 1'b0 && dut.seltgt_g3_l9[3] == 1'b0)
-                chk_p2m(ctrld_phy2mac[0], exp_safe_p2m,
-                    "G3 CtrlD[0]: not owner");
+                if (dut.seltgt_g3_l9 == '0) begin
+                    chk_p2m(ctrla_phy2mac[9], exp_safe_p2m,
+                        "G3 CtrlA[9]: not owner");
+                    chk_p2m(ctrlb_phy2mac[3], exp_safe_p2m,
+                        "G3 CtrlB[3]: not owner");
+                    chk_p2m(ctrlc_phy2mac[3], exp_safe_p2m,
+                        "G3 CtrlC[3]: not owner");
+                    chk_p2m(ctrld_phy2mac[0], exp_safe_p2m,
+                        "G3 CtrlD[0]: not owner");
+                end
+            end
             err_safe_state += (err_count - err_before);
         end
     end
@@ -594,22 +592,20 @@ module tb_pipe_lane_mapper;
             err_before = err_count;
             chk($onehot0(sel_snap), "seltgt_g3_l10 not one-hot0 (>1 branch enabled)");
 
-            if (sel_snap == '0 && dut.seltgt_g3_l10 == '0)
+            if (sel_snap == '0 && dut.seltgt_g3_l10 == '0) begin
                 chk_m2p(phy_mac2phy[10], SAFE_M2P,
                     "G3 lane10: sel==0 NOV gap");
-
-            if (sel_snap[0] == 1'b0 && dut.seltgt_g3_l10[0] == 1'b0)
-                chk_p2m(ctrla_phy2mac[10], exp_safe_p2m,
-                    "G3 CtrlA[10]: not owner");
-            if (sel_snap[1] == 1'b0 && dut.seltgt_g3_l10[1] == 1'b0)
-                chk_p2m(ctrlb_phy2mac[4], exp_safe_p2m,
-                    "G3 CtrlB[4]: not owner");
-            if (sel_snap[2] == 1'b0 && dut.seltgt_g3_l10[2] == 1'b0)
-                chk_p2m(ctrlc_phy2mac[4], exp_safe_p2m,
-                    "G3 CtrlC[4]: not owner");
-            if (sel_snap[3] == 1'b0 && dut.seltgt_g3_l10[3] == 1'b0)
-                chk_p2m(ctrld_phy2mac[1], exp_safe_p2m,
-                    "G3 CtrlD[1]: not owner");
+                if (dut.seltgt_g3_l10 == '0) begin
+                    chk_p2m(ctrla_phy2mac[10], exp_safe_p2m,
+                        "G3 CtrlA[10]: not owner");
+                    chk_p2m(ctrlb_phy2mac[4], exp_safe_p2m,
+                        "G3 CtrlB[4]: not owner");
+                    chk_p2m(ctrlc_phy2mac[4], exp_safe_p2m,
+                        "G3 CtrlC[4]: not owner");
+                    chk_p2m(ctrld_phy2mac[1], exp_safe_p2m,
+                        "G3 CtrlD[1]: not owner");
+                end
+            end
             err_safe_state += (err_count - err_before);
         end
     end
@@ -625,22 +621,20 @@ module tb_pipe_lane_mapper;
             err_before = err_count;
             chk($onehot0(sel_snap), "seltgt_g3_l11 not one-hot0 (>1 branch enabled)");
 
-            if (sel_snap == '0 && dut.seltgt_g3_l11 == '0)
+            if (sel_snap == '0 && dut.seltgt_g3_l11 == '0) begin
                 chk_m2p(phy_mac2phy[11], SAFE_M2P,
                     "G3 lane11: sel==0 NOV gap");
-
-            if (sel_snap[0] == 1'b0 && dut.seltgt_g3_l11[0] == 1'b0)
-                chk_p2m(ctrla_phy2mac[11], exp_safe_p2m,
-                    "G3 CtrlA[11]: not owner");
-            if (sel_snap[1] == 1'b0 && dut.seltgt_g3_l11[1] == 1'b0)
-                chk_p2m(ctrlb_phy2mac[5], exp_safe_p2m,
-                    "G3 CtrlB[5]: not owner");
-            if (sel_snap[2] == 1'b0 && dut.seltgt_g3_l11[2] == 1'b0)
-                chk_p2m(ctrlc_phy2mac[5], exp_safe_p2m,
-                    "G3 CtrlC[5]: not owner");
-            if (sel_snap[3] == 1'b0 && dut.seltgt_g3_l11[3] == 1'b0)
-                chk_p2m(ctrld_phy2mac[2], exp_safe_p2m,
-                    "G3 CtrlD[2]: not owner");
+                if (dut.seltgt_g3_l11 == '0) begin
+                    chk_p2m(ctrla_phy2mac[11], exp_safe_p2m,
+                        "G3 CtrlA[11]: not owner");
+                    chk_p2m(ctrlb_phy2mac[5], exp_safe_p2m,
+                        "G3 CtrlB[5]: not owner");
+                    chk_p2m(ctrlc_phy2mac[5], exp_safe_p2m,
+                        "G3 CtrlC[5]: not owner");
+                    chk_p2m(ctrld_phy2mac[2], exp_safe_p2m,
+                        "G3 CtrlD[2]: not owner");
+                end
+            end
             err_safe_state += (err_count - err_before);
         end
     end

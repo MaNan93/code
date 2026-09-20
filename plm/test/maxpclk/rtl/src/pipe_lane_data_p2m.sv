@@ -37,55 +37,55 @@ module pipe_lane_data_p2m #(
     assign ctrla_phy2mac[1] = phy_phy2mac[1];  // direct connection to lane1
     assign ctrla_phy2mac[2] = phy_phy2mac[2];  // direct connection to lane2
     pipe_lane_data_mux #(.WIDTH(PHY2MAC_W), .N(2)) u_p2m_ctrla_3 (
-        .sel  ({1'b0, seltgt_g1_l3[0]}),
+        .sel  ({seltgt_g1_l3[1], seltgt_g1_l3[0]}),
         .din  ({ctrla_p2m_tie, phy_phy2mac[3]}),
         .safe (SAFE_P2M),
         .dout (ctrla_phy2mac[3])
     );
     pipe_lane_data_mux #(.WIDTH(PHY2MAC_W), .N(2)) u_p2m_ctrla_4 (
-        .sel  ({1'b0, seltgt_g1_l4[0]}),
+        .sel  ({seltgt_g1_l3[1], seltgt_g1_l4[0]}),
         .din  ({ctrla_p2m_tie, phy_phy2mac[4]}),
         .safe (SAFE_P2M),
         .dout (ctrla_phy2mac[4])
     );
     pipe_lane_data_mux #(.WIDTH(PHY2MAC_W), .N(2)) u_p2m_ctrla_5 (
-        .sel  ({1'b0, seltgt_g1_l5[0]}),
+        .sel  ({seltgt_g1_l3[1], seltgt_g1_l5[0]}),
         .din  ({ctrla_p2m_tie, phy_phy2mac[5]}),
         .safe (SAFE_P2M),
         .dout (ctrla_phy2mac[5])
     );
     pipe_lane_data_mux #(.WIDTH(PHY2MAC_W), .N(2)) u_p2m_ctrla_6 (
-        .sel  ({1'b0, seltgt_g2_l6[0]}),
+        .sel  ({seltgt_g2_l6[1], seltgt_g2_l6[0]}),
         .din  ({ctrla_p2m_tie, phy_phy2mac[6]}),
         .safe (SAFE_P2M),
         .dout (ctrla_phy2mac[6])
     );
     pipe_lane_data_mux #(.WIDTH(PHY2MAC_W), .N(2)) u_p2m_ctrla_7 (
-        .sel  ({1'b0, seltgt_g2_l7[0]}),
+        .sel  ({seltgt_g2_l6[1], seltgt_g2_l7[0]}),
         .din  ({ctrla_p2m_tie, phy_phy2mac[7]}),
         .safe (SAFE_P2M),
         .dout (ctrla_phy2mac[7])
     );
     pipe_lane_data_mux #(.WIDTH(PHY2MAC_W), .N(2)) u_p2m_ctrla_8 (
-        .sel  ({1'b0, seltgt_g2_l8[0]}),
+        .sel  ({seltgt_g2_l6[1], seltgt_g2_l8[0]}),
         .din  ({ctrla_p2m_tie, phy_phy2mac[8]}),
         .safe (SAFE_P2M),
         .dout (ctrla_phy2mac[8])
     );
     pipe_lane_data_mux #(.WIDTH(PHY2MAC_W), .N(4)) u_p2m_ctrla_9 (
-        .sel  ({1'b0, 1'b0, 1'b0, seltgt_g3_l9[0]}),
+        .sel  ({seltgt_g3_l9[3], seltgt_g3_l9[2], seltgt_g3_l9[1], seltgt_g3_l9[0]}),
         .din  ({ctrla_p2m_tie, ctrla_p2m_tie, ctrla_p2m_tie, phy_phy2mac[9]}),
         .safe (SAFE_P2M),
         .dout (ctrla_phy2mac[9])
     );
     pipe_lane_data_mux #(.WIDTH(PHY2MAC_W), .N(4)) u_p2m_ctrla_10 (
-        .sel  ({1'b0, 1'b0, 1'b0, seltgt_g3_l10[0]}),
+        .sel  ({seltgt_g3_l9[3], seltgt_g3_l9[2], seltgt_g3_l9[1], seltgt_g3_l10[0]}),
         .din  ({ctrla_p2m_tie, ctrla_p2m_tie, ctrla_p2m_tie, phy_phy2mac[10]}),
         .safe (SAFE_P2M),
         .dout (ctrla_phy2mac[10])
     );
     pipe_lane_data_mux #(.WIDTH(PHY2MAC_W), .N(4)) u_p2m_ctrla_11 (
-        .sel  ({1'b0, 1'b0, 1'b0, seltgt_g3_l11[0]}),
+        .sel  ({seltgt_g3_l9[3], seltgt_g3_l9[2], seltgt_g3_l9[1], seltgt_g3_l11[0]}),
         .din  ({ctrla_p2m_tie, ctrla_p2m_tie, ctrla_p2m_tie, phy_phy2mac[11]}),
         .safe (SAFE_P2M),
         .dout (ctrla_phy2mac[11])
@@ -100,37 +100,37 @@ module pipe_lane_data_p2m #(
     };
 
     pipe_lane_data_mux #(.WIDTH(PHY2MAC_W), .N(2)) u_p2m_ctrlb_0 (
-        .sel  ({seltgt_g1_l3[1], 1'b0}),
+        .sel  ({seltgt_g1_l3[1], seltgt_g1_l3[0]}),
         .din  ({phy_phy2mac[3], ctrlb_p2m_tie}),
         .safe (SAFE_P2M),
         .dout (ctrlb_phy2mac[0])
     );
     pipe_lane_data_mux #(.WIDTH(PHY2MAC_W), .N(2)) u_p2m_ctrlb_1 (
-        .sel  ({seltgt_g1_l4[1], 1'b0}),
+        .sel  ({seltgt_g1_l4[1], seltgt_g1_l3[0]}),
         .din  ({phy_phy2mac[4], ctrlb_p2m_tie}),
         .safe (SAFE_P2M),
         .dout (ctrlb_phy2mac[1])
     );
     pipe_lane_data_mux #(.WIDTH(PHY2MAC_W), .N(2)) u_p2m_ctrlb_2 (
-        .sel  ({seltgt_g1_l5[1], 1'b0}),
+        .sel  ({seltgt_g1_l5[1], seltgt_g1_l3[0]}),
         .din  ({phy_phy2mac[5], ctrlb_p2m_tie}),
         .safe (SAFE_P2M),
         .dout (ctrlb_phy2mac[2])
     );
     pipe_lane_data_mux #(.WIDTH(PHY2MAC_W), .N(4)) u_p2m_ctrlb_3 (
-        .sel  ({1'b0, 1'b0, seltgt_g3_l9[1], 1'b0}),
+        .sel  ({seltgt_g3_l9[3], seltgt_g3_l9[2], seltgt_g3_l9[1], seltgt_g3_l9[0]}),
         .din  ({ctrlb_p2m_tie, ctrlb_p2m_tie, phy_phy2mac[9], ctrlb_p2m_tie}),
         .safe (SAFE_P2M),
         .dout (ctrlb_phy2mac[3])
     );
     pipe_lane_data_mux #(.WIDTH(PHY2MAC_W), .N(4)) u_p2m_ctrlb_4 (
-        .sel  ({1'b0, 1'b0, seltgt_g3_l10[1], 1'b0}),
+        .sel  ({seltgt_g3_l9[3], seltgt_g3_l9[2], seltgt_g3_l10[1], seltgt_g3_l9[0]}),
         .din  ({ctrlb_p2m_tie, ctrlb_p2m_tie, phy_phy2mac[10], ctrlb_p2m_tie}),
         .safe (SAFE_P2M),
         .dout (ctrlb_phy2mac[4])
     );
     pipe_lane_data_mux #(.WIDTH(PHY2MAC_W), .N(4)) u_p2m_ctrlb_5 (
-        .sel  ({1'b0, 1'b0, seltgt_g3_l11[1], 1'b0}),
+        .sel  ({seltgt_g3_l9[3], seltgt_g3_l9[2], seltgt_g3_l11[1], seltgt_g3_l9[0]}),
         .din  ({ctrlb_p2m_tie, ctrlb_p2m_tie, phy_phy2mac[11], ctrlb_p2m_tie}),
         .safe (SAFE_P2M),
         .dout (ctrlb_phy2mac[5])
@@ -145,37 +145,37 @@ module pipe_lane_data_p2m #(
     };
 
     pipe_lane_data_mux #(.WIDTH(PHY2MAC_W), .N(2)) u_p2m_ctrlc_0 (
-        .sel  ({seltgt_g2_l6[1], 1'b0}),
+        .sel  ({seltgt_g2_l6[1], seltgt_g2_l6[0]}),
         .din  ({phy_phy2mac[6], ctrlc_p2m_tie}),
         .safe (SAFE_P2M),
         .dout (ctrlc_phy2mac[0])
     );
     pipe_lane_data_mux #(.WIDTH(PHY2MAC_W), .N(2)) u_p2m_ctrlc_1 (
-        .sel  ({seltgt_g2_l7[1], 1'b0}),
+        .sel  ({seltgt_g2_l7[1], seltgt_g2_l6[0]}),
         .din  ({phy_phy2mac[7], ctrlc_p2m_tie}),
         .safe (SAFE_P2M),
         .dout (ctrlc_phy2mac[1])
     );
     pipe_lane_data_mux #(.WIDTH(PHY2MAC_W), .N(2)) u_p2m_ctrlc_2 (
-        .sel  ({seltgt_g2_l8[1], 1'b0}),
+        .sel  ({seltgt_g2_l8[1], seltgt_g2_l6[0]}),
         .din  ({phy_phy2mac[8], ctrlc_p2m_tie}),
         .safe (SAFE_P2M),
         .dout (ctrlc_phy2mac[2])
     );
     pipe_lane_data_mux #(.WIDTH(PHY2MAC_W), .N(4)) u_p2m_ctrlc_3 (
-        .sel  ({1'b0, seltgt_g3_l9[2], 1'b0, 1'b0}),
+        .sel  ({seltgt_g3_l9[3], seltgt_g3_l9[2], seltgt_g3_l9[1], seltgt_g3_l9[0]}),
         .din  ({ctrlc_p2m_tie, phy_phy2mac[9], ctrlc_p2m_tie, ctrlc_p2m_tie}),
         .safe (SAFE_P2M),
         .dout (ctrlc_phy2mac[3])
     );
     pipe_lane_data_mux #(.WIDTH(PHY2MAC_W), .N(4)) u_p2m_ctrlc_4 (
-        .sel  ({1'b0, seltgt_g3_l10[2], 1'b0, 1'b0}),
+        .sel  ({seltgt_g3_l9[3], seltgt_g3_l10[2], seltgt_g3_l9[1], seltgt_g3_l9[0]}),
         .din  ({ctrlc_p2m_tie, phy_phy2mac[10], ctrlc_p2m_tie, ctrlc_p2m_tie}),
         .safe (SAFE_P2M),
         .dout (ctrlc_phy2mac[4])
     );
     pipe_lane_data_mux #(.WIDTH(PHY2MAC_W), .N(4)) u_p2m_ctrlc_5 (
-        .sel  ({1'b0, seltgt_g3_l11[2], 1'b0, 1'b0}),
+        .sel  ({seltgt_g3_l9[3], seltgt_g3_l11[2], seltgt_g3_l9[1], seltgt_g3_l9[0]}),
         .din  ({ctrlc_p2m_tie, phy_phy2mac[11], ctrlc_p2m_tie, ctrlc_p2m_tie}),
         .safe (SAFE_P2M),
         .dout (ctrlc_phy2mac[5])
@@ -192,19 +192,19 @@ module pipe_lane_data_p2m #(
     };
 
     pipe_lane_data_mux #(.WIDTH(PHY2MAC_W), .N(4)) u_p2m_ctrld_0 (
-        .sel  ({seltgt_g3_l9[3], 1'b0, 1'b0, 1'b0}),
+        .sel  ({seltgt_g3_l9[3], seltgt_g3_l9[2], seltgt_g3_l9[1], seltgt_g3_l9[0]}),
         .din  ({phy_phy2mac[9], ctrld_p2m_tie, ctrld_p2m_tie, ctrld_p2m_tie}),
         .safe (SAFE_P2M),
         .dout (ctrld_phy2mac[0])
     );
     pipe_lane_data_mux #(.WIDTH(PHY2MAC_W), .N(4)) u_p2m_ctrld_1 (
-        .sel  ({seltgt_g3_l10[3], 1'b0, 1'b0, 1'b0}),
+        .sel  ({seltgt_g3_l10[3], seltgt_g3_l9[2], seltgt_g3_l9[1], seltgt_g3_l9[0]}),
         .din  ({phy_phy2mac[10], ctrld_p2m_tie, ctrld_p2m_tie, ctrld_p2m_tie}),
         .safe (SAFE_P2M),
         .dout (ctrld_phy2mac[1])
     );
     pipe_lane_data_mux #(.WIDTH(PHY2MAC_W), .N(4)) u_p2m_ctrld_2 (
-        .sel  ({seltgt_g3_l11[3], 1'b0, 1'b0, 1'b0}),
+        .sel  ({seltgt_g3_l11[3], seltgt_g3_l9[2], seltgt_g3_l9[1], seltgt_g3_l9[0]}),
         .din  ({phy_phy2mac[11], ctrld_p2m_tie, ctrld_p2m_tie, ctrld_p2m_tie}),
         .safe (SAFE_P2M),
         .dout (ctrld_phy2mac[2])

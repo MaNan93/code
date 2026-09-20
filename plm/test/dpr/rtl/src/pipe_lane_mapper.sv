@@ -34,7 +34,7 @@ module pipe_lane_mapper #(
     input logic dpr_rst_n,
     input mac2phy_lane_t [NL-1:0] dpr_mac2phy,
     output phy2mac_lane_t [NL-1:0] dpr_phy2mac,
-    output logic dpr_pclk,   // DPR's own working clock, so external logic can sync to it
+    output logic dpr_pclk,   // derived from PHY output clocks
     // Controller side. Each controller's ports are declared at its own real max_width.
     // CtrlA x12
     input logic ctrla_rst_n,   // already synchronized externally

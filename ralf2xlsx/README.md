@@ -29,12 +29,13 @@ ralf2xlsx top.ralf --dump > new.txt                # 文本化后跟上一版 di
 | 选项 | 说明 |
 | --- | --- |
 | `-t, --top` | 顶层 `block` / `system` 名（同 ralgen 的 `-t`），可给多次；不给则展开所有顶层 system（没有 system 就所有 block） |
-| `-o, --out` | 输出 xlsx，缺省 `<ralf名>.xlsx` |
+| `-o, --out` | 单文件时指定输出 `.xlsx`；多文件时指定输出目录；缺省时各文件在源文件旁生成同名 `.xlsx` |
 | `-I, --incdir` | `source` 的搜索目录，可多次（同 ralgen 的 `-I`） |
 | `-s, --sheet-per-block` | 每个 block/domain 再单独出一张 sheet |
-| `--csv FILE` | 额外导出字段表 CSV（UTF-8 BOM） |
+| `--csv FILE/DIR` | 额外导出字段表 CSV（UTF-8 BOM）；单文件时是文件名，多文件时是输出目录 |
 | `--base ADDR` | 顶层基地址，缺省 0，支持 `0x1000` / `'h1000` |
 | `--addr-mode byte\|word` | RALF 里 `@offset` 的含义，见下 |
+| `--flavor auto\|uvm\|vmm` | field access mode 校验方言：默认 `auto` 接受 UVM/VMM 并集 |
 | `--sort source\|addr` | 行顺序：按 RALF 出现顺序（缺省）或按地址 |
 | `--no-expand-arrays` | 数组只出一行 `name[lo:hi]`，大数组不撑爆表格 |
 | `--check` | 只解析 + 展开，不生成 Excel |

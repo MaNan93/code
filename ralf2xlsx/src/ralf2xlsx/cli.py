@@ -3,8 +3,8 @@
 """
 ralf2xlsx.py -- Synopsys RALF (Register Abstraction Layer File) -> Excel 寄存器表
 
-    python ralf2xlsx.py top.ralf -t <topname> -o regs.xlsx [-I incdir]...
-    python ralf2xlsx.py a.ralf b.ralf c.ralf -o outdir/   # 批量, 各自独立转换
+    ralf2xlsx top.ralf -t <topname> -o regs.xlsx [-I incdir]...
+    ralf2xlsx a.ralf b.ralf c.ralf -o outdir/   # 批量, 各自独立转换
 
 Version History
 ---------------
@@ -1997,10 +1997,10 @@ def main(argv=None):
         description='把 Synopsys RALF 寄存器描述文件转换成 Excel 表格',
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog='例:\n'
-               '  python ralf2xlsx.py top.ralf -t soc -o regmap.xlsx -s\n'
-               '  python ralf2xlsx.py a.ralf b.ralf c.ralf -o outdir/   # 批量, 各自独立转换出各自的 xlsx\n'
-               '  python ralf2xlsx.py top.ralf --check --strict     # CI 里只做检查\n'
-               '  python ralf2xlsx.py top.ralf --dump > new.txt     # 文本化后 diff')
+               '  ralf2xlsx top.ralf -t soc -o regmap.xlsx -s\n'
+               '  ralf2xlsx a.ralf b.ralf c.ralf -o outdir/   # 批量, 各自独立转换出各自的 xlsx\n'
+               '  ralf2xlsx top.ralf --check --strict     # CI 里只做检查\n'
+               '  ralf2xlsx top.ralf --dump > new.txt     # 文本化后 diff')
     ap.add_argument('ralf', nargs='+',
                     help='.ralf 文件; 传多个时逐个独立转换(各自的定义/顶层/输出), 不会互相合并')
     ap.add_argument('-t', '--top', action='append', default=[],

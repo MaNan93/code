@@ -3,18 +3,27 @@
 把 Synopsys `ralgen` 用的 `.ralf` 文件解析、展开层次、算出绝对地址和位域，
 输出成一份可以直接发给设计/软件的 Excel 寄存器表。
 
-## 依赖
+## 安装
+
+推荐通过 wheel 安装：
 
 ```bash
-pip install openpyxl
+pip install ralf2xlsx-*.whl
+```
+
+wheel 会自动安装运行依赖 `openpyxl`，并注册命令行入口：
+
+```bash
+ralf2xlsx --help
 ```
 
 ## 用法
 
 ```bash
-python ralf2xlsx.py top.ralf -t soc -o regmap.xlsx -s
-python ralf2xlsx.py top.ralf --check --strict      # CI 卡关：解析有告警就失败
-python ralf2xlsx.py top.ralf --dump > new.txt      # 文本化后跟上一版 diff
+ralf2xlsx top.ralf -t soc -o regmap.xlsx -s
+ralf2xlsx a.ralf b.ralf c.ralf -o outdir/         # 批量独立转换
+ralf2xlsx top.ralf --check --strict                # CI 卡关：解析有告警就失败
+ralf2xlsx top.ralf --dump > new.txt                # 文本化后跟上一版 diff
 ```
 
 | 选项 | 说明 |
@@ -56,9 +65,10 @@ RALF 的 `@offset` 单位取决于所在 block 的 `bytes`（总线宽度）：
 | `Enums` | 字段枚举值（名字 → 值） |
 | `Warnings` | 解析/展开过程中的全部告警，跟着产物走 |
 
-主表列：Block / Register / Address / Offset / Width / Field / Bits / MSB / LSB / Size /
-Access / Reset / Reset(RALF 原文) / Soft Reset / Volatile / Enum / Constraint /
-R-W Limit / HDL Path / Field Desc / Register Desc。
+主表列：Block / Domain / Register / Kind / Address / Offset / Width(bit) / Field / Bits /
+MSB / LSB / Size / Access / Reset / Reset(RALF) / Soft Reset / Volatile / Enum /
+Constraint / Shared / R-W Limit / Memory / Memory Offset / Backdoor / HDL Path /
+VHDL Path / Local Path / Field Desc / Register Desc。
 
 ## 支持的 RALF 语法
 
@@ -91,5 +101,5 @@ R-W Limit / HDL Path / Field Desc / Register Desc。
 双 domain 的 bridge、block 数组、memory。
 
 ```bash
-python ralf2xlsx.py example.ralf -t soc -o example.xlsx -s
+ralf2xlsx example.ralf -t soc -o example.xlsx -s
 ```

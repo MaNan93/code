@@ -1,5 +1,5 @@
-"""ralf_tools package."""
+"""Synopsys RALF to Excel converter."""
 
-from .ralf2xlsx import main
+from .cli import main
 
 __all__ = ["main"]

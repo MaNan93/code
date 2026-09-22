@@ -15,7 +15,7 @@ dependencies = [
 ]
 
 [project.scripts]
-ralf2xlsx = "ralf2xlsx.ralf2xlsx:main"
+ralf2xlsx = "ralf2xlsx.cli:main"
 
 [tool.setuptools]
 package-dir = {"" = "src"}

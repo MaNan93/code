@@ -4,9 +4,16 @@
 ralf2xlsx.py -- Synopsys RALF (Register Abstraction Layer File) -> Excel 寄存器表
 
     python ralf2xlsx.py top.ralf -t <topname> -o regs.xlsx [-I incdir]...
+    python ralf2xlsx.py a.ralf b.ralf c.ralf -o outdir/   # 批量, 各自独立转换
 
 Version History
 ---------------
+v2.5
+  - Accept multiple .ralf files on the command line. Each file is parsed
+    and elaborated independently (its own definition table, own top
+    selection) and gets its own .xlsx; -o/--csv are treated as an output
+    directory when more than one .ralf is given.
+
 v2.4
   - Fix Tcl '#' comment lexing: '#' starts a comment only at command start;
     literal '#' inside words/doc text no longer truncates the line or loses braces.
@@ -74,7 +81,7 @@ import re
 import sys
 from collections import OrderedDict
 
-VERSION = '2.4'
+VERSION = '2.5'
 
 # ============================================================================
 # 词法分析
@@ -1877,22 +1884,135 @@ def dump_text(ela, out=sys.stdout):
 # main
 # ============================================================================
 
+def _convert_one(args, ralf_path, out_path, csv_path, label=None):
+    """解析+展开+输出单个 .ralf 文件; label 非空时日志加前缀(批量模式用)"""
+    prefix = ('[%s] ' % label) if label else ''
+
+    if not os.path.isfile(ralf_path):
+        sys.stderr.write('%sERROR: 文件不存在: %s\n' % (prefix, ralf_path))
+        return 2
+
+    p = Parser(incdirs=args.incdir, flavor=args.flavor)
+    try:
+        p.parse_file(ralf_path)
+    except (ParseError, OSError) as e:
+        sys.stderr.write('%sRALF 解析失败: %s\n' % (prefix, e))
+        return 2
+    except Exception as e:                      # 兼容性兼底: 不向用户抛 traceback
+        sys.stderr.write('%sRALF 解析出错 (%s): %s\n' % (prefix, type(e).__name__, e))
+        return 2
+
+    tops = list(args.top)
+    if not tops:
+        systems = [n for k, n in p.order if k == 'system']
+        blocks = [n for k, n in p.order if k == 'block']
+        tops = systems or blocks
+        if not tops:
+            sys.stderr.write('%sRALF 里没有 block/system, 无法确定顶层\n' % prefix)
+            return 2
+        if len(tops) > 1:
+            sys.stderr.write('%s[i] 未指定 -t, 展开全部 %d 个顶层: %s\n'
+                             % (prefix, len(tops), ', '.join(tops)))
+
+    base, _ = parse_num(args.base)
+    ela = Elaborator(p, addr_mode=args.addr_mode,
+                     expand_arrays=not args.no_expand_arrays)
+    for t in tops:
+        topdef = p.defs['system'].get(t) or p.defs['block'].get(t)
+        if topdef is None:
+            sys.stderr.write('%s找不到 top: %s (可用: %s)\n' %
+                             (prefix, t, ', '.join('%s %s' % (k, n) for k, n in p.order)))
+            return 2
+        try:
+            ela.walk_block(topdef, topdef.name, base or 0, None)
+        except Exception as e:
+            sys.stderr.write('%s展开 %s 出错 (%s): %s\n' % (prefix, t, type(e).__name__, e))
+            return 2
+
+    if args.sort == 'addr':
+        ela.rows.sort(key=lambda r: (r['block'], r['_addr'], r['reg'],
+                                     r['lsb'] if r['lsb'] != '' else 0))
+        ela.reg_rows.sort(key=lambda r: (r['block'], r['_addr'], r['reg']))
+
+    warn_rows = ([dict(kind='parse', where=w, msg=m) for w, m in p.warnings] +
+                 [dict(kind='elab', where='', msg=m) for m in ela.warnings])
+
+    if args.dump:
+        dump_text(ela)
+
+    if not args.quiet:
+        for w in warn_rows:
+            sys.stderr.write('%s[warn] %s %s\n' % (prefix, ('%s:' % w['where']) if w['where'] else '',
+                                                 w['msg']))
+
+    sys.stderr.write('%sfiles %d | registers %d | fields %d | memories %d | warnings %d\n'
+                     % (prefix, len(p.files), len(ela.reg_rows), len(ela.rows),
+                        len(ela.mem_rows), len(warn_rows)))
+
+    if args.strict and warn_rows:
+        sys.stderr.write('%sERROR: --strict 下有 %d 条 warning, 未生成输出\n' % (prefix, len(warn_rows)))
+        return 3
+
+    if args.check:
+        return 0
+
+    meta = dict(src=os.path.abspath(ralf_path), nfiles=len(p.files),
+                top=', '.join(tops),
+                time=datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                addr_mode='%s offsets (%s), base=%s' %
+                          (args.addr_mode,
+                           'ralgen -B / byte addressing' if args.addr_mode == 'byte'
+                           else 'ralgen default / address units',
+                           hexs(base or 0)),
+                arrays='collapsed' if args.no_expand_arrays else 'expanded',
+                flavor=args.flavor)
+    try:
+        write_xlsx(out_path, ela, meta, warn_rows, sheet_per_block=args.sheet_per_block)
+    except ImportError:
+        sys.stderr.write('%sERROR: 需要 openpyxl, 请先 pip install openpyxl\n' % prefix)
+        return 2
+    except (OSError, IOError) as e:
+        sys.stderr.write('%sERROR: 无法写入 XLSX %s: %s\n' % (prefix, out_path, e))
+        return 2
+    except Exception as e:
+        sys.stderr.write('%sERROR: Excel 输出失败 (%s): %s\n' % (prefix, type(e).__name__, e))
+        return 2
+
+    if csv_path:
+        try:
+            write_csv(csv_path, ela.rows, REG_COLS)
+        except (OSError, IOError) as e:
+            sys.stderr.write('%sERROR: 无法写入 CSV %s: %s\n' % (prefix, csv_path, e))
+            return 2
+        except Exception as e:
+            sys.stderr.write('%sERROR: CSV 输出失败 (%s): %s\n' % (prefix, type(e).__name__, e))
+            return 2
+
+    print('%s[ok] %s' % (prefix, out_path))
+    return 0
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(
         description='把 Synopsys RALF 寄存器描述文件转换成 Excel 表格',
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog='例:\n'
                '  python ralf2xlsx.py top.ralf -t soc -o regmap.xlsx -s\n'
+               '  python ralf2xlsx.py a.ralf b.ralf c.ralf -o outdir/   # 批量, 各自独立转换出各自的 xlsx\n'
                '  python ralf2xlsx.py top.ralf --check --strict     # CI 里只做检查\n'
                '  python ralf2xlsx.py top.ralf --dump > new.txt     # 文本化后 diff')
-    ap.add_argument('ralf', help='顶层 .ralf 文件')
+    ap.add_argument('ralf', nargs='+',
+                    help='.ralf 文件; 传多个时逐个独立转换(各自的定义/顶层/输出), 不会互相合并')
     ap.add_argument('-t', '--top', action='append', default=[],
-                    help='顶层 block/system 名, 可多次; 不给则展开所有顶层 system(没有则所有 block)')
-    ap.add_argument('-o', '--out', help='输出 .xlsx (缺省: <ralf>.xlsx)')
+                    help='顶层 block/system 名, 可多次; 不给则展开所有顶层 system(没有则所有 block); '
+                         '批量模式下对每个文件分别生效')
+    ap.add_argument('-o', '--out',
+                    help='输出 .xlsx: 只传一个 .ralf 时是文件名(缺省 <ralf>.xlsx); '
+                         '传多个 .ralf 时是输出目录(缺省与各自源文件同目录), 每个文件各出一份同名 .xlsx')
     ap.add_argument('-I', '--incdir', action='append', default=[], help='source 搜索目录, 可多次')
     ap.add_argument('-s', '--sheet-per-block', action='store_true',
                     help='每个 block 额外生成一张 sheet')
-    ap.add_argument('--csv', help='同时输出一份 CSV (字段表)')
+    ap.add_argument('--csv', help='同时输出 CSV(字段表); 语义同 -o, 多文件时是目录')
     ap.add_argument('--base', default='0', help='顶层基地址 (缺省 0), 支持 0x / Verilog 格式')
     ap.add_argument('--addr-mode', choices=('byte', 'word'), default='byte',
                     help='RALF 里 @offset 的含义: byte=字节偏移(缺省, 对应 ralgen -B / byte addressing); '
@@ -1910,108 +2030,36 @@ def main(argv=None):
     ap.add_argument('-q', '--quiet', action='store_true', help='不打印 warning')
     args = ap.parse_args(argv)
 
-    if not os.path.isfile(args.ralf):
-        ap.error('文件不存在: %s' % args.ralf)
+    if len(args.ralf) == 1:
+        f = args.ralf[0]
+        out_path = args.out or (os.path.splitext(f)[0] + '.xlsx')
+        return _convert_one(args, f, out_path, args.csv)
 
-    p = Parser(incdirs=args.incdir, flavor=args.flavor)
-    try:
-        p.parse_file(args.ralf)
-    except (ParseError, OSError) as e:
-        sys.stderr.write('RALF 解析失败: %s\n' % e)
-        return 2
-    except Exception as e:                      # 兼容性兼底: 不向用户抛 traceback
-        sys.stderr.write('RALF 解析出错 (%s): %s\n' % (type(e).__name__, e))
-        return 2
-
-    tops = list(args.top)
-    if not tops:
-        systems = [n for k, n in p.order if k == 'system']
-        blocks = [n for k, n in p.order if k == 'block']
-        tops = systems or blocks
-        if not tops:
-            sys.stderr.write('RALF 里没有 block/system, 无法确定顶层\n')
-            return 2
-        if len(tops) > 1:
-            sys.stderr.write('[i] 未指定 -t, 展开全部 %d 个顶层: %s\n'
-                             % (len(tops), ', '.join(tops)))
-
-    base, _ = parse_num(args.base)
-    ela = Elaborator(p, addr_mode=args.addr_mode,
-                     expand_arrays=not args.no_expand_arrays)
-    for t in tops:
-        topdef = p.defs['system'].get(t) or p.defs['block'].get(t)
-        if topdef is None:
-            sys.stderr.write('找不到 top: %s (可用: %s)\n' %
-                             (t, ', '.join('%s %s' % (k, n) for k, n in p.order)))
-            return 2
+    out_dir = args.out
+    if out_dir:
         try:
-            ela.walk_block(topdef, topdef.name, base or 0, None)
-        except Exception as e:
-            sys.stderr.write('展开 %s 出错 (%s): %s\n' % (t, type(e).__name__, e))
+            os.makedirs(out_dir, exist_ok=True)
+        except OSError as e:
+            sys.stderr.write('ERROR: 无法创建输出目录 %s: %s\n' % (out_dir, e))
             return 2
-
-    if args.sort == 'addr':
-        ela.rows.sort(key=lambda r: (r['block'], r['_addr'], r['reg'],
-                                     r['lsb'] if r['lsb'] != '' else 0))
-        ela.reg_rows.sort(key=lambda r: (r['block'], r['_addr'], r['reg']))
-
-    warn_rows = ([dict(kind='parse', where=w, msg=m) for w, m in p.warnings] +
-                 [dict(kind='elab', where='', msg=m) for m in ela.warnings])
-
-    if args.dump:
-        dump_text(ela)
-
-    if not args.quiet:
-        for w in warn_rows:
-            sys.stderr.write('[warn] %s %s\n' % (('%s:' % w['where']) if w['where'] else '',
-                                                 w['msg']))
-
-    sys.stderr.write('files %d | registers %d | fields %d | memories %d | warnings %d\n'
-                     % (len(p.files), len(ela.reg_rows), len(ela.rows),
-                        len(ela.mem_rows), len(warn_rows)))
-
-    if args.strict and warn_rows:
-        sys.stderr.write('ERROR: --strict 下有 %d 条 warning, 未生成输出\n' % len(warn_rows))
-        return 3
-
-    if args.check:
-        return 0
-
-    out = args.out or (os.path.splitext(args.ralf)[0] + '.xlsx')
-    meta = dict(src=os.path.abspath(args.ralf), nfiles=len(p.files),
-                top=', '.join(tops),
-                time=datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-                addr_mode='%s offsets (%s), base=%s' %
-                          (args.addr_mode,
-                           'ralgen -B / byte addressing' if args.addr_mode == 'byte'
-                           else 'ralgen default / address units',
-                           hexs(base or 0)),
-                arrays='collapsed' if args.no_expand_arrays else 'expanded',
-                flavor=args.flavor)
-    try:
-        write_xlsx(out, ela, meta, warn_rows, sheet_per_block=args.sheet_per_block)
-    except ImportError:
-        sys.stderr.write('ERROR: 需要 openpyxl, 请先 pip install openpyxl\n')
-        return 2
-    except (OSError, IOError) as e:
-        sys.stderr.write('ERROR: 无法写入 XLSX %s: %s\n' % (out, e))
-        return 2
-    except Exception as e:
-        sys.stderr.write('ERROR: Excel 输出失败 (%s): %s\n' % (type(e).__name__, e))
-        return 2
-
-    if args.csv:
+    csv_dir = args.csv
+    if csv_dir:
         try:
-            write_csv(args.csv, ela.rows, REG_COLS)
-        except (OSError, IOError) as e:
-            sys.stderr.write('ERROR: 无法写入 CSV %s: %s\n' % (args.csv, e))
-            return 2
-        except Exception as e:
-            sys.stderr.write('ERROR: CSV 输出失败 (%s): %s\n' % (type(e).__name__, e))
+            os.makedirs(csv_dir, exist_ok=True)
+        except OSError as e:
+            sys.stderr.write('ERROR: 无法创建 CSV 输出目录 %s: %s\n' % (csv_dir, e))
             return 2
 
-    print('[ok] %s' % out)
-    return 0
+    worst = 0
+    for f in args.ralf:
+        base = os.path.splitext(os.path.basename(f))[0]
+        out_path = os.path.join(out_dir, base + '.xlsx') if out_dir \
+            else os.path.splitext(f)[0] + '.xlsx'
+        csv_path = os.path.join(csv_dir, base + '.csv') if csv_dir else None
+        rc = _convert_one(args, f, out_path, csv_path, label=os.path.basename(f))
+        if rc:
+            worst = rc
+    return worst
 
 
 if __name__ == '__main__':

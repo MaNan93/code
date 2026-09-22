@@ -1,0 +1,24 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ralf2xlsx"
+version = "2.5.0"
+description = "Synopsys RALF (Register Abstraction Layer File) -> Excel register map converter"
+requires-python = ">=3.6.8"
+authors = [
+  { name = "local-user" }
+]
+dependencies = [
+  "openpyxl"
+]
+
+[project.scripts]
+ralf2xlsx = "ralf2xlsx.ralf2xlsx:main"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]

@@ -137,3 +137,9 @@ Block tree:
 
 
 > Block tree 的附加信息统一使用圆括号，并按最长 tree 文本对齐括号起始列。
+
+
+### Overview
+
+Excel 第一个 sheet 固定为 `Overview`，用于 block 导航。每个实际实例化 block 一行，包含 Block、Definition、Base Addr、Domain(s)、Bus Bytes、Endian 和目标 Sheet。
+点击 Block 或 Sheet 单元格会直接跳转到对应 block sheet。使用 `--sort addr` 时，Overview 按 block base address 排序。

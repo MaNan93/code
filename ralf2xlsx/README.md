@@ -130,3 +130,7 @@ Block tree:
 
 
 > `Registers` 汇总 sheet 已移除。Excel 只保留 `RegisterMap`、可选的 `Memories` / `Enums`，以及每个 block 的独立 sheet。
+
+
+> Block 独立 sheet 名只使用实例名，不包含 system/父 block 路径。例如 `soc.pcie.phy` → `phy`，
+> `soc.uart[0]` → `uart_0`。如果出现重名，则自动追加 `_1`、`_2` 等后缀。

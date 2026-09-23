@@ -61,6 +61,11 @@ jobs:
           assert "BlockTree" not in names
           assert "Warnings" not in names
           assert "Registers" not in names
+          assert "Overview" in names
+          assert wb.sheetnames[0] == "Overview"
+          ovs = wb["Overview"]
+          assert ovs["A2"].hyperlink is not None
+          assert ovs["G2"].hyperlink is not None
           assert "RegisterMap" in names
           required = {"uart_0", "uart_1", "dma", "bridge"}
           missing = required - names

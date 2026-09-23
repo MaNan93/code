@@ -8,6 +8,12 @@ ralf2xlsx.py -- Synopsys RALF (Register Abstraction Layer File) -> Excel 寄存�
 
 Version History
 ---------------
+v2.6
+  - Generate one worksheet per instantiated block by default.
+  - Only blocks reachable from the selected system/top are emitted.
+  - Multi-domain blocks stay in one worksheet; Domain distinguishes interfaces.
+  - Add --no-sheet-per-block to disable per-block worksheets; keep -s for compatibility.
+
 v2.5
   - Accept multiple .ralf files on the command line. Each file is parsed
     and elaborated independently (its own definition table, own top
@@ -81,7 +87,7 @@ import re
 import sys
 from collections import OrderedDict
 
-VERSION = '2.5'
+VERSION = '2.6'
 
 # ============================================================================
 # 词法分析
@@ -1711,7 +1717,7 @@ def bit_range_of(r):
 # Excel 输出
 # ============================================================================
 
-def write_xlsx(path, ela, meta, warn_rows, sheet_per_block=False):
+def write_xlsx(path, ela, meta, warn_rows, sheet_per_block=True):
     from openpyxl import Workbook
     from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
     from openpyxl.utils import get_column_letter
@@ -1830,9 +1836,27 @@ def write_xlsx(path, ela, meta, warn_rows, sheet_per_block=False):
          fill=warn_fill if warn_rows else None)
 
     if sheet_per_block:
+        # One worksheet per instantiated block. For a multi-domain block,
+        # rows carry block paths like "soc.bridge.pci" / "soc.bridge.ahb";
+        # collapse those domain-qualified paths back to the block instance
+        # ("soc.bridge") so both interfaces stay in one sheet.
+        block_key = {}
+        for b in ela.blk_rows:
+            if b.get('kind') != 'block':
+                continue
+            p = b.get('block', '')
+            d = b.get('domain', '')
+            root = p
+            if d and p.endswith('.' + d):
+                root = p[:-(len(d) + 1)]
+            block_key[p] = root
+
         groups = OrderedDict()
         for r in ela.rows:
-            groups.setdefault(r['block'], []).append(r)
+            rp = r.get('block', '')
+            bname = block_key.get(rp, rp)
+            groups.setdefault(bname, []).append(r)
+
         used = set(s.title for s in wb.worksheets)
         for bname, rows in groups.items():
             t = re.sub(r'[\\/*?:\[\]]', '_', bname)[-31:]
@@ -1997,7 +2021,7 @@ def main(argv=None):
         description='把 Synopsys RALF 寄存器描述文件转换成 Excel 表格',
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog='例:\n'
-               '  ralf2xlsx top.ralf -t soc -o regmap.xlsx -s\n'
+               '  ralf2xlsx top.ralf -t soc -o regmap.xlsx\n'
                '  ralf2xlsx a.ralf b.ralf c.ralf -o outdir/   # 批量, 各自独立转换出各自的 xlsx\n'
                '  ralf2xlsx top.ralf --check --strict     # CI 里只做检查\n'
                '  ralf2xlsx top.ralf --dump > new.txt     # 文本化后 diff')
@@ -2010,8 +2034,11 @@ def main(argv=None):
                     help='输出 .xlsx: 只传一个 .ralf 时是文件名(缺省 <ralf>.xlsx); '
                          '传多个 .ralf 时是输出目录(缺省与各自源文件同目录), 每个文件各出一份同名 .xlsx')
     ap.add_argument('-I', '--incdir', action='append', default=[], help='source 搜索目录, 可多次')
-    ap.add_argument('-s', '--sheet-per-block', action='store_true',
-                    help='每个 block 额外生成一张 sheet')
+    ap.add_argument('-s', '--sheet-per-block', dest='sheet_per_block', action='store_true',
+                    default=True,
+                    help='每个实例化 block 生成独立 sheet（默认开启；保留此选项兼容旧命令）')
+    ap.add_argument('--no-sheet-per-block', dest='sheet_per_block', action='store_false',
+                    help='不生成每个 block 的独立 sheet')
     ap.add_argument('--csv', help='同时输出 CSV(字段表); 语义同 -o, 多文件时是目录')
     ap.add_argument('--base', default='0', help='顶层基地址 (缺省 0), 支持 0x / Verilog 格式')
     ap.add_argument('--addr-mode', choices=('byte', 'word'), default='byte',

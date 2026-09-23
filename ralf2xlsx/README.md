@@ -120,10 +120,10 @@ Summary:
   registers: 12 | fields: 32 | memories: 2 | warnings: 0
 Block tree:
   soc
-  ├─ uart[0]  [def=uart, base=0x00004000]
-  ├─ uart[1]  [def=uart, base=0x00004400]
-  ├─ dma      [def=dma, base=0x00008000]
-  └─ bridge   [def=bridge, base=0x0000C000, domain=pci, ahb]
+  ├─ uart[0]  (def=uart, base=0x00004000)
+  ├─ uart[1]  (def=uart, base=0x00004400)
+  ├─ dma      (def=dma, base=0x00008000)
+  └─ bridge   (def=bridge, base=0x0000C000, domain=pci, ahb)
 ```
 
 解析/展开 warning 也跟在终端输出中。使用 `-q/--quiet` 可关闭这些非错误信息。
@@ -134,3 +134,6 @@ Block tree:
 
 > Block 独立 sheet 名只使用实例名，不包含 system/父 block 路径。例如 `soc.pcie.phy` → `phy`，
 > `soc.uart[0]` → `uart_0`。如果出现重名，则自动追加 `_1`、`_2` 等后缀。
+
+
+> Block tree 的附加信息统一使用圆括号，并按最长 tree 文本对齐括号起始列。

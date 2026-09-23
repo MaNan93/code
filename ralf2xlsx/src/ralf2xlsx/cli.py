@@ -8,6 +8,11 @@ ralf2xlsx.py -- Synopsys RALF (Register Abstraction Layer File) -> Excel 寄存�
 
 Version History
 ---------------
+v2.7
+  - Add BlockTree worksheet showing the instantiated system/block hierarchy.
+  - Show both block instance path and block definition name (e.g. a=b => Definition a, Instance b).
+  - Collapse multi-domain interfaces under one block-tree node.
+
 v2.6
   - Generate one worksheet per instantiated block by default.
   - Only blocks reachable from the selected system/top are emitted.
@@ -87,7 +92,7 @@ import re
 import sys
 from collections import OrderedDict
 
-VERSION = '2.6'
+VERSION = '2.7'
 
 # ============================================================================
 # 词法分析
@@ -1279,6 +1284,7 @@ class Elaborator(object):
             self.add_reset_rules(bpath, getattr(mp, 'change_resets', []))
             bd, hdl_c, vhdl_c, _ = self.path_cols(hpath)
             self.blk_rows.append(dict(block=bpath, kind='system' if blk.is_system else 'block',
+                                      definition=blk.name,
                                       domain=mname, bus_bytes=bus, endian=mp.endian, base=base_byte,
                                       items=len(mp.insts), doc=blk.doc,
                                       backdoor=bd, hdl=hdl_c, vhdl=vhdl_c))
@@ -1708,6 +1714,106 @@ ENUM_COLS = [('block', 'Block', 22), ('domain', 'Domain', 12), ('reg', 'Register
 
 WARN_COLS = [('kind', 'Stage', 10), ('where', 'Where', 26), ('msg', 'Warning', 100)]
 
+BLOCKTREE_COLS = [
+    ('tree', 'Block Tree', 34),
+    ('kind', 'Kind', 10),
+    ('definition', 'Definition', 22),
+    ('instance', 'Instance Path', 34),
+    ('base', 'Base Addr', 14),
+    ('domains', 'Domain(s)', 18),
+    ('bus_bytes', 'Bus Bytes', 14),
+    ('endian', 'Endian', 12),
+    ('backdoor', 'Backdoor', 10),
+    ('hdl', 'HDL Path', 32),
+    ('vhdl', 'VHDL Path', 32),
+]
+
+
+def build_block_tree_rows(blk_rows):
+    """Collapse domain rows and render instantiated system/block hierarchy."""
+    nodes = OrderedDict()
+
+    for b in blk_rows:
+        path = b.get('block', '')
+        domain = b.get('domain', '')
+        root = path
+        if domain and path.endswith('.' + domain):
+            root = path[:-(len(domain) + 1)]
+
+        n = nodes.get(root)
+        if n is None:
+            n = dict(
+                instance=root,
+                kind=b.get('kind', ''),
+                definition=b.get('definition', ''),
+                base=b.get('base'),
+                domains=[],
+                bus_values=[],
+                endian_values=[],
+                backdoor=b.get('backdoor', ''),
+                hdl=b.get('hdl', ''),
+                vhdl=b.get('vhdl', ''),
+            )
+            nodes[root] = n
+
+        if domain and domain not in n['domains']:
+            n['domains'].append(domain)
+        if b.get('bus_bytes') not in n['bus_values']:
+            n['bus_values'].append(b.get('bus_bytes'))
+        if b.get('endian') not in n['endian_values']:
+            n['endian_values'].append(b.get('endian'))
+
+    paths = list(nodes.keys())
+    parent = {}
+    children = OrderedDict((p, []) for p in paths)
+    roots = []
+
+    for p in paths:
+        candidates = [q for q in paths if q != p and p.startswith(q + '.')]
+        par = max(candidates, key=len) if candidates else None
+        parent[p] = par
+        if par is None:
+            roots.append(p)
+        else:
+            children[par].append(p)
+
+    out = []
+
+    def emit(path, prefix='', is_last=True, level=0):
+        n = nodes[path]
+        leaf = path.rsplit('.', 1)[-1]
+        if level == 0:
+            tree = leaf
+        else:
+            tree = prefix + ('└─ ' if is_last else '├─ ') + leaf
+
+        buses = [str(v) for v in n['bus_values'] if v is not None]
+        endians = [str(v) for v in n['endian_values'] if v]
+        out.append(dict(
+            tree=tree,
+            kind=n['kind'],
+            definition=n['definition'],
+            instance=n['instance'],
+            base=hexs(n['base']) if n['base'] is not None else '',
+            domains=', '.join(n['domains']),
+            bus_bytes=', '.join(buses),
+            endian=', '.join(endians),
+            backdoor=n['backdoor'],
+            hdl=n['hdl'],
+            vhdl=n['vhdl'],
+        ))
+
+        kids = children.get(path, [])
+        child_prefix = prefix + ('   ' if is_last else '│  ')
+        for i, kid in enumerate(kids):
+            emit(kid, child_prefix if level > 0 else '',
+                 i == len(kids) - 1, level + 1)
+
+    for i, root in enumerate(roots):
+        emit(root, '', i == len(roots) - 1, 0)
+
+    return out
+
 
 def bit_range_of(r):
     return r.get('bits', '')
@@ -1812,6 +1918,10 @@ def write_xlsx(path, ela, meta, warn_rows, sheet_per_block=True):
     for j, w in enumerate([40, 10, 12, 14, 11, 10, 8, 10, 32, 32], 1):
         ws.column_dimensions[get_column_letter(j)].width = w
     ws.column_dimensions['B'].width = 46
+
+    # ---- BlockTree ----
+    tree_rows = build_block_tree_rows(ela.blk_rows)
+    dump(wb.create_sheet('BlockTree'), tree_rows, BLOCKTREE_COLS)
 
     dump(wb.create_sheet('RegisterMap'), ela.rows, REG_COLS, merge=True)
     dump(wb.create_sheet('Registers'), ela.reg_rows, REGSUM_COLS)

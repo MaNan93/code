@@ -41,6 +41,16 @@ jobs:
           rm -f example.xlsx
           .venv-test/bin/ralf2xlsx example.ralf -t soc -o example.xlsx
           test -s example.xlsx
+          .venv-test/bin/python - <<'PY'
+          from openpyxl import load_workbook
+          wb = load_workbook("example.xlsx", read_only=True)
+          names = set(wb.sheetnames)
+          required = {"soc.uart[0]", "soc.uart[1]", "soc.dma", "soc.bridge"}
+          missing = required - names
+          assert not missing, "missing per-block sheets: %s" % sorted(missing)
+          assert "soc.bridge.pci" not in names and "soc.bridge.ahb" not in names
+          print("verified block sheets:", sorted(required))
+          PY
           ls -lh example.xlsx
 
       - name: Upload wheel artifact

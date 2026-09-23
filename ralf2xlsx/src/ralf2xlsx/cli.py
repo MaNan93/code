@@ -8,6 +8,10 @@ ralf2xlsx.py -- Synopsys RALF (Register Abstraction Layer File) -> Excel 寄存�
 
 Version History
 ---------------
+v2.8
+  - Move Summary, BlockTree and Warnings out of Excel and print them to the terminal.
+  - Keep Excel focused on register data and per-block worksheets.
+
 v2.7
   - Add BlockTree worksheet showing the instantiated system/block hierarchy.
   - Show both block instance path and block definition name (e.g. a=b => Definition a, Instance b).
@@ -92,7 +96,7 @@ import re
 import sys
 from collections import OrderedDict
 
-VERSION = '2.7'
+VERSION = '2.8'
 
 # ============================================================================
 # 词法分析
@@ -1815,6 +1819,39 @@ def build_block_tree_rows(blk_rows):
     return out
 
 
+def print_block_tree(blk_rows, out=sys.stderr, prefix=''):
+    rows = build_block_tree_rows(blk_rows)
+    if not rows:
+        return
+    out.write('%sBlock tree:\n' % prefix)
+    for r in rows:
+        extra = []
+        definition = r.get('definition', '')
+        instance = r.get('instance', '')
+        leaf = instance.rsplit('.', 1)[-1] if instance else ''
+        if definition and definition != leaf:
+            extra.append('def=%s' % definition)
+        if r.get('base'):
+            extra.append('base=%s' % r['base'])
+        if r.get('domains'):
+            extra.append('domain=%s' % r['domains'])
+        line = r.get('tree', '')
+        if extra:
+            line += '  [' + ', '.join(extra) + ']'
+        out.write('%s  %s\n' % (prefix, line))
+
+
+def print_summary(meta, ela, warn_rows, out=sys.stderr, prefix=''):
+    out.write('%sSummary:\n' % prefix)
+    out.write('%s  source: %s\n' % (prefix, meta['src']))
+    out.write('%s  top: %s\n' % (prefix, meta['top']))
+    out.write('%s  registers: %d | fields: %d | memories: %d | warnings: %d\n' %
+              (prefix, len(ela.reg_rows), len(ela.rows), len(ela.mem_rows), len(warn_rows)))
+    out.write('%s  address mode: %s\n' % (prefix, meta['addr_mode']))
+    out.write('%s  arrays: %s | access dialect: %s\n' %
+              (prefix, meta['arrays'], meta.get('flavor', 'auto')))
+
+
 def bit_range_of(r):
     return r.get('bits', '')
 
@@ -1889,39 +1926,8 @@ def write_xlsx(path, ela, meta, warn_rows, sheet_per_block=True):
             # 几千行就能拖到几十秒。一次性赋值: 6000 个区间 6.3s -> 0.02s。
             ws.merged_cells = MultiCellRange(ranges)
 
-    # ---- Summary ----
-    ws = wb.active
-    ws.title = 'Summary'
-    ws['A1'] = 'RALF -> Register Map'
-    ws['A1'].font = Font(bold=True, size=14)
-    info = [('Source RALF', meta['src']), ('Included files', meta['nfiles']),
-            ('Top', meta['top']), ('Generated', meta['time']),
-            ('Tool', 'ralf2xlsx %s' % VERSION),
-            ('Registers', len(ela.reg_rows)), ('Field rows', len(ela.rows)),
-            ('Memories', len(ela.mem_rows)), ('Warnings', len(warn_rows)),
-            ('Address mode', meta['addr_mode']), ('Arrays', meta['arrays']),
-            ('Access dialect', meta.get('flavor', 'auto'))]
-    for i, (k, v) in enumerate(info, start=3):
-        ws.cell(i, 1, k).font = Font(bold=True)
-        ws.cell(i, 2, v)
-    r0 = 3 + len(info) + 1
-    for j, h in enumerate(['Block', 'Kind', 'Domain', 'Base Addr', 'Bus Bytes', 'Endian', 'Items', 'Backdoor', 'HDL Path', 'VHDL Path'], 1):
-        c = ws.cell(r0, j, h)
-        c.font, c.fill, c.alignment, c.border = hdr_font, hdr_fill, center, border
-    for i, b in enumerate(ela.blk_rows, start=r0 + 1):
-        for j, v in enumerate([b['block'], b['kind'], b.get('domain', ''), hexs(b['base']),
-                               b['bus_bytes'], b['endian'], b['items'], b.get('backdoor', ''),
-                               b.get('hdl', ''), b.get('vhdl', '')], 1):
-            c = ws.cell(i, j, v)
-            c.border = border
-            c.alignment = left if j == 1 else center
-    for j, w in enumerate([40, 10, 12, 14, 11, 10, 8, 10, 32, 32], 1):
-        ws.column_dimensions[get_column_letter(j)].width = w
-    ws.column_dimensions['B'].width = 46
-
-    # ---- BlockTree ----
-    tree_rows = build_block_tree_rows(ela.blk_rows)
-    dump(wb.create_sheet('BlockTree'), tree_rows, BLOCKTREE_COLS)
+    # Excel only contains register data; terminal carries summary/tree/warnings.
+    wb.remove(wb.active)
 
     dump(wb.create_sheet('RegisterMap'), ela.rows, REG_COLS, merge=True)
     dump(wb.create_sheet('Registers'), ela.reg_rows, REGSUM_COLS)
@@ -1941,9 +1947,6 @@ def write_xlsx(path, ela, meta, warn_rows, sheet_per_block=True):
                                           field=r['field'], name=nm, value=vv))
     if enum_rows:
         dump(wb.create_sheet('Enums'), enum_rows, ENUM_COLS)
-
-    dump(wb.create_sheet('Warnings'), warn_rows, WARN_COLS,
-         fill=warn_fill if warn_rows else None)
 
     if sheet_per_block:
         # One worksheet per instantiated block. For a multi-domain block,
@@ -2077,15 +2080,6 @@ def _convert_one(args, ralf_path, out_path, csv_path, label=None):
     if args.dump:
         dump_text(ela)
 
-    if not args.quiet:
-        for w in warn_rows:
-            sys.stderr.write('%s[warn] %s %s\n' % (prefix, ('%s:' % w['where']) if w['where'] else '',
-                                                 w['msg']))
-
-    sys.stderr.write('%sfiles %d | registers %d | fields %d | memories %d | warnings %d\n'
-                     % (prefix, len(p.files), len(ela.reg_rows), len(ela.rows),
-                        len(ela.mem_rows), len(warn_rows)))
-
     if args.strict and warn_rows:
         sys.stderr.write('%sERROR: --strict 下有 %d 条 warning, 未生成输出\n' % (prefix, len(warn_rows)))
         return 3
@@ -2103,6 +2097,14 @@ def _convert_one(args, ralf_path, out_path, csv_path, label=None):
                            hexs(base or 0)),
                 arrays='collapsed' if args.no_expand_arrays else 'expanded',
                 flavor=args.flavor)
+
+    if not args.quiet:
+        print_summary(meta, ela, warn_rows, prefix=prefix)
+        print_block_tree(ela.blk_rows, prefix=prefix)
+        for w in warn_rows:
+            sys.stderr.write('%s[warn] %s %s\n' %
+                             (prefix, ('%s:' % w['where']) if w['where'] else '', w['msg']))
+
     try:
         write_xlsx(out_path, ela, meta, warn_rows, sheet_per_block=args.sheet_per_block)
     except ImportError:

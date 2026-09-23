@@ -50,6 +50,7 @@ jobs:
           grep -F "Summary:" run.log
           grep -F "Block tree:" run.log
           grep -F "uart[0]" run.log
+          grep -F "(def=uart, base=" run.log
           .venv-test/bin/python - <<'PY'
           from openpyxl import load_workbook
           wb = load_workbook("example.xlsx", read_only=True)

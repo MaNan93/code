@@ -52,7 +52,7 @@ jobs:
           defs = {ws.cell(r, 4).value: ws.cell(r, 3).value for r in range(2, ws.max_row + 1)}
           assert defs["soc.uart[0]"] == "uart"
           assert defs["soc.dma"] == "dma"
-          required = {"soc.uart[0]", "soc.uart[1]", "soc.dma", "soc.bridge"}
+          required = {"soc.uart_0", "soc.uart_1", "soc.dma", "soc.bridge"}
           missing = required - names
           assert not missing, "missing per-block sheets: %s" % sorted(missing)
           assert "soc.bridge.pci" not in names and "soc.bridge.ahb" not in names

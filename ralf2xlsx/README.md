@@ -1,4 +1,4 @@
-# ralf2xlsx v2 — RALF 寄存器描述 → Excel 表格
+# ralf2xlsx v2.6 — RALF 寄存器描述 → Excel 表格
 
 把 Synopsys `ralgen` 用的 `.ralf` 文件解析、展开层次、算出绝对地址和位域，
 输出成一份可以直接发给设计/软件的 Excel 寄存器表。
@@ -20,7 +20,7 @@ ralf2xlsx --help
 ## 用法
 
 ```bash
-ralf2xlsx top.ralf -t soc -o regmap.xlsx -s
+ralf2xlsx top.ralf -t soc -o regmap.xlsx
 ralf2xlsx a.ralf b.ralf c.ralf -o outdir/         # 批量独立转换
 ralf2xlsx top.ralf --check --strict                # CI 卡关：解析有告警就失败
 ralf2xlsx top.ralf --dump > new.txt                # 文本化后跟上一版 diff
@@ -31,7 +31,8 @@ ralf2xlsx top.ralf --dump > new.txt                # 文本化后跟上一版 di
 | `-t, --top` | 顶层 `block` / `system` 名（同 ralgen 的 `-t`），可给多次；不给则展开所有顶层 system（没有 system 就所有 block） |
 | `-o, --out` | 单文件时指定输出 `.xlsx`；多文件时指定输出目录；缺省时各文件在源文件旁生成同名 `.xlsx` |
 | `-I, --incdir` | `source` 的搜索目录，可多次（同 ralgen 的 `-I`） |
-| `-s, --sheet-per-block` | 每个 block/domain 再单独出一张 sheet |
+| `-s, --sheet-per-block` | 每个实例化 block 生成独立 sheet（默认已开启；保留用于兼容旧命令） |
+| `--no-sheet-per-block` | 关闭每个 block 的独立 sheet，只保留汇总类 sheet |
 | `--csv FILE/DIR` | 额外导出字段表 CSV（UTF-8 BOM）；单文件时是文件名，多文件时是输出目录 |
 | `--base ADDR` | 顶层基地址，缺省 0，支持 `0x1000` / `'h1000` |
 | `--addr-mode byte\|word` | RALF 里 `@offset` 的含义，见下 |
@@ -60,7 +61,8 @@ RALF 的 `@offset` 单位取决于所在 block 的 `bytes`（总线宽度）：
 | Sheet | 内容 |
 | --- | --- |
 | `Summary` | 源文件、包含的文件数、顶层、统计；各 block/domain 的基地址、总线宽度、endian |
-| `RegisterMap` | 主表：一个字段一行，寄存器级的列纵向合并；冻结首行 + 自动筛选 |
+| `RegisterMap` | 全部已实例化 block 的汇总主表：一个字段一行 |
+| `<block>` | **默认生成**；system 实际实例化到的每个 block 各一张 sheet。未被 system 引用或被注释掉的 block 不输出；multi-domain block 仍是一张 sheet，由 `Domain` 列区分接口 |
 | `Registers` | 寄存器级汇总：一个寄存器一行，带 attributes 和在 RALF 里的行号 |
 | `Memories` | 存储器：地址、深度、位宽、容量、access、initial |
 | `Enums` | 字段枚举值（名字 → 值） |

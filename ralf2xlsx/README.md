@@ -1,4 +1,4 @@
-# ralf2xlsx v2.7 — RALF 寄存器描述 → Excel 表格
+# ralf2xlsx v2.8 — RALF 寄存器描述 → Excel 表格
 
 把 Synopsys `ralgen` 用的 `.ralf` 文件解析、展开层次、算出绝对地址和位域，
 输出成一份可以直接发给设计/软件的 Excel 寄存器表。
@@ -60,14 +60,11 @@ RALF 的 `@offset` 单位取决于所在 block 的 `bytes`（总线宽度）：
 
 | Sheet | 内容 |
 | --- | --- |
-| `Summary` | 源文件、包含的文件数、顶层、统计；各 block/domain 的基地址、总线宽度、endian |
-| `BlockTree` | system/block 实例层级树；显示 Instance Path、Definition、Base Addr、Domain(s) 和 backdoor path。`block a=b` 会显示 Definition=`a`、Instance=`b` |
 | `RegisterMap` | 全部已实例化 block 的汇总主表：一个字段一行 |
 | `<block>` | **默认生成**；system 实际实例化到的每个 block 各一张 sheet。未被 system 引用或被注释掉的 block 不输出；multi-domain block 仍是一张 sheet，由 `Domain` 列区分接口 |
 | `Registers` | 寄存器级汇总：一个寄存器一行，带 attributes 和在 RALF 里的行号 |
 | `Memories` | 存储器：地址、深度、位宽、容量、access、initial |
 | `Enums` | 字段枚举值（名字 → 值） |
-| `Warnings` | 解析/展开过程中的全部告警，跟着产物走 |
 
 主表列：Block / Domain / Register / Kind / Address / Offset / Width(bit) / Field / Bits /
 MSB / LSB / Size / Access / Reset / Reset(RALF) / Soft Reset / Volatile / Enum /
@@ -109,20 +106,25 @@ ralf2xlsx example.ralf -t soc -o example.xlsx -s
 ```
 
 
-### BlockTree
 
-生成的 Excel 会额外包含 `BlockTree` sheet，只显示从所选 top/system 实际可达的 block 实例。例如：
+
+### 终端输出
+
+`Summary`、block tree 和 warnings 都只输出到终端，不再写入 Excel sheet。Excel 只保留寄存器数据相关 sheet。
+
+示例：
 
 ```text
-soc
-├─ uart[0]
-├─ uart[1]
-├─ dma
-└─ bridge
+Summary:
+  source: .../example.ralf
+  top: soc
+  registers: 12 | fields: 32 | memories: 2 | warnings: 0
+Block tree:
+  soc
+  ├─ uart[0]  [def=uart, base=0x00004000]
+  ├─ uart[1]  [def=uart, base=0x00004400]
+  ├─ dma      [def=dma, base=0x00008000]
+  └─ bridge   [def=bridge, base=0x0000C000, domain=pci, ahb]
 ```
 
-若 RALF 中写的是 `block a=b (...) @'h4;`，tree 中的实例层级使用 `b`，同时 `Definition` 列记录 `a`。
-未被 system 实例化、或在 system 中被注释掉的 block 不会出现在 BlockTree，也不会生成对应 block sheet。
-
-> Excel sheet 名不允许使用 `[` / `]`。因此数组 block 实例 `soc.uart[0]` 在 `BlockTree` 中仍保持原始实例名，
-> 对应独立 sheet 名会转换为 `soc.uart_0`。
+解析/展开 warning 也跟在终端输出中。使用 `-q/--quiet` 可关闭这些非错误信息。

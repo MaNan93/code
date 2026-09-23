@@ -45,6 +45,13 @@ jobs:
           from openpyxl import load_workbook
           wb = load_workbook("example.xlsx", read_only=True)
           names = set(wb.sheetnames)
+          assert "BlockTree" in names, "missing BlockTree sheet"
+          ws = wb["BlockTree"]
+          tree_text = [ws.cell(r, 1).value for r in range(2, ws.max_row + 1)]
+          assert tree_text == ["soc", "├─ uart[0]", "├─ uart[1]", "├─ dma", "└─ bridge"], tree_text
+          defs = {ws.cell(r, 4).value: ws.cell(r, 3).value for r in range(2, ws.max_row + 1)}
+          assert defs["soc.uart[0]"] == "uart"
+          assert defs["soc.dma"] == "dma"
           required = {"soc.uart[0]", "soc.uart[1]", "soc.dma", "soc.bridge"}
           missing = required - names
           assert not missing, "missing per-block sheets: %s" % sorted(missing)

@@ -1969,7 +1969,10 @@ def write_xlsx(path, ela, meta, warn_rows, sheet_per_block=True):
 
         used = set(s.title for s in wb.worksheets)
         for bname, rows in groups.items():
-            t = re.sub(r'[\\/*?:\[\]]', '_', bname)[-31:]
+            # Excel forbids [] in sheet names. Keep array instances readable:
+            # soc.uart[0] -> soc.uart_0
+            t = re.sub(r'\[([^\]]+)\]', r'_\1', bname)
+            t = re.sub(r'[\\/*?:\[\]]', '_', t).strip('_')[-31:]
             base_t, k = t, 1
             while t in used:
                 t = ('%s_%d' % (base_t, k))[-31:]

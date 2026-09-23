@@ -37,7 +37,7 @@ ralf2xlsx top.ralf --dump > new.txt                # 文本化后跟上一版 di
 | `--base ADDR` | 顶层基地址，缺省 0，支持 `0x1000` / `'h1000` |
 | `--addr-mode byte\|word` | RALF 里 `@offset` 的含义，见下 |
 | `--flavor auto\|uvm\|vmm` | field access mode 校验方言：默认 `auto` 接受 UVM/VMM 并集 |
-| `--sort source\|addr` | 行顺序：按 RALF 出现顺序（缺省）或按地址 |
+| `--sort source\|addr` | 行顺序：按 RALF 出现顺序（缺省）；`addr` 时先按 block base address，再按 block 内寄存器绝对地址排序 |
 | `--no-expand-arrays` | 数组只出一行 `name[lo:hi]`，大数组不撑爆表格 |
 | `--check` | 只解析 + 展开，不生成 Excel |
 | `--dump` | 把展开后的寄存器表打成纯文本（便于 diff / code review） |

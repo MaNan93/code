@@ -8,6 +8,14 @@ ralf2xlsx.py -- Synopsys RALF (Register Abstraction Layer File) -> Excel 寄存�
 
 Version History
 ---------------
+v2.9
+  - Fix --sort addr: a multi-domain block (same base address, different
+    domain interfaces, e.g. a bridge with pci/ahb domains) had its rows
+    interleaved by address instead of staying grouped per domain, because
+    the tie-break key collapsed both domains to the same block root.
+    Tie-break on the full block path again so each block/domain stays
+    contiguous while blocks are still ordered by base address.
+
 v2.8
   - Move Summary, BlockTree and Warnings out of Excel and print them to the terminal.
   - Remove the Registers summary worksheet.
@@ -97,7 +105,7 @@ import re
 import sys
 from collections import OrderedDict
 
-VERSION = '2.8'
+VERSION = '2.9'
 
 # ============================================================================
 # 词法分析
@@ -2183,12 +2191,12 @@ def _convert_one(args, ralf_path, out_path, csv_path, label=None):
             return block_base.get(block_root(path), 0)
 
         ela.rows.sort(key=lambda r: (block_addr(r['block']),
-                                     block_root(r['block']),
+                                     r['block'],
                                      r['_addr'],
                                      r['reg'],
                                      r['lsb'] if r['lsb'] != '' else 0))
         ela.reg_rows.sort(key=lambda r: (block_addr(r['block']),
-                                         block_root(r['block']),
+                                         r['block'],
                                          r['_addr'],
                                          r['reg']))
 

@@ -1971,13 +1971,18 @@ def write_xlsx(path, ela, meta, warn_rows, sheet_per_block=True):
 
         used = set(s.title for s in wb.worksheets)
         for bname, rows in groups.items():
-            # Excel forbids [] in sheet names. Keep array instances readable:
-            # soc.uart[0] -> soc.uart_0
-            t = re.sub(r'\[([^\]]+)\]', r'_\1', bname)
+            # Sheet name uses only the block instance leaf, not the hierarchy path.
+            # soc.pcie.phy -> phy
+            # soc.uart[0] -> uart_0
+            leaf = bname.rsplit('.', 1)[-1]
+            t = re.sub(r'\[([^\]]+)\]', r'_\1', leaf)
             t = re.sub(r'[\\/*?:\[\]]', '_', t).strip('_')[-31:]
+            if not t:
+                t = 'block'
             base_t, k = t, 1
             while t in used:
-                t = ('%s_%d' % (base_t, k))[-31:]
+                suffix = '_%d' % k
+                t = (base_t[:31-len(suffix)] + suffix)
                 k += 1
             used.add(t)
             dump(wb.create_sheet(t), rows, REG_COLS, merge=True)

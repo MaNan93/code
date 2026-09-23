@@ -1719,6 +1719,17 @@ ENUM_COLS = [('block', 'Block', 22), ('domain', 'Domain', 12), ('reg', 'Register
 
 WARN_COLS = [('kind', 'Stage', 10), ('where', 'Where', 26), ('msg', 'Warning', 100)]
 
+OVERVIEW_COLS = [
+    ('instance', 'Block', 28),
+    ('definition', 'Definition', 22),
+    ('base', 'Base Addr', 14),
+    ('domains', 'Domain(s)', 18),
+    ('bus_bytes', 'Bus Bytes', 12),
+    ('endian', 'Endian', 10),
+    ('sheet', 'Sheet', 24),
+]
+
+
 BLOCKTREE_COLS = [
     ('tree', 'Block Tree', 34),
     ('kind', 'Kind', 10),
@@ -1936,8 +1947,9 @@ def write_xlsx(path, ela, meta, warn_rows, sheet_per_block=True):
             # 几千行就能拖到几十秒。一次性赋值: 6000 个区间 6.3s -> 0.02s。
             ws.merged_cells = MultiCellRange(ranges)
 
-    # Excel only contains register data; terminal carries summary/tree/warnings.
-    wb.remove(wb.active)
+    # Overview is the first worksheet and acts as block navigation.
+    ws_overview = wb.active
+    ws_overview.title = 'Overview'
 
     dump(wb.create_sheet('RegisterMap'), ela.rows, REG_COLS, merge=True)
     if ela.mem_rows:
@@ -1956,6 +1968,7 @@ def write_xlsx(path, ela, meta, warn_rows, sheet_per_block=True):
     if enum_rows:
         dump(wb.create_sheet('Enums'), enum_rows, ENUM_COLS)
 
+    block_sheet_names = {}
     if sheet_per_block:
         # One worksheet per instantiated block. For a multi-domain block,
         # rows carry block paths like "soc.bridge.pci" / "soc.bridge.ahb";
@@ -1994,7 +2007,70 @@ def write_xlsx(path, ela, meta, warn_rows, sheet_per_block=True):
                 t = (base_t[:31-len(suffix)] + suffix)
                 k += 1
             used.add(t)
+            block_sheet_names[bname] = t
             dump(wb.create_sheet(t), rows, REG_COLS, merge=True)
+
+
+    # ---- Overview ----
+    # Build one row per actual block instance, collapse multi-domain rows,
+    # and hyperlink each row to the generated block worksheet.
+    nodes = OrderedDict()
+    for b in ela.blk_rows:
+        if b.get('kind') != 'block':
+            continue
+        p = b.get('block', '')
+        d = b.get('domain', '')
+        root = p
+        if d and p.endswith('.' + d):
+            root = p[:-(len(d) + 1)]
+
+        n = nodes.get(root)
+        if n is None:
+            n = dict(instance=root,
+                     definition=b.get('definition', ''),
+                     base=b.get('base'),
+                     domains=[],
+                     bus_values=[],
+                     endian_values=[])
+            nodes[root] = n
+        if d and d not in n['domains']:
+            n['domains'].append(d)
+        if b.get('bus_bytes') not in n['bus_values']:
+            n['bus_values'].append(b.get('bus_bytes'))
+        if b.get('endian') not in n['endian_values']:
+            n['endian_values'].append(b.get('endian'))
+
+    overview_rows = []
+    for root, n in nodes.items():
+        overview_rows.append(dict(
+            instance=root.rsplit('.', 1)[-1],
+            definition=n['definition'],
+            base=hexs(n['base']) if n['base'] is not None else '',
+            domains=', '.join(n['domains']),
+            bus_bytes=', '.join(str(v) for v in n['bus_values'] if v is not None),
+            endian=', '.join(str(v) for v in n['endian_values'] if v),
+            sheet=block_sheet_names.get(root, ''),
+            _base=n['base'] if n['base'] is not None else 0,
+        ))
+
+    if getattr(meta, 'get', None) and meta.get('sort') == 'addr':
+        overview_rows.sort(key=lambda r: (r['_base'], r['instance']))
+
+    dump(ws_overview, overview_rows, OVERVIEW_COLS)
+
+    # Internal hyperlinks. Both Block and Sheet cells jump to the block sheet.
+    for row_idx, r in enumerate(overview_rows, start=2):
+        target = r.get('sheet', '')
+        if not target:
+            continue
+        escaped = target.replace("'", "''")
+        for col_idx in (1, 7):
+            c = ws_overview.cell(row_idx, col_idx)
+            c.hyperlink = "#'%s'!A1" % escaped
+            c.style = 'Hyperlink'
+
+    wb._sheets.remove(ws_overview)
+    wb._sheets.insert(0, ws_overview)
 
     wb.save(path)
 
@@ -2138,7 +2214,7 @@ def _convert_one(args, ralf_path, out_path, csv_path, label=None):
                            else 'ralgen default / address units',
                            hexs(base or 0)),
                 arrays='collapsed' if args.no_expand_arrays else 'expanded',
-                flavor=args.flavor)
+                flavor=args.flavor, sort=args.sort)
 
     if not args.quiet:
         print_summary(meta, ela, warn_rows, prefix=prefix)

@@ -6,7 +6,11 @@ on:
     branches: [main]
     paths:
       - "ralf2xlsx/**"
+      - "!ralf2xlsx/dist/**"
       - ".github/workflows/ralf2xlsx.yml"
+
+permissions:
+  contents: write
 
 jobs:
   build-wheel:
@@ -59,6 +63,18 @@ jobs:
           print("verified block sheets:", sorted(required))
           PY
           ls -lh example.xlsx
+
+      - name: Commit wheel to repository
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add dist/*.whl
+          if git diff --cached --quiet; then
+            echo "wheel unchanged"
+          else
+            git commit -m "build: update ralf2xlsx wheel"
+            git push origin HEAD:main
+          fi
 
       - name: Upload wheel artifact
         uses: actions/upload-artifact@v4

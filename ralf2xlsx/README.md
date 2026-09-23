@@ -123,3 +123,6 @@ soc
 
 若 RALF 中写的是 `block a=b (...) @'h4;`，tree 中的实例层级使用 `b`，同时 `Definition` 列记录 `a`。
 未被 system 实例化、或在 system 中被注释掉的 block 不会出现在 BlockTree，也不会生成对应 block sheet。
+
+> Excel sheet 名不允许使用 `[` / `]`。因此数组 block 实例 `soc.uart[0]` 在 `BlockTree` 中仍保持原始实例名，
+> 对应独立 sheet 名会转换为 `soc.uart_0`。

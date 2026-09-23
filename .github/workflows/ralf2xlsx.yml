@@ -43,19 +43,18 @@ jobs:
         run: |
           .venv-test/bin/ralf2xlsx --help
           rm -f example.xlsx
-          .venv-test/bin/ralf2xlsx example.ralf -t soc -o example.xlsx
+          .venv-test/bin/ralf2xlsx example.ralf -t soc -o example.xlsx 2>run.log
           test -s example.xlsx
+          grep -F "Summary:" run.log
+          grep -F "Block tree:" run.log
+          grep -F "uart[0]" run.log
           .venv-test/bin/python - <<'PY'
           from openpyxl import load_workbook
           wb = load_workbook("example.xlsx", read_only=True)
           names = set(wb.sheetnames)
-          assert "BlockTree" in names, "missing BlockTree sheet"
-          ws = wb["BlockTree"]
-          tree_text = [ws.cell(r, 1).value for r in range(2, ws.max_row + 1)]
-          assert tree_text == ["soc", "├─ uart[0]", "├─ uart[1]", "├─ dma", "└─ bridge"], tree_text
-          defs = {ws.cell(r, 4).value: ws.cell(r, 3).value for r in range(2, ws.max_row + 1)}
-          assert defs["soc.uart[0]"] == "uart"
-          assert defs["soc.dma"] == "dma"
+          assert "Summary" not in names
+          assert "BlockTree" not in names
+          assert "Warnings" not in names
           required = {"soc.uart_0", "soc.uart_1", "soc.dma", "soc.bridge"}
           missing = required - names
           assert not missing, "missing per-block sheets: %s" % sorted(missing)

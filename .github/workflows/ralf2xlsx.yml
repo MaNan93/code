@@ -59,7 +59,7 @@ jobs:
           assert "Warnings" not in names
           assert "Registers" not in names
           assert "RegisterMap" in names
-          required = {"soc.uart_0", "soc.uart_1", "soc.dma", "soc.bridge"}
+          required = {"uart_0", "uart_1", "dma", "bridge"}
           missing = required - names
           assert not missing, "missing per-block sheets: %s" % sorted(missing)
           assert "soc.bridge.pci" not in names and "soc.bridge.ahb" not in names

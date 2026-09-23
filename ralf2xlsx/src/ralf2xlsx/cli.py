@@ -10,7 +10,8 @@ Version History
 ---------------
 v2.8
   - Move Summary, BlockTree and Warnings out of Excel and print them to the terminal.
-  - Keep Excel focused on register data and per-block worksheets.
+  - Remove the Registers summary worksheet.
+  - Keep Excel focused on RegisterMap, optional Memories/Enums, and per-block worksheets.
 
 v2.7
   - Add BlockTree worksheet showing the instantiated system/block hierarchy.
@@ -1930,8 +1931,6 @@ def write_xlsx(path, ela, meta, warn_rows, sheet_per_block=True):
     wb.remove(wb.active)
 
     dump(wb.create_sheet('RegisterMap'), ela.rows, REG_COLS, merge=True)
-    dump(wb.create_sheet('Registers'), ela.reg_rows, REGSUM_COLS)
-
     if ela.mem_rows:
         dump(wb.create_sheet('Memories'), ela.mem_rows, MEM_COLS)
 

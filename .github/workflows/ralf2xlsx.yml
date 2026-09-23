@@ -37,7 +37,9 @@ jobs:
         run: |
           python -m venv .venv-test
           .venv-test/bin/python -m pip install --upgrade pip
-          .venv-test/bin/python -m pip install dist/*.whl
+          WHEEL="$(ls dist/ralf2xlsx-*.whl | sort -V | tail -1)"
+          echo "installing $WHEEL"
+          .venv-test/bin/python -m pip install "$WHEEL"
 
       - name: Verify console entry point
         run: |

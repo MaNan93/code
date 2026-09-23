@@ -2083,9 +2083,38 @@ def _convert_one(args, ralf_path, out_path, csv_path, label=None):
             return 2
 
     if args.sort == 'addr':
-        ela.rows.sort(key=lambda r: (r['block'], r['_addr'], r['reg'],
+        # Sort blocks by their base address, then registers by absolute address.
+        # This keeps each block contiguous while making the overall workbook
+        # follow the memory map order.
+        block_base = {}
+        for b in ela.blk_rows:
+            path = b.get('block', '')
+            domain = b.get('domain', '')
+            root = path
+            if domain and path.endswith('.' + domain):
+                root = path[:-(len(domain) + 1)]
+            base_addr = b.get('base', 0)
+            if root not in block_base or base_addr < block_base[root]:
+                block_base[root] = base_addr
+
+        def block_root(path):
+            if path in block_base:
+                return path
+            matches = [p for p in block_base if path == p or path.startswith(p + '.')]
+            return max(matches, key=len) if matches else path
+
+        def block_addr(path):
+            return block_base.get(block_root(path), 0)
+
+        ela.rows.sort(key=lambda r: (block_addr(r['block']),
+                                     block_root(r['block']),
+                                     r['_addr'],
+                                     r['reg'],
                                      r['lsb'] if r['lsb'] != '' else 0))
-        ela.reg_rows.sort(key=lambda r: (r['block'], r['_addr'], r['reg']))
+        ela.reg_rows.sort(key=lambda r: (block_addr(r['block']),
+                                         block_root(r['block']),
+                                         r['_addr'],
+                                         r['reg']))
 
     warn_rows = ([dict(kind='parse', where=w, msg=m) for w, m in p.warnings] +
                  [dict(kind='elab', where='', msg=m) for m in ela.warnings])

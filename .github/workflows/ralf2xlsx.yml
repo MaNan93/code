@@ -57,6 +57,8 @@ jobs:
           assert "Summary" not in names
           assert "BlockTree" not in names
           assert "Warnings" not in names
+          assert "Registers" not in names
+          assert "RegisterMap" in names
           required = {"soc.uart_0", "soc.uart_1", "soc.dma", "soc.bridge"}
           missing = required - names
           assert not missing, "missing per-block sheets: %s" % sorted(missing)

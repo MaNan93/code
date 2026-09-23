@@ -1825,6 +1825,9 @@ def print_block_tree(blk_rows, out=sys.stderr, prefix=''):
     if not rows:
         return
     out.write('%sBlock tree:\n' % prefix)
+
+    rendered = []
+    max_tree = 0
     for r in rows:
         extra = []
         definition = r.get('definition', '')
@@ -1836,9 +1839,15 @@ def print_block_tree(blk_rows, out=sys.stderr, prefix=''):
             extra.append('base=%s' % r['base'])
         if r.get('domains'):
             extra.append('domain=%s' % r['domains'])
-        line = r.get('tree', '')
+        tree = r.get('tree', '')
+        rendered.append((tree, extra))
+        max_tree = max(max_tree, len(tree))
+
+    for tree, extra in rendered:
         if extra:
-            line += '  [' + ', '.join(extra) + ']'
+            line = tree.ljust(max_tree + 2) + '(' + ', '.join(extra) + ')'
+        else:
+            line = tree
         out.write('%s  %s\n' % (prefix, line))
 
 

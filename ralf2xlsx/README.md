@@ -62,7 +62,6 @@ RALF 的 `@offset` 单位取决于所在 block 的 `bytes`（总线宽度）：
 | --- | --- |
 | `RegisterMap` | 全部已实例化 block 的汇总主表：一个字段一行 |
 | `<block>` | **默认生成**；system 实际实例化到的每个 block 各一张 sheet。未被 system 引用或被注释掉的 block 不输出；multi-domain block 仍是一张 sheet，由 `Domain` 列区分接口 |
-| `Registers` | 寄存器级汇总：一个寄存器一行，带 attributes 和在 RALF 里的行号 |
 | `Memories` | 存储器：地址、深度、位宽、容量、access、initial |
 | `Enums` | 字段枚举值（名字 → 值） |
 
@@ -128,3 +127,6 @@ Block tree:
 ```
 
 解析/展开 warning 也跟在终端输出中。使用 `-q/--quiet` 可关闭这些非错误信息。
+
+
+> `Registers` 汇总 sheet 已移除。Excel 只保留 `RegisterMap`、可选的 `Memories` / `Enums`，以及每个 block 的独立 sheet。

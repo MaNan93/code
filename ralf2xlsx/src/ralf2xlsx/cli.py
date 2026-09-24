@@ -8,6 +8,27 @@ ralf2xlsx.py -- Synopsys RALF (Register Abstraction Layer File) -> Excel 寄存�
 
 Version History
 ---------------
+v3.3
+  - Multi-domain block sheets (e.g. a bridge with pci/ahb) now get a
+    Domain column back automatically, even under the compact column set,
+    so same-address/same-name registers from different interfaces can
+    still be told apart.
+  - Generate a sheet for every reachable block, even ones with no
+    register rows (memory-only or genuinely empty) -- Overview/Block tree
+    no longer link to a sheet that doesn't exist.
+  - Auto addr-map detection now only looks at blocks actually reachable
+    from the selected top(s), not every block definition in the file --
+    an unused block named e.g. VF1_PF0_unused no longer forces the whole
+    file to 33-bit.
+  - VERSION is now read from installed package metadata
+    (importlib.metadata) instead of a second hardcoded string; pyproject
+    version is the single source of truth. Also wires up an actual
+    --version flag (VERSION existed but nothing read it before).
+  - README: drop the hardcoded version from the title (it goes stale
+    every release), fix the --quiet row (it hasn't written to a Warnings
+    sheet since Warnings moved to terminal-only), and note the
+    auto-detect addr-map scan is reachable-blocks-only.
+
 v3.2
   - Refactor: the "strip a block path's trailing .<domain> segment" snippet
     was duplicated 4x (block tree, per-block sheet grouping, Overview,
@@ -205,7 +226,20 @@ import re
 import sys
 from collections import OrderedDict
 
-VERSION = '3.2'
+try:
+    from importlib.metadata import PackageNotFoundError
+    from importlib.metadata import version as _pkg_version
+except ImportError:                          # pragma: no cover - Python < 3.8
+    _pkg_version, PackageNotFoundError = None, Exception
+
+try:
+    # pyproject.toml is the single source of truth for the release version;
+    # this just reads back what pip recorded when the wheel was installed.
+    VERSION = _pkg_version('ralf2xlsx') if _pkg_version else '0.0.0+dev'
+except PackageNotFoundError:
+    # Running from a source checkout without an installed distribution
+    # (e.g. PYTHONPATH=src python -m ralf2xlsx.cli) -- no metadata to read.
+    VERSION = '0.0.0+dev'
 
 # ============================================================================
 # 词法分析
@@ -1767,15 +1801,19 @@ class Elaborator(object):
 _ADDR_MAP_AUTO_RE = re.compile(r'VF1_PF0|VF_PF0', re.IGNORECASE)
 
 
-def detect_addr_map_layout(p):
+def detect_addr_map_layout(blk_rows):
     """Guess the DBI source layout (Table 3-22 vs 3-23) from block names.
 
-    A block name containing VF1_PF0 / VF_PF0 implies SRIOV/ARI is modeled
-    (Table 3-21: CDM/ELBI select bit moves to bit 32 in that case), so the
-    whole file is assumed to use the 33-bit source layout; otherwise 32-bit.
+    Only considers blocks actually reachable from the selected top(s) (i.e.
+    ela.blk_rows, post-elaboration) -- an unused block definition sitting
+    in the RALF but never instantiated must not sway the whole file's
+    detected layout. A definition name containing VF1_PF0 / VF_PF0 implies
+    SRIOV/ARI is modeled (Table 3-21: CDM/ELBI select bit moves to bit 32
+    in that case), so the file is assumed to use the 33-bit source layout;
+    otherwise 32-bit.
     """
-    for name in p.defs['block']:
-        if _ADDR_MAP_AUTO_RE.search(name):
+    for b in blk_rows:
+        if _ADDR_MAP_AUTO_RE.search(b.get('definition', '')):
             return '33bit'
     return '32bit'
 
@@ -2326,18 +2364,29 @@ def write_xlsx(path, ela, meta, warn_rows, sheet_per_block=True, full_columns=Fa
         # collapse those domain-qualified paths back to the block instance
         # ("soc.bridge") so both interfaces stay in one sheet.
         block_key = {}
+        block_domains = {}
         for b in ela.blk_rows:
             if b.get('kind') != 'block':
                 continue
             p = b.get('block', '')
-            block_key[p] = strip_domain(p, b.get('domain', ''))
+            d = b.get('domain', '')
+            root = strip_domain(p, d)
+            block_key[p] = root
+            if d:
+                block_domains.setdefault(root, set()).add(d)
 
+        # Seed every reachable block first, even ones with no register rows
+        # (memory-only or genuinely empty), so it still gets a sheet that
+        # Overview/Block tree can link to instead of pointing nowhere.
         groups = OrderedDict()
+        for root in block_key.values():
+            groups.setdefault(root, [])
         for r in ela.rows:
             rp = r.get('block', '')
             bname = block_key.get(rp, rp)
             groups.setdefault(bname, []).append(r)
 
+        domain_col = next(c for c in REG_COLS if c[0] == 'domain')
         used = set(s.title for s in wb.worksheets)
         for bname, rows in groups.items():
             # Sheet name uses only the block instance leaf, not the hierarchy path.
@@ -2355,7 +2404,13 @@ def write_xlsx(path, ela, meta, warn_rows, sheet_per_block=True, full_columns=Fa
                 k += 1
             used.add(t)
             block_sheet_names[bname] = t
-            dump(wb.create_sheet(t), rows, reg_cols, merge=True)
+            # Compact columns drop Domain; put it back for a multi-domain
+            # block so pci/ahb-style interfaces sharing one sheet can still
+            # be told apart.
+            cols = reg_cols
+            if len(block_domains.get(bname, ())) > 1 and not any(c[0] == 'domain' for c in cols):
+                cols = [domain_col] + list(cols)
+            dump(wb.create_sheet(t), rows, cols, merge=True)
 
 
     # ---- Overview ----
@@ -2487,7 +2542,7 @@ def _convert_one(args, ralf_path, out_path, csv_path, label=None):
     if args.addr_map:
         addr_map, addr_map_auto = args.addr_map, False
     else:
-        addr_map, addr_map_auto = detect_addr_map_layout(p), True
+        addr_map, addr_map_auto = detect_addr_map_layout(ela.blk_rows), True
     remap_elaborated_dbi_addresses(ela, addr_map)
 
     if args.sort == 'addr':
@@ -2592,6 +2647,7 @@ def main(argv=None):
                '  ralf2xlsx a.ralf b.ralf c.ralf -o outdir/   # 批量, 各自独立转换出各自的 xlsx\n'
                '  ralf2xlsx top.ralf --check --strict     # CI 里只做检查\n'
                '  ralf2xlsx top.ralf --dump > new.txt     # 文本化后 diff')
+    ap.add_argument('--version', action='version', version='ralf2xlsx %s' % VERSION)
     ap.add_argument('ralf', nargs='+',
                     help='.ralf 文件; 传多个时逐个独立转换(各自的定义/顶层/输出), 不会互相合并')
     ap.add_argument('-t', '--top', action='append', default=[],

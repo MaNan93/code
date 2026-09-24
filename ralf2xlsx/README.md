@@ -1,4 +1,6 @@
-# ralf2xlsx v2.8 — RALF 寄存器描述 → Excel 表格
+# ralf2xlsx — RALF 寄存器描述 → Excel 表格
+
+版本号以 [pyproject.toml](pyproject.toml) 和 `ralf2xlsx --help` 里的 `cli.py` `VERSION` 为准，本文档不单独维护一份，避免脱节。
 
 把 Synopsys `ralgen` 用的 `.ralf` 文件解析、展开层次、算出绝对地址和位域，
 输出成一份可以直接发给设计/软件的 Excel 寄存器表。
@@ -46,7 +48,7 @@ ralf2xlsx top.ralf --dump > new.txt                # 文本化后跟上一版 di
 | `--check` | 只解析 + 展开，不生成 Excel |
 | `--dump` | 把展开后的寄存器表打成纯文本（便于 diff / code review） |
 | `--strict` | 有 warning 即失败，退出码 3，不产出文件 |
-| `-q, --quiet` | 不在终端打印 warning（仍写进 Warnings sheet） |
+| `-q, --quiet` | 不在终端打印 Summary/Block tree/warning（Excel 不受影响；这些信息只在终端，没有对应 sheet） |
 
 退出码：`0` 成功 / `2` 解析失败或缺依赖 / `3` `--strict` 下有告警。
 
@@ -69,9 +71,9 @@ RALF 的 `@offset` 单位取决于所在 block 的 `bytes`（总线宽度）：
 
 源布局（32bit 用第一张源表，33bit 用第二张）：
 
-* **不传 `--addr-map`（默认）**：自动判断——扫描 RALF 里所有 `block` 定义的名字，只要有
-  一个包含 `VF1_PF0` 或 `VF_PF0`（不区分大小写），就判定整个文件是 33-bit 布局；否则按
-  32-bit 布局处理。
+* **不传 `--addr-map`（默认）**：自动判断——扫描从选定 `-t` 顶层实际实例化到的所有
+  block（未被顶层引用的 block 定义不算），只要有一个名字包含 `VF1_PF0` 或 `VF_PF0`
+  （不区分大小写），就判定整个文件是 33-bit 布局；否则按 32-bit 布局处理。
 * `--addr-map 32bit` / `--addr-map 33bit`：显式指定，覆盖自动判断的结果。
 
 终端的 `address map:` 那一行会标注这次用的布局是"自动识别"还是"`--addr-map` 指定"。默认

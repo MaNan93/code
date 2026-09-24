@@ -1767,6 +1767,14 @@ class MainWindow(QtWidgets.QMainWindow):
         self.dpr_check.toggled.connect(on_dpr_toggled)
         self.dpr_check.toggled.connect(self._schedule_live_edit_processing)
         form.addRow("dpr", self.dpr_check)
+
+        # The summary is otherwise only rebuilt on arrival at this page, which
+        # never happens while the user is already standing on it changing
+        # these -- exactly when the topology they describe is moving.
+        for control in (self.arch_combo, self.pclk_mode_combo, self.sel_mode_combo):
+            control.currentTextChanged.connect(self._schedule_topology_summary_refresh)
+        self.dpr_check.toggled.connect(self._schedule_topology_summary_refresh)
+
         layout.addLayout(form)
 
         actions_row = QtWidgets.QHBoxLayout()
@@ -2505,6 +2513,7 @@ class MainWindow(QtWidgets.QMainWindow):
         if dirty != self._title_shows_dirty:
             self._title_shows_dirty = dirty
             self._update_workspace_label()
+
     def _schedule_topology_summary_refresh(self, *_args):
         """Debounce summary work while generation options are changing."""
         if (

@@ -34,18 +34,50 @@ class QtFrontendTests(unittest.TestCase):
         cls.app.setFont(QtGui.QFont("Segoe UI", 13))
         cls.app.setStyleSheet(build_stylesheet())
 
+        # Opening a modal QMessageBox under the offscreen platform is an
+        # access violation in this Qt build -- verified with a three-line
+        # repro, no application code involved. That kills the interpreter
+        # mid-test, so unittest never reports the test AND silently skips
+        # every one after it: the suite looks like it passed because most
+        # of it never ran. Reaching a dialog unmocked is a test bug either
+        # way, so make it raise instead of taking the process down. Tests
+        # that mean to exercise a prompt patch it themselves, which wins
+        # over this for the duration.
+        for name in ("about", "critical", "information", "question", "warning"):
+            patcher = mock.patch.object(
+                QtWidgets.QMessageBox,
+                name,
+                side_effect=AssertionError(
+                    f"QMessageBox.{name}() reached without being mocked"
+                ),
+            )
+            patcher.start()
+            cls.addClassCleanup(patcher.stop)
+
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
         main_window.STATE_FILE = Path(self.temp.name) / "state.json"
+
+    def make_window(self):
+        """A MainWindow that tears down without the unsaved-changes prompt.
+
+        close() runs that guard, and a test that left edits behind would
+        otherwise open a modal from cleanup. Clearing the saved-payload
+        snapshot makes _is_dirty() false, so the guard returns immediately.
+        Cleanups run last-registered-first, so this is registered after the
+        close it has to precede."""
+        window = MainWindow()
+        self.addCleanup(window.close)
+        self.addCleanup(setattr, window, "_saved_payload", None)
+        return window
 
     def process_events(self):
         self.app.processEvents()
         self.app.processEvents()
 
     def test_window_tabs_headers_and_preview_snap(self):
-        window = MainWindow()
-        self.addCleanup(window.close)
+        window = self.make_window()
         window.show()
         self.process_events()
 
@@ -118,8 +150,7 @@ class QtFrontendTests(unittest.TestCase):
         csv_path.write_text("ctrl_id,ctrl_name,max_width\n0,CtrlA,12\n", encoding="utf-8")
         rtl_path.write_text("module pipe_lane_clk_gate;\nendmodule\n", encoding="utf-8")
 
-        window = MainWindow()
-        self.addCleanup(window.close)
+        window = self.make_window()
         window.current_workspace = workspace
         window.show()
         window._on_toggle_rtl_preview(True)
@@ -206,8 +237,7 @@ class QtFrontendTests(unittest.TestCase):
     def test_validation_errors_go_to_the_log_page(self):
         """The PROBLEMS tree is gone: validation output is plain log text now,
         and Validate brings the LOG page forward to show it."""
-        window = MainWindow()
-        self.addCleanup(window.close)
+        window = self.make_window()
         window.current_workspace = Path(self.temp.name) / "quad"
         config = mock.Mock()
         config.validate.return_value = ["controller max_width must be positive"]
@@ -227,8 +257,7 @@ class QtFrontendTests(unittest.TestCase):
     def test_config_parse_failure_is_logged_not_fatal(self):
         """Config() raises SystemExit (a BaseException) on a parse failure --
         it must be caught, or it takes the whole GUI down."""
-        window = MainWindow()
-        self.addCleanup(window.close)
+        window = self.make_window()
         window.current_workspace = Path(self.temp.name) / "quad"
 
         with mock.patch.object(
@@ -241,8 +270,7 @@ class QtFrontendTests(unittest.TestCase):
         self.assertIn("line 3: missing ctrl_id", window.log.toPlainText())
 
     def test_generate_process_can_import_source_checkout(self):
-        window = MainWindow()
-        self.addCleanup(window.close)
+        window = self.make_window()
         window.current_workspace = Path(self.temp.name) / "quad"
         with mock.patch.object(
             window, "_save_before_action", return_value=True
@@ -255,8 +283,7 @@ class QtFrontendTests(unittest.TestCase):
         window._set_generation_busy(False)
 
     def test_modal_dialog_blurs_only_while_open(self):
-        window = MainWindow()
-        self.addCleanup(window.close)
+        window = self.make_window()
         dialog = QtWidgets.QDialog(window)
         blur_was_active = []
 
@@ -320,8 +347,7 @@ class QtFrontendTests(unittest.TestCase):
         self.assertEqual(table.table.rowCount(), 1)
 
     def test_signal_dropdown_values_fit_without_elision(self):
-        window = MainWindow()
-        self.addCleanup(window.close)
+        window = self.make_window()
         window.resize(1200, 780)
         window.signals_table.set_rows([{
             "signal_name": "phy_mac_rxvalid",
@@ -348,8 +374,7 @@ class QtFrontendTests(unittest.TestCase):
             self.assertGreaterEqual(text_rect.width(), widest)
 
     def test_collapsed_log_does_not_overlap_editor(self):
-        window = MainWindow()
-        self.addCleanup(window.close)
+        window = self.make_window()
         window.resize(1200, 780)
         window.show()
         window.log_toggle.click()
@@ -362,8 +387,7 @@ class QtFrontendTests(unittest.TestCase):
         self.assertLessEqual(shell_bottom, window.log_card.geometry().top())
 
     def test_recent_menu_labels_and_actions(self):
-        window = MainWindow()
-        self.addCleanup(window.close)
+        window = self.make_window()
         item = QtWidgets.QListWidgetItem()
         item.setData(QtCore.Qt.UserRole, str(Path(self.temp.name) / "quad"))
         captured = {}
@@ -372,14 +396,19 @@ class QtFrontendTests(unittest.TestCase):
             actions = [action for action in menu.actions() if not action.isSeparator()]
             captured["labels"] = [action.text() for action in actions]
             captured["delete_widget"] = actions[-1].defaultWidget()
-            return actions[1]
+            # Chosen by label, not by index: picking actions[1] silently
+            # started selecting Reveal when that entry was added, so the
+            # test drove a different code path than it claimed to.
+            return next(a for a in actions if a.text() == "Clear")
 
         with mock.patch.object(QtWidgets.QMenu, "exec_", choose_clear), mock.patch.object(
             window, "_remove_recent_entry"
         ) as clear:
             window._show_recent_menu(item, QtCore.QPoint())
 
-        self.assertEqual(captured["labels"], ["Rename", "Clear", "Delete"])
+        self.assertEqual(
+            captured["labels"], ["Rename", main_window.REVEAL_LABEL, "Clear", "Delete"]
+        )
         self.assertEqual(captured["delete_widget"].objectName(), "destructiveMenuItem")
         clear.assert_called_once()
 
@@ -388,8 +417,7 @@ class QtFrontendTests(unittest.TestCase):
         main_window.save_last_workspace(workspace)
         self.assertEqual(main_window.load_recent_workspaces(), [])
 
-        window = MainWindow()
-        self.addCleanup(window.close)
+        window = self.make_window()
 
         self.assertEqual(window.current_workspace, workspace)
         self.assertEqual(main_window.load_recent_workspaces(), [])
@@ -484,19 +512,24 @@ class QtFrontendTests(unittest.TestCase):
         self.assertNotIn('setText("⋮")', main_source)
         self.assertNotIn('setText("›" if collapsed else "‹")', main_source)
 
+    # Deliberately not "quad": that sample is a *negative* fixture -- see
+    # NEGATIVE_SAMPLES in test_core, which pins the two topology errors it
+    # is meant to raise. Tests here need a workspace that validates, or
+    # anything reading the topology report gets an error page instead.
+    SAMPLE = "bifurcate"
+
     def _sample_workspace(self):
-        """A minimal but valid workspace the real loader accepts."""
-        workspace = Path(self.temp.name) / "quad"
+        """A copy of a bundled sample that the real loader accepts."""
+        workspace = Path(self.temp.name) / self.SAMPLE
         shutil.copytree(
-            Path(main_window.PLM_ROOT) / "test" / "quad" / "config",
+            Path(main_window.PLM_ROOT) / "test" / self.SAMPLE / "config",
             workspace / "config",
         )
         return workspace
 
     def test_unsaved_edits_mark_the_title_and_gate_switching(self):
         workspace = self._sample_workspace()
-        window = MainWindow()
-        self.addCleanup(window.close)
+        window = self.make_window()
         window._open_workspace(workspace)
         self.process_events()
 
@@ -533,8 +566,7 @@ class QtFrontendTests(unittest.TestCase):
 
     def test_revert_restores_the_version_on_disk(self):
         workspace = self._sample_workspace()
-        window = MainWindow()
-        self.addCleanup(window.close)
+        window = self.make_window()
         window._open_workspace(workspace)
         self.process_events()
         before = [row["ctrl_name"] for row in window.controllers_table.get_rows()]
@@ -554,8 +586,7 @@ class QtFrontendTests(unittest.TestCase):
         self.assertFalse(window._is_dirty())
 
     def test_generation_buttons_lock_while_a_run_is_in_flight(self):
-        window = MainWindow()
-        self.addCleanup(window.close)
+        window = self.make_window()
         self.assertTrue(all(button.isEnabled() for button in window.generation_buttons))
 
         window._set_generation_busy(True)
@@ -580,8 +611,7 @@ class QtFrontendTests(unittest.TestCase):
         """Two pages, one widget each: the activity log and Config.report().
         The topology used to share the REPORT page under its own sub-header,
         and there used to be a third PROBLEMS page -- both are gone."""
-        window = MainWindow()
-        self.addCleanup(window.close)
+        window = self.make_window()
 
         self.assertEqual(window.log_tab_btn.text(), "LOG")
         self.assertEqual(window.report_tab_btn.text(), "REPORT")
@@ -599,8 +629,7 @@ class QtFrontendTests(unittest.TestCase):
 
     def test_report_page_shows_the_topology_report(self):
         workspace = self._sample_workspace()
-        window = MainWindow()
-        self.addCleanup(window.close)
+        window = self.make_window()
         window._open_workspace(workspace)
         self.process_events()
 
@@ -621,8 +650,7 @@ class QtFrontendTests(unittest.TestCase):
 
     def test_topology_summary_reports_lane_groups(self):
         workspace = self._sample_workspace()
-        window = MainWindow()
-        self.addCleanup(window.close)
+        window = self.make_window()
         window._open_workspace(workspace)
         self.process_events()
 
@@ -633,8 +661,7 @@ class QtFrontendTests(unittest.TestCase):
 
     def test_external_config_change_is_not_overwritten(self):
         workspace = self._sample_workspace()
-        window = MainWindow()
-        self.addCleanup(window.close)
+        window = self.make_window()
         window._open_workspace(workspace)
         controllers = workspace / "config" / "controllers.csv"
         external_text = controllers.read_text(encoding="utf-8") + "\n"
@@ -648,8 +675,7 @@ class QtFrontendTests(unittest.TestCase):
 
     def test_new_workspace_prompts_for_unsaved_changes_only_once(self):
         workspace = self._sample_workspace()
-        window = MainWindow()
-        self.addCleanup(window.close)
+        window = self.make_window()
         window._open_workspace(workspace)
 
         target_parent = Path(self.temp.name) / "chosen-location"
@@ -687,8 +713,7 @@ class QtFrontendTests(unittest.TestCase):
 
     def test_invalid_topology_is_reported_without_calling_report(self):
         workspace = self._sample_workspace()
-        window = MainWindow()
-        self.addCleanup(window.close)
+        window = self.make_window()
         window._open_workspace(workspace)
         rows = window.lane_grid.get_rows()
         rows[0]["lane0"] = "99-0"
@@ -702,8 +727,7 @@ class QtFrontendTests(unittest.TestCase):
         self.assertIn("undefined ctrl_id=99", summary)
 
     def test_preview_toolbar_compacts_before_it_can_overlap_files_button(self):
-        window = MainWindow()
-        self.addCleanup(window.close)
+        window = self.make_window()
 
         window._apply_preview_control_density(300)
         self.assertFalse(window.preview_more_btn.isHidden())
@@ -724,8 +748,7 @@ class QtFrontendTests(unittest.TestCase):
         self.assertFalse(window.preview_search_btn.isHidden())
 
     def test_floating_log_stays_inside_a_narrow_main_pane(self):
-        window = MainWindow()
-        self.addCleanup(window.close)
+        window = self.make_window()
         window.show()
         window._on_toggle_rtl_preview(True)
         window.content_splitter.setSizes([120, 700])
@@ -740,8 +763,7 @@ class QtFrontendTests(unittest.TestCase):
         )
 
     def test_topology_refresh_is_debounced_from_generation_controls(self):
-        window = MainWindow()
-        self.addCleanup(window.close)
+        window = self.make_window()
         generation_index = window.tabs.indexOf(window._generation_page)
         window.tabs.setCurrentIndex(generation_index)
         self.process_events()
@@ -761,8 +783,7 @@ class QtFrontendTests(unittest.TestCase):
         self.assertEqual(len(timeout_spy), 1)
 
     def test_close_is_blocked_during_generation(self):
-        window = MainWindow()
-        self.addCleanup(window.close)
+        window = self.make_window()
         event = mock.Mock()
         window._set_generation_busy(True)
 
@@ -780,8 +801,7 @@ class QtFrontendTests(unittest.TestCase):
             "module pipe_lane_mapper;\n  logic Marker_Signal;\nendmodule\n",
             encoding="utf-8",
         )
-        window = MainWindow()
-        self.addCleanup(window.close)
+        window = self.make_window()
         window._open_workspace(workspace)
         window.show()
         window._on_toggle_rtl_preview(True)
@@ -821,8 +841,7 @@ class QtFrontendTests(unittest.TestCase):
 
     def test_live_validation_marks_duplicate_controller_ids(self):
         workspace = self._sample_workspace()
-        window = MainWindow()
-        self.addCleanup(window.close)
+        window = self.make_window()
         window._open_workspace(workspace)
         first = window.controllers_table.table.item(0, 0)
         second = window.controllers_table.table.item(1, 0)
@@ -841,8 +860,7 @@ class QtFrontendTests(unittest.TestCase):
 
     def test_undo_redo_restores_complete_editor_snapshot(self):
         workspace = self._sample_workspace()
-        window = MainWindow()
-        self.addCleanup(window.close)
+        window = self.make_window()
         window._open_workspace(workspace)
         item = window.controllers_table.table.item(0, 1)
         original = item.text()
@@ -873,8 +891,7 @@ class QtFrontendTests(unittest.TestCase):
         modified.write_text("module old; endmodule\n", encoding="utf-8")
         unchanged.write_text("module same; endmodule\n", encoding="utf-8")
 
-        window = MainWindow()
-        self.addCleanup(window.close)
+        window = self.make_window()
         window._open_workspace(workspace)
         window.show()
         window._on_toggle_rtl_preview(True)

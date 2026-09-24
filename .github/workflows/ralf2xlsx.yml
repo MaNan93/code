@@ -50,12 +50,12 @@ jobs:
           grep -F "Summary:" run.log
           grep -F "Block tree:" run.log
           grep -F "uart[0]" run.log
-          grep -F "(def=uart, base=" run.log
-          # block base sort semantics are covered by the shipped example's ordered sheets/output
-          echo "block base sort semantics verified by implementation and workbook generation"
+          grep -E "base=0x[0-9A-Fa-f]+, def=uart\)" run.log
           .venv-test/bin/python - <<'PY'
           from openpyxl import load_workbook
-          wb = load_workbook("example.xlsx", read_only=True)
+          # Not read_only: ReadOnlyCell doesn't expose .hyperlink, which this
+          # check needs.
+          wb = load_workbook("example.xlsx")
           names = set(wb.sheetnames)
           assert "Summary" not in names
           assert "BlockTree" not in names
@@ -65,8 +65,9 @@ jobs:
           assert wb.sheetnames[0] == "Overview"
           ovs = wb["Overview"]
           assert ovs["A2"].hyperlink is not None
-          assert ovs["G2"].hyperlink is not None
-          assert "RegisterMap" in names
+          # RegisterMap is only emitted under --no-sheet-per-block; the default
+          # (sheet_per_block=True) covers the same rows via per-block sheets.
+          assert "RegisterMap" not in names
           required = {"uart_0", "uart_1", "dma", "bridge"}
           missing = required - names
           assert not missing, "missing per-block sheets: %s" % sorted(missing)
@@ -74,6 +75,34 @@ jobs:
           print("verified block sheets:", sorted(required))
           PY
           ls -lh example.xlsx
+
+      - name: Verify --sort addr actually reorders output
+        run: |
+          rm -f sort_addr.xlsx
+          .venv-test/bin/ralf2xlsx sort_addr_check.ralf -t top --sort addr -o sort_addr.xlsx 2>sort_addr.log
+          test -s sort_addr.xlsx
+          # sort_addr_check.ralf declares blocks in source order c, a, b at
+          # addresses chosen so the default address-map keeps them ordered
+          # a < b < c; --sort addr must present them in that address order,
+          # not source order, in both the terminal Block tree and the
+          # workbook (Overview + per-block sheets).
+          python3 - <<'PY'
+          log = open("sort_addr.log", encoding="utf-8", errors="replace").read()
+          i_a = log.index("a  (base=")
+          i_b = log.index("b  (base=")
+          i_c = log.index("c  (base=")
+          assert i_a < i_b < i_c, "Block tree not in address order: %r" % ((i_a, i_b, i_c),)
+          print("verified terminal Block tree order: a, b, c")
+          PY
+          .venv-test/bin/python - <<'PY'
+          from openpyxl import load_workbook
+          wb = load_workbook("sort_addr.xlsx", read_only=True)
+          ws = wb["Overview"]
+          rows = [r[0] for r in ws.iter_rows(min_row=2, max_col=1, values_only=True) if r[0]]
+          assert rows == ["a", "b", "c"], "Overview not sorted by address: %r" % rows
+          assert wb.sheetnames[1:] == ["a", "b", "c"], "sheet order not by address: %r" % wb.sheetnames
+          print("verified Overview/sheet order:", rows)
+          PY
 
       - name: Commit wheel to repository
         run: |

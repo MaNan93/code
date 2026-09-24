@@ -1,0 +1,35 @@
+# ---------------------------------------------------------------------------
+# sort_addr_check.ralf -- minimal fixture for CI: blocks declared out of
+# address order (c, a, b) so --sort addr has something real to prove.
+# Addresses are chosen so the default (always-on) CDM address-map keeps
+# them in the same relative order: PF = bits[18:16] of the source address,
+# and the target layout orders primarily by PF, so a(PF=1) < b(PF=2) <
+# c(PF=3) survives the remap unchanged.
+# ---------------------------------------------------------------------------
+
+register r {
+   bytes 4;
+   field f { bits 32; access rw; }
+}
+
+block c {
+   bytes 4;
+   register r @'h0;
+}
+
+block a {
+   bytes 4;
+   register r @'h0;
+}
+
+block b {
+   bytes 4;
+   register r @'h0;
+}
+
+system top {
+   bytes 4;
+   block c @'h30000;
+   block a @'h10000;
+   block b @'h20000;
+}

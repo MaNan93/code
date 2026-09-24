@@ -40,7 +40,7 @@ mode=0  lane0=0-0  lane1=0-1  lane2=1-0
 | 列 | 含义 |
 |---|---|
 | `signal_name` | 信号名 |
-| `signal_type` | `perlane` 或 `shared` |
+| `signal_type` | `perlane` 或 `shared`；`shared` 只允许用于 `mac2phy`，`phy2mac` 必须使用 `perlane` |
 | `direction` | `mac2phy` 或 `phy2mac` |
 | `width` | 位宽 |
 | `safe_state` | 交接窗口里暂时没有 owner 时的值。两个方向都生效 |

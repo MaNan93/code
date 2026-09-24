@@ -312,7 +312,7 @@ class QtFrontendTests(unittest.TestCase):
         rows = [
             {"signal_type": "unknown_type", "direction": "unknown_direction"},
             {"signal_type": "", "direction": ""},
-            {"signal_type": "shared", "direction": "phy2mac"},
+            {"signal_type": "shared", "direction": "mac2phy"},
         ]
         table.set_rows(rows)
         self.assertEqual(table.get_rows(), rows)
@@ -857,6 +857,24 @@ class QtFrontendTests(unittest.TestCase):
         second.setText(original)
         window._process_live_edits()
         self.assertNotIn("Duplicate ctrl_id", first.toolTip())
+
+    def test_live_validation_rejects_shared_phy2mac(self):
+        workspace = self._sample_workspace()
+        window = self.make_window()
+        window._open_workspace(workspace)
+        rows = window.signals_table.get_rows()
+        row = next(i for i, value in enumerate(rows) if value["direction"] == "phy2mac")
+        signal_type = window.signals_table.table.cellWidget(row, 1)
+        direction = window.signals_table.table.cellWidget(row, 2)
+
+        signal_type.setCurrentText("shared")
+        window._process_live_edits()
+        self.assertIn("must be perlane", signal_type.toolTip())
+        self.assertIn("must be perlane", direction.toolTip())
+
+        signal_type.setCurrentText("perlane")
+        window._process_live_edits()
+        self.assertNotIn("must be perlane", signal_type.toolTip())
 
     def test_undo_redo_restores_complete_editor_snapshot(self):
         workspace = self._sample_workspace()

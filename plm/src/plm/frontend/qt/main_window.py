@@ -2349,6 +2349,8 @@ class MainWindow(QtWidgets.QMainWindow):
         signal_names = {}
         for row_index, row in enumerate(signals):
             name = str(row.get("signal_name", "")).strip()
+            signal_type = str(row.get("signal_type", "")).strip().lower()
+            direction = str(row.get("direction", "")).strip()
             if not is_sv_identifier(name):
                 mark(signal_errors, (row_index, "signal_name"), "Use a legal SystemVerilog identifier")
             elif name in signal_names:
@@ -2357,6 +2359,23 @@ class MainWindow(QtWidgets.QMainWindow):
                 mark(signal_errors, (previous, "signal_name"), "Signal names must be unique")
             else:
                 signal_names[name] = row_index
+
+            if signal_type not in SIGNAL_TYPES:
+                mark(
+                    signal_errors,
+                    (row_index, "signal_type"),
+                    "Use perlane or shared",
+                )
+            if direction not in DIRECTIONS:
+                mark(
+                    signal_errors,
+                    (row_index, "direction"),
+                    "Use mac2phy or phy2mac",
+                )
+            if signal_type == "shared" and direction == "phy2mac":
+                message = "phy2mac signals must be perlane"
+                mark(signal_errors, (row_index, "signal_type"), message)
+                mark(signal_errors, (row_index, "direction"), message)
 
             try:
                 width = self._parse_live_int(row.get("width", ""))

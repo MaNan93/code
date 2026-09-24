@@ -280,7 +280,7 @@ phy_mac_messagebus,perlane,phy2mac,8,0x50,0x50
 | 列 | 含义 |
 |---|---|
 | `signal_name` | 信号名，会作为对应 SystemVerilog struct 里的字段名 |
-| `signal_type` | `perlane`（默认语义，每条 lane 各自独立取值）或 `shared`（同一个 controller 自己的所有 lane 只有一个值，比如真实 PIPE 里的 Rate/PowerDown），大小写不敏感。只影响 `pipe_lane_mapper_connection.sv` 这个 flat 包装层怎么给这个 controller 生成端口——mapper 本体永远把每个信号当成 per-lane 的 struct 字段处理，因为一条 PHY lane 当前属于哪个 controller 本来就是随 mode 变的，跟"这个 controller 自己的 lane 之间是不是共享同一个值"是两回事 |
+| `signal_type` | `perlane`（默认语义，每条 lane 各自独立取值）或 `shared`（同一个 controller 自己的所有 lane 只驱动一个值，比如真实 PIPE 里的 Rate/PowerDown），大小写不敏感。`shared` 只允许用于 `mac2phy`；`phy2mac` 信号必须是 `perlane`。该列只影响 `pipe_lane_mapper_connection.sv` 这个 flat 包装层怎么给 controller 生成端口——mapper 本体始终把信号作为 per-lane struct 字段处理 |
 | `direction` | `mac2phy`（controller→PHY）或 `phy2mac`（PHY→controller） |
 | `width` | 信号位宽 |
 | `safe_state` | 该信号在"没有 owner"时应呈现的值（`pipe_lane_data_mux.safe()` 的取值）。整数字面量，支持 `int(x, 0)` 认得的写法：十进制、`0x..`、`0b..` |
@@ -297,10 +297,9 @@ phy_mac_messagebus,perlane,phy2mac,8,0x50,0x50
 controller 一个）展开成一个个 flat 信号端口，方便不想处理 SV struct 端口
 的下游流程/IP 直接对接。PHY 侧不管 `signal_type` 是什么，永远是 per-lane
 展开（`[NL]` 的 unpacked 数组）；controller 侧 `perlane` 信号同样展开成
-该 controller 自己 `max_width` 条 lane 的数组，`shared` 信号则收缩成一个
-标量端口——写方向由这个包装层把标量复制到每条 lane；读方向取 lane0 的值
-作为这个标量输出（假定该 controller 自己的所有 lane 在这个信号上本来就
-该一致，这个假定不由生成器校验）。
+该 controller 自己 `max_width` 条 lane 的数组；`shared mac2phy` 信号则收缩成
+一个标量输入，由包装层把它复制到 controller 的每条 lane。`phy2mac` 始终
+展开为 per-lane 数组，不支持 `shared`。
 
 ### 2.4 生成参数不在配置文件里
 

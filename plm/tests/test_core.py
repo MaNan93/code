@@ -5,7 +5,6 @@ import unittest
 from unittest import mock
 
 from plm.core import exporter
-from plm.core.generator import rtl
 from plm.core.model import Config
 from plm.core.paths import DOCS_DIR, WORKSPACE_MARKER, is_deletable_workspace
 from plm.core.workspace import (
@@ -72,6 +71,20 @@ class ConfigValidationTests(unittest.TestCase):
         signal = valid_payload()["signals"][0]
         signal["safe_state"] = "-1"
         self.assert_config_error(signals=[signal])
+
+    def test_rejects_shared_phy2mac_signal(self):
+        signal = valid_payload()["signals"][0]
+        signal.update({
+            "signal_name": "phy_mac_status",
+            "signal_type": "shared",
+            "direction": "phy2mac",
+        })
+        cfg_dir = self.make_config(signals=[signal])
+        with self.assertRaisesRegex(
+            SystemExit,
+            "phy2mac signals must use signal_type=perlane",
+        ):
+            Config(cfg_dir)
 
     def test_rejects_lane_whose_ctrl_lane_index_moves_between_modes(self):
         """A phy lane must keep one ctrl lane index per owner across modes.
@@ -177,52 +190,6 @@ class WorkspaceTests(unittest.TestCase):
         wheel; guard the glob against someone narrowing it to one filename."""
         pyproject = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
         self.assertIn('"plm" = ["docs/*.md"]', pyproject)
-
-
-class SharedSignalConnectionTests(unittest.TestCase):
-    def test_shared_phy2mac_reads_a_driven_controller_lane(self):
-        """A shared phy2mac output must not come off an undriven lane.
-
-        pipe_lane_data_p2m ties any controller lane no mode maps to the
-        tie_off constant. The connection wrapper collapses a shared signal
-        to one scalar by reading a single lane, so if it reads an undriven
-        one the port sits at that constant in every mode -- silently, in a
-        config validate() accepts.
-        """
-        with tempfile.TemporaryDirectory() as td:
-            root = Path(td)
-            save_workspace_content(root, {
-                "controllers": [
-                    # CtrlA starts at lane 1: lane 0 is never mapped.
-                    {"ctrl_id": "0", "ctrl_name": "CtrlA", "max_width": "2"},
-                    {"ctrl_id": "1", "ctrl_name": "CtrlB", "max_width": "1"},
-                ],
-                "signals": [
-                    {"signal_name": "mac_phy_txdata", "signal_type": "perlane",
-                     "direction": "mac2phy", "width": "8", "safe_state": "0", "tie_off": "0"},
-                    {"signal_name": "phy_mac_rxstatus", "signal_type": "shared",
-                     "direction": "phy2mac", "width": "3", "safe_state": "0", "tie_off": "7"},
-                ],
-                "mapping": {"lane_count": 2, "rows": [{"mode": "0", "lane0": "0-1", "lane1": "1-0"}]},
-                "gen_flags": {},
-            })
-            cfg = Config(root / "config")
-            self.assertEqual(cfg.validate(), [], "the fixture must stay a legal config")
-
-            p2m = rtl.gen_data_p2m(cfg)
-            self.assertIn("assign ctrla_phy2mac[0] = ctrla_p2m_tie;", p2m)
-
-            connection = rtl.gen_connection(cfg)
-            self.assertIn(
-                "assign ctrla_phy_mac_rxstatus = w_ctrla_phy2mac[1].phy_mac_rxstatus;",
-                connection,
-            )
-            self.assertNotIn("w_ctrla_phy2mac[0].phy_mac_rxstatus", connection)
-            # CtrlB does map lane 0, so it must be left alone.
-            self.assertIn(
-                "assign ctrlb_phy_mac_rxstatus = w_ctrlb_phy2mac[0].phy_mac_rxstatus;",
-                connection,
-            )
 
 
 class ExporterTests(unittest.TestCase):

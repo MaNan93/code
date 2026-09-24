@@ -1575,27 +1575,6 @@ def gen_top(cfg, pclk_mode="pclk_as_phy_output", sel_mode="sync", dpr=False):
     return "\n".join(L) + "\n"
 
 
-def _lowest_driven_ctrl_lane(cfg, cid):
-    """Lowest controller lane index some mode actually maps a PHY lane to.
-
-    A "shared" phy2mac signal collapses a controller's lanes down to one
-    scalar, so any *driven* lane can stand in for the rest. An undriven one
-    cannot: pipe_lane_data_p2m ties it to the tie_off constant, so reading
-    it pins the shared output to that constant in every mode.
-
-    Controller lane 0 is the usual answer and was once assumed to be the
-    only one, but nothing makes a config map it -- lane_mapping.csv may
-    start a controller at lane 1. validate() only requires that a
-    controller gets *some* lane, which is what makes this well defined."""
-    driven = {
-        cfg.mapping[m][l][1]
-        for m in cfg.modes
-        for l in range(cfg.lane_count)
-        if cfg.mapping[m][l][0] == cid
-    }
-    return min(driven) if driven else 0
-
-
 def gen_connection(cfg, pclk_mode="pclk_as_phy_output", dpr=False):
     """pipe_lane_mapper_connection.sv: a pure struct<->flat bridge around
     pipe_lane_mapper. The mapper's two packed-struct-array ports per side
@@ -1604,10 +1583,9 @@ def gen_connection(cfg, pclk_mode="pclk_as_phy_output", dpr=False):
     want SV struct ports.
 
     "perlane" signals (the default) stay an unpacked array of the
-    controller's own max_width. "shared" ones collapse to a single scalar
-    port per controller: a controller drives/observes one value across all
-    of its own lanes (e.g. Rate/PowerDown in the real PIPE spec), so
-    there's nothing to distinguish per-lane on that side.
+    controller's own max_width. A MAC-to-PHY "shared" signal collapses to a
+    single scalar input per controller: the wrapper copies the one value to
+    all of that controller's lanes. PHY-to-MAC signals are always per-lane.
 
     The PHY side is always per-lane regardless of signal_type: which
     controller owns a given PHY lane still varies by mode, so even a
@@ -1627,8 +1605,8 @@ def gen_connection(cfg, pclk_mode="pclk_as_phy_output", dpr=False):
     L.append("//")
     L.append("// Pure struct<->flat bridge around pipe_lane_mapper: every pipe_signals.csv")
     L.append("// row becomes its own flat port here instead of a packed-struct field, for")
-    L.append("// integration with flows/IP that don't want SV struct ports. signal_type=shared")
-    L.append("// collapses a controller's own max_width lanes to one scalar port; perlane")
+    L.append("// integration with flows/IP that don't want SV struct ports. A MAC-to-PHY")
+    L.append("// signal_type=shared collapses a controller's own lanes to one scalar input; perlane")
     L.append("// (the default) stays an unpacked array of max_width. The PHY side is always")
     L.append("// per-lane -- which controller owns a PHY lane still varies by mode, so even a")
     L.append("// \"shared\" signal still needs its own value per PHY lane there.")
@@ -1668,11 +1646,7 @@ def gen_connection(cfg, pclk_mode="pclk_as_phy_output", dpr=False):
             else:
                 L.append(f"    input logic [{s.width-1}:0] dpr_{s.name} [0:NL-1],")
         for s in p2m_sigs:
-            if s.is_shared:
-                L.append(f"    // {s.name}: shared across DPR's own lanes")
-                L.append(f"    output logic [{s.width-1}:0] dpr_{s.name},")
-            else:
-                L.append(f"    output logic [{s.width-1}:0] dpr_{s.name} [0:NL-1],")
+            L.append(f"    output logic [{s.width-1}:0] dpr_{s.name} [0:NL-1],")
         if phy_input_mode:
             L.append("    input logic dpr_pclk,")
             L.append("    output logic [NL-1:0] dpr_rx_clk,")
@@ -1690,11 +1664,7 @@ def gen_connection(cfg, pclk_mode="pclk_as_phy_output", dpr=False):
             else:
                 L.append(f"    input logic [{s.width-1}:0] {c.lname}_{s.name} [0:{c.max_width-1}],")
         for s in p2m_sigs:
-            if s.is_shared:
-                L.append(f"    // {s.name}: shared across {c.name}'s own lanes")
-                L.append(f"    output logic [{s.width-1}:0] {c.lname}_{s.name},")
-            else:
-                L.append(f"    output logic [{s.width-1}:0] {c.lname}_{s.name} [0:{c.max_width-1}],")
+            L.append(f"    output logic [{s.width-1}:0] {c.lname}_{s.name} [0:{c.max_width-1}],")
         if phy_input_mode:
             L.append(f"    input logic [{c.max_width-1}:0] {c.lname}_pclk,")
             L.append(f"    output logic [{c.max_width-1}:0] {c.lname}_rx_clk,")
@@ -1728,7 +1698,7 @@ def gen_connection(cfg, pclk_mode="pclk_as_phy_output", dpr=False):
         L.append(f"    assign w_phy_phy2mac[{l}] = '{{{fields}}};")
     L.append("")
 
-    # ---- controller side: struct <-> flat, shared collapses to one scalar
+    # ---- controller side: struct <-> flat, shared MAC-to-PHY collapses to one scalar
     for cid in sorted(cfg.controllers):
         c = cfg.controllers[cid]
         L.append("    //------------------------------------------------------------")
@@ -1740,20 +1710,9 @@ def gen_connection(cfg, pclk_mode="pclk_as_phy_output", dpr=False):
                 val = f"{c.lname}_{s.name}" if s.is_shared else f"{c.lname}_{s.name}[{l}]"
                 fields.append(f"{s.name}: {val}")
             L.append(f"    assign w_{c.lname}_mac2phy[{l}] = '{{{', '.join(fields)}}};")
-        src_lane = _lowest_driven_ctrl_lane(cfg, cid)
         for s in p2m_sigs:
-            if s.is_shared:
-                # A controller's own lanes are asserted (not checked here) to
-                # agree on a shared signal's value, so one of them stands for
-                # all -- but it has to be one a mode actually drives, or this
-                # reads the tie_off constant forever.
-                L.append(
-                    f"    assign {c.lname}_{s.name} = "
-                    f"w_{c.lname}_phy2mac[{src_lane}].{s.name};"
-                )
-            else:
-                for l in range(c.max_width):
-                    L.append(f"    assign {c.lname}_{s.name}[{l}] = w_{c.lname}_phy2mac[{l}].{s.name};")
+            for l in range(c.max_width):
+                L.append(f"    assign {c.lname}_{s.name}[{l}] = w_{c.lname}_phy2mac[{l}].{s.name};")
         L.append("")
 
     if dpr:
@@ -1767,11 +1726,8 @@ def gen_connection(cfg, pclk_mode="pclk_as_phy_output", dpr=False):
                 fields.append(f"{s.name}: {val}")
             L.append(f"    assign w_dpr_mac2phy[{l}] = '{{{', '.join(fields)}}};")
         for s in p2m_sigs:
-            if s.is_shared:
-                L.append(f"    assign dpr_{s.name} = w_dpr_phy2mac[0].{s.name};")
-            else:
-                for l in range(LC):
-                    L.append(f"    assign dpr_{s.name}[{l}] = w_dpr_phy2mac[{l}].{s.name};")
+            for l in range(LC):
+                L.append(f"    assign dpr_{s.name}[{l}] = w_dpr_phy2mac[{l}].{s.name};")
         L.append("")
 
     # ---- the real DUT

@@ -99,9 +99,10 @@ class Signal:
 
     signal_type: "perlane" (default sense of everything in this table --
     each of a controller's own lanes carries its own independent value) or
-    "shared" (this controller drives/observes one value across all of its
+    "shared" (this controller drives one MAC-to-PHY value across all of its
     own lanes -- e.g. Rate/PowerDown in the real PIPE spec, which a
-    controller changes for its whole link at once, never per-lane). This is
+    controller changes for its whole link at once, never per-lane). PHY-to-MAC
+    signals are always per-lane and may not be declared shared. This is
     purely a pipe_lane_mapper_connection.sv wrapper concern: the mapper
     core still treats every signal as a per-lane struct field regardless,
     since which controller owns a given PHY lane still varies by mode --
@@ -295,6 +296,11 @@ class Config:
                 if d not in ("mac2phy", "phy2mac"):
                     raise SystemExit(
                         f"{path} line {i}: direction='{d}' is invalid, must be mac2phy or phy2mac"
+                    )
+                if d == "phy2mac" and st == "shared":
+                    raise SystemExit(
+                        f"{path} line {i}: phy2mac signals must use "
+                        "signal_type=perlane; shared is only valid for mac2phy"
                     )
                 try:
                     s = Signal(name, st, d, r["width"], r["safe_state"], r["tie_off"])

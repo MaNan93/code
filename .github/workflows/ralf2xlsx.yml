@@ -95,26 +95,30 @@ jobs:
           rm -f sort_addr.xlsx
           .venv-test/bin/ralf2xlsx sort_addr_check.ralf -t top --sort addr -o sort_addr.xlsx 2>sort_addr.log
           test -s sort_addr.xlsx
-          # sort_addr_check.ralf declares blocks in source order c, a, b at
-          # addresses chosen so the default address-map keeps them ordered
-          # a < b < c; --sort addr must present them in that address order,
-          # not source order, in both the terminal Block tree and the
-          # workbook (Overview + per-block sheets).
+          # sort_addr_check.ralf declares 5 blocks out of address order and
+          # of mixed content -- a/b/c have registers, d is memory-only, e is
+          # genuinely empty -- at addresses chosen so the default
+          # address-map keeps them ordered a < d < b < e < c. --sort addr
+          # must present them in that address order, not source order, in
+          # the terminal Block tree AND the workbook (Overview + per-block
+          # sheet tabs), including for d/e which have no register rows to
+          # anchor their position by.
           python3 - <<'PY'
           log = open("sort_addr.log", encoding="utf-8", errors="replace").read()
-          i_a = log.index("a  (base=")
-          i_b = log.index("b  (base=")
-          i_c = log.index("c  (base=")
-          assert i_a < i_b < i_c, "Block tree not in address order: %r" % ((i_a, i_b, i_c),)
-          print("verified terminal Block tree order: a, b, c")
+          idx = [log.index("%s  (base=" % n) for n in "adbec"]
+          assert idx == sorted(idx), "Block tree not in address order: %r" % idx
+          print("verified terminal Block tree order: a, d, b, e, c")
           PY
           .venv-test/bin/python - <<'PY'
           from openpyxl import load_workbook
           wb = load_workbook("sort_addr.xlsx", read_only=True)
           ws = wb["Overview"]
           rows = [r[0] for r in ws.iter_rows(min_row=2, max_col=1, values_only=True) if r[0]]
-          assert rows == ["a", "b", "c"], "Overview not sorted by address: %r" % rows
-          assert wb.sheetnames[1:] == ["a", "b", "c"], "sheet order not by address: %r" % wb.sheetnames
+          expected = ["a", "d", "b", "e", "c"]
+          assert rows == expected, "Overview not sorted by address: %r" % rows
+          # Memories comes from d's memory row; only d/e (no registers) prove
+          # the backfill-ordering fix, the rest were already covered.
+          assert wb.sheetnames[2:] == expected, "sheet order not by address: %r" % wb.sheetnames
           print("verified Overview/sheet order:", rows)
           PY
 

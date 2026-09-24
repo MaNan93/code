@@ -20,7 +20,7 @@ ralf2xlsx.py -- Synopsys RALF (Register Abstraction Layer File) -> Excel 寄存�
 写法也能正确解析。
 
 输出 sheet:
-    Overview     -- 第一张 sheet, 每个实例化 block 一行, 点 Block/Sheet 列跳到对应 sheet
+    Overview     -- 第一张 sheet, 每个实例化 block 一行, 点击 Block 跳转到对应 sheet
     RegisterMap  -- 寄存器 x 字段 全量表 (一个字段一行, 寄存器列纵向合并);
                     仅在 --no-sheet-per-block 时生成, 否则用下面的按 block 分表代替
     <block sheets> -- 默认每个实例化 block 一张 sheet (同 RegisterMap 列); --no-sheet-per-block 关闭
@@ -1913,6 +1913,18 @@ def _collect_block_nodes(blk_rows, kind_filter=None):
     return nodes
 
 
+def _block_order_key(nodes, root):
+    """--sort addr key for a _collect_block_nodes root: base address, then
+    full path as tie-break. Full path (not the leaf instance name) because
+    it's unique -- two different blocks can share a leaf ("soc.a.reg" vs
+    "soc.b.reg") but never a full path -- and it's what every caller
+    (Block tree siblings, Overview rows, per-block sheet tabs) already has
+    on hand, so they all break same-address ties identically.
+    """
+    base = nodes[root]['base']
+    return (base if base is not None else 0, root)
+
+
 def build_block_tree_rows(blk_rows, sort_addr=False):
     """Collapse domain rows and render instantiated system/block hierarchy."""
     nodes = _collect_block_nodes(blk_rows)
@@ -1943,8 +1955,7 @@ def build_block_tree_rows(blk_rows, sort_addr=False):
 
     if sort_addr:
         def addr_key(p):
-            b = nodes[p]['base']
-            return (b if b is not None else 0, p)
+            return _block_order_key(nodes, p)
         roots.sort(key=addr_key)
         for kids in children.values():
             kids.sort(key=addr_key)
@@ -2162,8 +2173,7 @@ def write_xlsx(path, ela, meta, sheet_per_block=True, full_columns=False,
     nodes = _collect_block_nodes(ela.blk_rows, kind_filter='block')
     root_order = list(nodes.keys())
     if getattr(meta, 'get', None) and meta.get('sort') == 'addr':
-        root_order.sort(key=lambda r: (nodes[r]['base'] if nodes[r]['base'] is not None else 0,
-                                       r.rsplit('.', 1)[-1]))
+        root_order.sort(key=lambda r: _block_order_key(nodes, r))
 
     block_sheet_names = {}
     if sheet_per_block:
@@ -2395,6 +2405,7 @@ def _convert_one(args, ralf_path, out_path, csv_path, label=None):
         # here -- same width throughout, so no need to re-parse it.
         ela.mem_rows.sort(key=lambda r: (block_addr(r['block']),
                                          r['block'],
+                                         r['addr'] == '',   # addressless (e.g. @none) last
                                          r['addr'],
                                          r['name']))
 

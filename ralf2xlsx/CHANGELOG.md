@@ -4,6 +4,29 @@ All notable changes to `ralf2xlsx` are recorded here. The release version
 itself lives in [`pyproject.toml`](pyproject.toml) (single source of
 truth); this file is just the history behind each bump.
 
+## v3.6
+
+- Memories sheet: sort memories with no address (e.g. `@none`) after
+  addressed ones under `--sort addr`, instead of first -- empty string
+  sorts before any `0x...` string, which put addressless memories ahead
+  of the whole block map.
+- Unify the `--sort addr` tie-break (same base address) used by the
+  terminal Block tree, Overview rows, and per-block sheet tabs: all three
+  now break ties on the full block path via a shared `_block_order_key()`
+  instead of the Block tree using full path while Overview/sheet tabs
+  used just the leaf instance name -- two blocks with the same base
+  address under different parents (e.g. `soc.a.zz` vs `soc.b.aa`) could
+  previously come out in a different relative order in Excel than in the
+  terminal.
+- `sort_addr_check.ralf` (the CI fixture) now covers 5 blocks instead of
+  3: three with registers plus a memory-only block and a genuinely empty
+  one, still declared out of address order. The previous fixture only
+  exercised blocks that all had register rows, so it couldn't have caught
+  the v3.5 sheet-order regression it was meant to guard against.
+- Fix a stale docstring line: Overview lost its Sheet column back in
+  v2.12, so "点 Block/Sheet 列跳到对应 sheet" hasn't been accurate for a
+  while -- now just "点击 Block 跳转到对应 sheet".
+
 ## v3.5
 
 - Fix `--sort addr` sheet-tab order for blocks with no register rows

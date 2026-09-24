@@ -8,6 +8,97 @@ ralf2xlsx.py -- Synopsys RALF (Register Abstraction Layer File) -> Excel 寄存�
 
 Version History
 ---------------
+v3.1
+  - Batch mode (multiple .ralf on the command line): stop repeating
+    "[filename] " on every terminal line. The filename now appears once,
+    in the "Summary [filename]:" header; Block tree, warnings, address
+    map detail and the final [ok] line are unprefixed. Fatal errors that
+    can happen before a Summary is ever printed (file not found, parse
+    failure, missing top, write failure, ...) still carry the
+    "[filename] " tag so batch failures stay identifiable.
+
+v3.0
+  - BREAKING: --addr-map is no longer opt-in. When omitted, the source
+    layout (Table 3-22 vs 3-23) is auto-detected from block names: a name
+    containing VF1_PF0 or VF_PF0 (case-insensitive) implies the 33-bit
+    layout, otherwise 32-bit. Passing --addr-map 32bit/33bit explicitly
+    still overrides the detected value. This assumes every input .ralf
+    uses one of these two DBI address layouts -- running this tool on an
+    unrelated RALF file will now silently remap its addresses too.
+  - print_summary's "address map" line now always prints and notes
+    whether the layout was auto-detected or given via --addr-map.
+
+v2.23
+  - Simplify Table 3-22 CDM detection in remap_dbi_address to a single
+    (raw >> 21) == 0 check -- equivalent to the previous high==0 and
+    bit21==0 pair, no behavior change.
+
+v2.22
+  - Reorder Block tree metadata to (base=..., def=...) -- base address first,
+    definition name second.
+
+v2.21
+  - Recognize the Port Logic(CDM) address range (DISABLE_CFG_MAP_PL_REG=1)
+    in both Table 3-22 and Table 3-23 --addr-map source layouts. It has no
+    slot in the target layout, so it is explicitly skipped with a specific
+    warning instead of falling through to the generic "unrecognized
+    encoding" error.
+  - Fix Table 3-23 ELBI detection: it only checked bits[32:30]==0b100,
+    missing ELBI addresses with bit 30 set (falls through to the generic
+    error with a less specific message). Match on bits[32:31]==0b10, the
+    only combination that actually distinguishes ELBI from every other
+    Table 3-23 region.
+
+v2.20
+  - Hide Volatile from compact Excel sheets by default.
+  - Add --show-violatile to include Volatile in the compact view.
+
+v2.19
+  - Keep address-map terminal output concise by default.
+  - Add --show-addr-map to opt into per-register raw-to-mapped details.
+
+v2.18
+  - Show every raw-to-mapped register address in terminal output.
+  - Apply address mapping to block bases so Overview and the terminal block
+    tree use converted addresses as well as each block sheet's Address column.
+
+v2.17
+  - Rename the explicit source selector to --addr-map {32bit,33bit}.
+  - Print mapped/unchanged/failed register counts so identity mappings are
+    distinguishable from an option that was not applied.
+    32bit uses the first supplied source layout and 33bit uses the second.
+  - Omitting --addr-map leaves addresses unchanged; converted addresses
+    continue to drive --sort addr.
+
+v2.13
+  - Remove Enum, R/W Limit, Field Desc and Register Desc from the default
+    compact block sheets, leaving only columns A-H.
+
+v2.12
+  - Reduce Overview to Block and Base Addr; Block remains the navigation link.
+  - Remove Block, Domain, Kind and Width(bit) from compact block sheets.
+
+v2.11
+  - Use a compact 16-column register view by default in Excel.
+  - Add --full-columns to restore all 29 detailed register columns.
+  - Keep CSV output full-width for machine processing.
+
+v2.10
+  - Fix Overview sheet hyperlinks: assigning a plain string to
+    cell.hyperlink sets Hyperlink.target, which openpyxl always writes as
+    an *external* relationship -- Excel/WPS then treats "#'Sheet'!A1" as a
+    broken URL instead of jumping to the sheet. Use Hyperlink(location=...)
+    with no target/id, which is how OOXML actually encodes an in-workbook
+    jump.
+  - Fix --sort addr not affecting the terminal Block tree: it rendered
+    ela.blk_rows in raw instantiation order regardless of --sort. Sort
+    each node's children (and the root list) by base address when
+    --sort addr is given.
+  - Stop emitting the RegisterMap sheet when per-block sheets are also
+    being generated (the default) -- they already carry the same rows
+    split by block, so RegisterMap was pure duplication. It still appears
+    as the sole register-detail sheet under --no-sheet-per-block.
+
 v2.9
   - Fix --sort addr: a multi-domain block (same base address, different
     domain interfaces, e.g. a bridge with pci/ahb domains) had its rows
@@ -87,13 +178,13 @@ v2.0
 写法也能正确解析。
 
 输出 sheet:
-    Summary      -- 源文件/顶层/统计, 各 block 基地址
-    RegisterMap  -- 寄存器 x 字段 主表 (一个字段一行, 寄存器列纵向合并)
-    Registers    -- 寄存器级汇总 (一个寄存器一行)
-    Memories     -- 存储器
-    Enums        -- 字段枚举值
-    Warnings     -- 解析/展开过程中的所有告警
-    (-s 时额外每个 block 一张 sheet)
+    Overview     -- 第一张 sheet, 每个实例化 block 一行, 点 Block/Sheet 列跳到对应 sheet
+    RegisterMap  -- 寄存器 x 字段 全量表 (一个字段一行, 寄存器列纵向合并);
+                    仅在 --no-sheet-per-block 时生成, 否则用下面的按 block 分表代替
+    <block sheets> -- 默认每个实例化 block 一张 sheet (同 RegisterMap 列); --no-sheet-per-block 关闭
+    Memories     -- 存储器 (有 memory 才生成)
+    Enums        -- 字段枚举值 (有 enum 才生成)
+    Summary / Block tree / Warnings 不进 Excel, 打印到终端 (见 --quiet)
 """
 
 import argparse
@@ -105,7 +196,7 @@ import re
 import sys
 from collections import OrderedDict
 
-VERSION = '2.9'
+VERSION = '3.1'
 
 # ============================================================================
 # 词法分析
@@ -1661,6 +1752,184 @@ class Elaborator(object):
 
 
 # ============================================================================
+# DBI 地址重映射
+# ============================================================================
+
+_ADDR_MAP_AUTO_RE = re.compile(r'VF1_PF0|VF_PF0', re.IGNORECASE)
+
+
+def detect_addr_map_layout(p):
+    """Guess the DBI source layout (Table 3-22 vs 3-23) from block names.
+
+    A block name containing VF1_PF0 / VF_PF0 implies SRIOV/ARI is modeled
+    (Table 3-21: CDM/ELBI select bit moves to bit 32 in that case), so the
+    whole file is assumed to use the 33-bit source layout; otherwise 32-bit.
+    """
+    for name in p.defs['block']:
+        if _ADDR_MAP_AUTO_RE.search(name):
+            return '33bit'
+    return '32bit'
+
+
+def _pack_project_dbi(vf, pf, vf_active, access_type, payload):
+    """Pack fields into the project-specific 32-bit DBI layout."""
+    return (((vf & 0xff) << 24) |
+            (((pf >> 3) & 0x3) << 22) |
+            ((access_type & 0x3) << 20) |
+            (((pf >> 2) & 0x1) << 19) |
+            ((pf & 0x3) << 17) |
+            ((vf_active & 0x1) << 16) |
+            payload)
+
+
+def remap_dbi_address(raw, table_323=False):
+    """Convert native AXI DBI Table 3-22/3-23 address to project layout.
+
+    Returns (mapped_address, access_type_name). Raises ValueError when the
+    source encoding is unsupported or cannot be represented without loss.
+    """
+    if raw is None or raw < 0:
+        return raw, ''
+
+    if table_323:
+        if raw >= (1 << 33):
+            raise ValueError('Table 3-23 地址超过 33 bit')
+        prefix = (raw >> 30) & 0x7
+        select = (raw >> 19) & 0x7
+        high_payload = (raw >> 22) & 0xff
+
+        if prefix == 0x6 and select == 0x6 and high_payload == 0x02:
+            # Port Logic(CDM) when DISABLE_CFG_MAP_PL_REG=1: no equivalent
+            # slot in the target layout, so the caller skips this register
+            # and keeps its raw address (see remap_elaborated_dbi_addresses).
+            raise ValueError('目标布局不支持 Port Logic(CDM) 地址 (DISABLE_CFG_MAP_PL_REG=1)')
+
+        if ((raw >> 32) & 1) == 0:                 # CDM
+            vf = (raw >> 22) & 0xff
+            vf_active = (raw >> 21) & 1
+            pf = (raw >> 16) & 0x1f
+            cs2 = (raw >> 31) & 1
+            payload = (cs2 << 12) | (raw & 0xfff)
+            return _pack_project_dbi(vf, pf, vf_active, 0, payload), 'CDM'
+
+        if prefix == 0x7:                          # MSI-X Table/PBA
+            vf = (raw >> 22) & 0xff
+            vf_active = (raw >> 21) & 1
+            pf = (raw >> 16) & 0x1f
+            # Bit 15 selects MSI-X Table (0) versus PBA (1); bits 14:0
+            # carry the byte address in both source and target layouts.
+            payload = raw & 0xffff
+            return _pack_project_dbi(vf, pf, vf_active, 1, payload), 'MSI-X'
+
+        if prefix == 0x6 and select == 0x6 and high_payload == 0:  # iATU
+            return _pack_project_dbi(0, 0, 0, 2, raw & 0x7ffff), 'iATU'
+
+        if prefix == 0x6 and select == 0x7:         # DMA
+            if high_payload:
+                raise ValueError('DMA 高位地址非零，目标布局 [31:22] 为 Reserved')
+            return _pack_project_dbi(0, 0, 0, 3, raw & 0x7ffff), 'DMA'
+
+        if ((raw >> 31) & 0x3) == 0b10:             # ELBI ([32:31]=10)
+            raise ValueError('目标布局不支持 ELBI 地址')
+        raise ValueError('无法识别的 Table 3-23 DBI 地址编码')
+
+    if raw >= (1 << 32):
+        raise ValueError('Table 3-22 地址超过 32 bit')
+    high = (raw >> 22) & 0x3ff
+    select = (raw >> 19) & 0x7
+
+    if (raw >> 12) == 0x40b00:
+        # Port Logic(CDM) when DISABLE_CFG_MAP_PL_REG=1: no equivalent slot
+        # in the target layout, so the caller skips this register and keeps
+        # its raw address (see remap_elaborated_dbi_addresses).
+        raise ValueError('目标布局不支持 Port Logic(CDM) 地址 (DISABLE_CFG_MAP_PL_REG=1)')
+
+    if (raw >> 21) == 0:                           # CDM ([31:21]=0)
+        pf = (raw >> 16) & 0x7
+        cs2 = (raw >> 20) & 1
+        payload = (cs2 << 12) | (raw & 0xfff)
+        return _pack_project_dbi(0, pf, 0, 0, payload), 'CDM'
+
+    if high == 0x100 and select == 0x6:            # MSI-X Table/PBA
+        pf = (raw >> 16) & 0x7
+        payload = raw & 0xffff
+        return _pack_project_dbi(0, pf, 0, 1, payload), 'MSI-X'
+
+    if high == 0 and select == 0x6:                # iATU
+        return _pack_project_dbi(0, 0, 0, 2, raw & 0x7ffff), 'iATU'
+
+    if select == 0x7:                              # DMA
+        if high:
+            raise ValueError('DMA 高位地址非零，目标布局 [31:22] 为 Reserved')
+        return _pack_project_dbi(0, 0, 0, 3, raw & 0x7ffff), 'DMA'
+
+    if high == 0 and select == 0x4:
+        raise ValueError('目标布局不支持 ELBI 地址')
+    raise ValueError('无法识别的 Table 3-22 DBI 地址编码')
+
+
+def remap_elaborated_dbi_addresses(ela, addr_map):
+    """Remap all register rows in-place; preserve raw values on failure."""
+    table_323 = addr_map == '33bit'
+    warned = set()
+    status = {}
+    entries = OrderedDict()
+    for rows in (ela.rows, ela.reg_rows):
+        for row in rows:
+            raw = row.get('_addr')
+            if raw is None or raw < 0:
+                continue
+            path = '%s.%s' % (row.get('block', ''), row.get('reg', ''))
+            row['_raw_addr'] = raw
+            try:
+                mapped, access = remap_dbi_address(raw, table_323=table_323)
+            except ValueError as e:
+                key = (path, raw, str(e))
+                status[(path, raw)] = 'failed'
+                entries[(path, raw)] = dict(path=path, raw=raw, mapped=raw,
+                                                 access='', status='failed', error=str(e))
+                if key not in warned:
+                    warned.add(key)
+                    ela.warn('DBI 地址未转换 %s (%s, %s): %s' %
+                             (path, hexs(raw, 33 if table_323 else 32),
+                              'Table 3-23' if table_323 else 'Table 3-22', e))
+                continue
+            row['_addr'] = mapped
+            row['addr'] = hexs(mapped)
+            row['_dbi_access'] = access
+            status.setdefault((path, raw), 'mapped' if mapped != raw else 'unchanged')
+            entries.setdefault((path, raw), dict(
+                path=path, raw=raw, mapped=mapped, access=access,
+                status='mapped' if mapped != raw else 'unchanged', error=''))
+
+    # Overview and the terminal block tree are based on blk_rows rather than
+    # register rows, so convert their base addresses through the same mapping.
+    for block in ela.blk_rows:
+        raw = block.get('base')
+        if raw is None or raw < 0:
+            continue
+        block['_raw_base'] = raw
+        try:
+            mapped, _ = remap_dbi_address(raw, table_323=table_323)
+        except ValueError as e:
+            key = ('block:' + block.get('block', ''), raw, str(e))
+            if key not in warned:
+                warned.add(key)
+                ela.warn('DBI block base 未转换 %s (%s): %s' %
+                         (block.get('block', ''),
+                          hexs(raw, 33 if table_323 else 32), e))
+            continue
+        block['base'] = mapped
+
+    ela.addr_map_entries = list(entries.values())
+    ela.addr_map_stats = dict(
+        mapped=sum(1 for v in status.values() if v == 'mapped'),
+        unchanged=sum(1 for v in status.values() if v == 'unchanged'),
+        failed=sum(1 for v in status.values() if v == 'failed'),
+    )
+
+
+# ============================================================================
 # 表格定义
 # ============================================================================
 
@@ -1694,6 +1963,16 @@ REG_COLS = [
     ('local_path',  'Local Path',     24),
     ('fdoc',        'Field Desc',     34),
     ('rdoc',        'Register Desc',  30),
+]
+
+# Default Excel view: retain the columns most useful for register review.
+# The complete schema remains available through --full-columns and CSV.
+COMPACT_REG_KEYS = (
+    'reg', 'addr', 'byte_off', 'field', 'bits', 'access', 'reset',
+)
+COMPACT_REG_COLS = [c for c in REG_COLS if c[0] in COMPACT_REG_KEYS]
+COMPACT_VOLATILE_REG_COLS = [
+    c for c in REG_COLS if c[0] in COMPACT_REG_KEYS + ('volatile',)
 ]
 MERGE_KEYS = ('block', 'domain', 'reg', 'kind', 'addr', 'byte_off', 'width', 'shared',
               'restrict', 'memory', 'mem_offset', 'backdoor', 'hdl', 'vhdl', 'rdoc')
@@ -1729,12 +2008,7 @@ WARN_COLS = [('kind', 'Stage', 10), ('where', 'Where', 26), ('msg', 'Warning', 1
 
 OVERVIEW_COLS = [
     ('instance', 'Block', 28),
-    ('definition', 'Definition', 22),
     ('base', 'Base Addr', 14),
-    ('domains', 'Domain(s)', 18),
-    ('bus_bytes', 'Bus Bytes', 12),
-    ('endian', 'Endian', 10),
-    ('sheet', 'Sheet', 24),
 ]
 
 
@@ -1753,7 +2027,7 @@ BLOCKTREE_COLS = [
 ]
 
 
-def build_block_tree_rows(blk_rows):
+def build_block_tree_rows(blk_rows, sort_addr=False):
     """Collapse domain rows and render instantiated system/block hierarchy."""
     nodes = OrderedDict()
 
@@ -1801,6 +2075,14 @@ def build_block_tree_rows(blk_rows):
         else:
             children[par].append(p)
 
+    if sort_addr:
+        def addr_key(p):
+            b = nodes[p]['base']
+            return (b if b is not None else 0, p)
+        roots.sort(key=addr_key)
+        for kids in children.values():
+            kids.sort(key=addr_key)
+
     out = []
 
     def emit(path, prefix='', is_last=True, level=0):
@@ -1839,8 +2121,8 @@ def build_block_tree_rows(blk_rows):
     return out
 
 
-def print_block_tree(blk_rows, out=sys.stderr, prefix=''):
-    rows = build_block_tree_rows(blk_rows)
+def print_block_tree(blk_rows, out=sys.stderr, prefix='', sort_addr=False):
+    rows = build_block_tree_rows(blk_rows, sort_addr=sort_addr)
     if not rows:
         return
     out.write('%sBlock tree:\n' % prefix)
@@ -1852,10 +2134,10 @@ def print_block_tree(blk_rows, out=sys.stderr, prefix=''):
         definition = r.get('definition', '')
         instance = r.get('instance', '')
         leaf = instance.rsplit('.', 1)[-1] if instance else ''
-        if definition and definition != leaf:
-            extra.append('def=%s' % definition)
         if r.get('base'):
             extra.append('base=%s' % r['base'])
+        if definition and definition != leaf:
+            extra.append('def=%s' % definition)
         if r.get('domains'):
             extra.append('domain=%s' % r['domains'])
         tree = r.get('tree', '')
@@ -1870,8 +2152,8 @@ def print_block_tree(blk_rows, out=sys.stderr, prefix=''):
         out.write('%s  %s\n' % (prefix, line))
 
 
-def print_summary(meta, ela, warn_rows, out=sys.stderr, prefix=''):
-    out.write('%sSummary:\n' % prefix)
+def print_summary(meta, ela, warn_rows, out=sys.stderr, prefix='', label=None):
+    out.write('%sSummary%s:\n' % (prefix, (' [%s]' % label) if label else ''))
     out.write('%s  source: %s\n' % (prefix, meta['src']))
     out.write('%s  top: %s\n' % (prefix, meta['top']))
     out.write('%s  registers: %d | fields: %d | memories: %d | warnings: %d\n' %
@@ -1879,6 +2161,30 @@ def print_summary(meta, ela, warn_rows, out=sys.stderr, prefix=''):
     out.write('%s  address mode: %s\n' % (prefix, meta['addr_mode']))
     out.write('%s  arrays: %s | access dialect: %s\n' %
               (prefix, meta['arrays'], meta.get('flavor', 'auto')))
+    stats = getattr(ela, 'addr_map_stats', {})
+    how = '自动识别' if meta.get('addr_map_auto') else '--addr-map 指定'
+    out.write('%s  address map: %s (%s) -> target | mapped: %d | unchanged: %d | failed: %d\n' %
+              (prefix, meta.get('addr_map', ''), how, stats.get('mapped', 0),
+               stats.get('unchanged', 0), stats.get('failed', 0)))
+
+
+def print_address_map(ela, addr_map, out=sys.stderr, prefix=''):
+    entries = getattr(ela, 'addr_map_entries', [])
+    if not entries:
+        return
+    bits = 33 if addr_map == '33bit' else 32
+    out.write('%sAddress map (%s -> target):\n' % (prefix, addr_map))
+    for item in entries:
+        raw = hexs(item['raw'], bits)
+        mapped = hexs(item['mapped'])
+        suffix = item.get('access', '')
+        if item['status'] == 'failed':
+            suffix = 'FAILED: %s' % item.get('error', '')
+        elif item['status'] == 'unchanged':
+            suffix = '%s, unchanged' % suffix
+        out.write('%s  %s: %s -> %s%s\n' %
+                  (prefix, item['path'], raw, mapped,
+                   ('  [%s]' % suffix) if suffix else ''))
 
 
 def bit_range_of(r):
@@ -1889,11 +2195,13 @@ def bit_range_of(r):
 # Excel 输出
 # ============================================================================
 
-def write_xlsx(path, ela, meta, warn_rows, sheet_per_block=True):
+def write_xlsx(path, ela, meta, warn_rows, sheet_per_block=True, full_columns=False,
+               show_violatile=False):
     from openpyxl import Workbook
     from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
     from openpyxl.utils import get_column_letter
     from openpyxl.worksheet.cell_range import CellRange, MultiCellRange
+    from openpyxl.worksheet.hyperlink import Hyperlink
 
     hdr_font = Font(bold=True, color='FFFFFF', size=10)
     hdr_fill = PatternFill('solid', fgColor='2F5597')
@@ -1906,6 +2214,8 @@ def write_xlsx(path, ela, meta, warn_rows, sheet_per_block=True):
     mono = Font(name='Consolas', size=10)
 
     wb = Workbook()
+    reg_cols = (REG_COLS if full_columns else
+                (COMPACT_VOLATILE_REG_COLS if show_violatile else COMPACT_REG_COLS))
 
     def dump(ws, rows, cols, merge=False, fill=None):
         for j, (_, h, w) in enumerate(cols, 1):
@@ -1959,7 +2269,10 @@ def write_xlsx(path, ela, meta, warn_rows, sheet_per_block=True):
     ws_overview = wb.active
     ws_overview.title = 'Overview'
 
-    dump(wb.create_sheet('RegisterMap'), ela.rows, REG_COLS, merge=True)
+    if not sheet_per_block:
+        # Per-block sheets already carry every register/field row split by
+        # block; only fall back to one combined sheet when they're disabled.
+        dump(wb.create_sheet('RegisterMap'), ela.rows, reg_cols, merge=True)
     if ela.mem_rows:
         dump(wb.create_sheet('Memories'), ela.mem_rows, MEM_COLS)
 
@@ -2016,7 +2329,7 @@ def write_xlsx(path, ela, meta, warn_rows, sheet_per_block=True):
                 k += 1
             used.add(t)
             block_sheet_names[bname] = t
-            dump(wb.create_sheet(t), rows, REG_COLS, merge=True)
+            dump(wb.create_sheet(t), rows, reg_cols, merge=True)
 
 
     # ---- Overview ----
@@ -2066,16 +2379,19 @@ def write_xlsx(path, ela, meta, warn_rows, sheet_per_block=True):
 
     dump(ws_overview, overview_rows, OVERVIEW_COLS)
 
-    # Internal hyperlinks. Both Block and Sheet cells jump to the block sheet.
+    # Internal hyperlink: the Block cell jumps to its block worksheet.
     for row_idx, r in enumerate(overview_rows, start=2):
         target = r.get('sheet', '')
         if not target:
             continue
         escaped = target.replace("'", "''")
-        for col_idx in (1, 7):
-            c = ws_overview.cell(row_idx, col_idx)
-            c.hyperlink = "#'%s'!A1" % escaped
-            c.style = 'Hyperlink'
+        c = ws_overview.cell(row_idx, 1)
+        # A plain string assigns to Hyperlink.target, which openpyxl always
+        # turns into an *external* relationship (TargetMode="External") --
+        # Excel/WPS then treats "#'Sheet'!A1" as a broken URL instead of an
+        # in-workbook jump. Internal jumps must use .location, no target/id.
+        c.hyperlink = Hyperlink(ref='', location="'%s'!A1" % escaped)
+        c.style = 'Hyperlink'
 
     wb._sheets.remove(ws_overview)
     wb._sheets.insert(0, ws_overview)
@@ -2166,6 +2482,12 @@ def _convert_one(args, ralf_path, out_path, csv_path, label=None):
             sys.stderr.write('%s展开 %s 出错 (%s): %s\n' % (prefix, t, type(e).__name__, e))
             return 2
 
+    if args.addr_map:
+        addr_map, addr_map_auto = args.addr_map, False
+    else:
+        addr_map, addr_map_auto = detect_addr_map_layout(p), True
+    remap_elaborated_dbi_addresses(ela, addr_map)
+
     if args.sort == 'addr':
         # Sort blocks by their base address, then registers by absolute address.
         # This keeps each block contiguous while making the overall workbook
@@ -2222,17 +2544,23 @@ def _convert_one(args, ralf_path, out_path, csv_path, label=None):
                            else 'ralgen default / address units',
                            hexs(base or 0)),
                 arrays='collapsed' if args.no_expand_arrays else 'expanded',
-                flavor=args.flavor, sort=args.sort)
+                flavor=args.flavor, sort=args.sort,
+                addr_map=addr_map, addr_map_auto=addr_map_auto)
 
     if not args.quiet:
-        print_summary(meta, ela, warn_rows, prefix=prefix)
-        print_block_tree(ela.blk_rows, prefix=prefix)
+        print_summary(meta, ela, warn_rows, label=label)
+        print_block_tree(ela.blk_rows, sort_addr=(args.sort == 'addr'))
+        if args.show_addr_map:
+            print_address_map(ela, addr_map)
         for w in warn_rows:
-            sys.stderr.write('%s[warn] %s %s\n' %
-                             (prefix, ('%s:' % w['where']) if w['where'] else '', w['msg']))
+            sys.stderr.write('[warn] %s %s\n' %
+                             (('%s:' % w['where']) if w['where'] else '', w['msg']))
 
     try:
-        write_xlsx(out_path, ela, meta, warn_rows, sheet_per_block=args.sheet_per_block)
+        write_xlsx(out_path, ela, meta, warn_rows,
+                   sheet_per_block=args.sheet_per_block,
+                   full_columns=args.full_columns,
+                   show_violatile=args.show_violatile)
     except ImportError:
         sys.stderr.write('%sERROR: 需要 openpyxl, 请先 pip install openpyxl\n' % prefix)
         return 2
@@ -2253,7 +2581,7 @@ def _convert_one(args, ralf_path, out_path, csv_path, label=None):
             sys.stderr.write('%sERROR: CSV 输出失败 (%s): %s\n' % (prefix, type(e).__name__, e))
             return 2
 
-    print('%s[ok] %s' % (prefix, out_path))
+    print('[ok] %s' % out_path)
     return 0
 
 
@@ -2280,6 +2608,10 @@ def main(argv=None):
                     help='每个实例化 block 生成独立 sheet（默认开启；保留此选项兼容旧命令）')
     ap.add_argument('--no-sheet-per-block', dest='sheet_per_block', action='store_false',
                     help='不生成每个 block 的独立 sheet')
+    ap.add_argument('--full-columns', action='store_true',
+                    help='Excel 显示全部明细列（默认只显示常用的精简列；CSV 始终为全量列）')
+    ap.add_argument('--show-violatile', action='store_true',
+                    help='在精简 Excel 表中显示 Volatile 列（按指定拼写保留）')
     ap.add_argument('--csv', help='同时输出 CSV(字段表); 语义同 -o, 多文件时是目录')
     ap.add_argument('--base', default='0', help='顶层基地址 (缺省 0), 支持 0x / Verilog 格式')
     ap.add_argument('--addr-mode', choices=('byte', 'word'), default='byte',
@@ -2290,6 +2622,12 @@ def main(argv=None):
                          'uvm=只接受 UVM 表, vmm=只接受 VMM 表')
     ap.add_argument('--sort', choices=('source', 'addr'), default='source',
                     help='行顺序: source=按 RALF 出现顺序(缺省), addr=按地址')
+    ap.add_argument('--addr-map', choices=('32bit', '33bit'),
+                    help='指定当前 RALF 的地址布局并转换为目标寄存器布局; '
+                         '32bit=第一张源表, 33bit=第二张源表; '
+                         '不给则自动判断: block name 里含 VF1_PF0/VF_PF0 视为 33bit, 否则 32bit')
+    ap.add_argument('--show-addr-map', action='store_true',
+                    help='逐寄存器打印原地址和转换后地址（默认只打印转换统计）')
     ap.add_argument('--no-expand-arrays', action='store_true',
                     help='数组只出一行 (name[lo:hi]), 大数组不撑爆表格')
     ap.add_argument('--check', action='store_true', help='只解析+展开, 不生成 Excel')

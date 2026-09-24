@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "ralf2xlsx"
-version = "2.9.0"
+version = "3.1.0"
 description = "Synopsys RALF (Register Abstraction Layer File) -> Excel register map converter"
 requires-python = ">=3.6.8"
 authors = [

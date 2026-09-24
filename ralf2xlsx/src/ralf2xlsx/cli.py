@@ -8,6 +8,15 @@ ralf2xlsx.py -- Synopsys RALF (Register Abstraction Layer File) -> Excel 寄存�
 
 Version History
 ---------------
+v3.2
+  - Refactor: the "strip a block path's trailing .<domain> segment" snippet
+    was duplicated 4x (block tree, per-block sheet grouping, Overview,
+    --sort addr); extract strip_domain(). The Overview node-collection loop
+    duplicated build_block_tree_rows' node-collection loop almost verbatim;
+    extract _collect_block_nodes() and have both call it. No behavior
+    change (verified: Overview order/hyperlinks, per-block sheet names,
+    and --sort addr domain grouping all still match).
+
 v3.1
   - Batch mode (multiple .ralf on the command line): stop repeating
     "[filename] " on every terminal line. The filename now appears once,
@@ -196,7 +205,7 @@ import re
 import sys
 from collections import OrderedDict
 
-VERSION = '3.1'
+VERSION = '3.2'
 
 # ============================================================================
 # 词法分析
@@ -2027,16 +2036,30 @@ BLOCKTREE_COLS = [
 ]
 
 
-def build_block_tree_rows(blk_rows, sort_addr=False):
-    """Collapse domain rows and render instantiated system/block hierarchy."""
+def strip_domain(path, domain):
+    """Drop a trailing '.<domain>' segment: 'soc.bridge.pci' -> 'soc.bridge'."""
+    if domain and path.endswith('.' + domain):
+        return path[:-(len(domain) + 1)]
+    return path
+
+
+def _collect_block_nodes(blk_rows, kind_filter=None):
+    """Group blk_rows by domain-stripped root path.
+
+    Multi-domain interfaces of the same block instance (e.g.
+    'soc.bridge.pci' / 'soc.bridge.ahb') collapse into one node; per-root
+    domains/bus_bytes/endian are aggregated. kind_filter, if given, only
+    considers rows of that kind (build_block_tree_rows wants system+block,
+    the Overview sheet wants block only).
+    """
     nodes = OrderedDict()
 
     for b in blk_rows:
+        if kind_filter is not None and b.get('kind') != kind_filter:
+            continue
         path = b.get('block', '')
         domain = b.get('domain', '')
-        root = path
-        if domain and path.endswith('.' + domain):
-            root = path[:-(len(domain) + 1)]
+        root = strip_domain(path, domain)
 
         n = nodes.get(root)
         if n is None:
@@ -2060,6 +2083,13 @@ def build_block_tree_rows(blk_rows, sort_addr=False):
             n['bus_values'].append(b.get('bus_bytes'))
         if b.get('endian') not in n['endian_values']:
             n['endian_values'].append(b.get('endian'))
+
+    return nodes
+
+
+def build_block_tree_rows(blk_rows, sort_addr=False):
+    """Collapse domain rows and render instantiated system/block hierarchy."""
+    nodes = _collect_block_nodes(blk_rows)
 
     paths = list(nodes.keys())
     parent = {}
@@ -2300,11 +2330,7 @@ def write_xlsx(path, ela, meta, warn_rows, sheet_per_block=True, full_columns=Fa
             if b.get('kind') != 'block':
                 continue
             p = b.get('block', '')
-            d = b.get('domain', '')
-            root = p
-            if d and p.endswith('.' + d):
-                root = p[:-(len(d) + 1)]
-            block_key[p] = root
+            block_key[p] = strip_domain(p, b.get('domain', ''))
 
         groups = OrderedDict()
         for r in ela.rows:
@@ -2335,31 +2361,7 @@ def write_xlsx(path, ela, meta, warn_rows, sheet_per_block=True, full_columns=Fa
     # ---- Overview ----
     # Build one row per actual block instance, collapse multi-domain rows,
     # and hyperlink each row to the generated block worksheet.
-    nodes = OrderedDict()
-    for b in ela.blk_rows:
-        if b.get('kind') != 'block':
-            continue
-        p = b.get('block', '')
-        d = b.get('domain', '')
-        root = p
-        if d and p.endswith('.' + d):
-            root = p[:-(len(d) + 1)]
-
-        n = nodes.get(root)
-        if n is None:
-            n = dict(instance=root,
-                     definition=b.get('definition', ''),
-                     base=b.get('base'),
-                     domains=[],
-                     bus_values=[],
-                     endian_values=[])
-            nodes[root] = n
-        if d and d not in n['domains']:
-            n['domains'].append(d)
-        if b.get('bus_bytes') not in n['bus_values']:
-            n['bus_values'].append(b.get('bus_bytes'))
-        if b.get('endian') not in n['endian_values']:
-            n['endian_values'].append(b.get('endian'))
+    nodes = _collect_block_nodes(ela.blk_rows, kind_filter='block')
 
     overview_rows = []
     for root, n in nodes.items():
@@ -2494,11 +2496,7 @@ def _convert_one(args, ralf_path, out_path, csv_path, label=None):
         # follow the memory map order.
         block_base = {}
         for b in ela.blk_rows:
-            path = b.get('block', '')
-            domain = b.get('domain', '')
-            root = path
-            if domain and path.endswith('.' + domain):
-                root = path[:-(len(domain) + 1)]
+            root = strip_domain(b.get('block', ''), b.get('domain', ''))
             base_addr = b.get('base', 0)
             if root not in block_base or base_addr < block_base[root]:
                 block_base[root] = base_addr

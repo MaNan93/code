@@ -27,17 +27,31 @@ jobs:
         with:
           python-version: "3.12"
 
+      - name: Read package version
+        id: pkgver
+        run: |
+          VERSION="$(python -c "import tomllib; print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "building ralf2xlsx $VERSION"
+
       - name: Build wheel
+        env:
+          WHEEL: dist/ralf2xlsx-${{ steps.pkgver.outputs.version }}-py3-none-any.whl
         run: |
           python -m pip install --upgrade pip build
           python -m build --wheel
+          # Fail loudly if the built filename doesn't match pyproject's
+          # version, instead of silently picking up a stale wheel later via
+          # ls | sort -V | tail -1.
+          test -f "$WHEEL" || { echo "expected $WHEEL, got:"; ls dist/; exit 1; }
           ls -lh dist/
 
       - name: Install wheel in clean venv
+        env:
+          WHEEL: dist/ralf2xlsx-${{ steps.pkgver.outputs.version }}-py3-none-any.whl
         run: |
           python -m venv .venv-test
           .venv-test/bin/python -m pip install --upgrade pip
-          WHEEL="$(ls dist/ralf2xlsx-*.whl | sort -V | tail -1)"
           echo "installing $WHEEL"
           .venv-test/bin/python -m pip install "$WHEEL"
 
@@ -105,14 +119,16 @@ jobs:
           PY
 
       - name: Commit wheel to repository
+        env:
+          WHEEL: dist/ralf2xlsx-${{ steps.pkgver.outputs.version }}-py3-none-any.whl
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -f dist/*.whl
+          git add -f "$WHEEL"
           if git diff --cached --quiet; then
             echo "wheel unchanged"
           else
-            git commit -m "build: update ralf2xlsx wheel"
+            git commit -m "build: update ralf2xlsx wheel ($WHEEL)"
             git push origin HEAD:main
           fi
 

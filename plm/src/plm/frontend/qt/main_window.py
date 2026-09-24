@@ -519,7 +519,9 @@ class MainWindow(QtWidgets.QMainWindow):
         self._topology_refresh_timer.timeout.connect(self._refresh_topology_summary)
         last = load_last_workspace()
         if last:
-            self._open_workspace(last)
+            # Session restoration must not undo an explicit Clear from Recent.
+            # A later user-initiated open still records the workspace normally.
+            self._open_workspace(last, add_to_recent=False)
 
     # ------------------------------------------------------------ UI shell
     def _build_ui(self):
@@ -2544,7 +2546,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self._log(f"Reverted to the version on disk: {target}.")
 
     # ------------------------------------------------------------ workspace lifecycle
-    def _open_workspace(self, path, confirm_discard=True):
+    def _open_workspace(self, path, confirm_discard=True, add_to_recent=True):
         path = Path(path).resolve()
         if not is_workspace_root(path):
             QtWidgets.QMessageBox.warning(
@@ -2576,7 +2578,8 @@ class MainWindow(QtWidgets.QMainWindow):
         self.lane_grid.set_columns(mapping["lane_count"])
         self.lane_grid.set_rows(mapping["rows"])
         self.lane_grid.set_controllers(self.controllers_table.get_rows())
-        add_recent_workspace(path)
+        if add_to_recent:
+            add_recent_workspace(path)
         save_last_workspace(path)
         self._refresh_recent()
         self._update_workspace_label()

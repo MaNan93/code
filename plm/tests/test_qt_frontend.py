@@ -341,6 +341,21 @@ class QtFrontendTests(unittest.TestCase):
         self.assertEqual(captured["delete_widget"].objectName(), "destructiveMenuItem")
         clear.assert_called_once()
 
+    def test_startup_restore_does_not_restore_a_cleared_recent_entry(self):
+        workspace = self._sample_workspace().resolve()
+        main_window.save_last_workspace(workspace)
+        self.assertEqual(main_window.load_recent_workspaces(), [])
+
+        window = MainWindow()
+        self.addCleanup(window.close)
+
+        self.assertEqual(window.current_workspace, workspace)
+        self.assertEqual(main_window.load_recent_workspaces(), [])
+
+        # Explicitly opening it later makes it recent again.
+        window._open_workspace(workspace)
+        self.assertEqual(main_window.load_recent_workspaces(), [workspace])
+
     def test_lane_grid_context_menu_and_x32_layout(self):
         grid = LaneGrid()
         grid.resize(1000, 500)

@@ -41,8 +41,12 @@ from collections import OrderedDict
 try:
     from importlib.metadata import PackageNotFoundError
     from importlib.metadata import version as _pkg_version
-except ImportError:                          # pragma: no cover - Python < 3.8
-    _pkg_version, PackageNotFoundError = None, Exception
+except ImportError:                          # Python < 3.8: stdlib has no
+    try:                                      # importlib.metadata yet; fall
+        from importlib_metadata import PackageNotFoundError  # back to the
+        from importlib_metadata import version as _pkg_version  # backport
+    except ImportError:                       # (declared in pyproject.toml
+        _pkg_version, PackageNotFoundError = None, Exception  # for <3.8).
 
 try:
     # pyproject.toml is the single source of truth for the release version;
@@ -2057,7 +2061,7 @@ def bit_range_of(r):
 # Excel 输出
 # ============================================================================
 
-def write_xlsx(path, ela, meta, warn_rows, sheet_per_block=True, full_columns=False,
+def write_xlsx(path, ela, meta, sheet_per_block=True, full_columns=False,
                show_violatile=False):
     from openpyxl import Workbook
     from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
@@ -2150,6 +2154,17 @@ def write_xlsx(path, ela, meta, warn_rows, sheet_per_block=True, full_columns=Fa
     if enum_rows:
         dump(wb.create_sheet('Enums'), enum_rows, ENUM_COLS)
 
+    # Canonical block order, shared by per-block sheets and Overview below
+    # so sheet tabs, Overview rows, and the terminal Block tree always
+    # agree -- including for blocks with zero register rows (memory-only
+    # or genuinely empty), which have no row of their own to anchor an
+    # order derived purely from ela.rows.
+    nodes = _collect_block_nodes(ela.blk_rows, kind_filter='block')
+    root_order = list(nodes.keys())
+    if getattr(meta, 'get', None) and meta.get('sort') == 'addr':
+        root_order.sort(key=lambda r: (nodes[r]['base'] if nodes[r]['base'] is not None else 0,
+                                       r.rsplit('.', 1)[-1]))
+
     block_sheet_names = {}
     if sheet_per_block:
         # One worksheet per instantiated block. For a multi-domain block,
@@ -2168,20 +2183,16 @@ def write_xlsx(path, ela, meta, warn_rows, sheet_per_block=True, full_columns=Fa
             if d:
                 block_domains.setdefault(root, set()).add(d)
 
-        # ela.rows establishes sheet order (it's already in source or
-        # --sort addr order by this point); go first so that order carries
-        # over to sheet-creation order below, then backfill blocks with no
-        # register rows (memory-only or genuinely empty) so they still get
-        # a sheet that Overview/Block tree can link to instead of pointing
-        # nowhere -- appending them after doesn't disturb the order already
-        # established for blocks that do have rows.
+        # Seed groups in root_order (already correct: source, or --sort
+        # addr's base-address order) so sheet tabs agree with Overview/
+        # Block tree even for blocks with no rows to fall back on.
         groups = OrderedDict()
+        for root in root_order:
+            groups[root] = []
         for r in ela.rows:
             rp = r.get('block', '')
             bname = block_key.get(rp, rp)
             groups.setdefault(bname, []).append(r)
-        for root in block_key.values():
-            groups.setdefault(root, [])
 
         domain_col = next(c for c in REG_COLS if c[0] == 'domain')
         used = set(s.title for s in wb.worksheets)
@@ -2211,25 +2222,19 @@ def write_xlsx(path, ela, meta, warn_rows, sheet_per_block=True, full_columns=Fa
 
 
     # ---- Overview ----
-    # Build one row per actual block instance, collapse multi-domain rows,
-    # and hyperlink each row to the generated block worksheet.
-    nodes = _collect_block_nodes(ela.blk_rows, kind_filter='block')
-
+    # One row per actual block instance (multi-domain rows already
+    # collapsed by _collect_block_nodes above), in the same root_order
+    # used for the per-block sheets, hyperlinked to its worksheet.
     # Only instance/base/sheet ever reach OVERVIEW_COLS or the hyperlink
-    # loop below; _base is a sort key. n also carries definition/domains/
-    # bus_values/endian_values (used by build_block_tree_rows via the same
+    # loop below; nodes also carries definition/domains/bus_values/
+    # endian_values (used by build_block_tree_rows via the same
     # _collect_block_nodes call), which Overview has no use for.
-    overview_rows = []
-    for root, n in nodes.items():
-        overview_rows.append(dict(
-            instance=root.rsplit('.', 1)[-1],
-            base=hexs(n['base']) if n['base'] is not None else '',
-            sheet=block_sheet_names.get(root, ''),
-            _base=n['base'] if n['base'] is not None else 0,
-        ))
-
-    if getattr(meta, 'get', None) and meta.get('sort') == 'addr':
-        overview_rows.sort(key=lambda r: (r['_base'], r['instance']))
+    overview_rows = [
+        dict(instance=root.rsplit('.', 1)[-1],
+             base=hexs(nodes[root]['base']) if nodes[root]['base'] is not None else '',
+             sheet=block_sheet_names.get(root, ''))
+        for root in root_order
+    ]
 
     dump(ws_overview, overview_rows, OVERVIEW_COLS)
 
@@ -2384,6 +2389,14 @@ def _convert_one(args, ralf_path, out_path, csv_path, label=None):
                                          r['block'],
                                          r['_addr'],
                                          r['reg']))
+        # mem_rows only stores addr as hexs()'s fixed-width zero-padded
+        # string (no raw-int twin like rows'/reg_rows' _addr), but that's
+        # exactly why plain string comparison already sorts numerically
+        # here -- same width throughout, so no need to re-parse it.
+        ela.mem_rows.sort(key=lambda r: (block_addr(r['block']),
+                                         r['block'],
+                                         r['addr'],
+                                         r['name']))
 
     warn_rows = ([dict(kind='parse', where=w, msg=m) for w, m in p.warnings] +
                  [dict(kind='elab', where='', msg=m) for m in ela.warnings])
@@ -2420,7 +2433,7 @@ def _convert_one(args, ralf_path, out_path, csv_path, label=None):
                              (('%s:' % w['where']) if w['where'] else '', w['msg']))
 
     try:
-        write_xlsx(out_path, ela, meta, warn_rows,
+        write_xlsx(out_path, ela, meta,
                    sheet_per_block=args.sheet_per_block,
                    full_columns=args.full_columns,
                    show_violatile=args.show_violatile)

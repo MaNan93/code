@@ -136,5 +136,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ralf2xlsx-wheel
-          path: ralf2xlsx/dist/*.whl
+          path: ralf2xlsx/dist/ralf2xlsx-${{ steps.pkgver.outputs.version }}-py3-none-any.whl
           retention-days: 90

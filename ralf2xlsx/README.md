@@ -1,6 +1,6 @@
 # ralf2xlsx — RALF 寄存器描述 → Excel 表格
 
-版本号以 [pyproject.toml](pyproject.toml) 和 `ralf2xlsx --help` 里的 `cli.py` `VERSION` 为准，本文档不单独维护一份，避免脱节。
+版本号以 [pyproject.toml](pyproject.toml) 为唯一来源；装完之后用 `ralf2xlsx --version` 查询，本文档不单独维护一份，避免脱节。
 
 把 Synopsys `ralgen` 用的 `.ralf` 文件解析、展开层次、算出绝对地址和位域，
 输出成一份可以直接发给设计/软件的 Excel 寄存器表。
@@ -177,4 +177,8 @@ Block tree:
 
 Excel 第一个 sheet 固定为 `Overview`，用于 block 导航。每个实际实例化 block 一行，
 只显示 Block 和 Base Addr。点击 Block 单元格会直接跳转到对应 block sheet。
-使用 `--sort addr` 时，Overview 按 block base address 排序。
+使用 `--sort addr` 时，Overview、每个 block sheet 的标签页顺序、以及终端 Block tree
+三者都按 block base address 排序，彼此一致。
+
+> `--no-sheet-per-block` 时没有按 block 拆分的 sheet 可跳，Overview 的 Block 列
+> 不会有超链接，只做一览用途。

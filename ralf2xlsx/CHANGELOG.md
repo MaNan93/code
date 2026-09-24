@@ -4,6 +4,33 @@ All notable changes to `ralf2xlsx` are recorded here. The release version
 itself lives in [`pyproject.toml`](pyproject.toml) (single source of
 truth); this file is just the history behind each bump.
 
+## v3.5
+
+- Fix `--sort addr` sheet-tab order for blocks with no register rows
+  (memory-only or empty): they were backfilled at the very end regardless
+  of their base address, so a memory-only block between two register
+  blocks would land after both instead of between them, even though
+  Overview and the per-block sheet contents were already correctly
+  address-sorted. Block order for per-block sheets and Overview is now
+  computed once, up front, and shared by both.
+- `--sort addr` now also sorts the Memories sheet (by block base address,
+  then memory address, then name) -- it previously only sorted register
+  rows, so Memories could stay in source order while everything else
+  followed the address map.
+- Support Python 3.6/3.7 for `--version`/VERSION again: `importlib.metadata`
+  is stdlib-only from 3.8; fall back to the `importlib-metadata` backport
+  (now a conditional dependency for `python_version < "3.8"`) before
+  giving up and reporting `"0.0.0+dev"`.
+- Drop `write_xlsx`'s unused `warn_rows` parameter (Warnings hasn't been
+  an Excel sheet since v2.8; nothing inside the function read it).
+- README: note that `--no-sheet-per-block` leaves Overview's Block column
+  without a hyperlink (no per-block sheet to jump to), and that Overview/
+  per-block sheet tabs/terminal Block tree agree under `--sort addr`. Fix
+  the version paragraph to point at `--version`, not `--help`.
+- CI: also scope the uploaded build artifact to the current version's
+  wheel instead of `dist/*.whl` (which still picked up every historical
+  wheel sitting in the tracked dist/ directory).
+
 ## v3.4
 
 - Move this changelog out of `cli.py`'s module docstring into

@@ -319,6 +319,48 @@ class QtFrontendTests(unittest.TestCase):
             table._show_row_context_menu(-1, QtCore.QPoint())
         self.assertEqual(table.table.rowCount(), 1)
 
+    def test_signal_dropdown_values_fit_without_elision(self):
+        window = MainWindow()
+        self.addCleanup(window.close)
+        window.resize(1200, 780)
+        window.signals_table.set_rows([{
+            "signal_name": "phy_mac_rxvalid",
+            "signal_type": "perlane",
+            "direction": "phy2mac",
+            "width": "1",
+            "safe_state": "0",
+            "tie_off": "0",
+        }])
+        window.show()
+        self.process_events()
+
+        for column, options in ((1, main_window.SIGNAL_TYPES), (2, main_window.DIRECTIONS)):
+            combo = window.signals_table.table.cellWidget(0, column)
+            style_option = QtWidgets.QStyleOptionComboBox()
+            combo.initStyleOption(style_option)
+            text_rect = combo.style().subControlRect(
+                QtWidgets.QStyle.CC_ComboBox,
+                style_option,
+                QtWidgets.QStyle.SC_ComboBoxEditField,
+                combo,
+            )
+            widest = max(combo.fontMetrics().horizontalAdvance(value) for value in options)
+            self.assertGreaterEqual(text_rect.width(), widest)
+
+    def test_collapsed_log_does_not_overlap_editor(self):
+        window = MainWindow()
+        self.addCleanup(window.close)
+        window.resize(1200, 780)
+        window.show()
+        window.log_toggle.click()
+        self.process_events()
+        window._position_floating_log()
+
+        shell_bottom = window.editor_shell.mapTo(
+            window.main_area, QtCore.QPoint(0, window.editor_shell.height())
+        ).y()
+        self.assertLessEqual(shell_bottom, window.log_card.geometry().top())
+
     def test_recent_menu_labels_and_actions(self):
         window = MainWindow()
         self.addCleanup(window.close)

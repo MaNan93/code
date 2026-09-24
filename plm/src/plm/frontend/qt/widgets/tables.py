@@ -267,7 +267,22 @@ class EditableTable(QtWidgets.QWidget):
                 else metrics.width(heading)
             )
             design_width = int(column.get("width", 0) * scale)
-            minimums.append(max(design_width, text_width + int(28 * scale)))
+            minimum = max(design_width, text_width + int(28 * scale))
+            if column.get("options"):
+                # QComboBox.sizeHint() includes its text padding and drop-down
+                # button. The table delegate then insets the cell widget on
+                # both sides, so include that space too; otherwise a column
+                # can fit its heading while clipping values such as
+                # "perlane" in the editor below it.
+                probe = RoundedComboBox(self.table)
+                probe.addItems(column["options"])
+                probe.ensurePolished()
+                minimum = max(
+                    minimum,
+                    probe.sizeHint().width() + 2 * _PaddedItemDelegate.HORIZONTAL_PADDING,
+                )
+                probe.deleteLater()
+            minimums.append(minimum)
             if not column.get("width"):
                 flexible.append(index)
 

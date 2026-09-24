@@ -898,8 +898,11 @@ class MainWindow(QtWidgets.QMainWindow):
 
         content = QtWidgets.QWidget()
         cv = QtWidgets.QVBoxLayout(content)
+        self.main_content_layout = cv
         # Fill the main content width and meet the title bar at the top.  Keep
-        # only the bottom breathing room used by the floating log card.
+        # the bottom breathing room used by the floating log card. Once the
+        # card exists, _position_floating_log expands this margin by the
+        # collapsed header height so the editor cannot run underneath it.
         cv.setContentsMargins(0, 0, 0, BOTTOM_EDGE_INSET)
 
         self.tabs = QtWidgets.QTabWidget()
@@ -1606,24 +1609,29 @@ class MainWindow(QtWidgets.QMainWindow):
         scale = _ui_scale()
         margin = max(12, int(14 * scale))
         expanded = self.log_toggle.isChecked()
+        collapsed_height = self.log_header.sizeHint().height() + 16
+        content_layout = getattr(self, "main_content_layout", None)
+        if content_layout is not None:
+            margins = content_layout.contentsMargins()
+            clearance = BOTTOM_EDGE_INSET + collapsed_height
+            if margins.bottom() != clearance:
+                content_layout.setContentsMargins(
+                    margins.left(), margins.top(), margins.right(), clearance
+                )
         # Use the editor shell's real geometry so the floating card fills the
         # same left-to-right boundary at every DPI/font size.
         if getattr(self, "editor_shell", None):
             shell_origin = self.editor_shell.mapTo(self.main_area, QtCore.QPoint(0, 0))
             x = shell_origin.x()
             width = max(1, min(self.editor_shell.width(), self.main_area.width() - x))
-            bottom = shell_origin.y() + self.editor_shell.height()
         else:
             x = margin
             width = max(1, self.main_area.width() - 2 * margin)
-            bottom = self.main_area.height() - margin
+        bottom = self.main_area.height() - BOTTOM_EDGE_INSET
         if expanded:
             height = min(int(260 * scale), max(190, int(self.main_area.height() * 0.38)))
         else:
-            # Collapsed: hug the header row's real height instead of a fixed
-            # constant that was taller than "LOG" + the chevron actually need.
-            margins = self.log_layout.contentsMargins()
-            height = self.log_header.sizeHint().height() + margins.top() + margins.bottom()
+            height = collapsed_height
         y = max(margin, bottom - height)
         self.log_card.setGeometry(x, y, width, height)
         self.log_card.raise_()

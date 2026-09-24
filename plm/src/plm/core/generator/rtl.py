@@ -1575,6 +1575,27 @@ def gen_top(cfg, pclk_mode="pclk_as_phy_output", sel_mode="sync", dpr=False):
     return "\n".join(L) + "\n"
 
 
+def _lowest_driven_ctrl_lane(cfg, cid):
+    """Lowest controller lane index some mode actually maps a PHY lane to.
+
+    A "shared" phy2mac signal collapses a controller's lanes down to one
+    scalar, so any *driven* lane can stand in for the rest. An undriven one
+    cannot: pipe_lane_data_p2m ties it to the tie_off constant, so reading
+    it pins the shared output to that constant in every mode.
+
+    Controller lane 0 is the usual answer and was once assumed to be the
+    only one, but nothing makes a config map it -- lane_mapping.csv may
+    start a controller at lane 1. validate() only requires that a
+    controller gets *some* lane, which is what makes this well defined."""
+    driven = {
+        cfg.mapping[m][l][1]
+        for m in cfg.modes
+        for l in range(cfg.lane_count)
+        if cfg.mapping[m][l][0] == cid
+    }
+    return min(driven) if driven else 0
+
+
 def gen_connection(cfg, pclk_mode="pclk_as_phy_output", dpr=False):
     """pipe_lane_mapper_connection.sv: a pure struct<->flat bridge around
     pipe_lane_mapper. The mapper's two packed-struct-array ports per side
@@ -1719,11 +1740,17 @@ def gen_connection(cfg, pclk_mode="pclk_as_phy_output", dpr=False):
                 val = f"{c.lname}_{s.name}" if s.is_shared else f"{c.lname}_{s.name}[{l}]"
                 fields.append(f"{s.name}: {val}")
             L.append(f"    assign w_{c.lname}_mac2phy[{l}] = '{{{', '.join(fields)}}};")
+        src_lane = _lowest_driven_ctrl_lane(cfg, cid)
         for s in p2m_sigs:
             if s.is_shared:
                 # A controller's own lanes are asserted (not checked here) to
-                # agree on a shared signal's value -- lane 0 stands for all.
-                L.append(f"    assign {c.lname}_{s.name} = w_{c.lname}_phy2mac[0].{s.name};")
+                # agree on a shared signal's value, so one of them stands for
+                # all -- but it has to be one a mode actually drives, or this
+                # reads the tie_off constant forever.
+                L.append(
+                    f"    assign {c.lname}_{s.name} = "
+                    f"w_{c.lname}_phy2mac[{src_lane}].{s.name};"
+                )
             else:
                 for l in range(c.max_width):
                     L.append(f"    assign {c.lname}_{s.name}[{l}] = w_{c.lname}_phy2mac[{l}].{s.name};")

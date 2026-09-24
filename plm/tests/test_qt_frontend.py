@@ -276,6 +276,28 @@ class QtFrontendTests(unittest.TestCase):
         self.assertEqual(blur_was_active, [True])
         self.assertIsNone(window.centralWidget().graphicsEffect())
 
+    def test_signal_enum_values_survive_render_and_can_be_corrected(self):
+        table = EditableTable([
+            {"key": "signal_type", "heading": "Type", "options": main_window.SIGNAL_TYPES},
+            {"key": "direction", "heading": "Direction", "options": main_window.DIRECTIONS},
+        ])
+        self.addCleanup(table.close)
+        rows = [
+            {"signal_type": "unknown_type", "direction": "unknown_direction"},
+            {"signal_type": "", "direction": ""},
+            {"signal_type": "shared", "direction": "phy2mac"},
+        ]
+        table.set_rows(rows)
+        self.assertEqual(table.get_rows(), rows)
+        table.set_rows(table.get_rows())
+        self.assertEqual(table.get_rows(), rows)
+        table.table.cellWidget(0, 0).setCurrentText("perlane")
+        table.table.cellWidget(0, 1).setCurrentText("mac2phy")
+        self.assertEqual(table.get_rows()[0], {
+            "signal_type": "perlane", "direction": "mac2phy",
+        })
+        self.assertEqual(table.get_rows()[1:], rows[1:])
+
     def test_table_context_menu_inserts_and_deletes(self):
         table = EditableTable([
             {"key": "id", "heading": "ID"},

@@ -390,8 +390,11 @@ class EditableTable(QtWidgets.QWidget):
                 if col.get("options"):
                     combo = RoundedComboBox()
                     combo.addItems(col["options"])
-                    if value in col["options"]:
-                        combo.setCurrentText(value)
+                    # Preserve invalid CSV values so validation can report them
+                    # instead of silently replacing them with the first option.
+                    if value not in col["options"]:
+                        combo.addItem(value)
+                    combo.setCurrentText(value)
                     combo.setContextMenuPolicy(QtCore.Qt.CustomContextMenu)
                     combo.customContextMenuRequested.connect(
                         lambda pos, widget=combo, row_index=r:

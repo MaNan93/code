@@ -516,10 +516,6 @@ class MainWindow(QtWidgets.QMainWindow):
         self._dirty_timer.setInterval(700)
         self._dirty_timer.timeout.connect(self._poll_dirty_state)
         self._dirty_timer.start()
-        self._topology_refresh_timer = QtCore.QTimer(self)
-        self._topology_refresh_timer.setSingleShot(True)
-        self._topology_refresh_timer.setInterval(250)
-        self._topology_refresh_timer.timeout.connect(self._refresh_topology_summary)
         last = load_last_workspace()
         if last:
             # Session restoration must not undo an explicit Clear from Recent.
@@ -1768,13 +1764,6 @@ class MainWindow(QtWidgets.QMainWindow):
         self.dpr_check.toggled.connect(self._schedule_live_edit_processing)
         form.addRow("dpr", self.dpr_check)
 
-        # The summary is otherwise only rebuilt on arrival at this page, which
-        # never happens while the user is already standing on it changing
-        # these -- exactly when the topology they describe is moving.
-        for control in (self.arch_combo, self.pclk_mode_combo, self.sel_mode_combo):
-            control.currentTextChanged.connect(self._schedule_topology_summary_refresh)
-        self.dpr_check.toggled.connect(self._schedule_topology_summary_refresh)
-
         layout.addLayout(form)
 
         actions_row = QtWidgets.QHBoxLayout()
@@ -2533,14 +2522,6 @@ class MainWindow(QtWidgets.QMainWindow):
             self._title_shows_dirty = dirty
             self._update_workspace_label()
 
-    def _schedule_topology_summary_refresh(self, *_args):
-        """Debounce summary work while generation options are changing."""
-        if (
-            self.tabs.currentWidget() is getattr(self, "_generation_page", None)
-            and hasattr(self, "_topology_refresh_timer")
-        ):
-            self._topology_refresh_timer.start()
-
     def _confirm_discard_changes(self):
         """Ask before dropping unsaved edits. True = caller may proceed."""
         if not self._is_dirty():
@@ -2803,11 +2784,14 @@ class MainWindow(QtWidgets.QMainWindow):
         # that is stored as a CSS-like pixel size.
         font.setPixelSize(round(size))
         app = QtWidgets.QApplication.instance()
-        app.setFont(font)
+        if app.font() != font:
+            app.setFont(font)
         # The app font alone changes nothing the QSS names a font-size for,
         # and it names one for QWidget -- so the sheet has to be rebuilt at
         # the new size too, or this setting only ever moves padding around.
-        app.setStyleSheet(build_stylesheet(round(size)))
+        stylesheet = build_stylesheet(round(size))
+        if app.styleSheet() != stylesheet:
+            app.setStyleSheet(stylesheet)
         self._apply_sidebar_collapsed()
         QtCore.QTimer.singleShot(0, self._position_floating_log)
         QtCore.QTimer.singleShot(0, self._position_preview_controls)

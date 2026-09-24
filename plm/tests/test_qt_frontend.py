@@ -57,7 +57,18 @@ class QtFrontendTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
-        main_window.STATE_FILE = Path(self.temp.name) / "state.json"
+        state = mock.patch.object(main_window, "STATE_FILE", Path(self.temp.name) / "state.json")
+        state.start()
+        self.addCleanup(state.stop)
+        self.addCleanup(self.destroy_test_widgets)
+
+    def destroy_test_widgets(self):
+        # close() only hides a QWidget. Destroy test windows (including
+        # standalone tables/dialogs) before the next test changes app styles;
+        # otherwise their timers and event filters remain active across tests.
+        for widget in self.app.topLevelWidgets():
+            widget.deleteLater()
+        QtCore.QCoreApplication.sendPostedEvents(None, QtCore.QEvent.DeferredDelete)
 
     def make_window(self):
         """A MainWindow that tears down without the unsaved-changes prompt.
@@ -75,6 +86,22 @@ class QtFrontendTests(unittest.TestCase):
     def process_events(self):
         self.app.processEvents()
         self.app.processEvents()
+
+    def test_font_settings_only_reapply_styles_when_changed(self):
+        window = self.make_window()
+        with mock.patch.object(
+            self.app, "setStyleSheet", wraps=self.app.setStyleSheet
+        ) as apply_style:
+            window._apply_font(DEFAULT_SETTINGS)
+            apply_style.assert_not_called()
+            window._apply_font({**DEFAULT_SETTINGS, "fontSize": 16})
+            self.process_events()
+            self.assertEqual(self.app.font().pixelSize(), 16)
+            apply_style.assert_called_once()
+            window._apply_font({**DEFAULT_SETTINGS, "fontSize": 16})
+            apply_style.assert_called_once()
+            window._apply_font(DEFAULT_SETTINGS)
+            self.process_events()
 
     def test_window_tabs_headers_and_preview_snap(self):
         window = self.make_window()
@@ -761,26 +788,6 @@ class QtFrontendTests(unittest.TestCase):
             window.log_card.geometry().right(),
             window.main_area.rect().right(),
         )
-
-    def test_topology_refresh_is_debounced_from_generation_controls(self):
-        window = self.make_window()
-        generation_index = window.tabs.indexOf(window._generation_page)
-        window.tabs.setCurrentIndex(generation_index)
-        self.process_events()
-
-        timeout_spy = QtTest.QSignalSpy(window._topology_refresh_timer.timeout)
-        window._poll_dirty_state()
-        QtTest.QTest.qWait(300)
-        self.process_events()
-        self.assertEqual(len(timeout_spy), 0)
-
-        next_index = (
-            window.sel_mode_combo.currentIndex() + 1
-        ) % window.sel_mode_combo.count()
-        window.sel_mode_combo.setCurrentIndex(next_index)
-        QtTest.QTest.qWait(300)
-        self.process_events()
-        self.assertEqual(len(timeout_spy), 1)
 
     def test_close_is_blocked_during_generation(self):
         window = self.make_window()

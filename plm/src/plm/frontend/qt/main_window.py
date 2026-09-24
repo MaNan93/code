@@ -74,6 +74,9 @@ LANE_COUNTS = ["x2", "x4", "x8", "x16", "x32"]
 # wheel alongside it (it documents the CLI, which this window is not), it
 # just is not what someone clicking Doc in the GUI is asking for.
 DOC_PATH = DOCS_DIR / "qt_frontend_guide.md"
+# Lives here rather than in main.py because both the window icon and the
+# sidebar brand mark need it, and main.py already imports this module.
+APP_ICON_PATH = Path(__file__).resolve().parent / "assets" / "app_icon.svg"
 PREVIEW_MAXIMIZE_ANIM_MS = 180
 BOTTOM_EDGE_INSET = 12
 TAB_VERTICAL_GAP = 4
@@ -802,12 +805,11 @@ class MainWindow(QtWidgets.QMainWindow):
         hl.addItem(self.brand_left_spacer)
         brand_mark = QtWidgets.QLabel()
         self.brand_mark = brand_mark
-        mario = Path(__file__).resolve().parent / "assets" / "mario_icon.png"
-        if mario.is_file():
-            pix = QtGui.QPixmap(str(mario)).scaled(
-                28, 28, QtCore.Qt.KeepAspectRatioByExpanding, QtCore.Qt.SmoothTransformation
-            )
-            brand_mark.setPixmap(pix)
+        # Rendered through QIcon at the exact target size rather than
+        # QPixmap(...).scaled(): the source is vector, so asking for 28px
+        # rasterises at 28px instead of downsampling a 512px bitmap.
+        if APP_ICON_PATH.is_file():
+            brand_mark.setPixmap(QtGui.QIcon(str(APP_ICON_PATH)).pixmap(28, 28))
         brand_mark.setFixedSize(28, 28)
         hl.addWidget(brand_mark)
         self.brand_name = QtWidgets.QLabel("plmConsultant")

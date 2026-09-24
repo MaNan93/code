@@ -7,7 +7,6 @@ Run: python run.py -gui
 """
 
 import sys
-from pathlib import Path
 
 try:
     from PyQt5 import QtCore, QtGui, QtWidgets
@@ -18,10 +17,8 @@ except ImportError:
         "(or, offline, transfer the PyQt5/PyQt5-sip wheels to this machine and pip install those)."
     )
 
-from plm.frontend.qt.main_window import MainWindow
+from plm.frontend.qt.main_window import APP_ICON_PATH, MainWindow
 from plm.frontend.qt.widgets.theme import apply_titlebar_theme, build_stylesheet
-
-APP_ICON_PATH = Path(__file__).resolve().parent / "assets" / "mario_icon.png"
 
 
 def main(argv=None):

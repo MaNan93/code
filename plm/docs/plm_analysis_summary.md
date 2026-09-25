@@ -40,11 +40,11 @@ src/plm/
 ├─ core/generator/tb.py   : 纯文本生成（testbench）
 ├─ core/exporter.py       : 文件 I/O 编排（核心设计亮点：写到临时目录，成功后整体 os.replace，失败自动回滚）
 ├─ core/common/*.sv       : 5 个手写模块（pipe_lane_sel_sync 等）
-├─ cli/main.py            : 统一 CLI（plm generate rtl|tb|all，plm validate）
+├─ cli/main.py            : 统一 CLI（plm generate，plm validate）
 └─ frontend/qt/           : PyQt5 GUI（唯一有效的图形前端，Web 已移除）
 ```
 
-关键设计：`generator` 完全不碰文件系统，`exporter` 只负责写盘，`cli` 只负责 argparse —— 三层分工清晰，使得 `export_rtl()/export_tb()` 变成任何调用方都能直接用的纯函数。
+关键设计：`generator` 完全不碰文件系统，`exporter` 只负责写盘，`cli` 只负责 argparse —— 三层分工清晰，使得 `export_all()` 成为调用方统一使用的事务化输出入口。
 
 ---
 
@@ -228,7 +228,7 @@ dout = acc XOR safe
 
 ### 3.6 流程层面的限制
 
-- **RTL 和 TB 必须用同一个 `--pclk-mode`/`--dpr`**，否则要么编译不过，要么 TB 对着过期 RTL 跑。用 `generate all` 一次跑完最省心；分开跑就得自己保证两边一致。
+- **RTL 和 TB 由一次 `generate` 使用同一组参数生成**；一边失败时两边旧输出都保持不变。
 - **生成参数只走命令行**。`make` 靠 `Makefile` 里的 `SETFLAGS_<SET>`，Qt 前端靠 Generation 页；CLI 不读任何文件。
 - **`--dpr` 强制要求 `--sel-mode sync`**，`--dpr` + `comb` 直接报错。
 - **`--dpr` 只支持 `pclk_as_phy_output`**，配 `pclk_as_phy_input` 直接报错（DPR 在那套架构下拿不到自由跑的时钟源，会死锁）。

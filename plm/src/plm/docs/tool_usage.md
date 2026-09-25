@@ -7,10 +7,8 @@
 不需要先 `pip install -e .`（它自己会把 `src/` 加进 `sys.path`）：
 
 ```bash
-python run.py generate rtl --config <SET>
-python run.py generate tb  --config <SET>
-python run.py generate all --config <SET>
-python run.py validate     --config <SET>
+python run.py generate --config <SET>
+python run.py validate --config <SET>
 python run.py -gui            # Qt 桌面前端，需要先 pip install -e ".[qt]"
 ```
 
@@ -26,20 +24,12 @@ pip install -e .
 这是一次性的（装成可编辑安装），装完之后 `plm` 包才能被 `python -m
 plm.cli.main` 或 `plm` console-script 找到。安装后也可以直接运行 `plm -gui`。
 
-- `plm generate rtl --config <SET>` —— 只生成 RTL（`<SET>/rtl/`）
-- `plm generate tb --config <SET>` —— 只生成 testbench（`<SET>/tb/`）
-- `plm generate all --config <SET>` —— RTL + testbench 都生成
-- `plm validate --config <SET>` —— 只解析+校验配置，不生成任何文件
+- `plm generate --config <SET>` —— 使用同一组参数生成 RTL 和 testbench
+- `plm validate --config <SET>` —— 只解析并校验配置，不生成文件
 
-`generate rtl`/`generate tb` 相互独立，可以分别单独重新生成（比如只改了
-`pipe_signals.csv` 的 `tie_off` 列，只需要重新生成 RTL），也可以用
-`generate all` 在同一次调用里先后各跑一次。三者共享同一份配置文件解析
-逻辑（`plm.core.model`），并且 RTL 和 testbench **都必须用同一个
-`--pclk-mode` 值**——testbench 按这个 flag 决定怎么实例化 DUT，跟 RTL
-实际生成时用的 `--pclk-mode` 不一致，要么编译不过，要么 testbench 和一份
-过期的 RTL 对不上。最省心的做法是用 `generate all`：一次调用里 RTL 和 testbench 用的是同一组
-参数，不会传漏。分开跑 `generate rtl` / `generate tb` 时，`--pclk-mode`
-（和 `--dpr`）必须自己保证两边一样。
+RTL 与 testbench 是一组不可拆分的产物。`generate` 会先在 staging 目录完成
+两边的生成；只有全部成功才一起替换 `rtl/` 和 `tb/`。任何一步失败都会
+保留原有输出，避免新 RTL 搭配旧 testbench。
 
 关键架构约束和 mode 切换规则见本文第 0.5、0.6 节；各生成模块的实现细节
 记录在生成器源码和生成 RTL 的模块头注释中。
@@ -195,16 +185,16 @@ plm/
 │     │  ├─ generator/
 │     │  │  ├─ rtl.py           纯文本生成：RTL 各模块的 gen_* 函数
 │     │  │  └─ tb.py            纯文本生成：testbench 的 gen_tb()
-│     │  ├─ exporter.py       文件 I/O 编排：export_rtl()/export_tb()（写 <SET>/rtl|tb/）
-│     │  ├─ tb_makefile.mk    仿真用 makefile 模板，export_tb() 生成时复制到 tb/ 下
-│     │  └─ common/           手写的公共模块（不是生成出来的），export_rtl() 生成时复制到 rtl/common/
+│     │  ├─ exporter.py       文件 I/O 编排：export_all()，事务化写入 rtl/ 与 tb/
+│     │  ├─ tb_makefile.mk    仿真用 makefile 模板，生成时复制到 tb/ 下
+│     │  └─ common/           手写公共模块，生成时复制到 rtl/common/
 │     │      ├─ pipe_lane_sync2.sv
 │     │      ├─ pipe_lane_sel_sync.sv
 │     │      ├─ pipe_lane_clk_gate.sv
 │     │      ├─ pipe_lane_clk_or.sv
 │     │      └─ pipe_lane_data_mux.sv
 │     ├─ cli/
-│     │  └─ main.py           统一 CLI：`plm generate rtl|tb|all`、`plm validate`
+│     │  └─ main.py           统一 CLI：`plm generate`、`plm validate`
 │     └─ frontend/
 │        └─ qt/                 桌面前端（PyQt5，`pip install -e ".[qt]"`）
 ├─ test/
@@ -214,11 +204,11 @@ plm/
 │     │  ├─ lane_mapping.csv
 │     │  ├─ pipe_signals.csv
 │     │  └─ gen_flags.txt     Qt 前端记住的生成参数，CLI 不读（见 2.4 节）
-│     ├─ rtl/               `plm generate rtl` 的输出（每次生成会被覆盖）
+│     ├─ rtl/               `plm generate` 的 RTL 输出
 │     │  ├─ src/             生成出来的模块
 │     │  ├─ common/           从 plm.core.common 复制过来的公共模块
 │     │  └─ flist.f           文件列表（供 verilator/vcs 用 -f 引用）
-│     └─ tb/                 `plm generate tb` 的输出
+│     └─ tb/                 `plm generate` 的 testbench 输出
 │        ├─ tb_pipe_lane_mapper.sv
 │        └─ makefile          从 plm.core 的 tb_makefile.mk 复制来的（VCS 仿真用）
 │     └─ docs/
@@ -319,166 +309,52 @@ CLI 不读任何文件来拿它们。
 不传就是 CLI 默认值：`--arch original_pipe --pclk-mode pclk_as_phy_output
 --sel-mode sync`，不开 dpr。
 
-## 3. `plm generate rtl`：生成 RTL
+## 3. `plm generate`：生成匹配的 RTL 与 testbench
 
 ```bash
-python -m plm.cli.main generate rtl --config <SET> [其它参数]
-# 装了包之后，也可以用 console-script：
-plm generate rtl --config <SET> [其它参数]
+python -m plm.cli.main generate --config <SET> [其它参数]
+plm generate --config <SET> [其它参数]
 ```
 
 | 参数 | 默认值 | 说明 |
 |---|---|---|
-| `--config SET` | 无（必填） | 配置集名字或路径。先按 `test/<SET>/` 找，找不到再当作直接给的路径（相对/绝对都可）；不给这个参数会列出 `test/` 下已有的配置集名字然后报错退出 |
-| `--arch {original_pipe,serdes}` | `original_pipe` | 这套配置集针对哪种 PHY 宏：`original_pipe`（经典 PIPE PHY）只支持 `--pclk-mode pclk_as_phy_output`，`serdes`（SerDes 风格宏）只支持 `--pclk-mode pclk_as_phy_input`。纯粹是跟 `--pclk-mode` 的一致性校验，两者不匹配直接报错退出，不生成任何文件 |
-| `--pclk-mode {pclk_as_phy_output,pclk_as_phy_input}` | `pclk_as_phy_output` | 选择哪种 PCLK 归属架构；两者互斥，生成的顶层端口/内部信号完全不同。`output` 模式由 PHY 提供 PCLK，`input` 模式由 controller 提供逐 lane PCLK。**必须和 `--arch`、以及 `generate tb` 用的值一致** |
-| `--sel-mode {sync,comb}` | `sync` | 顶层 `pipe_lane_mapper` 的 `SEL_SYNC` 参数取什么默认值（也就是数据路径上 `pipe_lane_sel_sync` 的 `SYNC`）；`comb` 只在候选 controller 真的共享时钟域且 `mode` 无毛刺时才安全。这只是设置默认值——`SEL_SYNC` 仍然是个普通的 RTL 参数，例化时不改代码也能覆盖。只影响 RTL，`generate tb` 没有这个参数。**`--dpr` 打开时必须是 `sync`**（DPR 作为 group 的额外候选分支，跟真实候选共用同一个 `SEL_SYNC`；`comb` 无法保证 DPR 分支和真实候选共享时钟域，`--dpr`+`--sel-mode comb` 会直接报错退出） |
-| `--verible-path PATH` | 无 | `verible-verilog-format` 的路径，用来给生成的 `.sv` 文件自动格式化。查找优先级：`--verible-path` 显式指定 > 当前工作目录下同名文件 > `PATH` 环境变量；三处都找不到就跳过格式化（生成物功能不受影响，只是排版保持生成器原样） |
-| `--quiet` | 关闭 | 不打印每个文件的生成日志和配置报告（`Config.report()`），只在出错时输出 |
+| `--config SET` | 无（必填） | 配置集名字或路径 |
+| `--arch {original_pipe,serdes}` | `original_pipe` | PHY 宏类型，必须与 pclk-mode 匹配 |
+| `--pclk-mode {pclk_as_phy_output,pclk_as_phy_input}` | `pclk_as_phy_output` | PCLK 归属架构 |
+| `--sel-mode {sync,comb}` | `sync` | Group 选择同步方式；DPR 要求 sync |
+| `--dpr` | 关闭 | 生成并例化 DPR overlay |
+| `--verible-path PATH` | 自动搜索 | SystemVerilog 格式化器 |
+| `--verible-flags JSON` | 内置默认值 | 覆盖 Verible 参数 |
+| `--quiet` | 关闭 | 不打印拓扑报告 |
 
-`--config` 之外的所有参数都可以省略，省略即用默认值——不加
-`--pclk-mode`/`--sel-mode` 生成的就是原来一直兼容的默认组合。
+生成器先在 workspace 旁建立 staging，同时生成 `rtl/` 和 `tb/`。两边都成功
+后才替换旧输出；RTL 或 TB 任意一步失败，旧的两套输出都保持不变。
 
-生成产物固定写到 `<SET>/rtl/`，跟 `--config` 传的是配置集名字还是路径
-无关——即使 `--config` 给的是 `test/` 之外的路径，也会在那个路径下
-按同样的 `rtl/` 布局写产物。
+## 5. `plm validate`
 
-示例：
-
-```bash
-# 默认参数生成 quad 的 RTL
-plm generate rtl --config quad
-
-# 生成 maxpclk 的 RTL——这套配置演示的就是另一套时钟架构，
-# 所以必须显式传参（见 2.4 节）
-plm generate rtl --config maxpclk
-
-# 临时切回默认的 pclk_as_phy_output 试一下：
-plm generate rtl --config maxpclk --pclk-mode pclk_as_phy_output
-
-# 切到组合直通的 NOV 同步，且不打印生成日志
-plm generate rtl --config quad --sel-mode comb --quiet
-
-# 指定 verible-verilog-format 路径做自动格式化
-plm generate rtl --config quad --verible-path /opt/verible/bin/verible-verilog-format
-```
-
-## 4. `plm generate tb`：生成 testbench
-
-```bash
-python -m plm.cli.main generate tb --config <SET> [其它参数]
-plm generate tb --config <SET> [其它参数]
-```
-
-| 参数 | 默认值 | 说明 |
-|---|---|---|
-| `--config SET` | 无（必填） | 同 `generate rtl` 的 `--config`；testbench 固定写到 `<SET>/tb/` |
-| `--arch {original_pipe,serdes}` | `original_pipe` | 同 `generate rtl` 的 `--arch`，纯粹是跟 `--pclk-mode` 的一致性校验。**必须和这套配置集的 RTL 是用哪个 `--arch` 生成的一致** |
-| `--pclk-mode {pclk_as_phy_output,pclk_as_phy_input}` | `pclk_as_phy_output` | 决定 testbench 怎么实例化 DUT（`pipe_lane_mapper`）的端口列表。**必须和这套配置集的 RTL 是用哪个 `--pclk-mode` 生成的一致** |
-| `--verible-path PATH` | 无 | 同 `generate rtl` 的 `--verible-path` |
-| `--quiet` | 关闭 | 同 `generate rtl` 的 `--quiet` |
-
-没有 `--sel-mode`：testbench 的 NOV 监控逻辑不区分 `sync`/`comb`，两种
-`--sel-mode` 生成出来的 RTL 用同一份 testbench 都能跑。
-
-生成 testbench 的同时，会把 `plm.core` 的 `tb_makefile.mk` 复制成
-`<SET>/tb/makefile`（第 6 节仿真要用）。
-
-示例：
-
-```bash
-# 默认参数生成 quad 的 testbench
-plm generate tb --config quad
-
-# 生成 maxpclk 的 testbench——要和它的 RTL 用同一个 --pclk-mode，
-# 分开跑就得自己传对（用 generate all 就不用操心）
-plm generate tb --config maxpclk
-```
-
-## 5. `plm generate all` / `plm validate`
-
-`plm generate all --config <SET> [其它参数]` 依次跑 `generate rtl` 再
-`generate tb`，接受两者参数的并集（`--sel-mode` 只影响 RTL 那一步）。
-
-`plm validate --config <SET>` 只解析 + 校验配置（`Config.validate()`），
-不写任何文件——适合在 CI 里快速检查某套配置集本身是否合法，不需要真的
-跑一次生成。校验通过会打印 `OK -- config is valid.` 和 `Config.report()`
-的配置概览；不通过则打印每一条校验错误并以非零状态退出。
+`plm validate --config <SET>` 只解析并校验配置，不写任何文件。校验通过会
+打印配置报告；失败时打印所有校验错误并以非零状态退出。
 
 ## 6. 用顶层 `Makefile` 批量生成
 
-顶层 `Makefile` 对 `test/` 下每一套配置集重新跑 `plm generate rtl`
-和 `plm generate tb`（通过 `python -m plm.cli.main`），用途：脚本/CSV
-改完之后一键把所有配置集刷新到最新，避免出现"改了脚本或 CSV，但某套
-配置忘了重新生成"的漂移。
+顶层 `Makefile` 对每个正向配置集执行一次 `plm generate`。故意非法的
+`quad` 是负向校验 fixture，不参与批量生成。
 
 | 命令 | 作用 |
 |---|---|
-| `make` / `make all` | 生成所有配置集的 RTL + testbench，某一个失败就停 |
-| `make -k` | 同上，但失败了继续跑完其余的 |
-| `make <SET>` | 只生成某一套配置集的 RTL + testbench，如 `make quad` |
-| `make rtl-<SET>` | 只重新生成某一套配置集的 RTL，如 `make rtl-quad` |
-| `make tb-<SET>` | 只重新生成某一套配置集的 testbench，如 `make tb-quad` |
-| `make list` | 列出 `test/` 下识别到的配置集名字 |
-| `make clean` | 删掉所有配置集的生成物（`rtl/`、`tb/tb_pipe_lane_mapper.sv`） |
-| `make clean-<SET>` | 只删掉某一套配置集的生成物，如 `make clean-quad` |
-| `make help` | 打印这份命令/变量说明，附带当前实际识别到的配置集名字 |
+| `make` / `make all` | 生成所有正向配置集 |
+| `make -k` | 出错后继续处理其余配置集 |
+| `make <SET>` | 生成一套配置，如 `make bifurcate` |
+| `make list` | 列出参与生成的配置集 |
+| `make clean` | 清理所有配置集的生成物 |
+| `make clean-<SET>` | 清理指定配置集 |
 
-`make help` 的输出是英文的：这台机器上 `make.exe`（conda-forge 的 GNU
-Make on Windows）在把 `@echo` 里的非 ASCII 字符传给 shell 时会出现乱码
-——用一个只有一行 `@echo "中文"` 的最小 Makefile 单独测试过，跟这个
-项目本身的内容无关，是工具链的问题。所以 `Makefile` 里所有实际会被
-执行的 `@echo` 都改成了英文；文件本身的注释（不会被当命令执行，只是
-被人或编辑器读取）不受影响，还是中文。
-
-配置集会被自动发现：只要存在 `test/<name>/config/controllers.csv`，
-`<name>` 就会被当作一个配置集，不需要手改 Makefile。
-
-### 6.1 透传参数给两个子命令
-
-这里的变量是**全局的**：适用于这一次 `make` 调用涉及的所有配置集，
-用来临时试一个参数、或者需要所有配置集都统一切换某个参数时用。
-
-```bash
-make all GENFLAGS="--pclk-mode pclk_as_phy_input"   # 两个子命令都收到
-make all RTL_GENFLAGS="--sel-mode comb"               # 只有 generate rtl 收到
-```
-
-| 变量 | 传给谁 |
-|---|---|
-| `GENFLAGS` | `generate rtl` 和 `generate tb` 都会收到 |
-| `RTL_GENFLAGS` | 只传给 `generate rtl` |
-| `TB_GENFLAGS` | 只传给 `generate tb` |
-
-某个配置集自己固定要用的参数（比如 `maxpclk` 一直都要用
-`--pclk-mode pclk_as_phy_input`）写在 `Makefile` 里的 `SETFLAGS_<SET>` 变量上：
-
-```make
-SETFLAGS_maxpclk := --arch serdes --pclk-mode pclk_as_phy_input
-SETFLAGS_dpr     := --dpr
-```
-
-加一套需要非默认参数的配置集时，记得在这里补一行，否则 `make <SET>` 会用
-默认参数生成它。上面那三个全局变量追加在 `SETFLAGS_<SET>` 后面，所以可以
-临时覆盖。
-
-### 6.2 可覆盖的变量
-
-| 变量 | 默认值 | 说明 |
-|---|---|---|
-| `PYTHON` | `uv run python` | 用哪个 Python 解释器跑 `plm.cli.main` |
-| `GENFLAGS` | 空 | 追加给两个子命令的额外参数（见 6.1 节） |
-| `RTL_GENFLAGS` | 空 | 只追加给 `generate rtl` 的额外参数 |
-| `TB_GENFLAGS` | 空 | 只追加给 `generate tb` 的额外参数 |
-
-例：`make all PYTHON=/path/to/python3`。
-
-生成物的语法/语义正确性、以及功能正确性都要靠仿真验证（第 7 节）——
-`Makefile` 本身不做任何检查，只负责生成。
+`GENFLAGS` 追加到本次 make 涉及的每一个 `plm generate` 命令；
+`SETFLAGS_<SET>` 保存某套样例所需的非默认参数。
 
 ## 7. 仿真
 
-`generate tb` 生成 testbench 时会把 `plm.core` 的 `tb_makefile.mk` 复制成
+`plm generate` 生成 testbench 时会把 `plm.core` 的 `tb_makefile.mk` 复制成
 每个配置集的 `tb/makefile`（VCS + Verdi 流程）：
 
 ```bash
@@ -490,8 +366,7 @@ make clean     # 清掉编译/仿真产物
 make           # 等价于 compile + run
 ```
 
-这要求这套配置集的 `rtl/` 已经用 `plm generate rtl`（或顶层 `Makefile`）
-生成过，并且和 `tb/` 是用同一个 `--pclk-mode` 生成的。
+`rtl/` 和 `tb/` 始终来自同一次生成，不需要人工保持参数一致。
 
 编译时会自动打开 `+define+DUMP_FSDB`，testbench 里对应写出
 `waves.fsdb`。
@@ -509,10 +384,9 @@ verilator --binary -f flist.f ../tb/tb_pipe_lane_mapper.sv --top-module tb_pipe_
 
 ## 8. 生成时的终端输出
 
-不加 `--quiet` 时，`generate rtl`/`generate tb` 都会依次打印：
+不加 `--quiet` 时，`plm generate` 会依次打印：
 
-1. 用到的配置目录、自己的输出目录（`generate rtl` 打印 RTL 目录，
-   `generate tb` 打印 TB 目录）；
+1. 用到的配置目录以及 RTL、TB 输出目录；
 2. 自己生成的每个文件的路径；
 3. `Config.report()` 给出的配置概览，包括：
    - 各 lane group 的分组结果、每个 mode 下的 owner、是否需要 NOV；
@@ -521,8 +395,7 @@ verilator --binary -f flist.f ../tb/tb_pipe_lane_mapper.sv --top-module tb_pipe_
    - 每个信号的 `safe_state` 取值；
    - 每一对 mode 切换会影响哪些 group、哪些 group 不受影响。
 
-这份配置报告和具体生成 RTL 还是 TB 无关，`generate rtl`/`generate tb`
-各自运行时都会打印（`--quiet` 时都不打印）。
+配置报告只打印一次；`--quiet` 时不打印。
 
 配置不满足 `Config.validate()` 里的任何一条硬性检查时，生成会直接
 报错退出，不会写出任何文件；主要拓扑限制及其原因见第 0.6 节。

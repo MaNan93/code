@@ -612,6 +612,8 @@ class QtFrontendTests(unittest.TestCase):
             ("GENERATING", "Generating..."),
             ("REFRESHING_PREVIEW", "Refreshing preview..."),
             ("DONE", "Generated"),
+            ("STALE", "Out of date"),
+            ("UP_TO_DATE", "Up to date"),
             ("FAILED", "Generation failed"),
         ]
         for state, label in expected:

@@ -9,6 +9,7 @@ from plm.core import exporter
 from plm.core.gen_flags import GenerationOptions
 from plm.core.model import Config
 from plm.core.plan import GenerationPlan
+from plm.core.service import generate
 from plm.core.paths import DOCS_DIR, WORKSPACE_MARKER, is_deletable_workspace
 from plm.core.workspace import (
     read_gen_flags,
@@ -197,6 +198,46 @@ class WorkspaceTests(unittest.TestCase):
 
 
 class ExporterTests(unittest.TestCase):
+    def test_generation_is_noop_only_for_a_verified_current_output_set(self):
+        config_dir = ROOT / "test" / "bifurcate" / "config"
+        options = GenerationOptions(quiet=True)
+        with tempfile.TemporaryDirectory() as td:
+            workspace = Path(td)
+            first = generate(config_dir, workspace / "rtl", options)
+            before = {
+                path.relative_to(workspace): (path.stat().st_mtime_ns, path.read_bytes())
+                for path in workspace.rglob("*") if path.is_file()
+            }
+            phases = []
+            second = generate(
+                config_dir, workspace / "rtl", options, progress=phases.append
+            )
+            after = {
+                path.relative_to(workspace): (path.stat().st_mtime_ns, path.read_bytes())
+                for path in workspace.rglob("*") if path.is_file()
+            }
+
+            self.assertTrue(first.generated)
+            self.assertFalse(second.generated)
+            self.assertEqual(phases, ["VALIDATING", "UP_TO_DATE"])
+            self.assertEqual(before, after)
+
+            generated = workspace / "rtl" / "src" / "pipe_lane_mapper.sv"
+            generated.write_text(generated.read_text() + "// changed\n")
+            repaired = generate(config_dir, workspace / "rtl", options)
+            self.assertTrue(repaired.generated)
+
+            changed_options = generate(
+                config_dir,
+                workspace / "rtl",
+                GenerationOptions(sel_mode="comb", quiet=True),
+            )
+            self.assertTrue(changed_options.generated)
+            self.assertNotEqual(
+                repaired.plan.generation_key,
+                changed_options.plan.generation_key,
+            )
+
     def test_failed_generation_preserves_previous_output_set(self):
         cfg = Config(ROOT / "test" / "bifurcate" / "config")
         plan = GenerationPlan.build(cfg, GenerationOptions(quiet=True))

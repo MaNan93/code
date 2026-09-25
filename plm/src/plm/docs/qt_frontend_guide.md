@@ -81,8 +81,10 @@ mode=0  lane0=0-0  lane1=0-1  lane2=1-0
 校验失败时不会写入生成结果，具体原因显示在 LOG 页。输出文件自动写到
 `<config_dir>/../rtl/` 和 `<config_dir>/../tb/`。
 
-按钮左侧会依次显示 `Saving`、`Validating`、`Generating`、
-`Refreshing preview`，最终停在 `Generated` 或 `Generation failed`。
+按钮左侧会显示当前输出状态：编辑后为 `Out of date`，已有输出与当前配置、
+参数匹配时为 `Up to date`。生成过程中依次显示 `Saving`、`Validating`、
+`Generating`、`Refreshing preview`，最终停在 `Generated`、`Up to date` 或
+`Generation failed`。输出已经完整且最新时，Generate 会直接跳过写盘。
 RTL 与 TB 各自带一份 `manifest.json`；两份文件的 `generation_key` 相同，
 用于确认它们来自同一份配置和同一次参数组合。
 

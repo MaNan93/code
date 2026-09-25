@@ -155,6 +155,41 @@ def _self_check_output_set(plan, workspace):
         raise ValidationError(issues)
 
 
+def read_manifests(workspace):
+    """Return both output manifests, or an empty mapping if either is invalid."""
+    workspace = Path(workspace)
+    manifests = {}
+    try:
+        for kind in OUTPUT_DIRS:
+            manifests[kind] = json.loads(
+                (workspace / kind / MANIFEST_NAME).read_text(encoding="utf-8")
+            )
+    except (OSError, ValueError):
+        return {}
+    return manifests
+
+
+def output_set_matches_plan(plan, workspace, *, verify_files=False):
+    """Tell callers whether the installed RTL/TB set belongs to ``plan``.
+
+    UI freshness checks only need the matched generation keys. Generation uses
+    ``verify_files=True`` so a missing or edited output is repaired rather than
+    incorrectly treated as a no-op.
+    """
+    manifests = read_manifests(workspace)
+    if set(manifests) != set(OUTPUT_DIRS) or any(
+        manifest.get("generation_key") != plan.generation_key
+        for manifest in manifests.values()
+    ):
+        return False
+    if verify_files:
+        try:
+            _self_check_output_set(plan, workspace)
+        except ValidationError:
+            return False
+    return True
+
+
 def _remove_path(path):
     path = Path(path)
     if path.is_dir():

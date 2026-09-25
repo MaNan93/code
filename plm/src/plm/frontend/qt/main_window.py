@@ -34,6 +34,7 @@ from plm.core.gen_flags import (
     SEL_MODE_VALUES,
     GenerationOptions,
 )
+from plm.core.exporter import output_set_matches_plan
 from plm.core.model import Config
 from plm.core.paths import CONFIGS_ROOT, DOCS_DIR, PLM_ROOT, is_deletable_workspace, is_workspace_root
 from plm.core.validation import (
@@ -94,6 +95,8 @@ GENERATION_STATE_LABELS = {
     "GENERATING": "Generating...",
     "REFRESHING_PREVIEW": "Refreshing preview...",
     "DONE": "Generated",
+    "STALE": "Out of date",
+    "UP_TO_DATE": "Up to date",
     "FAILED": "Generation failed",
 }
 
@@ -2345,6 +2348,11 @@ class MainWindow(QtWidgets.QMainWindow):
                 column,
             )
             break
+        if not self._generation_busy and self.current_workspace is not None:
+            current = self._live_plan is not None and output_set_matches_plan(
+                self._live_plan, self.current_workspace
+            )
+            self._set_generation_state("UP_TO_DATE" if current else "STALE")
 
     def _focus_first_live_validation_error(self):
         target = getattr(self, "_first_live_validation_error", None)
@@ -2878,13 +2886,14 @@ class MainWindow(QtWidgets.QMainWindow):
         before_outputs = self._output_signature(run_workspace)
         generated = []
         output_buffer = ""
+        terminal_phase = None
         # --quiet suppresses the generator's own copy of Config.report(), which
         # would otherwise be echoed into the LOG on every run -- the REPORT page
         # already shows exactly that, live. See the two tabs' tooltips for the
         # split: LOG is what this run did, REPORT is what the config looks like.
         cmd = [
             sys.executable, "-m", "plm.cli.main", "generate",
-            "--config", str(run_workspace), "--quiet",
+            "--config", str(run_workspace), "--quiet", "--events-json",
         ]
         cmd += self._gen_flag_args()
         settings = load_settings()
@@ -2916,13 +2925,20 @@ class MainWindow(QtWidgets.QMainWindow):
         proc.setProcessChannelMode(QtCore.QProcess.MergedChannels)
 
         def handle_output_line(line):
+            nonlocal terminal_phase
             stripped = line.strip()
-            if stripped == "PLM_PHASE: VALIDATING":
-                self._set_generation_state("VALIDATING")
-                return
-            if stripped == "PLM_PHASE: GENERATING":
-                self._set_generation_state("GENERATING")
-                return
+            if stripped.startswith("PLM_EVENT "):
+                try:
+                    event = json.loads(stripped[len("PLM_EVENT ") :])
+                except (TypeError, ValueError):
+                    self._log(line)
+                    return
+                phase = event.get("phase")
+                if phase in ("VALIDATING", "GENERATING", "UP_TO_DATE"):
+                    self._set_generation_state(phase)
+                    if phase == "UP_TO_DATE":
+                        terminal_phase = phase
+                    return
             if stripped.startswith("generated "):
                 generated.append(stripped[len("generated ") :])
             self._log(line)
@@ -2945,7 +2961,10 @@ class MainWindow(QtWidgets.QMainWindow):
             elapsed = time.monotonic() - started_at
             self._log(f"[generate: {len(generated)} file(s), {elapsed:.1f}s]")
             if exit_code == 0:
-                self._log("[generate finished]")
+                if terminal_phase == "UP_TO_DATE":
+                    self._log("[generate skipped: outputs are up to date]")
+                else:
+                    self._log("[generate finished]")
                 self._set_generation_state("REFRESHING_PREVIEW")
                 after_outputs = self._output_signature(run_workspace)
                 self._show_generation_results(
@@ -2954,7 +2973,9 @@ class MainWindow(QtWidgets.QMainWindow):
                 if self.current_workspace == run_workspace:
                     self._refresh_topology_summary()
                     self._refresh_rtl_preview()
-                self._set_generation_state("DONE")
+                self._set_generation_state(
+                    "UP_TO_DATE" if terminal_phase == "UP_TO_DATE" else "DONE"
+                )
             else:
                 self._log(f"[generate finished, exit code {exit_code}]")
                 self._set_generation_state("FAILED")

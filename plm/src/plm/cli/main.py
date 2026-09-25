@@ -14,7 +14,6 @@ import argparse
 import json
 import sys
 
-from plm.core.exporter import export_all
 from plm.core.gen_flags import (
     ARCH_VALUES,
     PCLK_MODE_VALUES,
@@ -22,29 +21,15 @@ from plm.core.gen_flags import (
     GenerationOptions,
 )
 from plm.core.paths import resolve_set
-from plm.core.validation import (
-    ValidationError,
-    load_generation_plan,
-    load_validated_config,
-)
+from plm.core.service import generate
+from plm.core.validation import ValidationError, load_validated_config
 
-ARCH_CHOICES = list(ARCH_VALUES)
-PCLK_MODE_CHOICES = list(PCLK_MODE_VALUES)
-SEL_MODE_CHOICES = list(SEL_MODE_VALUES)
 
 ARCH_HELP = (
     "PHY family: original_pipe requires pclk_as_phy_output; "
     "serdes requires pclk_as_phy_input."
 )
-PCLK_MODE_HELP = (
-    "PCLK architecture: PHY output or controller-provided PHY input."
-)
-VERIBLE_PATH_HELP = (
-    "Path to verible-verilog-format. Defaults to searching PATH."
-)
-VERIBLE_FLAGS_HELP = (
-    "JSON object of verible-verilog-format flags, replacing the defaults."
-)
+PCLK_MODE_HELP = "PCLK architecture: PHY output or controller-provided PHY input."
 DPR_HELP = (
     "Generate the DPR diagnostic-probe overlay. Requires --sel-mode sync; "
     "PHY-input mode needs an external dpr_pclk."
@@ -53,28 +38,35 @@ DPR_HELP = (
 
 def _add_config_arg(parser):
     parser.add_argument(
-        "--config",
-        default=None,
-        metavar="SET",
+        "--config", default=None, metavar="SET",
         help="Directory holding the three config CSVs (or its parent).",
     )
 
 
 def _add_generation_args(parser):
     parser.add_argument(
-        "--sel-mode", choices=SEL_MODE_CHOICES, default="sync",
+        "--sel-mode", choices=list(SEL_MODE_VALUES), default="sync",
         help="sync=break-before-make plus synchronization; "
         "comb=passthrough for a shared clock domain only",
     )
-    parser.add_argument("--arch", choices=ARCH_CHOICES, default="original_pipe", help=ARCH_HELP)
     parser.add_argument(
-        "--pclk-mode", choices=PCLK_MODE_CHOICES,
+        "--arch", choices=list(ARCH_VALUES), default="original_pipe", help=ARCH_HELP
+    )
+    parser.add_argument(
+        "--pclk-mode", choices=list(PCLK_MODE_VALUES),
         default="pclk_as_phy_output", help=PCLK_MODE_HELP,
     )
-    parser.add_argument("--verible-path", default=None, metavar="PATH", help=VERIBLE_PATH_HELP)
-    parser.add_argument("--verible-flags", default=None, metavar="JSON", help=VERIBLE_FLAGS_HELP)
+    parser.add_argument(
+        "--verible-path", default=None, metavar="PATH",
+        help="Path to verible-verilog-format. Defaults to searching PATH.",
+    )
+    parser.add_argument(
+        "--verible-flags", default=None, metavar="JSON",
+        help="JSON object of formatter flags, replacing the defaults.",
+    )
     parser.add_argument("--dpr", action="store_true", help=DPR_HELP)
     parser.add_argument("--quiet", action="store_true")
+    parser.add_argument("--events-json", action="store_true", help=argparse.SUPPRESS)
 
 
 def _parse_verible_flags(raw):
@@ -91,6 +83,11 @@ def _parse_verible_flags(raw):
     return value
 
 
+def _emit_event(enabled, phase):
+    if enabled:
+        print("PLM_EVENT " + json.dumps({"phase": phase}, sort_keys=True), flush=True)
+
+
 def cmd_generate(argv):
     parser = argparse.ArgumentParser(
         prog="plm generate",
@@ -100,7 +97,6 @@ def cmd_generate(argv):
     _add_generation_args(parser)
     args = parser.parse_args(argv)
     csv_dir, out_rtl = resolve_set(args.config)
-
     options = GenerationOptions(
         arch=args.arch,
         pclk_mode=args.pclk_mode,
@@ -111,16 +107,17 @@ def cmd_generate(argv):
         quiet=args.quiet,
     )
     print(f"Config: {csv_dir}")
-    print("PLM_PHASE: VALIDATING")
     try:
-        plan = load_generation_plan(csv_dir, options)
+        result = generate(
+            csv_dir,
+            out_rtl,
+            options,
+            progress=lambda phase: _emit_event(args.events_json, phase),
+        )
     except ValidationError as error:
-        raise SystemExit(f"Config validation failed:\n{error}") from error
-    print("PLM_PHASE: GENERATING")
-    try:
-        export_all(plan, out_rtl)
-    except ValidationError as error:
-        raise SystemExit(f"Generated output self-check failed:\n{error}") from error
+        raise SystemExit(f"Generation validation failed:\n{error}") from error
+    if not result.generated:
+        print("Outputs are up to date; generation skipped.")
 
 
 def cmd_validate(argv):

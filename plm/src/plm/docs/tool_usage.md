@@ -183,6 +183,7 @@ plm/
 │     │  ├─ gen_flags.py      GenerationOptions + flag 合法取值和组合规则
 │     │  ├─ plan.py           GenerationPlan：RTL/TB/Report 共用的已解析计划
 │     │  ├─ validation.py     format/topology/generation/output 四层校验
+│     │  ├─ service.py        共用生成流程：校验、no-op 判断、导出
 │     │  ├─ workspace.py      CSV/工作区读写（供 Qt 前端编辑器使用）
 │     │  ├─ generator/
 │     │  │  ├─ rtl.py           纯文本生成：RTL 各模块的 gen_* 函数
@@ -334,6 +335,8 @@ plm generate --config <SET> [其它参数]
 拓扑；随后在 workspace 旁建立 staging，同时生成 `rtl/` 和 `tb/`。生成完成后
 写入两份 Manifest，并检查文件列表、hash、顶层模块、NL/NC 宽度和模板残留。
 全部通过后才替换旧输出；生成或自检任意一步失败，旧的两套输出都保持不变。
+如果现有两份 Manifest 的 `generation_key` 匹配且所有文件 hash 均通过自检，
+本次操作会报告输出已是最新并跳过写盘；配置、参数或文件内容有任何变化都会重新生成。
 
 错误按 `[format]`、`[topology]`、`[generation]`、`[output]` 分层报告。
 

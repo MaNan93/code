@@ -299,14 +299,33 @@ def load_recent_workspaces():
     return [p for p in (Path(r) for r in raw) if is_workspace_root(p)]
 
 
+def _absolute_path(path):
+    """Make a path absolute without rewriting its user-visible spelling.
+
+    Path.resolve() expands Windows 8.3 short names (RUNNER~1) to long names.
+    That made the same directory compare differently across the UI and tests,
+    and could suppress Preview generation-status refreshes.
+    """
+    return Path(os.path.abspath(os.path.expanduser(os.fspath(path))))
+
+
+def _same_path(left, right):
+    """Compare filesystem identity, falling back safely for missing paths."""
+    try:
+        return os.path.samefile(left, right)
+    except (OSError, TypeError, ValueError):
+        normalize = lambda value: os.path.normcase(
+            os.path.abspath(os.path.expanduser(os.fspath(value)))
+        )
+        return normalize(left) == normalize(right)
+
+
 def add_recent_workspace(path):
-    """Appends path if it's not already listed -- an already-listed entry
-    keeps its existing position instead of jumping to the front on every
-    open, so the Recent list holds still and isn't reordered by use."""
+    """Append path once, including across Windows short/long aliases."""
     data = _read_state_file()
     path_str = str(path)
     recent = data.get("recent", [])
-    if path_str not in recent:
+    if not any(_same_path(path_str, item) for item in recent):
         recent.append(path_str)
     data["recent"] = recent[-MAX_RECENT_WORKSPACES:]
     _write_state_file(data)
@@ -314,25 +333,25 @@ def add_recent_workspace(path):
 
 def remove_recent_workspace(path):
     data = _read_state_file()
-    path_str = str(path)
-    data["recent"] = [p for p in data.get("recent", []) if p != path_str]
+    data["recent"] = [
+        item for item in data.get("recent", []) if not _same_path(item, path)
+    ]
     _write_state_file(data)
 
 
 def rename_recent_workspace(old_path, new_path):
     """Replace a renamed workspace path everywhere it is persisted."""
-    old_path = Path(old_path).resolve()
-    new_path = Path(new_path).resolve()
+    old_path = _absolute_path(old_path)
+    new_path = _absolute_path(new_path)
     data = _read_state_file()
     recent = []
     for raw_path in data.get("recent", []):
-        path = Path(raw_path).resolve()
-        replacement = str(new_path) if path == old_path else str(path)
-        if replacement not in recent:
+        replacement = str(new_path) if _same_path(raw_path, old_path) else raw_path
+        if not any(_same_path(replacement, item) for item in recent):
             recent.append(replacement)
     data["recent"] = recent[-MAX_RECENT_WORKSPACES:]
     last = data.get("workspace")
-    if last and Path(last).resolve() == old_path:
+    if last and _same_path(last, old_path):
         data["workspace"] = str(new_path)
     _write_state_file(data)
 
@@ -1942,7 +1961,11 @@ class MainWindow(QtWidgets.QMainWindow):
             f"{counts['New']} new, {counts['Modified']} modified, "
             f"{counts['Unchanged']} unchanged."
         )
-        if self.current_workspace == workspace and self.rtl_preview_panel.isVisible():
+        if (
+            self.current_workspace is not None
+            and _same_path(self.current_workspace, workspace)
+            and self.rtl_preview_panel.isVisible()
+        ):
             self._refresh_rtl_preview()
 
     def _on_toggle_log(self, checked):
@@ -2566,7 +2589,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
     # ------------------------------------------------------------ workspace lifecycle
     def _open_workspace(self, path, confirm_discard=True, add_to_recent=True):
-        path = Path(path).resolve()
+        path = _absolute_path(path)
         if not is_workspace_root(path):
             QtWidgets.QMessageBox.warning(
                 self, "Open failed", f"Not a PLM workspace (missing config CSVs): {path}"
@@ -2717,24 +2740,29 @@ class MainWindow(QtWidgets.QMainWindow):
             return
         self._open_workspace(ws, confirm_discard=False)
 
-    def _on_save(self):
-        """Returns True when the workspace is on disk, False on failure --
-        _confirm_discard_changes() relies on that to keep edits when a save
-        the user asked for could not be written."""
+    def _save_current_workspace(self, *, log_success):
+        """Persist the editor state, with one error-handling path for all callers."""
         if self.current_workspace is None:
-            QtWidgets.QMessageBox.warning(self, "No workspace", "Open or create a workspace first.")
+            QtWidgets.QMessageBox.warning(
+                self, "No workspace", "Open or create a workspace first."
+            )
             return False
         if not self._ensure_external_config_unchanged():
             return False
         try:
             save_workspace_content(self.current_workspace, self._gather_payload())
-        except (ValueError, OSError) as e:
-            QtWidgets.QMessageBox.critical(self, "Save failed", str(e))
-            self._log(f"Save failed: {e}")
+        except (ValueError, OSError) as error:
+            QtWidgets.QMessageBox.critical(self, "Save failed", str(error))
+            self._log(f"Save failed: {error}")
             return False
-        self._log(f"Saved {self.current_workspace}/config/*.")
+        if log_success:
+            self._log(f"Saved {self.current_workspace}/config/*.")
         self._mark_saved()
         return True
+
+    def _on_save(self):
+        """Save explicitly; the discard guard relies on the boolean result."""
+        return self._save_current_workspace(log_success=True)
 
     def _on_settings(self):
         dlg = SettingsDialog(self, load_settings())
@@ -2866,23 +2894,8 @@ class MainWindow(QtWidgets.QMainWindow):
 
     # ------------------------------------------------------------ validate / generate
     def _save_before_action(self):
-        """Save-before-action, same as every other front end: Validate and
-        Generate must always act on current tab content, not whatever was
-        last written to disk. Returns True on success, False (after
-        already reporting the error) on failure."""
-        if self.current_workspace is None:
-            QtWidgets.QMessageBox.warning(self, "No workspace", "Open or create a workspace first.")
-            return False
-        if not self._ensure_external_config_unchanged():
-            return False
-        try:
-            save_workspace_content(self.current_workspace, self._gather_payload())
-        except (ValueError, OSError) as e:
-            QtWidgets.QMessageBox.critical(self, "Save failed", str(e))
-            self._log(f"Save failed: {e}")
-            return False
-        self._mark_saved()
-        return True
+        """Save current edits before Validate or Generate."""
+        return self._save_current_workspace(log_success=False)
 
     def _on_validate(self):
         if not self._save_before_action():

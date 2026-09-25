@@ -1788,15 +1788,11 @@ class MainWindow(QtWidgets.QMainWindow):
         actions_row = QtWidgets.QHBoxLayout()
         actions_row.addStretch(1)
         btn_validate = QtWidgets.QPushButton("Validate")
-        btn_gen_rtl = QtWidgets.QPushButton("Generate RTL")
-        btn_gen_tb = QtWidgets.QPushButton("Generate TB")
-        btn_gen_all = QtWidgets.QPushButton("Generate All")
-        btn_gen_all.setObjectName("primaryBtn")
+        btn_generate = QtWidgets.QPushButton("Generate")
+        btn_generate.setObjectName("primaryBtn")
         btn_validate.clicked.connect(self._on_validate)
-        btn_gen_rtl.clicked.connect(self._on_gen_rtl)
-        btn_gen_tb.clicked.connect(self._on_gen_tb)
-        btn_gen_all.clicked.connect(self._on_gen_all)
-        self.generation_buttons = [btn_validate, btn_gen_rtl, btn_gen_tb, btn_gen_all]
+        btn_generate.clicked.connect(self._on_generate)
+        self.generation_buttons = [btn_validate, btn_generate]
         for b in self.generation_buttons:
             actions_row.addWidget(b)
         layout.addLayout(actions_row)
@@ -1923,12 +1919,8 @@ class MainWindow(QtWidgets.QMainWindow):
         self._generation_file_status = {}
 
     @staticmethod
-    def _output_signature(workspace, target):
-        roots = []
-        if target in ("rtl", "all"):
-            roots.append(workspace / "rtl")
-        if target in ("tb", "all"):
-            roots.append(workspace / "tb")
+    def _output_signature(workspace):
+        roots = (workspace / "rtl", workspace / "tb")
         signature = {}
         for root in roots:
             if not root.is_dir():
@@ -2649,24 +2641,13 @@ class MainWindow(QtWidgets.QMainWindow):
         self.sel_mode_combo.setCurrentText(flags.get("sel-mode") or SEL_MODES[0])
         self.dpr_check.setChecked(bool(flags.get("dpr")))
 
-    def _gen_flag_args(self, sel_mode=True):
-        """The Generation page's current choices, as `plm generate` arguments.
-
-        A combo still showing its "(default: ...)" placeholder contributes
-        nothing, so the CLI applies its own default -- the placeholder and the
-        CLI default are the same value, and not passing it keeps the logged
-        command line honest about what was actually chosen.
-
-        sel_mode=False for `generate tb`, which has no --sel-mode option of its
-        own (the testbench doesn't instantiate pipe_lane_sel_sync), so passing
-        it there is an argparse error rather than a no-op.
-        """
+    def _gen_flag_args(self):
+        """Return the Generation page's non-placeholder CLI arguments."""
         combos = [
             ("--arch", self.arch_combo, ARCH_VALUES),
             ("--pclk-mode", self.pclk_mode_combo, PCLK_MODE_VALUES),
+            ("--sel-mode", self.sel_mode_combo, SEL_MODE_VALUES),
         ]
-        if sel_mode:
-            combos.append(("--sel-mode", self.sel_mode_combo, SEL_MODE_VALUES))
         args = []
         for flag, combo, values in combos:
             value = combo.currentText()
@@ -2972,17 +2953,11 @@ class MainWindow(QtWidgets.QMainWindow):
         self._topology_payload = payload
         self.topology_summary.setPlainText(text)
 
-    def _on_gen_rtl(self):
-        self._run_tool("rtl")
+    def _on_generate(self):
+        self._run_tool()
 
-    def _on_gen_tb(self):
-        self._run_tool("tb")
-
-    def _on_gen_all(self):
-        self._run_tool("all")
-
-    def _run_tool(self, target, then=None):
-        """QProcess runs `python -m plm.cli.main generate <target>`
+    def _run_tool(self, then=None):
+        """QProcess runs `python -m plm.cli.main generate`
         against the current workspace asynchronously. QProcess signals
         deliver output on the Qt event loop as it arrives.
 
@@ -3000,7 +2975,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self._set_generation_busy(True)
         started_at = time.monotonic()
         run_workspace = self.current_workspace
-        before_outputs = self._output_signature(run_workspace, target)
+        before_outputs = self._output_signature(run_workspace)
         generated = []
         output_buffer = ""
         # --quiet suppresses the generator's own copy of Config.report(), which
@@ -3008,10 +2983,10 @@ class MainWindow(QtWidgets.QMainWindow):
         # already shows exactly that, live. See the two tabs' tooltips for the
         # split: LOG is what this run did, REPORT is what the config looks like.
         cmd = [
-            sys.executable, "-m", "plm.cli.main", "generate", target,
+            sys.executable, "-m", "plm.cli.main", "generate",
             "--config", str(run_workspace), "--quiet",
         ]
-        cmd += self._gen_flag_args(sel_mode=(target != "tb"))
+        cmd += self._gen_flag_args()
         settings = load_settings()
         verible_path = settings.get("veriblePath")
         if verible_path:
@@ -3062,19 +3037,16 @@ class MainWindow(QtWidgets.QMainWindow):
                 output_buffer = ""
             self._set_generation_busy(False)
             elapsed = time.monotonic() - started_at
-            self._log(
-                f"[generate {target}: {len(generated)} file(s), {elapsed:.1f}s]"
-            )
+            self._log(f"[generate: {len(generated)} file(s), {elapsed:.1f}s]")
             if exit_code == 0:
                 self._log("[generate finished]")
-                after_outputs = self._output_signature(run_workspace, target)
+                after_outputs = self._output_signature(run_workspace)
                 self._show_generation_results(
                     run_workspace, before_outputs, after_outputs
                 )
                 if self.current_workspace == run_workspace:
                     self._refresh_topology_summary()
-                    if target in ("rtl", "all"):
-                        self._refresh_rtl_preview()
+                    self._refresh_rtl_preview()
             else:
                 self._log(f"[generate finished, exit code {exit_code}]")
             if proc in self._active_processes:
@@ -3085,7 +3057,7 @@ class MainWindow(QtWidgets.QMainWindow):
         def on_error(_error):
             if proc.state() == QtCore.QProcess.NotRunning:
                 self._set_generation_busy(False)
-                self._log(f"Failed to launch generate {target}: {proc.errorString()}")
+                self._log(f"Failed to launch generate: {proc.errorString()}")
                 if proc in getattr(self, "_active_processes", []):
                     self._active_processes.remove(proc)
 

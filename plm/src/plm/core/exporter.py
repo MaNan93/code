@@ -18,29 +18,65 @@ from plm.core.paths import COMMON_DIR, TB_MAKEFILE
 from plm.core.verible import format_sv
 
 
-def _stage_output_dir(destination):
-    destination = Path(destination)
-    destination.parent.mkdir(parents=True, exist_ok=True)
-    staged = Path(tempfile.mkdtemp(prefix=f".{destination.name}-generate-", dir=destination.parent))
-    if destination.is_dir():
-        shutil.copytree(destination, staged, dirs_exist_ok=True)
+OUTPUT_DIRS = ("rtl", "tb")
+
+
+def _remove_path(path):
+    path = Path(path)
+    if path.is_dir():
+        shutil.rmtree(path)
+    elif path.exists():
+        path.unlink()
+
+
+def _stage_output_set(workspace):
+    """Copy the current output set to a sibling staging directory."""
+    workspace = Path(workspace)
+    workspace.mkdir(parents=True, exist_ok=True)
+    staged = Path(
+        tempfile.mkdtemp(
+            prefix=f".{workspace.name}-generate-",
+            dir=workspace.parent,
+        )
+    )
+    for name in OUTPUT_DIRS:
+        source = workspace / name
+        if source.is_dir():
+            shutil.copytree(source, staged / name)
     return staged
 
 
-def _commit_output_dir(staged, destination):
-    """Swap a complete staged directory into place, rolling back on error."""
-    destination = Path(destination)
-    backup = destination.parent / f".{destination.name}-backup-{uuid.uuid4().hex}"
-    if destination.exists():
-        os.replace(destination, backup)
+def _commit_output_set(staged, workspace):
+    """Install RTL and TB together, restoring both if either swap fails."""
+    staged = Path(staged)
+    workspace = Path(workspace)
+    token = uuid.uuid4().hex
+    backups = {}
+    installed = []
     try:
-        os.replace(staged, destination)
+        for name in OUTPUT_DIRS:
+            destination = workspace / name
+            if destination.exists():
+                backup = workspace / f".{name}-backup-{token}"
+                os.replace(destination, backup)
+                backups[name] = backup
+        for name in OUTPUT_DIRS:
+            source = staged / name
+            if not source.is_dir():
+                raise RuntimeError(f"staged output is missing {name}/")
+            destination = workspace / name
+            os.replace(source, destination)
+            installed.append(destination)
     except BaseException:
-        if backup.exists() and not destination.exists():
-            os.replace(backup, destination)
+        for destination in reversed(installed):
+            _remove_path(destination)
+        for name, backup in backups.items():
+            if backup.exists():
+                os.replace(backup, workspace / name)
         raise
-    if backup.exists():
-        shutil.rmtree(backup, ignore_errors=True)
+    else:
+        for backup in backups.values():
+            _remove_path(backup)
 
 
 def _export_rtl_into(cfg, out_dir, *, pclk_mode="pclk_as_phy_output", sel_mode="sync", dpr=False,
@@ -100,23 +136,6 @@ def _export_rtl_into(cfg, out_dir, *, pclk_mode="pclk_as_phy_output", sel_mode="
         print(cfg.report())
 
 
-def export_rtl(cfg, out_dir, *, pclk_mode="pclk_as_phy_output", sel_mode="sync", dpr=False,
-               verible_path=None, verible_flags=None, quiet=False):
-    """Generate in staging and replace the previous RTL only on success."""
-    destination = Path(out_dir)
-    staged = _stage_output_dir(destination)
-    try:
-        _export_rtl_into(
-            cfg, staged, pclk_mode=pclk_mode, sel_mode=sel_mode, dpr=dpr,
-            verible_path=verible_path, verible_flags=verible_flags, quiet=quiet,
-            display_out=destination,
-        )
-        _commit_output_dir(staged, destination)
-    finally:
-        if staged.exists():
-            shutil.rmtree(staged, ignore_errors=True)
-
-
 def _export_tb_into(cfg, out_rtl, *, pclk_mode="pclk_as_phy_output", dpr=False,
                     verible_path=None, verible_flags=None, quiet=False, display_tb=None):
     """Write the testbench for cfg into out_rtl.parent / "tb" (out_rtl is
@@ -145,22 +164,28 @@ def _export_tb_into(cfg, out_rtl, *, pclk_mode="pclk_as_phy_output", dpr=False,
         print(cfg.report())
 
 
-def export_tb(cfg, out_rtl, *, pclk_mode="pclk_as_phy_output", dpr=False,
-              verible_path=None, verible_flags=None, quiet=False):
-    """Generate in staging and replace the previous testbench only on success."""
-    final_rtl = Path(out_rtl)
-    destination = final_rtl.parent / "tb"
-    destination.parent.mkdir(parents=True, exist_ok=True)
-    temp_parent = Path(tempfile.mkdtemp(prefix=".plm-tb-generate-", dir=destination.parent))
-    temp_rtl = temp_parent / "rtl"
+def export_all(cfg, out_rtl, *, pclk_mode="pclk_as_phy_output", sel_mode="sync",
+               dpr=False, verible_path=None, verible_flags=None, quiet=False):
+    """Generate a matched RTL/TB set and install it only after both succeed."""
+    workspace = Path(out_rtl).parent
+    staged = _stage_output_set(workspace)
     try:
-        if destination.is_dir():
-            shutil.copytree(destination, temp_parent / "tb")
-        _export_tb_into(
-            cfg, temp_rtl, pclk_mode=pclk_mode, dpr=dpr,
-            verible_path=verible_path, verible_flags=verible_flags, quiet=quiet,
-            display_tb=destination,
+        _export_rtl_into(
+            cfg, staged / "rtl",
+            pclk_mode=pclk_mode, sel_mode=sel_mode, dpr=dpr,
+            verible_path=verible_path, verible_flags=verible_flags,
+            quiet=True, display_out=workspace / "rtl",
         )
-        _commit_output_dir(temp_parent / "tb", destination)
+        _export_tb_into(
+            cfg, staged / "rtl",
+            pclk_mode=pclk_mode, dpr=dpr,
+            verible_path=verible_path, verible_flags=verible_flags,
+            quiet=True, display_tb=workspace / "tb",
+        )
+        if not quiet:
+            print()
+            print(cfg.report())
+        _commit_output_set(staged, workspace)
     finally:
-        shutil.rmtree(temp_parent, ignore_errors=True)
+        if staged.exists():
+            shutil.rmtree(staged, ignore_errors=True)

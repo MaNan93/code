@@ -302,7 +302,7 @@ class QtFrontendTests(unittest.TestCase):
         with mock.patch.object(
             window, "_save_before_action", return_value=True
         ), mock.patch.object(QtCore.QProcess, "start"):
-            window._run_tool("all")
+            window._run_tool()
 
         process = window._active_processes[-1]
         python_path = process.processEnvironment().value("PYTHONPATH").split(os.pathsep)
@@ -614,6 +614,10 @@ class QtFrontendTests(unittest.TestCase):
 
     def test_generation_buttons_lock_while_a_run_is_in_flight(self):
         window = self.make_window()
+        self.assertEqual(
+            [button.text() for button in window.generation_buttons],
+            ["Validate", "Generate"],
+        )
         self.assertTrue(all(button.isEnabled() for button in window.generation_buttons))
 
         window._set_generation_busy(True)
@@ -624,7 +628,7 @@ class QtFrontendTests(unittest.TestCase):
         self.assertFalse(window.recent_list.isEnabled())
         # A second click while busy must not start another writer.
         with mock.patch.object(window, "_save_before_action") as save:
-            window._run_tool("rtl")
+            window._run_tool()
         save.assert_not_called()
 
         window._set_generation_busy(False)
@@ -922,11 +926,11 @@ class QtFrontendTests(unittest.TestCase):
         window._on_toggle_rtl_preview(True)
         self.process_events()
 
-        before = window._output_signature(workspace, "rtl")
+        before = window._output_signature(workspace)
         modified.write_text("module new; endmodule\n", encoding="utf-8")
         created = rtl / "created.sv"
         created.write_text("module created; endmodule\n", encoding="utf-8")
-        after = window._output_signature(workspace, "rtl")
+        after = window._output_signature(workspace)
         window._show_generation_results(workspace, before, after)
         self.process_events()
 

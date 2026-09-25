@@ -193,17 +193,23 @@ class WorkspaceTests(unittest.TestCase):
 
 
 class ExporterTests(unittest.TestCase):
-    def test_failed_rtl_generation_preserves_previous_output(self):
+    def test_failed_generation_preserves_previous_output_set(self):
         cfg = Config(ROOT / "test" / "quad" / "config")
         with tempfile.TemporaryDirectory() as td:
-            out = Path(td) / "rtl"
-            out.mkdir()
-            sentinel = out / "known-good.txt"
-            sentinel.write_text("old output", encoding="utf-8")
-            with mock.patch.object(exporter.rtl, "gen_pkg", side_effect=RuntimeError("injected")):
+            workspace = Path(td)
+            rtl_sentinel = workspace / "rtl" / "known-good.txt"
+            tb_sentinel = workspace / "tb" / "known-good.txt"
+            rtl_sentinel.parent.mkdir()
+            tb_sentinel.parent.mkdir()
+            rtl_sentinel.write_text("old rtl", encoding="utf-8")
+            tb_sentinel.write_text("old tb", encoding="utf-8")
+            with mock.patch.object(
+                exporter.tb, "gen_tb", side_effect=RuntimeError("injected")
+            ):
                 with self.assertRaises(RuntimeError):
-                    exporter.export_rtl(cfg, out, quiet=True)
-            self.assertEqual(sentinel.read_text(encoding="utf-8"), "old output")
+                    exporter.export_all(cfg, workspace / "rtl", quiet=True)
+            self.assertEqual(rtl_sentinel.read_text(encoding="utf-8"), "old rtl")
+            self.assertEqual(tb_sentinel.read_text(encoding="utf-8"), "old tb")
 
 
 # Non-default generation flags each bundled sample is meant to be generated
@@ -234,7 +240,7 @@ NEGATIVE_SAMPLES = {
 
 
 def sample_gen_kwargs(sample_name):
-    """export_rtl/export_tb kwargs for one bundled sample."""
+    """export_all kwargs for one bundled sample."""
     return dict(SAMPLE_GEN_FLAGS.get(sample_name, {}))
 
 
@@ -280,11 +286,7 @@ class SampleRegressionTests(unittest.TestCase):
                 cfg = Config(copied / "config")
                 self.assertEqual(cfg.validate(), [])
                 kwargs = sample_gen_kwargs(source.name)
-                exporter.export_rtl(cfg, copied / "rtl", quiet=True, **kwargs)
-                exporter.export_tb(
-                    cfg, copied / "rtl", quiet=True,
-                    **{k: v for k, v in kwargs.items() if k != "sel_mode"},
-                )
+                exporter.export_all(cfg, copied / "rtl", quiet=True, **kwargs)
                 self.assertTrue((copied / "rtl" / "flist.f").is_file())
                 self.assertTrue((copied / "tb" / "tb_pipe_lane_mapper.sv").is_file())
 

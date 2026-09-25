@@ -14,6 +14,11 @@ class CliEntryPointTests(unittest.TestCase):
         self.assertEqual(result, 0)
         self.assertIn("plm -gui", output.getvalue())
 
+    def test_generate_is_one_command(self):
+        with mock.patch.object(cli, "cmd_generate", return_value=23) as generate:
+            self.assertEqual(cli.main(["generate", "--config", "demo"]), 23)
+        generate.assert_called_once_with(["--config", "demo"])
+
     def test_gui_short_flag_launches_qt(self):
         with mock.patch.object(cli, "cmd_gui", return_value=17) as launch:
             self.assertEqual(cli.main(["-gui"]), 17)

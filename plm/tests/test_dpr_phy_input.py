@@ -21,10 +21,10 @@ class DprClockTests(unittest.TestCase):
         self.cfg = Config(ROOT / "test" / "maxpclk" / "config")
 
     def test_input_mode_is_accepted_but_comb_stays_rejected(self):
-        validate_dpr(True, "pclk_as_phy_input", "sync")
-        validate_dpr(True, "pclk_as_phy_input")
+        validate_dpr(True, "sync")
+        validate_dpr(False, "comb")
         with self.assertRaises(SystemExit):
-            validate_dpr(True, "pclk_as_phy_input", "comb")
+            validate_dpr(True, "comb")
 
     def test_clock_ports_and_no_derived_input_clock(self):
         for generator in (rtl.gen_top, rtl.gen_connection):
@@ -95,8 +95,7 @@ class DprClockTests(unittest.TestCase):
                 config = self._simulation_config(root)
                 out = root / "rtl"
                 with contextlib.redirect_stdout(io.StringIO()):
-                    exporter.export_rtl(config, out, pclk_mode=mode, dpr=dpr, quiet=True)
-                    exporter.export_tb(config, out, pclk_mode=mode, dpr=dpr, quiet=True)
+                    exporter.export_all(config, out, pclk_mode=mode, dpr=dpr, quiet=True)
                 build = subprocess.run(
                     [simulator, "--binary", "--timing", "-j", "0", "-Wno-fatal",
                      "-CFLAGS", "-std=c++20",

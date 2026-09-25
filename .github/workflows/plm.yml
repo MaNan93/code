@@ -5,10 +5,12 @@ on:
     paths:
       - "plm/**"
       - ".github/workflows/plm.yml"
+      - ".gitattributes"
   pull_request:
     paths:
       - "plm/**"
       - ".github/workflows/plm.yml"
+      - ".gitattributes"
 
 concurrency:
   group: plm-${{ github.workflow }}-${{ github.ref }}

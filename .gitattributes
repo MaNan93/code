@@ -1,0 +1,5 @@
+# Generated PLM fixtures are byte-for-byte reproducibility baselines.
+/plm/test/**/*.sv text eol=lf
+/plm/test/**/*.f text eol=lf
+/plm/test/**/manifest.json text eol=lf
+/plm/test/**/makefile text eol=lf

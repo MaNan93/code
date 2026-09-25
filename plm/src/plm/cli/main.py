@@ -91,13 +91,6 @@ def _parse_verible_flags(raw):
     return value
 
 
-def validate_dpr(dpr, sel_mode):
-    if dpr and sel_mode != "sync":
-        raise SystemExit(
-            f"--dpr requires --sel-mode sync (got --sel-mode {sel_mode})"
-        )
-
-
 def cmd_generate(argv):
     parser = argparse.ArgumentParser(
         prog="plm generate",

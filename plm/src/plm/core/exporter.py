@@ -17,10 +17,9 @@ import tempfile
 import uuid
 
 from plm.core.generator import rtl, tb
-from plm.core.gen_flags import GenerationOptions, legacy_options
 from plm.core.plan import GenerationPlan
 from plm.core.paths import COMMON_DIR, TB_MAKEFILE
-from plm.core.validation import ValidationError, ValidationIssue, plan_from_config
+from plm.core.validation import ValidationError, ValidationIssue
 from plm.core.verible import format_sv
 
 
@@ -293,33 +292,11 @@ def _export_tb_into(cfg, out_rtl, *, pclk_mode="pclk_as_phy_output", dpr=False,
         print(cfg.report())
 
 
-def export_all(cfg, out_rtl, *, options=None, arch=None,
-               pclk_mode="pclk_as_phy_output", sel_mode="sync", dpr=False,
-               verible_path=None, verible_flags=None, quiet=False):
-    """Generate, self-check and atomically install one matched RTL/TB set.
-
-    ``cfg`` may be either a Config (legacy programmatic API) or the preferred
-    shared :class:`GenerationPlan`. CLI and Qt always use the latter.
-    """
-    if isinstance(cfg, GenerationPlan):
-        plan = cfg
-        if options is not None and options != plan.options:
-            raise ValueError("GenerationPlan and options disagree")
-        options = plan.options
-    else:
-        if options is None:
-            options = legacy_options(
-                arch=arch,
-                pclk_mode=pclk_mode,
-                sel_mode=sel_mode,
-                dpr=dpr,
-                verible_path=verible_path,
-                verible_flags=verible_flags,
-                quiet=quiet,
-            )
-        elif not isinstance(options, GenerationOptions):
-            raise TypeError("options must be a GenerationOptions")
-        plan = plan_from_config(cfg, options)
+def export_all(plan, out_rtl):
+    """Generate, self-check and atomically install one matched RTL/TB set."""
+    if not isinstance(plan, GenerationPlan):
+        raise TypeError("plan must be a GenerationPlan")
+    options = plan.options
 
     workspace = Path(out_rtl).parent
     staged = _stage_output_set(workspace)

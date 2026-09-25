@@ -9,6 +9,28 @@ from plm.core.gen_flags import GenerationOptions
 
 
 CONFIG_FILES = ("controllers.csv", "lane_mapping.csv", "pipe_signals.csv")
+GENERATOR_FILES = (
+    "plan.py",
+    "exporter.py",
+    "generator/rtl.py",
+    "generator/tb.py",
+    "tb_makefile.mk",
+)
+
+
+def _generator_fingerprint():
+    """Hash every source asset that can change generated RTL/TB semantics."""
+    core_dir = Path(__file__).resolve().parent
+    paths = [core_dir / name for name in GENERATOR_FILES]
+    paths.extend(sorted((core_dir / "common").glob("*.sv")))
+    digest = hashlib.sha256()
+    for path in paths:
+        relative = path.relative_to(core_dir).as_posix()
+        digest.update(relative.encode("utf-8"))
+        digest.update(b"\0")
+        digest.update(path.read_bytes())
+        digest.update(b"\0")
+    return digest.hexdigest()
 
 
 def _config_hash(config_dir):
@@ -34,6 +56,7 @@ class GenerationPlan:
     config: object
     options: GenerationOptions
     config_hash: str
+    generator_fingerprint: str
     pclk_sources: object
     pclk_candidates: object
 
@@ -48,6 +71,7 @@ class GenerationPlan:
             config=config,
             options=options,
             config_hash=_config_hash(config.dir),
+            generator_fingerprint=_generator_fingerprint(),
             pclk_sources=config.ctrl_pclk_src(),
             pclk_candidates=config.ctrl_pclk_cands(),
         )
@@ -56,6 +80,7 @@ class GenerationPlan:
     def generation_key(self):
         payload = {
             "config_hash": self.config_hash,
+            "generator_fingerprint": self.generator_fingerprint,
             "options": self.options.manifest_dict(),
         }
         encoded = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
@@ -106,6 +131,7 @@ class GenerationPlan:
             "schema_version": 1,
             "generation_key": self.generation_key,
             "config_hash": self.config_hash,
+            "generator_fingerprint": self.generator_fingerprint,
             "options": self.options.manifest_dict(),
             "design": {
                 "lane_count": self.lane_count,

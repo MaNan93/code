@@ -853,6 +853,26 @@ class QtFrontendTests(unittest.TestCase):
         window._process_live_edits()
         self.assertNotIn("Duplicate ctrl_id", first.toolTip())
 
+    def test_generate_focuses_first_invalid_cell(self):
+        workspace = self._sample_workspace()
+        window = self.make_window()
+        window._open_workspace(workspace)
+        table = window.controllers_table.table
+        table.item(1, 0).setText(table.item(0, 0).text())
+        window._process_live_edits()
+
+        with mock.patch.object(
+            window, "_save_before_action"
+        ) as save, mock.patch.object(QtCore.QProcess, "start") as start:
+            window._run_tool()
+
+        save.assert_not_called()
+        start.assert_not_called()
+        self.assertEqual(window.tabs.currentIndex(), 0)
+        self.assertEqual((table.currentRow(), table.currentColumn()), (0, 0))
+        self.assertEqual(window._generation_state, "FAILED")
+        self.assertIn("highlighted configuration cell", window.log.toPlainText())
+
     def test_live_validation_rejects_shared_phy2mac(self):
         workspace = self._sample_workspace()
         window = self.make_window()

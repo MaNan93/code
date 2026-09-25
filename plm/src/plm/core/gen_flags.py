@@ -24,7 +24,7 @@ from dataclasses import dataclass
 # own PCLK out to the MAC, serdes (a SerDes-style macro) always expects the
 # MAC side to hand it a reference clock instead. Both generators validate a
 # config's --arch/--pclk-mode combination against this table (see
-# validate_arch()) so a mismatched pair is caught at generation time instead
+# GenerationOptions.errors()) so a mismatched pair is caught at generation time instead
 # of surfacing later as a confusing elaboration/simulation failure.
 ARCH_PCLK_MODE = {
     "original_pipe": "pclk_as_phy_output",
@@ -98,31 +98,6 @@ class GenerationOptions:
             "dpr": bool(self.dpr),
         }
 
-
-def legacy_options(*, arch=None, pclk_mode="pclk_as_phy_output", sel_mode="sync",
-                   dpr=False, verible_path=None, verible_flags=None, quiet=False):
-    """Build options for the programmatic API's historical keyword form."""
-    if arch is None:
-        arch = PCLK_MODE_ARCH.get(pclk_mode, "original_pipe")
-    return GenerationOptions(
-        arch=arch,
-        pclk_mode=pclk_mode,
-        sel_mode=sel_mode,
-        dpr=dpr,
-        verible_path=verible_path,
-        verible_flags=verible_flags,
-        quiet=quiet,
-    )
-
-
-def validate_arch(arch, pclk_mode):
-    """Raise SystemExit if --arch and --pclk-mode disagree about which
-    clock architecture is in use. See ARCH_PCLK_MODE above."""
-    required = ARCH_PCLK_MODE[arch]
-    if pclk_mode != required:
-        raise SystemExit(
-            f"--arch {arch} only supports --pclk-mode {required} (got --pclk-mode {pclk_mode})"
-        )
 
 
 def complete_arch_pclk(arch, pclk_mode):

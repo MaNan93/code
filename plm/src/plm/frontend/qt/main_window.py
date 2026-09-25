@@ -2487,6 +2487,42 @@ class MainWindow(QtWidgets.QMainWindow):
         self._live_validation_error_count = (
             len(controller_errors) + len(signal_errors) + len(lane_errors)
         )
+        self._first_live_validation_error = None
+        for tab_index, editor, errors in (
+            (0, self.controllers_table, controller_errors),
+            (1, self.lane_grid, lane_errors),
+            (2, self.signals_table, signal_errors),
+        ):
+            if not errors:
+                continue
+            row, column = min(errors, key=lambda cell: (cell[0], str(cell[1])))
+            if isinstance(column, str):
+                column = next(
+                    index
+                    for index, definition in enumerate(editor.columns)
+                    if definition["key"] == column
+                )
+            self._first_live_validation_error = (
+                tab_index,
+                editor.table,
+                row,
+                column,
+            )
+            break
+
+    def _focus_first_live_validation_error(self):
+        target = getattr(self, "_first_live_validation_error", None)
+        if target is None:
+            return False
+        tab_index, table, row, column = target
+        self.tabs.setCurrentIndex(tab_index)
+        table.setCurrentCell(row, column)
+        item = table.item(row, column)
+        if item is not None:
+            table.scrollToItem(item)
+        editor = table.cellWidget(row, column)
+        (editor or table).setFocus()
+        return True
 
     # ------------------------------------------------------------ dirty state
     def _config_disk_signature(self):
@@ -2987,6 +3023,12 @@ class MainWindow(QtWidgets.QMainWindow):
         Settings (see plm.frontend.qt.widgets.settings). None of them is
         written into the workspace -- a workspace is its three CSVs."""
         if self._generation_busy:
+            return
+        self._validate_live_tables()
+        if self._focus_first_live_validation_error():
+            self._set_bottom_panel_page(0)
+            self._set_generation_state("FAILED")
+            self._log("Generate blocked: fix the highlighted configuration cell.")
             return
         self._set_generation_state("SAVING")
         if not self._save_before_action():

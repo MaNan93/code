@@ -199,6 +199,7 @@ class WorkspaceTests(unittest.TestCase):
 class ExporterTests(unittest.TestCase):
     def test_failed_generation_preserves_previous_output_set(self):
         cfg = Config(ROOT / "test" / "bifurcate" / "config")
+        plan = GenerationPlan.build(cfg, GenerationOptions(quiet=True))
         with tempfile.TemporaryDirectory() as td:
             workspace = Path(td)
             rtl_sentinel = workspace / "rtl" / "known-good.txt"
@@ -211,7 +212,7 @@ class ExporterTests(unittest.TestCase):
                 exporter.tb, "gen_tb", side_effect=RuntimeError("injected")
             ):
                 with self.assertRaises(RuntimeError):
-                    exporter.export_all(cfg, workspace / "rtl", quiet=True)
+                    exporter.export_all(plan, workspace / "rtl")
             self.assertEqual(rtl_sentinel.read_text(encoding="utf-8"), "old rtl")
             self.assertEqual(tb_sentinel.read_text(encoding="utf-8"), "old tb")
 
@@ -224,7 +225,13 @@ class ExporterTests(unittest.TestCase):
             exporter.export_all(plan, workspace / "rtl")
             rtl = json.loads((workspace / "rtl" / "manifest.json").read_text())
             tb = json.loads((workspace / "tb" / "manifest.json").read_text())
-            for field in ("generation_key", "config_hash", "options", "design"):
+            for field in (
+                "generation_key",
+                "config_hash",
+                "generator_fingerprint",
+                "options",
+                "design",
+            ):
                 self.assertEqual(rtl[field], tb[field])
             self.assertEqual(rtl["generation_key"], plan.generation_key)
             self.assertIn("src/pipe_lane_mapper.sv", rtl["files"])
@@ -232,6 +239,7 @@ class ExporterTests(unittest.TestCase):
 
     def test_failed_post_generation_self_check_preserves_previous_outputs(self):
         cfg = Config(ROOT / "test" / "bifurcate" / "config")
+        plan = GenerationPlan.build(cfg, GenerationOptions(quiet=True))
         with tempfile.TemporaryDirectory() as td:
             workspace = Path(td)
             old_rtl = workspace / "rtl" / "old.txt"
@@ -246,7 +254,7 @@ class ExporterTests(unittest.TestCase):
                 side_effect=ValidationError([]),
             ):
                 with self.assertRaises(ValidationError):
-                    exporter.export_all(cfg, workspace / "rtl", quiet=True)
+                    exporter.export_all(plan, workspace / "rtl")
             self.assertEqual(old_rtl.read_text(encoding="utf-8"), "rtl")
             self.assertEqual(old_tb.read_text(encoding="utf-8"), "tb")
 
@@ -261,6 +269,18 @@ class GenerationPlanTests(unittest.TestCase):
         )
         self.assertIs(first.ctrl_pclk_src(), first.pclk_sources)
         self.assertIs(first.ctrl_pclk_cands(), first.pclk_candidates)
+        self.assertNotEqual(first.generation_key, second.generation_key)
+        self.assertRegex(first.generator_fingerprint, r"^[0-9a-f]{64}$")
+
+    def test_generator_fingerprint_changes_the_generation_key(self):
+        cfg = Config(ROOT / "test" / "bifurcate" / "config")
+        with mock.patch(
+            "plm.core.plan._generator_fingerprint",
+            side_effect=("1" * 64, "2" * 64),
+        ):
+            first = GenerationPlan.build(cfg, GenerationOptions())
+            second = GenerationPlan.build(cfg, GenerationOptions())
+        self.assertNotEqual(first.generator_fingerprint, second.generator_fingerprint)
         self.assertNotEqual(first.generation_key, second.generation_key)
 
     def test_validation_layers_distinguish_format_topology_and_options(self):
@@ -359,7 +379,16 @@ class SampleRegressionTests(unittest.TestCase):
                 cfg = Config(copied / "config")
                 self.assertEqual(cfg.validate(), [])
                 kwargs = sample_gen_kwargs(source.name)
-                exporter.export_all(cfg, copied / "rtl", quiet=True, **kwargs)
+                pclk_mode = kwargs.get("pclk_mode", "pclk_as_phy_output")
+                options = GenerationOptions(
+                    arch="serdes" if pclk_mode == "pclk_as_phy_input" else "original_pipe",
+                    quiet=True,
+                    **kwargs,
+                )
+                exporter.export_all(
+                    GenerationPlan.build(cfg, options),
+                    copied / "rtl",
+                )
                 self.assertTrue((copied / "rtl" / "flist.f").is_file())
                 self.assertTrue((copied / "tb" / "tb_pipe_lane_mapper.sv").is_file())
 

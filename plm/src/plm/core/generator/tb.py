@@ -110,21 +110,31 @@ def gen_tb(cfg, pclk_mode="pclk_as_phy_output", dpr=False):
         L.append("    logic [NC-1:0] ctrl_ref_clk;")
         L.append("    logic [NL-1:0] rx_clk;")
         L.append("")
-        L.append("    for (genvar c = 0; c < NC; c++) begin : g_ctrl_clk")
-        L.append("        initial begin")
-        L.append("            ctrl_ref_clk[c] = 1'b0;")
-        L.append("            #(c * 0.7);")
-        L.append("            forever #(CTRL_PERIOD_NS[c] / 2.0) ctrl_ref_clk[c] = ~ctrl_ref_clk[c];")
-        L.append("        end")
-        L.append("    end")
+        # Keep every procedural clock driver on its own scalar.  Driving
+        # different bits of one packed vector from separate initial blocks
+        # is legal SystemVerilog, but Verilator models those blocks as
+        # competing read-modify-write drivers; coincident edges can therefore
+        # lose transitions and leave a period check waiting forever.
+        for index, period in enumerate(ctrl_periods):
+            source = f"ctrl_ref_clk_src_{index}"
+            phase = index * 0.7
+            L.append(f"    logic {source} = 1'b0;")
+            L.append("    initial begin")
+            if phase:
+                L.append(f"        #{phase:g};")
+            L.append(f"        forever #{period / 2.0:g} {source} = ~{source};")
+            L.append("    end")
+            L.append(f"    assign ctrl_ref_clk[{index}] = {source};")
         L.append("")
-        L.append("    for (genvar l = 0; l < NL; l++) begin : g_rx_clk")
-        L.append("        initial begin")
-        L.append("            rx_clk[l] = 1'b0;")
-        L.append("            #(l * 0.9 + 0.3);")
-        L.append("            forever #(LANE_PERIOD_NS[l] / 2.0) rx_clk[l] = ~rx_clk[l];")
-        L.append("        end")
-        L.append("    end")
+        for index, period in enumerate(lane_periods):
+            source = f"rx_clk_src_{index}"
+            phase = index * 0.9 + 0.3
+            L.append(f"    logic {source} = 1'b0;")
+            L.append("    initial begin")
+            L.append(f"        #{phase:g};")
+            L.append(f"        forever #{period / 2.0:g} {source} = ~{source};")
+            L.append("    end")
+            L.append(f"    assign rx_clk[{index}] = {source};")
         L.append("")
         for c in ctrls:
             L.append(f"    logic [{c.max_width-1}:0] {c.lname}_pclk;")
@@ -143,13 +153,16 @@ def gen_tb(cfg, pclk_mode="pclk_as_phy_output", dpr=False):
         L.append("")
         L.append("    logic [NL-1:0] phy_pclk_out;")
         L.append("")
-        L.append("    for (genvar l = 0; l < NL; l++) begin : g_clk")
-        L.append("        initial begin")
-        L.append("            phy_pclk_out[l] = 1'b0;")
-        L.append("            #(l * 0.7);")
-        L.append("            forever #(PERIOD_NS[l] / 2.0) phy_pclk_out[l] = ~phy_pclk_out[l];")
-        L.append("        end")
-        L.append("    end")
+        for index, period in enumerate(periods):
+            source = f"phy_pclk_out_src_{index}"
+            phase = index * 0.7
+            L.append(f"    logic {source} = 1'b0;")
+            L.append("    initial begin")
+            if phase:
+                L.append(f"        #{phase:g};")
+            L.append(f"        forever #{period / 2.0:g} {source} = ~{source};")
+            L.append("    end")
+            L.append(f"    assign phy_pclk_out[{index}] = {source};")
         L.append("")
 
     # ---- DUT IO

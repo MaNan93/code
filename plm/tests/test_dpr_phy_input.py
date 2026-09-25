@@ -8,10 +8,11 @@ import subprocess
 import tempfile
 import unittest
 
-from plm.cli.main import validate_dpr
 from plm.core import exporter
+from plm.core.gen_flags import GenerationOptions
 from plm.core.generator import rtl, tb
 from plm.core.model import Config
+from plm.core.plan import GenerationPlan
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -21,10 +22,10 @@ class DprClockTests(unittest.TestCase):
         self.cfg = Config(ROOT / "test" / "maxpclk" / "config")
 
     def test_input_mode_is_accepted_but_comb_stays_rejected(self):
-        validate_dpr(True, "sync")
-        validate_dpr(False, "comb")
-        with self.assertRaises(SystemExit):
-            validate_dpr(True, "comb")
+        GenerationOptions(dpr=True, sel_mode="sync").validated()
+        GenerationOptions(dpr=False, sel_mode="comb").validated()
+        with self.assertRaises(ValueError):
+            GenerationOptions(dpr=True, sel_mode="comb").validated()
 
     def test_clock_ports_and_no_derived_input_clock(self):
         for generator in (rtl.gen_top, rtl.gen_connection):
@@ -55,6 +56,19 @@ class DprClockTests(unittest.TestCase):
     def test_phy_output_generation_is_unchanged(self):
         self.assertNotIn("input logic dpr_pclk,", rtl.gen_top(self.cfg, dpr=True))
         self.assertIn("phy_pclk_out", rtl.gen_clk_mux(self.cfg, dpr=True))
+
+    def test_testbench_clocks_have_one_scalar_driver_each(self):
+        source = tb.gen_tb(self.cfg, pclk_mode="pclk_as_phy_input", dpr=True)
+        self.assertIn("logic ctrl_ref_clk_src_0 = 1'b0;", source)
+        self.assertIn("assign ctrl_ref_clk[0] = ctrl_ref_clk_src_0;", source)
+        self.assertIn("logic rx_clk_src_0 = 1'b0;", source)
+        self.assertNotIn("ctrl_ref_clk[c] = ~ctrl_ref_clk[c]", source)
+        self.assertNotIn("rx_clk[l] = ~rx_clk[l]", source)
+
+        source = tb.gen_tb(self.cfg, pclk_mode="pclk_as_phy_output", dpr=True)
+        self.assertIn("logic phy_pclk_out_src_0 = 1'b0;", source)
+        self.assertIn("assign phy_pclk_out[0] = phy_pclk_out_src_0;", source)
+        self.assertNotIn("phy_pclk_out[l] = ~phy_pclk_out[l]", source)
 
     @staticmethod
     def _simulation_config(root: Path) -> Config:
@@ -94,8 +108,15 @@ class DprClockTests(unittest.TestCase):
                 root = Path(td)
                 config = self._simulation_config(root)
                 out = root / "rtl"
+                options = GenerationOptions(
+                    arch="serdes" if mode == "pclk_as_phy_input" else "original_pipe",
+                    pclk_mode=mode,
+                    dpr=dpr,
+                    quiet=True,
+                )
+                plan = GenerationPlan.build(config, options)
                 with contextlib.redirect_stdout(io.StringIO()):
-                    exporter.export_all(config, out, pclk_mode=mode, dpr=dpr, quiet=True)
+                    exporter.export_all(plan, out)
                 build = subprocess.run(
                     [simulator, "--binary", "--timing", "-j", "0", "-Wno-fatal",
                      "-CFLAGS", "-std=c++20",

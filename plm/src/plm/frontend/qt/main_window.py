@@ -5,9 +5,10 @@ main window.
 This is a thin desktop front end over the three config CSVs that
 plm.core.generator reads, and over that generation pipeline itself. Config
 access goes straight through plm.core.workspace. Editing writes the same
-plain CSV files a human would edit; Validate calls plm.core.model.Config
-directly; Generate runs `python -m plm.cli.main generate ...` with the
-Generation page's flags on the command line. See plm.frontend.qt.widgets.theme
+plain CSV files a human would edit; Generate runs
+`python -m plm.cli.main generate ...` with the Generation page's flags on
+the command line. The CLI validates the saved configuration before writing
+RTL or testbench outputs. See plm.frontend.qt.widgets.theme
 for the QSS and plm.frontend.qt.widgets.settings for the Settings dialog.
 """
 
@@ -1787,12 +1788,10 @@ class MainWindow(QtWidgets.QMainWindow):
 
         actions_row = QtWidgets.QHBoxLayout()
         actions_row.addStretch(1)
-        btn_validate = QtWidgets.QPushButton("Validate")
         btn_generate = QtWidgets.QPushButton("Generate")
         btn_generate.setObjectName("primaryBtn")
-        btn_validate.clicked.connect(self._on_validate)
         btn_generate.clicked.connect(self._on_generate)
-        self.generation_buttons = [btn_validate, btn_generate]
+        self.generation_buttons = [btn_generate]
         for b in self.generation_buttons:
             actions_row.addWidget(b)
         layout.addLayout(actions_row)
@@ -2873,35 +2872,13 @@ class MainWindow(QtWidgets.QMainWindow):
             # has to be current when it is actually on screen.
             self._refresh_topology_summary()
 
-    # ------------------------------------------------------------ validate / generate
+    # ---------------------------------------------------------------- generate
     def _save_before_action(self):
-        """Save current edits before Validate or Generate."""
+        """Save current edits before Generate."""
         return self._save_current_workspace(log_success=False)
 
-    def _on_validate(self):
-        if not self._save_before_action():
-            return
-        self._set_bottom_panel_page(0)  # LOG -- this is where the verdict lands
-        cfg_dir = self.current_workspace / "config"
-        self._log(f"--- validating {cfg_dir} ---")
-        try:
-            cfg = Config(cfg_dir)
-        except SystemExit as error:
-            # Config parse failures raise SystemExit (a BaseException, so an
-            # `except Exception` above would not catch it) -- report it and
-            # stay alive rather than taking the GUI down.
-            self._log(str(error))
-            return
-        errs = cfg.validate()
-        if errs:
-            self._log("Config validation failed:")
-            for error in errs:
-                self._log(f"  - {error}")
-        else:
-            self._log("OK -- config is valid.")
-
     def _set_generation_busy(self, busy):
-        """Lock the Generate/Validate row while a run is in flight.
+        """Lock Generate while a run is in flight.
 
         Two overlapping runs write the same files, so a double click is not
         just wasted work -- it can interleave two writers over one output

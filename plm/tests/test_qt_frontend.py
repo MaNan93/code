@@ -261,41 +261,6 @@ class QtFrontendTests(unittest.TestCase):
         self.assertIn("--- previous/rtl/common/pipe_lane_clk_gate.sv", window.preview_code.toPlainText())
         self.assertIn("+  assign enabled = 1'b1;", window.preview_code.toPlainText())
 
-    def test_validation_errors_go_to_the_log_page(self):
-        """The PROBLEMS tree is gone: validation output is plain log text now,
-        and Validate brings the LOG page forward to show it."""
-        window = self.make_window()
-        window.current_workspace = Path(self.temp.name) / "quad"
-        config = mock.Mock()
-        config.validate.return_value = ["controller max_width must be positive"]
-
-        with mock.patch.object(
-            window, "_save_before_action", return_value=True
-        ), mock.patch.object(main_window, "Config", return_value=config):
-            window._on_validate()
-
-        text = window.log.toPlainText()
-        self.assertIn("Config validation failed:", text)
-        self.assertIn("controller max_width must be positive", text)
-        self.assertIs(window.bottom_panel_stack.currentWidget(), window.log)
-        self.assertTrue(window.log_tab_btn.isChecked())
-        self.assertFalse(window.report_tab_btn.isChecked())
-
-    def test_config_parse_failure_is_logged_not_fatal(self):
-        """Config() raises SystemExit (a BaseException) on a parse failure --
-        it must be caught, or it takes the whole GUI down."""
-        window = self.make_window()
-        window.current_workspace = Path(self.temp.name) / "quad"
-
-        with mock.patch.object(
-            window, "_save_before_action", return_value=True
-        ), mock.patch.object(
-            main_window, "Config", side_effect=SystemExit("line 3: missing ctrl_id")
-        ):
-            window._on_validate()
-
-        self.assertIn("line 3: missing ctrl_id", window.log.toPlainText())
-
     def test_generate_process_can_import_source_checkout(self):
         window = self.make_window()
         window.current_workspace = Path(self.temp.name) / "quad"
@@ -616,7 +581,7 @@ class QtFrontendTests(unittest.TestCase):
         window = self.make_window()
         self.assertEqual(
             [button.text() for button in window.generation_buttons],
-            ["Validate", "Generate"],
+            ["Generate"],
         )
         self.assertTrue(all(button.isEnabled() for button in window.generation_buttons))
 
@@ -649,7 +614,7 @@ class QtFrontendTests(unittest.TestCase):
         self.assertEqual(window.bottom_panel_stack.count(), 2)
         self.assertIs(window.bottom_panel_stack.widget(0), window.log)
         self.assertIs(window.bottom_panel_stack.widget(1), window.topology_summary)
-        # LOG is what a fresh window shows -- it is where Validate/Generate write.
+        # LOG is what a fresh window shows -- it is where Generate writes.
         self.assertIs(window.bottom_panel_stack.currentWidget(), window.log)
         self.assertFalse(hasattr(window, "problem_tree"))
         self.assertIsNone(

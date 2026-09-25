@@ -260,6 +260,43 @@ class ExporterTests(unittest.TestCase):
 
 
 class GenerationPlanTests(unittest.TestCase):
+    def test_format_issues_include_editor_coordinates(self):
+        payload = valid_payload()
+        payload["controllers"].append({
+            "ctrl_id": "0", "ctrl_name": "CtrlB", "max_width": "2",
+        })
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            save_workspace_content(root, payload)
+            with self.assertRaises(ValidationError) as caught:
+                load_generation_plan(root / "config", GenerationOptions())
+
+        issues = caught.exception.issues
+        self.assertEqual(
+            [(issue.table, issue.row, issue.column) for issue in issues],
+            [("controllers", 0, "ctrl_id"), ("controllers", 1, "ctrl_id")],
+        )
+
+    def test_related_signal_cells_share_one_validation_diagnostic(self):
+        payload = valid_payload()
+        payload["signals"][0].update({
+            "signal_type": "shared", "direction": "phy2mac",
+        })
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            save_workspace_content(root, payload)
+            with self.assertRaises(ValidationError) as caught:
+                load_generation_plan(root / "config", GenerationOptions())
+
+        issues = caught.exception.issues
+        self.assertEqual(
+            {(issue.table, issue.row, issue.column) for issue in issues},
+            {
+                ("signals", 0, "signal_type"),
+                ("signals", 0, "direction"),
+            },
+        )
+
     def test_plan_caches_topology_and_changes_key_with_options(self):
         cfg = Config(ROOT / "test" / "bifurcate" / "config")
         first = GenerationPlan.build(cfg, GenerationOptions())

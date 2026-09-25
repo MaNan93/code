@@ -17,7 +17,6 @@ import difflib
 import hashlib
 import json
 import os
-import re
 import shutil
 import subprocess
 import sys
@@ -35,9 +34,14 @@ from plm.core.gen_flags import (
     SEL_MODE_VALUES,
     GenerationOptions,
 )
-from plm.core.model import Config, is_sv_identifier
+from plm.core.model import Config
 from plm.core.paths import CONFIGS_ROOT, DOCS_DIR, PLM_ROOT, is_deletable_workspace, is_workspace_root
-from plm.core.validation import ValidationError, plan_from_config
+from plm.core.validation import (
+    ValidationError,
+    ValidationIssue,
+    load_generation_plan,
+    plan_from_config,
+)
 from plm.core.workspace import save_workspace_content, scaffold_default_content, workspace_content
 from plm.frontend.qt.widgets import sap_icons
 from plm.frontend.qt.widgets.lanegrid import LaneGrid
@@ -2288,214 +2292,46 @@ class MainWindow(QtWidgets.QMainWindow):
         self._undo_history.append(current)
         self._apply_history_payload(target)
 
-    @staticmethod
-    def _parse_live_int(value, base=10):
-        text = str(value or "").strip()
-        if not text:
-            raise ValueError("value is required")
-        return int(text, base)
-
     def _validate_live_tables(self):
-        """Mark directly actionable authoring errors without modal dialogs."""
-        controller_errors = {}
-        signal_errors = {}
-        lane_errors = {}
-
-        def mark(errors, key, message):
-            errors.setdefault(key, message)
-
-        controllers = self.controllers_table.get_rows()
-        controller_ids = {}
-        controller_names = {}
-        max_widths = {}
-        numeric_ids = []
-        for row_index, row in enumerate(controllers):
-            raw_id = str(row.get("ctrl_id", "")).strip()
-            name = str(row.get("ctrl_name", "")).strip()
-            raw_width = str(row.get("max_width", "")).strip()
-            try:
-                ctrl_id = self._parse_live_int(raw_id)
-                if ctrl_id < 0:
-                    raise ValueError
-                numeric_ids.append(ctrl_id)
-                if ctrl_id in controller_ids:
-                    mark(controller_errors, (row_index, "ctrl_id"), "Duplicate ctrl_id")
-                    mark(
-                        controller_errors,
-                        (controller_ids[ctrl_id], "ctrl_id"),
-                        "Duplicate ctrl_id",
-                    )
-                else:
-                    controller_ids[ctrl_id] = row_index
-            except ValueError:
-                mark(controller_errors, (row_index, "ctrl_id"), "ctrl_id must be an integer >= 0")
-                ctrl_id = None
-
-            if not is_sv_identifier(name):
-                mark(
-                    controller_errors,
-                    (row_index, "ctrl_name"),
-                    "Use a legal SystemVerilog identifier",
+        """Render the core validator's structured issues in the editors."""
+        errors = {"controllers": {}, "signals": {}, "mapping": {}}
+        issues = ()
+        self._live_plan = None
+        try:
+            with tempfile.TemporaryDirectory() as scratch:
+                root = Path(scratch) / "live-validation"
+                save_workspace_content(root, self._gather_payload())
+                self._live_plan = load_generation_plan(
+                    root / "config",
+                    self._current_generation_options(),
                 )
-            elif name.casefold() in controller_names:
-                previous = controller_names[name.casefold()]
-                mark(controller_errors, (row_index, "ctrl_name"), "Controller names must be unique")
-                mark(controller_errors, (previous, "ctrl_name"), "Controller names must be unique")
-            else:
-                controller_names[name.casefold()] = row_index
+        except ValidationError as error:
+            issues = error.issues
+        except (OSError, ValueError) as error:
+            issues = (ValidationIssue("format", str(error)),)
 
-            try:
-                width = self._parse_live_int(raw_width)
-                if width < 1:
-                    raise ValueError
-                if width > self.lane_grid.lane_count:
-                    mark(
-                        controller_errors,
-                        (row_index, "max_width"),
-                        f"max_width cannot exceed {self.lane_grid.lane_count} lanes",
-                    )
-                if ctrl_id is not None:
-                    max_widths[ctrl_id] = width
-            except ValueError:
-                mark(controller_errors, (row_index, "max_width"), "max_width must be an integer >= 1")
+        for issue in issues:
+            if issue.table not in errors or issue.row is None or issue.column is None:
+                continue
+            errors[issue.table].setdefault((issue.row, issue.column), str(issue))
 
-        if numeric_ids and sorted(numeric_ids) != list(range(len(controllers))):
-            for row_index, row in enumerate(controllers):
-                mark(
-                    controller_errors,
-                    (row_index, "ctrl_id"),
-                    "ctrl_id values must be contiguous starting at 0",
-                )
-
-        signals = self.signals_table.get_rows()
-        signal_names = {}
-        for row_index, row in enumerate(signals):
-            name = str(row.get("signal_name", "")).strip()
-            signal_type = str(row.get("signal_type", "")).strip().lower()
-            direction = str(row.get("direction", "")).strip()
-            if not is_sv_identifier(name):
-                mark(signal_errors, (row_index, "signal_name"), "Use a legal SystemVerilog identifier")
-            elif name in signal_names:
-                previous = signal_names[name]
-                mark(signal_errors, (row_index, "signal_name"), "Signal names must be unique")
-                mark(signal_errors, (previous, "signal_name"), "Signal names must be unique")
-            else:
-                signal_names[name] = row_index
-
-            if signal_type not in SIGNAL_TYPES:
-                mark(
-                    signal_errors,
-                    (row_index, "signal_type"),
-                    "Use perlane or shared",
-                )
-            if direction not in DIRECTIONS:
-                mark(
-                    signal_errors,
-                    (row_index, "direction"),
-                    "Use mac2phy or phy2mac",
-                )
-            if signal_type == "shared" and direction == "phy2mac":
-                message = "phy2mac signals must be perlane"
-                mark(signal_errors, (row_index, "signal_type"), message)
-                mark(signal_errors, (row_index, "direction"), message)
-
-            try:
-                width = self._parse_live_int(row.get("width", ""))
-                if width < 1:
-                    raise ValueError
-            except ValueError:
-                width = None
-                mark(signal_errors, (row_index, "width"), "width must be an integer >= 1")
-
-            try:
-                safe_state = self._parse_live_int(row.get("safe_state", ""), 0)
-                if safe_state < 0 or (width is not None and safe_state >= (1 << width)):
-                    raise ValueError
-            except ValueError:
-                mark(signal_errors, (row_index, "safe_state"), "safe_state is outside the signal width")
-
-            tie_off = str(row.get("tie_off", "")).strip().lower()
-            if tie_off != "lane0":
-                try:
-                    tie_value = self._parse_live_int(tie_off, 0)
-                    if tie_value < 0 or (width is not None and tie_value >= (1 << width)):
-                        raise ValueError
-                except ValueError:
-                    mark(
-                        signal_errors,
-                        (row_index, "tie_off"),
-                        "Use lane0 or an integer value inside the signal width",
-                    )
-
-        mapping_rows = self.lane_grid.get_rows()
-        mode_values = {}
-        parsed_modes = []
-        for row_index, row in enumerate(mapping_rows):
-            try:
-                mode = self._parse_live_int(row.get("mode", ""))
-                if mode < 0:
-                    raise ValueError
-                parsed_modes.append(mode)
-                if mode in mode_values:
-                    mark(lane_errors, (row_index, 0), "Mode values must be unique")
-                    mark(lane_errors, (mode_values[mode], 0), "Mode values must be unique")
-                else:
-                    mode_values[mode] = row_index
-            except ValueError:
-                mark(lane_errors, (row_index, 0), "mode must be an integer >= 0")
-
-            assigned = {}
-            for lane in range(self.lane_grid.lane_count):
-                column = lane + 1
-                value = str(row.get(f"lane{lane}", "")).strip()
-                match = re.fullmatch(r"(\d+)-(\d+)", value)
-                if not match:
-                    mark(lane_errors, (row_index, column), "Use ctrl_id-port, for example 0-0")
-                    continue
-                ctrl_id, port = (int(match.group(1)), int(match.group(2)))
-                if ctrl_id not in controller_ids:
-                    mark(lane_errors, (row_index, column), f"Undefined ctrl_id {ctrl_id}")
-                    continue
-                if port >= max_widths.get(ctrl_id, 0):
-                    mark(
-                        lane_errors,
-                        (row_index, column),
-                        f"Port {port} exceeds controller max_width",
-                    )
-                pair = (ctrl_id, port)
-                if pair in assigned:
-                    mark(lane_errors, (row_index, column), "Controller port is assigned twice")
-                    mark(
-                        lane_errors,
-                        (row_index, assigned[pair]),
-                        "Controller port is assigned twice",
-                    )
-                else:
-                    assigned[pair] = column
-
-        if parsed_modes and sorted(parsed_modes) != list(range(len(mapping_rows))):
-            for row_index in range(len(mapping_rows)):
-                mark(
-                    lane_errors,
-                    (row_index, 0),
-                    "Mode values must be contiguous starting at 0",
-                )
-
+        controller_errors = errors["controllers"]
+        signal_errors = errors["signals"]
+        lane_errors = errors["mapping"]
         self.controllers_table.set_cell_errors(controller_errors)
         self.signals_table.set_cell_errors(signal_errors)
         self.lane_grid.set_cell_errors(lane_errors)
-        self._live_validation_error_count = (
-            len(controller_errors) + len(signal_errors) + len(lane_errors)
-        )
+        self._live_validation_error_count = sum(len(value) for value in errors.values())
+
         self._first_live_validation_error = None
-        for tab_index, editor, errors in (
+        for tab_index, editor, table_errors in (
             (0, self.controllers_table, controller_errors),
             (1, self.lane_grid, lane_errors),
             (2, self.signals_table, signal_errors),
         ):
-            if not errors:
+            if not table_errors:
                 continue
-            row, column = min(errors, key=lambda cell: (cell[0], str(cell[1])))
+            row, column = min(table_errors, key=lambda cell: (cell[0], str(cell[1])))
             if isinstance(column, str):
                 column = next(
                     index
@@ -2523,7 +2359,6 @@ class MainWindow(QtWidgets.QMainWindow):
         editor = table.cellWidget(row, column)
         (editor or table).setFocus()
         return True
-
     # ------------------------------------------------------------ dirty state
     def _config_disk_signature(self):
         """Return exact config bytes so external edits cannot be overwritten."""

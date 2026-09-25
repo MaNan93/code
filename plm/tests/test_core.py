@@ -391,6 +391,30 @@ class SampleRegressionTests(unittest.TestCase):
                 )
                 self.assertTrue((copied / "rtl" / "flist.f").is_file())
                 self.assertTrue((copied / "tb" / "tb_pipe_lane_mapper.sv").is_file())
+                for output_name in ("rtl", "tb"):
+                    expected_root = source / output_name
+                    actual_root = copied / output_name
+                    expected_files = {
+                        path.relative_to(expected_root)
+                        for path in expected_root.rglob("*")
+                        if path.is_file()
+                    }
+                    actual_files = {
+                        path.relative_to(actual_root)
+                        for path in actual_root.rglob("*")
+                        if path.is_file()
+                    }
+                    self.assertEqual(
+                        actual_files,
+                        expected_files,
+                        f"{source.name}/{output_name} generated file list is stale",
+                    )
+                    for relative in sorted(expected_files):
+                        self.assertEqual(
+                            (actual_root / relative).read_bytes(),
+                            (expected_root / relative).read_bytes(),
+                            f"{source.name}/{output_name}/{relative} is stale; regenerate samples",
+                        )
 
     def test_negative_samples_are_rejected_for_the_expected_reason(self):
         for sample_name, expected_messages in NEGATIVE_SAMPLES.items():

@@ -29,13 +29,41 @@ module tb_pipe_lane_mapper;
 
     logic [NL-1:0] phy_pclk_out;
 
-    for (genvar l = 0; l < NL; l++) begin : g_clk
-        initial begin
-            phy_pclk_out[l] = 1'b0;
-            #(l * 0.7);
-            forever #(PERIOD_NS[l] / 2.0) phy_pclk_out[l] = ~phy_pclk_out[l];
-        end
+    logic phy_pclk_out_src_0 = 1'b0;
+    initial begin
+        forever #1.5 phy_pclk_out_src_0 = ~phy_pclk_out_src_0;
     end
+    assign phy_pclk_out[0] = phy_pclk_out_src_0;
+    logic phy_pclk_out_src_1 = 1'b0;
+    initial begin
+        #0.7;
+        forever #2.5 phy_pclk_out_src_1 = ~phy_pclk_out_src_1;
+    end
+    assign phy_pclk_out[1] = phy_pclk_out_src_1;
+    logic phy_pclk_out_src_2 = 1'b0;
+    initial begin
+        #1.4;
+        forever #3.5 phy_pclk_out_src_2 = ~phy_pclk_out_src_2;
+    end
+    assign phy_pclk_out[2] = phy_pclk_out_src_2;
+    logic phy_pclk_out_src_3 = 1'b0;
+    initial begin
+        #2.1;
+        forever #4.5 phy_pclk_out_src_3 = ~phy_pclk_out_src_3;
+    end
+    assign phy_pclk_out[3] = phy_pclk_out_src_3;
+    logic phy_pclk_out_src_4 = 1'b0;
+    initial begin
+        #2.8;
+        forever #5.5 phy_pclk_out_src_4 = ~phy_pclk_out_src_4;
+    end
+    assign phy_pclk_out[4] = phy_pclk_out_src_4;
+    logic phy_pclk_out_src_5 = 1'b0;
+    initial begin
+        #3.5;
+        forever #6.5 phy_pclk_out_src_5 = ~phy_pclk_out_src_5;
+    end
+    assign phy_pclk_out[5] = phy_pclk_out_src_5;
 
     //------------------------------------------------------------ DUT IO
     logic [NL-1:0]      phy_phystatus_stim = '0;

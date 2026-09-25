@@ -39,13 +39,101 @@ module tb_pipe_lane_mapper;
 
     logic [NL-1:0] phy_pclk_out;
 
-    for (genvar l = 0; l < NL; l++) begin : g_clk
-        initial begin
-            phy_pclk_out[l] = 1'b0;
-            #(l * 0.7);
-            forever #(PERIOD_NS[l] / 2.0) phy_pclk_out[l] = ~phy_pclk_out[l];
-        end
+    logic phy_pclk_out_src_0 = 1'b0;
+    initial begin
+        forever #1.5 phy_pclk_out_src_0 = ~phy_pclk_out_src_0;
     end
+    assign phy_pclk_out[0] = phy_pclk_out_src_0;
+    logic phy_pclk_out_src_1 = 1'b0;
+    initial begin
+        #0.7;
+        forever #2.5 phy_pclk_out_src_1 = ~phy_pclk_out_src_1;
+    end
+    assign phy_pclk_out[1] = phy_pclk_out_src_1;
+    logic phy_pclk_out_src_2 = 1'b0;
+    initial begin
+        #1.4;
+        forever #3.5 phy_pclk_out_src_2 = ~phy_pclk_out_src_2;
+    end
+    assign phy_pclk_out[2] = phy_pclk_out_src_2;
+    logic phy_pclk_out_src_3 = 1'b0;
+    initial begin
+        #2.1;
+        forever #4.5 phy_pclk_out_src_3 = ~phy_pclk_out_src_3;
+    end
+    assign phy_pclk_out[3] = phy_pclk_out_src_3;
+    logic phy_pclk_out_src_4 = 1'b0;
+    initial begin
+        #2.8;
+        forever #5.5 phy_pclk_out_src_4 = ~phy_pclk_out_src_4;
+    end
+    assign phy_pclk_out[4] = phy_pclk_out_src_4;
+    logic phy_pclk_out_src_5 = 1'b0;
+    initial begin
+        #3.5;
+        forever #6.5 phy_pclk_out_src_5 = ~phy_pclk_out_src_5;
+    end
+    assign phy_pclk_out[5] = phy_pclk_out_src_5;
+    logic phy_pclk_out_src_6 = 1'b0;
+    initial begin
+        #4.2;
+        forever #7.5 phy_pclk_out_src_6 = ~phy_pclk_out_src_6;
+    end
+    assign phy_pclk_out[6] = phy_pclk_out_src_6;
+    logic phy_pclk_out_src_7 = 1'b0;
+    initial begin
+        #4.9;
+        forever #1.5 phy_pclk_out_src_7 = ~phy_pclk_out_src_7;
+    end
+    assign phy_pclk_out[7] = phy_pclk_out_src_7;
+    logic phy_pclk_out_src_8 = 1'b0;
+    initial begin
+        #5.6;
+        forever #2.5 phy_pclk_out_src_8 = ~phy_pclk_out_src_8;
+    end
+    assign phy_pclk_out[8] = phy_pclk_out_src_8;
+    logic phy_pclk_out_src_9 = 1'b0;
+    initial begin
+        #6.3;
+        forever #3.5 phy_pclk_out_src_9 = ~phy_pclk_out_src_9;
+    end
+    assign phy_pclk_out[9] = phy_pclk_out_src_9;
+    logic phy_pclk_out_src_10 = 1'b0;
+    initial begin
+        #7;
+        forever #4.5 phy_pclk_out_src_10 = ~phy_pclk_out_src_10;
+    end
+    assign phy_pclk_out[10] = phy_pclk_out_src_10;
+    logic phy_pclk_out_src_11 = 1'b0;
+    initial begin
+        #7.7;
+        forever #5.5 phy_pclk_out_src_11 = ~phy_pclk_out_src_11;
+    end
+    assign phy_pclk_out[11] = phy_pclk_out_src_11;
+    logic phy_pclk_out_src_12 = 1'b0;
+    initial begin
+        #8.4;
+        forever #6.5 phy_pclk_out_src_12 = ~phy_pclk_out_src_12;
+    end
+    assign phy_pclk_out[12] = phy_pclk_out_src_12;
+    logic phy_pclk_out_src_13 = 1'b0;
+    initial begin
+        #9.1;
+        forever #7.5 phy_pclk_out_src_13 = ~phy_pclk_out_src_13;
+    end
+    assign phy_pclk_out[13] = phy_pclk_out_src_13;
+    logic phy_pclk_out_src_14 = 1'b0;
+    initial begin
+        #9.8;
+        forever #1.5 phy_pclk_out_src_14 = ~phy_pclk_out_src_14;
+    end
+    assign phy_pclk_out[14] = phy_pclk_out_src_14;
+    logic phy_pclk_out_src_15 = 1'b0;
+    initial begin
+        #10.5;
+        forever #2.5 phy_pclk_out_src_15 = ~phy_pclk_out_src_15;
+    end
+    assign phy_pclk_out[15] = phy_pclk_out_src_15;
 
     //------------------------------------------------------------ DUT IO
     logic [NL-1:0]      phy_phystatus_stim = '0;

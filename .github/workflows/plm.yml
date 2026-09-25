@@ -10,6 +10,10 @@ on:
       - "plm/**"
       - ".github/workflows/plm.yml"
 
+concurrency:
+  group: plm-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   test:
     strategy:
@@ -26,16 +30,19 @@ jobs:
       QT_QPA_PLATFORM: offscreen
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: astral-sh/setup-uv@v10.2.0
         with:
           python-version: ${{ matrix.python }}
+          working-directory: plm
+          enable-cache: true
+          cache-dependency-glob: plm/uv.lock
       # The PyQt5 wheel links against libGL/libEGL even for the offscreen
       # platform, and the Linux runner image doesn't ship them.
       - if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y libgl1 libegl1
-      - run: python -m pip install -e ".[qt]"
-      - run: python -m compileall -q src run.py tests
-      - run: python -m unittest discover -s tests -v
+      - run: uv sync --extra qt --locked
+      - run: uv run python -m compileall -q src run.py tests
+      - run: uv run python -m unittest discover -s tests -v
 
   rtl-sim:
     runs-on: ubuntu-latest
@@ -44,12 +51,15 @@ jobs:
         working-directory: plm
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: astral-sh/setup-uv@v10.2.0
         with:
           python-version: "3.12"
+          working-directory: plm
+          enable-cache: true
+          cache-dependency-glob: plm/uv.lock
       - run: sudo apt-get update && sudo apt-get install -y verilator
-      - run: python -m pip install -e .
-      - run: PLM_RUN_RTL_SIM=1 python -m unittest -v tests.test_dpr_phy_input
+      - run: uv sync --locked
+      - run: PLM_RUN_RTL_SIM=1 uv run python -m unittest -v tests.test_dpr_phy_input
 
   wheel:
     runs-on: ubuntu-latest
@@ -58,12 +68,15 @@ jobs:
         working-directory: plm
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: astral-sh/setup-uv@v10.2.0
         with:
           python-version: "3.12"
-      - run: python -m pip wheel . --no-deps -w dist
-      - run: python -m venv wheel-venv
-      - run: wheel-venv/bin/python -m pip install --no-deps dist/plm-*.whl
+          working-directory: plm
+          enable-cache: true
+          cache-dependency-glob: plm/uv.lock
+      - run: uv build --wheel
+      - run: uv venv wheel-venv --python 3.12
+      - run: uv pip install --python wheel-venv/bin/python --no-deps dist/plm-*.whl
       - run: >-
           wheel-venv/bin/python -c "import tempfile;
           from pathlib import Path;

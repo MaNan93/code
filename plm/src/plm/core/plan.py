@@ -12,6 +12,8 @@ CONFIG_FILES = ("controllers.csv", "lane_mapping.csv", "pipe_signals.csv")
 GENERATOR_FILES = (
     "plan.py",
     "exporter.py",
+    "gen_flags.py",
+    "model.py",
     "generator/rtl.py",
     "generator/tb.py",
     "tb_makefile.mk",

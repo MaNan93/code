@@ -2,8 +2,8 @@
 //
 // Pure struct<->flat bridge around pipe_lane_mapper: every pipe_signals.csv
 // row becomes its own flat port here instead of a packed-struct field, for
-// integration with flows/IP that don't want SV struct ports. signal_type=shared
-// collapses a controller's own max_width lanes to one scalar port; perlane
+// integration with flows/IP that don't want SV struct ports. A MAC-to-PHY
+// signal_type=shared collapses a controller's own lanes to one scalar input; perlane
 // (the default) stays an unpacked array of max_width. The PHY side is always
 // per-lane -- which controller owns a PHY lane still varies by mode, so even a
 // "shared" signal still needs its own value per PHY lane there.

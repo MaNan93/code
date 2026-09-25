@@ -1,0 +1,36 @@
+{
+  "config_hash": "09631885913dee316a14799086ffcbb8ce6a4eebee99da8aab99839c9741d9a5",
+  "design": {
+    "controller_count": 4,
+    "group_count": 4,
+    "lane_count": 16,
+    "mode_count": 4
+  },
+  "files": {
+    "common/pipe_lane_clk_gate.sv": "06549f2377eaf593705454287d4e63b4455c81bf0c10d0b9099383aa1674386d",
+    "common/pipe_lane_clk_or.sv": "4c85baaaa132c6c275b50dc7a63db2de276231a590512a4c35b7e768365ea918",
+    "common/pipe_lane_data_mux.sv": "b1389115a4e797df5127346fdebf156b8ecaba7f74630e427d9b4a92a529e3ed",
+    "common/pipe_lane_sel_sync.sv": "2262734be855f57559379f8758f216a2b1cdb72bd711cea6a83563023ed27509",
+    "common/pipe_lane_sync2.sv": "b0a44d809977ee2211e6bdcc93158e961e2b5d11824d4ad50d4f03b571a14bd0",
+    "flist.f": "7c5fe7d2b5af049545bef2d483252e3a2def005f0d208880ec64cdb58b01969a",
+    "src/pipe_lane_clk_mux.sv": "eefa3831221d0996f0e4f3b9f04f163dd45091d2457b390fb717cf3c449cb811",
+    "src/pipe_lane_data_m2p.sv": "5fe93b061c3774c2f5ecb6c1311bd715854fba4c6ca7d764f69c5cb2433f182f",
+    "src/pipe_lane_data_p2m.sv": "f5b2b81eaa80ffb0f1d26ad45ed734ab8ecb562b34e5112a961f768aee7d5315",
+    "src/pipe_lane_mapper.sv": "e32d705e71edafb4453203d2a7c8301b4e81c0ae83b13271e565a30788807fcc",
+    "src/pipe_lane_mapper_connection.sv": "dd2517a34546945b82cf9bad874bbd5a8e51ee9b51b0f3687a5d910228481df3",
+    "src/pipe_lane_mode_dec.sv": "ed825b70942a841c24f5044fc0762ab5c65fcc3301d269797102fafcdb682fdc",
+    "src/pipe_lane_rst_mux.sv": "3210544564a73371ff11517d74398d726777d96fd5d78c2926edaaa529b684fd",
+    "src/pipe_lane_sel_gen.sv": "38729b3fa1b145c7dd1b10a262fb43ceaa3d3ec8d7f278edf3945b34e77fbb87",
+    "src/pipe_lane_signal_pkg.sv": "62227051dfd9f2d06805b76cad765493645c1ddbde06f91965784749964f0a8b"
+  },
+  "generation_key": "8f30072ebf9714b83051166355289b6312688eca0fc201374ad31991e2584bc8",
+  "generator_fingerprint": "cab7d46e00f3d2bd6cd3a86101fd7cddff93bcf58e2dc9f98817c9bcd26c8e62",
+  "options": {
+    "arch": "original_pipe",
+    "dpr": false,
+    "pclk_mode": "pclk_as_phy_output",
+    "sel_mode": "sync"
+  },
+  "output": "rtl",
+  "schema_version": 1
+}

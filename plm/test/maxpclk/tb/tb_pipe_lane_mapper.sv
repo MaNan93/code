@@ -43,21 +43,102 @@ module tb_pipe_lane_mapper;
     logic [NC-1:0] ctrl_ref_clk;
     logic [NL-1:0] rx_clk;
 
-    for (genvar c = 0; c < NC; c++) begin : g_ctrl_clk
-        initial begin
-            ctrl_ref_clk[c] = 1'b0;
-            #(c * 0.7);
-            forever #(CTRL_PERIOD_NS[c] / 2.0) ctrl_ref_clk[c] = ~ctrl_ref_clk[c];
-        end
+    logic ctrl_ref_clk_src_0 = 1'b0;
+    initial begin
+        forever #1.5 ctrl_ref_clk_src_0 = ~ctrl_ref_clk_src_0;
     end
+    assign ctrl_ref_clk[0] = ctrl_ref_clk_src_0;
+    logic ctrl_ref_clk_src_1 = 1'b0;
+    initial begin
+        #0.7;
+        forever #2.5 ctrl_ref_clk_src_1 = ~ctrl_ref_clk_src_1;
+    end
+    assign ctrl_ref_clk[1] = ctrl_ref_clk_src_1;
+    logic ctrl_ref_clk_src_2 = 1'b0;
+    initial begin
+        #1.4;
+        forever #3.5 ctrl_ref_clk_src_2 = ~ctrl_ref_clk_src_2;
+    end
+    assign ctrl_ref_clk[2] = ctrl_ref_clk_src_2;
+    logic ctrl_ref_clk_src_3 = 1'b0;
+    initial begin
+        #2.1;
+        forever #4.5 ctrl_ref_clk_src_3 = ~ctrl_ref_clk_src_3;
+    end
+    assign ctrl_ref_clk[3] = ctrl_ref_clk_src_3;
 
-    for (genvar l = 0; l < NL; l++) begin : g_rx_clk
-        initial begin
-            rx_clk[l] = 1'b0;
-            #(l * 0.9 + 0.3);
-            forever #(LANE_PERIOD_NS[l] / 2.0) rx_clk[l] = ~rx_clk[l];
-        end
+    logic rx_clk_src_0 = 1'b0;
+    initial begin
+        #0.3;
+        forever #2.5 rx_clk_src_0 = ~rx_clk_src_0;
     end
+    assign rx_clk[0] = rx_clk_src_0;
+    logic rx_clk_src_1 = 1'b0;
+    initial begin
+        #1.2;
+        forever #3.5 rx_clk_src_1 = ~rx_clk_src_1;
+    end
+    assign rx_clk[1] = rx_clk_src_1;
+    logic rx_clk_src_2 = 1'b0;
+    initial begin
+        #2.1;
+        forever #4.5 rx_clk_src_2 = ~rx_clk_src_2;
+    end
+    assign rx_clk[2] = rx_clk_src_2;
+    logic rx_clk_src_3 = 1'b0;
+    initial begin
+        #3;
+        forever #5.5 rx_clk_src_3 = ~rx_clk_src_3;
+    end
+    assign rx_clk[3] = rx_clk_src_3;
+    logic rx_clk_src_4 = 1'b0;
+    initial begin
+        #3.9;
+        forever #6.5 rx_clk_src_4 = ~rx_clk_src_4;
+    end
+    assign rx_clk[4] = rx_clk_src_4;
+    logic rx_clk_src_5 = 1'b0;
+    initial begin
+        #4.8;
+        forever #7.5 rx_clk_src_5 = ~rx_clk_src_5;
+    end
+    assign rx_clk[5] = rx_clk_src_5;
+    logic rx_clk_src_6 = 1'b0;
+    initial begin
+        #5.7;
+        forever #8.5 rx_clk_src_6 = ~rx_clk_src_6;
+    end
+    assign rx_clk[6] = rx_clk_src_6;
+    logic rx_clk_src_7 = 1'b0;
+    initial begin
+        #6.6;
+        forever #2.5 rx_clk_src_7 = ~rx_clk_src_7;
+    end
+    assign rx_clk[7] = rx_clk_src_7;
+    logic rx_clk_src_8 = 1'b0;
+    initial begin
+        #7.5;
+        forever #3.5 rx_clk_src_8 = ~rx_clk_src_8;
+    end
+    assign rx_clk[8] = rx_clk_src_8;
+    logic rx_clk_src_9 = 1'b0;
+    initial begin
+        #8.4;
+        forever #4.5 rx_clk_src_9 = ~rx_clk_src_9;
+    end
+    assign rx_clk[9] = rx_clk_src_9;
+    logic rx_clk_src_10 = 1'b0;
+    initial begin
+        #9.3;
+        forever #5.5 rx_clk_src_10 = ~rx_clk_src_10;
+    end
+    assign rx_clk[10] = rx_clk_src_10;
+    logic rx_clk_src_11 = 1'b0;
+    initial begin
+        #10.2;
+        forever #6.5 rx_clk_src_11 = ~rx_clk_src_11;
+    end
+    assign rx_clk[11] = rx_clk_src_11;
 
     logic [11:0] ctrla_pclk;
     logic [11:0] ctrla_rx_clk;

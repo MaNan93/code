@@ -98,7 +98,13 @@ def _self_check_output_set(plan, workspace):
 
     if set(manifests) == set(OUTPUT_DIRS):
         rtl_manifest, tb_manifest = manifests["rtl"], manifests["tb"]
-        for field in ("generation_key", "config_hash", "options", "design"):
+        for field in (
+            "generation_key",
+            "config_hash",
+            "generator_fingerprint",
+            "options",
+            "design",
+        ):
             if rtl_manifest.get(field) != tb_manifest.get(field):
                 issues.append(ValidationIssue("output", f"RTL/TB manifest {field} mismatch"))
 
@@ -158,20 +164,15 @@ def _remove_path(path):
 
 
 def _stage_output_set(workspace):
-    """Copy the current output set to a sibling staging directory."""
+    """Create an empty sibling staging directory for a fresh output set."""
     workspace = Path(workspace)
     workspace.mkdir(parents=True, exist_ok=True)
-    staged = Path(
+    return Path(
         tempfile.mkdtemp(
             prefix=f".{workspace.name}-generate-",
             dir=workspace.parent,
         )
     )
-    for name in OUTPUT_DIRS:
-        source = workspace / name
-        if source.is_dir():
-            shutil.copytree(source, staged / name)
-    return staged
 
 
 def _commit_output_set(staged, workspace):
@@ -301,11 +302,6 @@ def export_all(plan, out_rtl):
     workspace = Path(out_rtl).parent
     staged = _stage_output_set(workspace)
     try:
-        # A generated set is authoritative. Starting empty prevents renamed or
-        # removed outputs from surviving merely because staging began as a
-        # copy of the previous, known-good set.
-        for name in OUTPUT_DIRS:
-            _remove_path(staged / name)
         _export_rtl_into(
             plan, staged / "rtl",
             pclk_mode=options.pclk_mode,

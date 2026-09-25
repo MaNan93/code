@@ -1,0 +1,23 @@
+{
+  "config_hash": "09631885913dee316a14799086ffcbb8ce6a4eebee99da8aab99839c9741d9a5",
+  "design": {
+    "controller_count": 4,
+    "group_count": 4,
+    "lane_count": 16,
+    "mode_count": 4
+  },
+  "files": {
+    "makefile": "c25dc98bf8ee551eb196496f948599549b937f102c702b97fe7efc4579512e16",
+    "tb_pipe_lane_mapper.sv": "f7c9ba538c92e47729ae46564ac90d5d8ccf6396af84c97b1adb6ef141ce1168"
+  },
+  "generation_key": "8f30072ebf9714b83051166355289b6312688eca0fc201374ad31991e2584bc8",
+  "generator_fingerprint": "cab7d46e00f3d2bd6cd3a86101fd7cddff93bcf58e2dc9f98817c9bcd26c8e62",
+  "options": {
+    "arch": "original_pipe",
+    "dpr": false,
+    "pclk_mode": "pclk_as_phy_output",
+    "sel_mode": "sync"
+  },
+  "output": "tb",
+  "schema_version": 1
+}

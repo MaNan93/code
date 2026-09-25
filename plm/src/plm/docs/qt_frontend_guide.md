@@ -75,10 +75,11 @@ mode=0  lane0=0-0  lane1=0-1  lane2=1-0
 
 | 按钮 | 功能 |
 |---|---|
-| Validate | 检查配置 |
-| Generate | 使用同一组参数生成 RTL 和 testbench；全部成功后一起更新输出 |
+| Generate | 保存当前编辑、完整校验配置，并使用同一组参数生成 RTL 和 testbench；全部成功后一起更新输出 |
 
-输出文件自动写到 `<config_dir>/../rtl/` 和 `<config_dir>/../tb/`。
+表格编辑时会实时标出常见错误；点击 **Generate** 后仍会执行完整校验。
+校验失败时不会写入生成结果，具体原因显示在 LOG 页。输出文件自动写到
+`<config_dir>/../rtl/` 和 `<config_dir>/../tb/`。
 
 > 侧边栏底部那个 **Settings** 按钮是另一回事：它开的是 verible 格式化器的
 > 设置对话框，跟上面这四个生成参数无关。
@@ -90,9 +91,8 @@ mode=0  lane0=0-0  lane1=0-1  lane2=1-0
 2. Controllers tab：填 controller 信息
 3. Lane Mapping tab：填 mode 和 lane 分配
 4. Pipe Signals tab：用默认值或自己改
-5. Generation tab：选生成参数（不改就用默认），点 **Validate** 检查
-6. 检查通过：点 **Generate**
-7. 侧边栏点 **Save**
+5. Generation tab：选生成参数（不改就用默认），点 **Generate**；程序会先完整校验，再同时生成 RTL 和 testbench
+6. 侧边栏点 **Save**
 
 ## 常见操作
 
@@ -130,7 +130,7 @@ mode=0  lane0=0-0  lane1=0-1  lane2=1-0
 | 一条 PHY lane 跨 mode 换了 controller lane 下标 | 同一个 owner 在不同 mode 下把这条 lane 编到了不同位置 | 改成每个 mode 下都是同一个下标 |
 | pclk 候选数 > 1 | controller 的工作时钟会变 | 确保最低编号 owned lane 不变 |
 
-生成没有输出：检查工作区路径、Validate 是否通过、看 LOG 页。
+生成没有输出：检查工作区路径，并在 LOG 页查看校验或生成错误。
 
 ## 文件位置
 

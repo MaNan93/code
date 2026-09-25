@@ -81,6 +81,11 @@ mode=0  lane0=0-0  lane1=0-1  lane2=1-0
 校验失败时不会写入生成结果，具体原因显示在 LOG 页。输出文件自动写到
 `<config_dir>/../rtl/` 和 `<config_dir>/../tb/`。
 
+按钮左侧会依次显示 `Saving`、`Validating`、`Generating`、
+`Refreshing preview`，最终停在 `Generated` 或 `Generation failed`。
+RTL 与 TB 各自带一份 `manifest.json`；两份文件的 `generation_key` 相同，
+用于确认它们来自同一份配置和同一次参数组合。
+
 > 侧边栏底部那个 **Settings** 按钮是另一回事：它开的是 verible 格式化器的
 > 设置对话框，跟上面这四个生成参数无关。
 

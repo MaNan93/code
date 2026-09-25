@@ -603,6 +603,25 @@ class QtFrontendTests(unittest.TestCase):
         )
         self.assertTrue(window.recent_list.isEnabled())
 
+    def test_generation_state_machine_has_visible_terminal_states(self):
+        window = self.make_window()
+        expected = [
+            ("IDLE", "Ready"),
+            ("SAVING", "Saving..."),
+            ("VALIDATING", "Validating..."),
+            ("GENERATING", "Generating..."),
+            ("REFRESHING_PREVIEW", "Refreshing preview..."),
+            ("DONE", "Generated"),
+            ("FAILED", "Generation failed"),
+        ]
+        for state, label in expected:
+            window._set_generation_state(state)
+            self.assertEqual(window._generation_state, state)
+            self.assertEqual(window.generation_state_label.text(), label)
+
+        with self.assertRaises(ValueError):
+            window._set_generation_state("CANCELLED")
+
     def test_bottom_panel_is_log_and_report(self):
         """Two pages, one widget each: the activity log and Config.report().
         The topology used to share the REPORT page under its own sub-header,

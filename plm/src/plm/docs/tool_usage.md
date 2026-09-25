@@ -180,12 +180,14 @@ plm/
 │     │  ├─ model.py          配置文件解析与校验（Config / Controller / Signal / LaneGroup）
 │     │  ├─ paths.py          配置集路径解析（PLM_ROOT/CONFIGS_ROOT/resolve_set/...）
 │     │  ├─ verible.py        verible-verilog-format 自动格式化
-│     │  ├─ gen_flags.py      生成 flag 的合法取值表 + arch/pclk-mode 交叉校验
+│     │  ├─ gen_flags.py      GenerationOptions + flag 合法取值和组合规则
+│     │  ├─ plan.py           GenerationPlan：RTL/TB/Report 共用的已解析计划
+│     │  ├─ validation.py     format/topology/generation/output 四层校验
 │     │  ├─ workspace.py      CSV/工作区读写（供 Qt 前端编辑器使用）
 │     │  ├─ generator/
 │     │  │  ├─ rtl.py           纯文本生成：RTL 各模块的 gen_* 函数
 │     │  │  └─ tb.py            纯文本生成：testbench 的 gen_tb()
-│     │  ├─ exporter.py       文件 I/O 编排：export_all()，事务化写入 rtl/ 与 tb/
+│     │  ├─ exporter.py       Manifest、自检及 export_all() 事务化写入
 │     │  ├─ tb_makefile.mk    仿真用 makefile 模板，生成时复制到 tb/ 下
 │     │  └─ common/           手写公共模块，生成时复制到 rtl/common/
 │     │      ├─ pipe_lane_sync2.sv
@@ -207,10 +209,12 @@ plm/
 │     ├─ rtl/               `plm generate` 的 RTL 输出
 │     │  ├─ src/             生成出来的模块
 │     │  ├─ common/           从 plm.core.common 复制过来的公共模块
-│     │  └─ flist.f           文件列表（供 verilator/vcs 用 -f 引用）
+│     │  ├─ flist.f           文件列表（供 verilator/vcs 用 -f 引用）
+│     │  └─ manifest.json     配置/参数 hash 和 RTL 文件 hash
 │     └─ tb/                 `plm generate` 的 testbench 输出
 │        ├─ tb_pipe_lane_mapper.sv
-│        └─ makefile          从 plm.core 的 tb_makefile.mk 复制来的（VCS 仿真用）
+│        ├─ makefile          从 plm.core 的 tb_makefile.mk 复制来的（VCS 仿真用）
+│        └─ manifest.json     与 RTL 相同的 generation_key 和 TB 文件 hash
 │     └─ docs/
 │        ├─ tool_usage.md       本文档
 │        └─ qt_frontend_guide.md Qt 前端操作说明
@@ -326,8 +330,12 @@ plm generate --config <SET> [其它参数]
 | `--verible-flags JSON` | 内置默认值 | 覆盖 Verible 参数 |
 | `--quiet` | 关闭 | 不打印拓扑报告 |
 
-生成器先在 workspace 旁建立 staging，同时生成 `rtl/` 和 `tb/`。两边都成功
-后才替换旧输出；RTL 或 TB 任意一步失败，旧的两套输出都保持不变。
+生成器先建立统一的 `GenerationPlan`，让 RTL、TB 和 Report 使用同一份已解析
+拓扑；随后在 workspace 旁建立 staging，同时生成 `rtl/` 和 `tb/`。生成完成后
+写入两份 Manifest，并检查文件列表、hash、顶层模块、NL/NC 宽度和模板残留。
+全部通过后才替换旧输出；生成或自检任意一步失败，旧的两套输出都保持不变。
+
+错误按 `[format]`、`[topology]`、`[generation]`、`[output]` 分层报告。
 
 ## 5. `plm validate`
 

@@ -33,9 +33,11 @@ from plm.core.gen_flags import (
     PCLK_MODE_ARCH,
     PCLK_MODE_VALUES,
     SEL_MODE_VALUES,
+    GenerationOptions,
 )
 from plm.core.model import Config, is_sv_identifier
 from plm.core.paths import CONFIGS_ROOT, DOCS_DIR, PLM_ROOT, is_deletable_workspace, is_workspace_root
+from plm.core.validation import ValidationError, plan_from_config
 from plm.core.workspace import save_workspace_content, scaffold_default_content, workspace_content
 from plm.frontend.qt.widgets import sap_icons
 from plm.frontend.qt.widgets.lanegrid import LaneGrid
@@ -81,6 +83,15 @@ APP_ICON_PATH = Path(__file__).resolve().parent / "assets" / "app_icon.svg"
 PREVIEW_MAXIMIZE_ANIM_MS = 180
 BOTTOM_EDGE_INSET = 12
 TAB_VERTICAL_GAP = 4
+GENERATION_STATE_LABELS = {
+    "IDLE": "Ready",
+    "SAVING": "Saving...",
+    "VALIDATING": "Validating...",
+    "GENERATING": "Generating...",
+    "REFRESHING_PREVIEW": "Refreshing preview...",
+    "DONE": "Generated",
+    "FAILED": "Generation failed",
+}
 
 def _ui_scale():
     """Return a scaling factor relative to the 13 px design baseline so
@@ -497,6 +508,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self._saved_disk_signature = None  # config bytes at the last load/save
         self._title_shows_dirty = False
         self._generation_busy = False
+        self._generation_state = "IDLE"
         self._topology_payload = None
         self._history_payload = None
         self._undo_history = []
@@ -1787,6 +1799,11 @@ class MainWindow(QtWidgets.QMainWindow):
         layout.addLayout(form)
 
         actions_row = QtWidgets.QHBoxLayout()
+        self.generation_state_label = QtWidgets.QLabel(
+            GENERATION_STATE_LABELS[self._generation_state]
+        )
+        self.generation_state_label.setObjectName("generationState")
+        actions_row.addWidget(self.generation_state_label)
         actions_row.addStretch(1)
         btn_generate = QtWidgets.QPushButton("Generate")
         btn_generate.setObjectName("primaryBtn")
@@ -2195,6 +2212,8 @@ class MainWindow(QtWidgets.QMainWindow):
     def _process_live_edits(self):
         if self._restoring_history or self.current_workspace is None:
             return
+        if not self._generation_busy:
+            self._set_generation_state("IDLE")
         self._capture_edit_snapshot()
         self._validate_live_tables()
         self._poll_dirty_state()
@@ -2656,6 +2675,23 @@ class MainWindow(QtWidgets.QMainWindow):
             args.append("--dpr")
         return args
 
+    def _current_generation_options(self, **overrides):
+        """Return the same typed option set used by CLI and exporter."""
+        values = {
+            "arch": self.arch_combo.currentText()
+            if self.arch_combo.currentText() in ARCH_VALUES
+            else "original_pipe",
+            "pclk_mode": self.pclk_mode_combo.currentText()
+            if self.pclk_mode_combo.currentText() in PCLK_MODE_VALUES
+            else "pclk_as_phy_output",
+            "sel_mode": self.sel_mode_combo.currentText()
+            if self.sel_mode_combo.currentText() in SEL_MODE_VALUES
+            else "sync",
+            "dpr": self.dpr_check.isChecked(),
+        }
+        values.update(overrides)
+        return GenerationOptions(**values)
+
     def _gather_payload(self):
         """Collect the workspace's content to write on Save, straight from
         the live widgets."""
@@ -2895,6 +2931,13 @@ class MainWindow(QtWidgets.QMainWindow):
         if getattr(self, "recent_list", None) is not None:
             self.recent_list.setEnabled(enabled)
 
+    def _set_generation_state(self, state):
+        if state not in GENERATION_STATE_LABELS:
+            raise ValueError(f"unknown generation state {state}")
+        self._generation_state = state
+        if getattr(self, "generation_state_label", None) is not None:
+            self.generation_state_label.setText(GENERATION_STATE_LABELS[state])
+
     def _refresh_topology_summary(self):
         """Render Config.report() for what would be generated right now.
 
@@ -2914,13 +2957,13 @@ class MainWindow(QtWidgets.QMainWindow):
                 root = Path(scratch) / "summary"
                 save_workspace_content(root, payload)
                 config = Config(root / "config")
-                errors = config.validate()
-                if errors:
+                try:
+                    plan = plan_from_config(config, self._current_generation_options())
+                    text = plan.report()
+                except ValidationError as error:
                     text = "Config is not valid yet:\n" + "\n".join(
-                        f"  - {error}" for error in errors
+                        f"  - {issue}" for issue in error.issues
                     )
-                else:
-                    text = config.report()
         except SystemExit as error:
             text = f"Config cannot be read yet:\n{error}"
         except Exception as error:
@@ -2945,11 +2988,14 @@ class MainWindow(QtWidgets.QMainWindow):
         written into the workspace -- a workspace is its three CSVs."""
         if self._generation_busy:
             return
+        self._set_generation_state("SAVING")
         if not self._save_before_action():
+            self._set_generation_state("IDLE")
             return
         self._clear_generation_results()
         self._set_bottom_panel_page(0)  # LOG -- the run's output streams in here
         self._set_generation_busy(True)
+        self._set_generation_state("VALIDATING")
         started_at = time.monotonic()
         run_workspace = self.current_workspace
         before_outputs = self._output_signature(run_workspace)
@@ -2994,6 +3040,12 @@ class MainWindow(QtWidgets.QMainWindow):
 
         def handle_output_line(line):
             stripped = line.strip()
+            if stripped == "PLM_PHASE: VALIDATING":
+                self._set_generation_state("VALIDATING")
+                return
+            if stripped == "PLM_PHASE: GENERATING":
+                self._set_generation_state("GENERATING")
+                return
             if stripped.startswith("generated "):
                 generated.append(stripped[len("generated ") :])
             self._log(line)
@@ -3017,6 +3069,7 @@ class MainWindow(QtWidgets.QMainWindow):
             self._log(f"[generate: {len(generated)} file(s), {elapsed:.1f}s]")
             if exit_code == 0:
                 self._log("[generate finished]")
+                self._set_generation_state("REFRESHING_PREVIEW")
                 after_outputs = self._output_signature(run_workspace)
                 self._show_generation_results(
                     run_workspace, before_outputs, after_outputs
@@ -3024,8 +3077,10 @@ class MainWindow(QtWidgets.QMainWindow):
                 if self.current_workspace == run_workspace:
                     self._refresh_topology_summary()
                     self._refresh_rtl_preview()
+                self._set_generation_state("DONE")
             else:
                 self._log(f"[generate finished, exit code {exit_code}]")
+                self._set_generation_state("FAILED")
             if proc in self._active_processes:
                 self._active_processes.remove(proc)
             if then and exit_code == 0:
@@ -3034,6 +3089,7 @@ class MainWindow(QtWidgets.QMainWindow):
         def on_error(_error):
             if proc.state() == QtCore.QProcess.NotRunning:
                 self._set_generation_busy(False)
+                self._set_generation_state("FAILED")
                 self._log(f"Failed to launch generate: {proc.errorString()}")
                 if proc in getattr(self, "_active_processes", []):
                     self._active_processes.remove(proc)

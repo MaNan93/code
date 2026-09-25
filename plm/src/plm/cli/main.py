@@ -15,13 +15,22 @@ import json
 import sys
 
 from plm.core.exporter import export_all
-from plm.core.gen_flags import validate_arch
-from plm.core.model import load
+from plm.core.gen_flags import (
+    ARCH_VALUES,
+    PCLK_MODE_VALUES,
+    SEL_MODE_VALUES,
+    GenerationOptions,
+)
 from plm.core.paths import resolve_set
+from plm.core.validation import (
+    ValidationError,
+    load_generation_plan,
+    load_validated_config,
+)
 
-ARCH_CHOICES = ["original_pipe", "serdes"]
-PCLK_MODE_CHOICES = ["pclk_as_phy_output", "pclk_as_phy_input"]
-SEL_MODE_CHOICES = ["sync", "comb"]
+ARCH_CHOICES = list(ARCH_VALUES)
+PCLK_MODE_CHOICES = list(PCLK_MODE_VALUES)
+SEL_MODE_CHOICES = list(SEL_MODE_VALUES)
 
 ARCH_HELP = (
     "PHY family: original_pipe requires pclk_as_phy_output; "
@@ -99,18 +108,26 @@ def cmd_generate(argv):
     args = parser.parse_args(argv)
     csv_dir, out_rtl = resolve_set(args.config)
 
-    verible_flags = _parse_verible_flags(args.verible_flags)
-    validate_arch(args.arch, args.pclk_mode)
-    validate_dpr(args.dpr, args.sel_mode)
-
-    cfg = load(csv_dir)
-    print(f"Config: {csv_dir}")
-    export_all(
-        cfg, out_rtl,
-        pclk_mode=args.pclk_mode, sel_mode=args.sel_mode, dpr=args.dpr,
-        verible_path=args.verible_path, verible_flags=verible_flags,
+    options = GenerationOptions(
+        arch=args.arch,
+        pclk_mode=args.pclk_mode,
+        sel_mode=args.sel_mode,
+        dpr=args.dpr,
+        verible_path=args.verible_path,
+        verible_flags=_parse_verible_flags(args.verible_flags),
         quiet=args.quiet,
     )
+    print(f"Config: {csv_dir}")
+    print("PLM_PHASE: VALIDATING")
+    try:
+        plan = load_generation_plan(csv_dir, options)
+    except ValidationError as error:
+        raise SystemExit(f"Config validation failed:\n{error}") from error
+    print("PLM_PHASE: GENERATING")
+    try:
+        export_all(plan, out_rtl)
+    except ValidationError as error:
+        raise SystemExit(f"Generated output self-check failed:\n{error}") from error
 
 
 def cmd_validate(argv):
@@ -121,7 +138,10 @@ def cmd_validate(argv):
     _add_config_arg(parser)
     args = parser.parse_args(argv)
     csv_dir, _out_rtl = resolve_set(args.config)
-    cfg = load(csv_dir)
+    try:
+        cfg = load_validated_config(csv_dir)
+    except ValidationError as error:
+        raise SystemExit(f"Config validation failed:\n{error}") from error
     print(f"Config: {csv_dir}")
     print("OK -- config is valid.\n")
     print(cfg.report())

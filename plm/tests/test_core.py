@@ -1,11 +1,14 @@
 from pathlib import Path
+import json
 import shutil
 import tempfile
 import unittest
 from unittest import mock
 
 from plm.core import exporter
+from plm.core.gen_flags import GenerationOptions
 from plm.core.model import Config
+from plm.core.plan import GenerationPlan
 from plm.core.paths import DOCS_DIR, WORKSPACE_MARKER, is_deletable_workspace
 from plm.core.workspace import (
     read_gen_flags,
@@ -14,6 +17,7 @@ from plm.core.workspace import (
     save_workspace_content,
     write_aligned_csv,
 )
+from plm.core.validation import ValidationError, load_generation_plan
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -194,7 +198,7 @@ class WorkspaceTests(unittest.TestCase):
 
 class ExporterTests(unittest.TestCase):
     def test_failed_generation_preserves_previous_output_set(self):
-        cfg = Config(ROOT / "test" / "quad" / "config")
+        cfg = Config(ROOT / "test" / "bifurcate" / "config")
         with tempfile.TemporaryDirectory() as td:
             workspace = Path(td)
             rtl_sentinel = workspace / "rtl" / "known-good.txt"
@@ -210,6 +214,75 @@ class ExporterTests(unittest.TestCase):
                     exporter.export_all(cfg, workspace / "rtl", quiet=True)
             self.assertEqual(rtl_sentinel.read_text(encoding="utf-8"), "old rtl")
             self.assertEqual(tb_sentinel.read_text(encoding="utf-8"), "old tb")
+
+    def test_manifests_prove_rtl_and_tb_are_one_generation(self):
+        cfg = Config(ROOT / "test" / "bifurcate" / "config")
+        options = GenerationOptions(quiet=True)
+        plan = GenerationPlan.build(cfg, options)
+        with tempfile.TemporaryDirectory() as td:
+            workspace = Path(td)
+            exporter.export_all(plan, workspace / "rtl")
+            rtl = json.loads((workspace / "rtl" / "manifest.json").read_text())
+            tb = json.loads((workspace / "tb" / "manifest.json").read_text())
+            for field in ("generation_key", "config_hash", "options", "design"):
+                self.assertEqual(rtl[field], tb[field])
+            self.assertEqual(rtl["generation_key"], plan.generation_key)
+            self.assertIn("src/pipe_lane_mapper.sv", rtl["files"])
+            self.assertIn("tb_pipe_lane_mapper.sv", tb["files"])
+
+    def test_failed_post_generation_self_check_preserves_previous_outputs(self):
+        cfg = Config(ROOT / "test" / "bifurcate" / "config")
+        with tempfile.TemporaryDirectory() as td:
+            workspace = Path(td)
+            old_rtl = workspace / "rtl" / "old.txt"
+            old_tb = workspace / "tb" / "old.txt"
+            old_rtl.parent.mkdir()
+            old_tb.parent.mkdir()
+            old_rtl.write_text("rtl", encoding="utf-8")
+            old_tb.write_text("tb", encoding="utf-8")
+            with mock.patch.object(
+                exporter,
+                "_self_check_output_set",
+                side_effect=ValidationError([]),
+            ):
+                with self.assertRaises(ValidationError):
+                    exporter.export_all(cfg, workspace / "rtl", quiet=True)
+            self.assertEqual(old_rtl.read_text(encoding="utf-8"), "rtl")
+            self.assertEqual(old_tb.read_text(encoding="utf-8"), "tb")
+
+
+class GenerationPlanTests(unittest.TestCase):
+    def test_plan_caches_topology_and_changes_key_with_options(self):
+        cfg = Config(ROOT / "test" / "bifurcate" / "config")
+        first = GenerationPlan.build(cfg, GenerationOptions())
+        second = GenerationPlan.build(
+            cfg,
+            GenerationOptions(arch="serdes", pclk_mode="pclk_as_phy_input"),
+        )
+        self.assertIs(first.ctrl_pclk_src(), first.pclk_sources)
+        self.assertIs(first.ctrl_pclk_cands(), first.pclk_candidates)
+        self.assertNotEqual(first.generation_key, second.generation_key)
+
+    def test_validation_layers_distinguish_format_topology_and_options(self):
+        with tempfile.TemporaryDirectory() as td:
+            with self.assertRaises(ValidationError) as caught:
+                load_generation_plan(Path(td), GenerationOptions())
+            self.assertEqual(caught.exception.issues[0].layer, "format")
+
+        with self.assertRaises(ValidationError) as caught:
+            load_generation_plan(
+                ROOT / "test" / "quad" / "config", GenerationOptions()
+            )
+        self.assertTrue(
+            all(issue.layer == "topology" for issue in caught.exception.issues)
+        )
+
+        with self.assertRaises(ValidationError) as caught:
+            load_generation_plan(
+                ROOT / "test" / "bifurcate" / "config",
+                GenerationOptions(dpr=True, sel_mode="comb"),
+            )
+        self.assertEqual(caught.exception.issues[0].layer, "generation")
 
 
 # Non-default generation flags each bundled sample is meant to be generated

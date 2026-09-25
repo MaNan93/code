@@ -16,6 +16,8 @@ So this module holds only the shared vocabulary -- the legal values, and the
 value-level rules relating them -- with no file I/O of its own.
 """
 
+from dataclasses import dataclass
+
 # --arch names the PHY macro family a config set targets; each one only ever
 # works with one --pclk-mode, since that's a property of the macro, not an
 # independent choice -- original_pipe (a classic PIPE PHY) always drives its
@@ -36,6 +38,81 @@ PCLK_MODE_ARCH = {v: k for k, v in ARCH_PCLK_MODE.items()}
 ARCH_VALUES = ("original_pipe", "serdes")
 PCLK_MODE_VALUES = ("pclk_as_phy_output", "pclk_as_phy_input")
 SEL_MODE_VALUES = ("sync", "comb")
+
+
+@dataclass(frozen=True)
+class GenerationOptions:
+    """One immutable generation option set shared by every front end.
+
+    Presentation-only switches such as ``quiet`` and formatter settings live
+    here too, but :meth:`manifest_dict` deliberately keeps only the values
+    that change the generated design.
+    """
+
+    arch: str = "original_pipe"
+    pclk_mode: str = "pclk_as_phy_output"
+    sel_mode: str = "sync"
+    dpr: bool = False
+    verible_path: str = None
+    verible_flags: dict = None
+    quiet: bool = False
+
+    def errors(self):
+        errors = []
+        if self.arch not in ARCH_VALUES:
+            errors.append(f"arch must be one of {', '.join(ARCH_VALUES)} (got {self.arch!r})")
+        if self.pclk_mode not in PCLK_MODE_VALUES:
+            errors.append(
+                f"pclk_mode must be one of {', '.join(PCLK_MODE_VALUES)} "
+                f"(got {self.pclk_mode!r})"
+            )
+        if self.sel_mode not in SEL_MODE_VALUES:
+            errors.append(
+                f"sel_mode must be one of {', '.join(SEL_MODE_VALUES)} "
+                f"(got {self.sel_mode!r})"
+            )
+        if self.arch in ARCH_PCLK_MODE and self.pclk_mode in PCLK_MODE_VALUES:
+            required = ARCH_PCLK_MODE[self.arch]
+            if self.pclk_mode != required:
+                errors.append(
+                    f"arch {self.arch} only supports pclk_mode {required} "
+                    f"(got {self.pclk_mode})"
+                )
+        if self.dpr and self.sel_mode != "sync":
+            errors.append(f"dpr requires sel_mode sync (got {self.sel_mode})")
+        if self.verible_flags is not None and not isinstance(self.verible_flags, dict):
+            errors.append("verible_flags must be a JSON object")
+        return errors
+
+    def validated(self):
+        errors = self.errors()
+        if errors:
+            raise ValueError("; ".join(errors))
+        return self
+
+    def manifest_dict(self):
+        return {
+            "arch": self.arch,
+            "pclk_mode": self.pclk_mode,
+            "sel_mode": self.sel_mode,
+            "dpr": bool(self.dpr),
+        }
+
+
+def legacy_options(*, arch=None, pclk_mode="pclk_as_phy_output", sel_mode="sync",
+                   dpr=False, verible_path=None, verible_flags=None, quiet=False):
+    """Build options for the programmatic API's historical keyword form."""
+    if arch is None:
+        arch = PCLK_MODE_ARCH.get(pclk_mode, "original_pipe")
+    return GenerationOptions(
+        arch=arch,
+        pclk_mode=pclk_mode,
+        sel_mode=sel_mode,
+        dpr=dpr,
+        verible_path=verible_path,
+        verible_flags=verible_flags,
+        quiet=quiet,
+    )
 
 
 def validate_arch(arch, pclk_mode):

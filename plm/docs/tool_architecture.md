@@ -42,15 +42,18 @@ Generated Code）和一份 `pyproject.toml` + `src/` 布局的示例，要求照
 `model.py`（Controller/Signal/LaneGroup/Config，解析+校验+report，保持
 一个文件，因为原文件内部已经组织得足够好，硬拆 parser/validator 没有
 额外收益）、`paths.py`（配置集路径解析）、`verible.py`
-（verible-verilog-format 调用）、`gen_flags.py`（生成 flag 的取值表，
-CLI 默认值和前端编辑器两种用法故意放一个文件，因为操作的是同一份
-文件格式，按"操作对象"分而不是按"谁在用"分更好找）、`workspace.py`
+（verible-verilog-format 调用）、`gen_flags.py`（统一的不可变
+`GenerationOptions` 和参数组合规则）、`plan.py`（一次解析后供 RTL、TB、
+Report 共用的 `GenerationPlan`）、`validation.py`（format、topology、
+generation、output 四层错误）、`workspace.py`
 （CSV/工作区读写，确认过生成流程本身不用，只有前端编辑器用，但依然
 算 core 而不是 frontend，因为"共享的非 UI 逻辑"是这里 core 的定义，
 不是"只有生成流程用的才算 core"）、`generator/{rtl,tb}.py`（纯文本
 生成，零文件 I/O）、`exporter.py`（**这次重构真正的收益所在**：把两个
 老脚本 `main()` 里的文件 I/O 编排单独拆出来，不带 argparse/sys.exit，
-`export_all()` 成为调用方统一使用的事务化导出入口；RTL 和 TB 在同一 staging 中生成，任何一边失败都保留两边旧输出）。
+`export_all()` 成为调用方统一使用的事务化导出入口；RTL 和 TB 在同一 staging
+中生成，写入匹配的 Manifest，再做文件/hash/端口/宽度/模板残留自检；任何
+一步失败都保留两边旧输出）。
 
 **统一 CLI 的设计**：`plm generate --config X [...]` +
 `plm validate --config X`，纯 stdlib argparse，没引入 click/typer——

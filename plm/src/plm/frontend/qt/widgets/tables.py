@@ -24,14 +24,6 @@ def drag_handle_icon():
     return _DRAG_HANDLE_ICON
 
 
-def drag_handle_item():
-    item = QtWidgets.QTableWidgetItem()
-    item.setIcon(drag_handle_icon())
-    item.setToolTip("Drag to reorder")
-    item.setTextAlignment(QtCore.Qt.AlignCenter)
-    return item
-
-
 def _ui_scale():
     """Scaling factor relative to the 13 px design baseline."""
     app = QtWidgets.QApplication.instance()

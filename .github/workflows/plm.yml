@@ -35,7 +35,7 @@ jobs:
           python-version: ${{ matrix.python }}
           working-directory: plm
           enable-cache: true
-          cache-dependency-glob: plm/uv.lock
+          cache-dependency-glob: uv.lock
       # The PyQt5 wheel links against libGL/libEGL even for the offscreen
       # platform, and the Linux runner image doesn't ship them.
       - if: runner.os == 'Linux'
@@ -56,7 +56,7 @@ jobs:
           python-version: "3.12"
           working-directory: plm
           enable-cache: true
-          cache-dependency-glob: plm/uv.lock
+          cache-dependency-glob: uv.lock
       - run: sudo apt-get update && sudo apt-get install -y verilator
       - run: uv sync --locked
       - run: PLM_RUN_RTL_SIM=1 uv run python -m unittest -v tests.test_dpr_phy_input
@@ -73,7 +73,7 @@ jobs:
           python-version: "3.12"
           working-directory: plm
           enable-cache: true
-          cache-dependency-glob: plm/uv.lock
+          cache-dependency-glob: uv.lock
       - run: uv build --wheel
       - run: uv venv wheel-venv --python 3.12
       - run: uv pip install --python wheel-venv/bin/python --no-deps dist/plm-*.whl

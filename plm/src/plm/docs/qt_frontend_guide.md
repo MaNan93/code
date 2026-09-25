@@ -76,9 +76,7 @@ mode=0  lane0=0-0  lane1=0-1  lane2=1-0
 | 按钮 | 功能 |
 |---|---|
 | Validate | 检查配置 |
-| Generate RTL | 生成 RTL 到 `rtl/src/` |
-| Generate TB | 生成 testbench 到 `tb/` |
-| Generate All | RTL + TB |
+| Generate | 使用同一组参数生成 RTL 和 testbench；全部成功后一起更新输出 |
 
 输出文件自动写到 `<config_dir>/../rtl/` 和 `<config_dir>/../tb/`。
 
@@ -93,7 +91,7 @@ mode=0  lane0=0-0  lane1=0-1  lane2=1-0
 3. Lane Mapping tab：填 mode 和 lane 分配
 4. Pipe Signals tab：用默认值或自己改
 5. Generation tab：选生成参数（不改就用默认），点 **Validate** 检查
-6. 检查通过：点 **Generate All**
+6. 检查通过：点 **Generate**
 7. 侧边栏点 **Save**
 
 ## 常见操作

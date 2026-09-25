@@ -218,9 +218,8 @@ plm/
 ```
 
 一个配置集（`test/<SET>/`）只由 `config/` 下的三个 CSV 定义；
-`rtl/`、`tb/` 都是生成产物，重新生成前不需要手动清理：`generate rtl`
-会先把 `rtl/common/` 整个清空重建，`rtl/src/`、`flist.f` 按文件名覆盖
-写入；`generate tb` 把 `tb/tb_pipe_lane_mapper.sv` 按文件名覆盖写入。
+`rtl/`、`tb/` 都是生成产物，重新生成前不需要手动清理。统一的 `generate`
+会在 staging 中重建生成内容，并在 RTL 与 testbench 都成功后一起更新两边。
 
 ## 2. 配置文件格式（`config/` 下三个 CSV）
 

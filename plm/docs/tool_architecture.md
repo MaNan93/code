@@ -50,10 +50,9 @@ CLI 默认值和前端编辑器两种用法故意放一个文件，因为操作�
 不是"只有生成流程用的才算 core"）、`generator/{rtl,tb}.py`（纯文本
 生成，零文件 I/O）、`exporter.py`（**这次重构真正的收益所在**：把两个
 老脚本 `main()` 里的文件 I/O 编排单独拆出来，不带 argparse/sys.exit，
-`export_rtl()`/`export_tb()` 变成任何调用方——CLI、以后可能的测试、
-别的脚本——都能直接拿来用的纯函数）。
+`export_all()` 成为调用方统一使用的事务化导出入口；RTL 和 TB 在同一 staging 中生成，任何一边失败都保留两边旧输出）。
 
-**统一 CLI 的设计**：`plm generate rtl|tb|all --config X [...]` +
+**统一 CLI 的设计**：`plm generate --config X [...]` +
 `plm validate --config X`，纯 stdlib argparse，没引入 click/typer——
 这个工具依赖本来就只有 stdlib + Flask + PyQt5，为一个 CLI 单独加一个新
 依赖不值得。旧的 `plm_gen_rtl.py`/`plm_gen_tb.py` 这两个脚本名**直接
@@ -99,7 +98,7 @@ project 吗？"——这其实是两件独立的事，当时用问题拆开确�
 
 ## 3. 统一入口脚本：从 `plm`（无后缀）到 `run.py`
 
-用户嫌 `python -m plm.cli.main generate rtl --config X` 这种深路径调用
+用户嫌 `python -m plm.cli.main generate --config X` 这种深路径调用
 麻烦，要求"在 plm/ 下生成一个文件做工具的统一入口"。第一版做了一个
 仓库根目录下、**无扩展名**、带 shebang 的文件，名字就叫 `plm`——
 选择无扩展名是为了避开一个真实的坑：如果这个文件叫 `plm.py`，摆在
@@ -162,7 +161,7 @@ project 吗？"——这其实是两件独立的事，当时用问题拆开确�
 workspace 时恢复上次的选择；前端生成时仍然把 flag 拼在命令行上。
 
 **原来是怎么回事**：一套配置集可以在自己的 `config/gen_flags.txt` 里固定这几个
-参数，`plm generate rtl/tb/all` 启动时会先做一次"丢弃式"预解析拿到 `--config`，
+参数，旧版各 generate 子命令启动时会先做一次"丢弃式"预解析拿到 `--config`，
 读出那个文件，再把里面的键值翻译成 argv token 塞在真正的 argv 前面，当作
 argparse 的默认值。好处是配置集自包含——`make maxpclk` 不用记得加
 `--pclk-mode pclk_as_phy_input`。
@@ -201,4 +200,4 @@ argparse 的默认值。好处是配置集自包含——`make maxpclk` 不用�
 - `workspace_content()` / `save_workspace_content()` 的 payload 里仍然有 `gen_flags` 键，
   只是这个键现在只在前端和磁盘之间往返，不再喂给 CLI。
 - Qt 的 `_run_tool` 现在自己拼 `--arch/--pclk-mode/--sel-mode/--dpr`
-  （`_gen_flag_args()`），`generate tb` 那一路不传 `--sel-mode`，因为那个子命令没有这个选项。
+  （`_gen_flag_args()`）；统一 Generate 会把同一组参数交给整套 RTL/TB 生成事务。

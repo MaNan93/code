@@ -361,6 +361,20 @@ class GenerationPlanTests(unittest.TestCase):
         self.assertNotEqual(first.generator_fingerprint, second.generator_fingerprint)
         self.assertNotEqual(first.generation_key, second.generation_key)
 
+    def test_config_hash_is_independent_of_checkout_line_endings(self):
+        source = ROOT / "test" / "bifurcate" / "config"
+        baseline = GenerationPlan.build(Config(source), GenerationOptions())
+        with tempfile.TemporaryDirectory() as td:
+            config_dir = Path(td)
+            for name in ("controllers.csv", "lane_mapping.csv", "pipe_signals.csv"):
+                content = (source / name).read_bytes().replace(b"\r\n", b"\n")
+                (config_dir / name).write_bytes(content.replace(b"\n", b"\r\n"))
+            windows_style = GenerationPlan.build(
+                Config(config_dir), GenerationOptions()
+            )
+        self.assertEqual(baseline.config_hash, windows_style.config_hash)
+        self.assertEqual(baseline.generation_key, windows_style.generation_key)
+
     def test_validation_layers_distinguish_format_topology_and_options(self):
         with tempfile.TemporaryDirectory() as td:
             with self.assertRaises(ValidationError) as caught:

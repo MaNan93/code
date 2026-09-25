@@ -31,6 +31,12 @@ def _file_hash(path):
     return hashlib.sha256(Path(path).read_bytes()).hexdigest()
 
 
+def _write_text(path, content):
+    """Write generated text with stable LF endings on every platform."""
+    with Path(path).open("w", encoding="utf-8", newline="\n") as handle:
+        handle.write(content)
+
+
 def _output_files(directory):
     directory = Path(directory)
     return sorted(
@@ -47,9 +53,9 @@ def _write_manifest(plan, directory, kind):
         path.relative_to(directory).as_posix(): _file_hash(path)
         for path in _output_files(directory)
     }
-    (directory / MANIFEST_NAME).write_text(
+    _write_text(
+        directory / MANIFEST_NAME,
         json.dumps(manifest, indent=2, sort_keys=True) + "\n",
-        encoding="utf-8",
     )
     return manifest
 
@@ -269,8 +275,9 @@ def _export_rtl_into(cfg, out_dir, *, pclk_mode="pclk_as_phy_output", sel_mode="
     for f in COMMON_DIR.iterdir():
         if f.is_file():
             if f.suffix == ".sv":
-                (common_dst / f.name).write_text(
-                    format_sv(f.read_text(encoding="utf-8"), verible_path, verible_flags), encoding="utf-8"
+                _write_text(
+                    common_dst / f.name,
+                    format_sv(f.read_text(encoding="utf-8"), verible_path, verible_flags),
                 )
             else:
                 shutil.copy2(f, common_dst / f.name)
@@ -292,7 +299,7 @@ def _export_rtl_into(cfg, out_dir, *, pclk_mode="pclk_as_phy_output", sel_mode="
     for p, c in files.items():
         if p.suffix == ".sv":
             c = format_sv(c, verible_path, verible_flags)
-        p.write_text(c, encoding="utf-8")
+        _write_text(p, c)
         print(f"  generated {shown_out / p.relative_to(out_dir)}")
 
     if not quiet:
@@ -313,13 +320,14 @@ def _export_tb_into(cfg, out_rtl, *, pclk_mode="pclk_as_phy_output", dpr=False,
     # being hand-maintained per set and silently missing wherever nobody
     # remembered to add it.
     if TB_MAKEFILE.is_file():
-        shutil.copy2(TB_MAKEFILE, tb_dir / "makefile")
+        _write_text(tb_dir / "makefile", TB_MAKEFILE.read_text(encoding="utf-8"))
 
     shown_tb = Path(display_tb) if display_tb is not None else tb_dir
     print(f"TB    : {shown_tb}")
     tb_file = tb_dir / "tb_pipe_lane_mapper.sv"
-    tb_file.write_text(
-        format_sv(tb.gen_tb(cfg, pclk_mode, dpr), verible_path, verible_flags), encoding="utf-8"
+    _write_text(
+        tb_file,
+        format_sv(tb.gen_tb(cfg, pclk_mode, dpr), verible_path, verible_flags),
     )
     print(f"  generated {shown_tb / tb_file.name}")
 

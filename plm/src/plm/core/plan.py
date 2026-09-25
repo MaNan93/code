@@ -20,6 +20,12 @@ GENERATOR_FILES = (
 )
 
 
+def _normalized_text_bytes(path):
+    """Hash text by content, independent of the checkout's line endings."""
+    text = Path(path).read_text(encoding="utf-8")
+    return text.replace("\r\n", "\n").replace("\r", "\n").encode("utf-8")
+
+
 def _generator_fingerprint():
     """Hash every source asset that can change generated RTL/TB semantics."""
     core_dir = Path(__file__).resolve().parent
@@ -30,7 +36,7 @@ def _generator_fingerprint():
         relative = path.relative_to(core_dir).as_posix()
         digest.update(relative.encode("utf-8"))
         digest.update(b"\0")
-        digest.update(path.read_bytes())
+        digest.update(_normalized_text_bytes(path))
         digest.update(b"\0")
     return digest.hexdigest()
 
@@ -41,7 +47,7 @@ def _config_hash(config_dir):
         path = Path(config_dir) / name
         digest.update(name.encode("utf-8"))
         digest.update(b"\0")
-        digest.update(path.read_bytes())
+        digest.update(_normalized_text_bytes(path))
         digest.update(b"\0")
     return digest.hexdigest()
 

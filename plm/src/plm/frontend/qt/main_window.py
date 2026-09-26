@@ -20,7 +20,6 @@ import os
 import shutil
 import subprocess
 import sys
-import tempfile
 import time
 from pathlib import Path
 
@@ -35,13 +34,11 @@ from plm.core.gen_flags import (
     GenerationOptions,
 )
 from plm.core.exporter import output_set_matches_plan
-from plm.core.model import Config
 from plm.core.paths import CONFIGS_ROOT, DOCS_DIR, PLM_ROOT, is_deletable_workspace, is_workspace_root
 from plm.core.validation import (
     ValidationError,
     ValidationIssue,
-    load_generation_plan,
-    plan_from_config,
+    load_generation_plan_from_payload,
 )
 from plm.core.workspace import save_workspace_content, scaffold_default_content, workspace_content
 from plm.frontend.qt.widgets import sap_icons
@@ -612,6 +609,10 @@ class MainWindow(QtWidgets.QMainWindow):
         QtCore.QTimer.singleShot(0, self._position_preview_controls)
 
     def eventFilter(self, watched, event):
+        if event.type() == QtCore.QEvent.ApplicationActivate:
+            QtCore.QTimer.singleShot(
+                0, lambda: self._update_generation_freshness(verify_files=True)
+            )
         if (
             getattr(self, "preview_file_tree", None)
             and self.preview_file_tree.isVisible()
@@ -2302,13 +2303,9 @@ class MainWindow(QtWidgets.QMainWindow):
         issues = ()
         self._live_plan = None
         try:
-            with tempfile.TemporaryDirectory() as scratch:
-                root = Path(scratch) / "live-validation"
-                save_workspace_content(root, self._gather_payload())
-                self._live_plan = load_generation_plan(
-                    root / "config",
-                    self._current_generation_options(),
-                )
+            self._live_plan = load_generation_plan_from_payload(
+                self._gather_payload(), self._current_generation_options()
+            )
         except ValidationError as error:
             issues = error.issues
         except (OSError, ValueError) as error:
@@ -2833,9 +2830,8 @@ class MainWindow(QtWidgets.QMainWindow):
     def _refresh_topology_summary(self):
         """Render Config.report() for what would be generated right now.
 
-        Written to a scratch copy rather than read back from the workspace,
-        so the summary describes the edits in front of the user instead of
-        whatever was last saved."""
+        Built directly from the editor's in-memory rows, so the summary
+        describes unsaved edits without touching the filesystem."""
         if not getattr(self, "topology_summary", None):
             return
         if self.current_workspace is None:
@@ -2845,19 +2841,14 @@ class MainWindow(QtWidgets.QMainWindow):
         if payload == getattr(self, "_topology_payload", None):
             return
         try:
-            with tempfile.TemporaryDirectory() as scratch:
-                root = Path(scratch) / "summary"
-                save_workspace_content(root, payload)
-                config = Config(root / "config")
-                try:
-                    plan = plan_from_config(config, self._current_generation_options())
-                    text = plan.report()
-                except ValidationError as error:
-                    text = "Config is not valid yet:\n" + "\n".join(
-                        f"  - {issue}" for issue in error.issues
-                    )
-        except SystemExit as error:
-            text = f"Config cannot be read yet:\n{error}"
+            plan = load_generation_plan_from_payload(
+                payload, self._current_generation_options()
+            )
+            text = plan.report()
+        except ValidationError as error:
+            text = "Config is not valid yet:\n" + "\n".join(
+                f"  - {issue}" for issue in error.issues
+            )
         except Exception as error:
             # This runs from Qt slots/timers: never let an unexpected model
             # exception terminate the GUI.

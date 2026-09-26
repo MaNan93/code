@@ -10,6 +10,7 @@ from plm.core.verible import formatter_identity
 
 
 CONFIG_FILES = ("controllers.csv", "lane_mapping.csv", "pipe_signals.csv")
+MANIFEST_SCHEMA_VERSION = 2
 GENERATOR_FILES = (
     "plan.py",
     "exporter.py",
@@ -149,7 +150,7 @@ class GenerationPlan:
 
     def manifest_base(self):
         return {
-            "schema_version": 2,
+            "schema_version": MANIFEST_SCHEMA_VERSION,
             "generation_key": self.generation_key,
             "config_hash": self.config_hash,
             "generator_fingerprint": self.generator_fingerprint,

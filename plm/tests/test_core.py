@@ -8,7 +8,7 @@ from unittest import mock
 from plm.core import exporter
 from plm.core.gen_flags import GenerationOptions
 from plm.core.model import Config
-from plm.core.plan import GenerationPlan
+from plm.core.plan import GenerationPlan, MANIFEST_SCHEMA_VERSION
 from plm.core.service import generate
 from plm.core.paths import DOCS_DIR, WORKSPACE_MARKER, is_deletable_workspace
 from plm.core.workspace import (
@@ -18,7 +18,11 @@ from plm.core.workspace import (
     save_workspace_content,
     write_aligned_csv,
 )
-from plm.core.validation import ValidationError, load_generation_plan
+from plm.core.validation import (
+    ValidationError,
+    load_generation_plan,
+    load_generation_plan_from_payload,
+)
 from plm.core import validation
 
 
@@ -276,6 +280,7 @@ class ExporterTests(unittest.TestCase):
             ):
                 self.assertEqual(rtl[field], tb[field])
             self.assertEqual(rtl["generation_key"], plan.generation_key)
+            self.assertEqual(rtl["schema_version"], MANIFEST_SCHEMA_VERSION)
             self.assertIn("src/pipe_lane_mapper.sv", rtl["files"])
             self.assertIn("tb_pipe_lane_mapper.sv", tb["files"])
 
@@ -335,6 +340,29 @@ class ExporterTests(unittest.TestCase):
 
 
 class GenerationPlanTests(unittest.TestCase):
+    def test_editor_payload_validation_matches_saved_config(self):
+        payload = valid_payload()
+        memory_plan = load_generation_plan_from_payload(payload, GenerationOptions())
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            save_workspace_content(root, payload)
+            disk_plan = load_generation_plan(root / "config", GenerationOptions())
+
+        self.assertEqual(memory_plan.config_hash, disk_plan.config_hash)
+        self.assertEqual(memory_plan.generation_key, disk_plan.generation_key)
+
+    def test_editor_payload_duplicate_errors_keep_both_row_coordinates(self):
+        payload = valid_payload()
+        payload["controllers"].append({
+            "ctrl_id": "0", "ctrl_name": "CtrlB", "max_width": "2",
+        })
+        with self.assertRaises(ValidationError) as caught:
+            load_generation_plan_from_payload(payload, GenerationOptions())
+        self.assertEqual(
+            [(issue.table, issue.row, issue.column) for issue in caught.exception.issues],
+            [("controllers", 0, "ctrl_id"), ("controllers", 1, "ctrl_id")],
+        )
+
     def test_config_snapshot_drives_both_parsing_and_hash(self):
         source = ROOT / "test" / "bifurcate" / "config"
         with tempfile.TemporaryDirectory() as td:

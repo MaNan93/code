@@ -44,8 +44,8 @@
       "wrap_end_else_clauses": "true"
     }
   },
-  "generation_key": "e5e2412109d92619b98ae6f2b9de2327b3d7bfa5700f307619cc620fe6e27a0f",
-  "generator_fingerprint": "28ec83c8814a8ee51426a19607111c382bb0a7442461654fb3356e4c3479acce",
+  "generation_key": "01fcd6e101379436dd2a69454bdaf748094b1f42788fbda1d444200ca4875c8d",
+  "generator_fingerprint": "ddc5fb8df9921c8477a5185d2c60fdb8b829d87d47068aa7863ba219f2f21ade",
   "options": {
     "arch": "serdes",
     "dpr": false,

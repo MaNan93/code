@@ -25,6 +25,8 @@ from plm.frontend.qt.widgets.theme import (
     build_stylesheet,
 )
 from plm.core.validation import ValidationError, ValidationIssue
+from plm.core.gen_flags import GenerationOptions
+from plm.core.service import generate
 
 
 class QtFrontendTests(unittest.TestCase):
@@ -624,6 +626,38 @@ class QtFrontendTests(unittest.TestCase):
 
         with self.assertRaises(ValueError):
             window._set_generation_state("CANCELLED")
+
+    def test_application_activation_rechecks_output_hashes(self):
+        window = self.make_window()
+        with mock.patch.object(window, "_update_generation_freshness") as refresh:
+            window.eventFilter(
+                self.app, QtCore.QEvent(QtCore.QEvent.ApplicationActivate)
+            )
+            self.process_events()
+        refresh.assert_called_with(verify_files=True)
+
+    def test_application_activation_marks_externally_edited_output_stale(self):
+        workspace = self._sample_workspace()
+        generate(
+            workspace / "config",
+            workspace / "rtl",
+            GenerationOptions(quiet=True),
+        )
+        window = self.make_window()
+        window._open_workspace(workspace)
+        self.assertEqual(window._generation_state, "UP_TO_DATE")
+
+        generated = workspace / "rtl" / "src" / "pipe_lane_mapper.sv"
+        generated.write_text(
+            generated.read_text(encoding="utf-8") + "// external edit\n",
+            encoding="utf-8",
+        )
+        window.eventFilter(
+            self.app, QtCore.QEvent(QtCore.QEvent.ApplicationActivate)
+        )
+        self.process_events()
+
+        self.assertEqual(window._generation_state, "STALE")
 
     def test_bottom_panel_is_log_and_report(self):
         """Two pages, one widget each: the activity log and Config.report().

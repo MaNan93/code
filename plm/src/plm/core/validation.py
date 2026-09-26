@@ -2,12 +2,14 @@
 
 import csv
 from dataclasses import dataclass
+import io
 from pathlib import Path
 import re
 
 from plm.core.model import Config
 from plm.core.plan import GenerationPlan
 from plm.core.plan import CONFIG_FILES
+from plm.core.workspace import config_snapshot_from_payload
 
 
 @dataclass(frozen=True)
@@ -37,11 +39,16 @@ _TABLES = {
 }
 
 
-def _csv_rows(path):
+def _csv_rows(path, content=None):
     try:
-        with Path(path).open(newline="", encoding="utf-8") as handle:
+        handle = (
+            Path(path).open(newline="", encoding="utf-8")
+            if content is None
+            else io.StringIO(content.decode("utf-8"), newline="")
+        )
+        with handle:
             return list(csv.DictReader(handle))
-    except OSError:
+    except (OSError, UnicodeError, csv.Error):
         return []
 
 
@@ -58,7 +65,7 @@ def _column_from_message(filename, message):
     return "signal_name"
 
 
-def _format_issues(config_dir, error):
+def _format_issues(config_dir, error, files=None):
     """Translate parser diagnostics into table coordinates for every front end."""
     message = str(error)
     filename = next((name for name in _TABLES if name in message), None)
@@ -86,7 +93,9 @@ def _format_issues(config_dir, error):
         key, value = duplicate
         display_message = message.replace("duplicate ctrl_id", "Duplicate ctrl_id")
         rows = [
-            index for index, data in enumerate(_csv_rows(path))
+            index for index, data in enumerate(
+                _csv_rows(path, files.get(filename) if files else None)
+            )
             if str(data.get(key, "")).strip() == value
         ]
         mapped_column = 0 if filename == "lane_mapping.csv" else key
@@ -142,7 +151,7 @@ def _load_validated_config(config_dir, files):
     try:
         config = Config(config_dir, file_contents=files)
     except (OSError, SystemExit, UnicodeError, csv.Error) as error:
-        raise ValidationError(_format_issues(config_dir, error)) from error
+        raise ValidationError(_format_issues(config_dir, error, files)) from error
 
     topology = [_topology_issue(config, message) for message in config.validate()]
     if topology:
@@ -166,16 +175,26 @@ def load_generation_plan(config_dir, options):
         raise ValidationError(_format_issues(config_dir, error)) from error
     config = _load_validated_config(config_dir, files)
 
-    option_issues = [
-        ValidationIssue("generation", message) for message in options.errors()
-    ]
+    return _build_generation_plan(config, options, files)
+
+
+def load_generation_plan_from_payload(payload, options):
+    """Validate unsaved front-end rows without creating a temporary workspace."""
+    virtual_config_dir = Path("<editor>") / "config"
+    try:
+        files = config_snapshot_from_payload(payload)
+    except ValueError as error:
+        raise ValidationError([ValidationIssue("format", str(error))]) from error
+    config = _load_validated_config(virtual_config_dir, files)
+    return _build_generation_plan(config, options, files)
+
+
+def _build_generation_plan(config, options, files):
+    option_issues = [ValidationIssue("generation", message) for message in options.errors()]
     if option_issues:
         raise ValidationError(option_issues)
-
     try:
-        return GenerationPlan.build(
-            config, options, validated=True, config_files=files
-        )
+        return GenerationPlan.build(config, options, validated=True, config_files=files)
     except (OSError, UnicodeError, ValueError) as error:
         raise ValidationError(
             [ValidationIssue("generation", f"could not fingerprint generation inputs: {error}")]

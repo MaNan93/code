@@ -24,6 +24,7 @@ logic used by more than one front end, same as the rest of plm.core.
 
 from pathlib import Path
 import csv
+import io
 import os
 import shutil
 import tempfile
@@ -220,6 +221,65 @@ def write_aligned_csv(path, header, rows, eol):
         wr = csv.writer(f, lineterminator=eol)
         wr.writerow(header)
         wr.writerows(rows)
+
+
+def _csv_bytes(header, rows):
+    """Serialize editor rows exactly like the on-disk CSV writers, in memory."""
+    stream = io.StringIO(newline="")
+    writer = csv.writer(stream, lineterminator="\n")
+    writer.writerow(header)
+    writer.writerows(rows)
+    return stream.getvalue().encode("utf-8")
+
+
+def config_snapshot_from_payload(payload):
+    """Return the three config CSVs for a front-end payload without file I/O."""
+    controllers = payload.get("controllers") or []
+    signals = payload.get("signals") or []
+    mapping = payload.get("mapping") or {}
+    if not controllers:
+        raise ValueError("Controllers table is empty -- at least one controller is required.")
+    if not signals:
+        raise ValueError("Pipe Signals table is empty -- at least one signal is required.")
+    mapping_rows = mapping.get("rows") or []
+    if not mapping_rows:
+        raise ValueError("Lane Mapping table is empty -- at least one mode row is required.")
+    try:
+        lane_count = int(mapping.get("lane_count") or 4)
+    except (TypeError, ValueError) as error:
+        raise ValueError("lane_count must be an integer") from error
+    if lane_count < 1:
+        raise ValueError("lane_count must be >= 1")
+
+    controller_columns = ("ctrl_id", "ctrl_name", "max_width")
+    signal_columns = (
+        "signal_name", "signal_type", "direction", "width", "safe_state", "tie_off",
+    )
+    mapping_columns = ["mode"] + [f"lane{lane}" for lane in range(lane_count)]
+    return {
+        "controllers.csv": _csv_bytes(
+            controller_columns,
+            [[row.get(column, "") for column in controller_columns] for row in controllers],
+        ),
+        "pipe_signals.csv": _csv_bytes(
+            signal_columns,
+            [
+                [
+                    row.get("signal_name", ""),
+                    row.get("signal_type", "") or "perlane",
+                    row.get("direction", ""),
+                    row.get("width", ""),
+                    row.get("safe_state", ""),
+                    row.get("tie_off", ""),
+                ]
+                for row in signals
+            ],
+        ),
+        "lane_mapping.csv": _csv_bytes(
+            mapping_columns,
+            [[row.get(column, "") for column in mapping_columns] for row in mapping_rows],
+        ),
+    }
 
 
 def write_controllers_csv(path, rows):

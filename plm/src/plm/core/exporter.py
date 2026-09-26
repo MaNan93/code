@@ -17,7 +17,7 @@ import tempfile
 import uuid
 
 from plm.core.generator import rtl, tb
-from plm.core.plan import GenerationPlan
+from plm.core.plan import GenerationPlan, MANIFEST_SCHEMA_VERSION
 from plm.core.paths import COMMON_DIR, TB_MAKEFILE
 from plm.core.validation import ValidationError, ValidationIssue
 from plm.core.verible import format_sv
@@ -25,7 +25,6 @@ from plm.core.verible import format_sv
 
 OUTPUT_DIRS = ("rtl", "tb")
 MANIFEST_NAME = "manifest.json"
-MANIFEST_SCHEMA_VERSION = 2
 _SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 
 

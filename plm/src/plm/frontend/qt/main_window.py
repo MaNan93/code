@@ -2355,8 +2355,9 @@ class MainWindow(QtWidgets.QMainWindow):
     def _update_generation_freshness(self, *, verify_files=False):
         if self._generation_busy or self.current_workspace is None:
             return
-        current = self._live_plan is not None and output_set_matches_plan(
-            self._live_plan,
+        plan = getattr(self, "_live_plan", None)
+        current = plan is not None and output_set_matches_plan(
+            plan,
             self.current_workspace,
             verify_files=verify_files,
         )

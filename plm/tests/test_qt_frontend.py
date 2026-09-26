@@ -264,7 +264,7 @@ class QtFrontendTests(unittest.TestCase):
 
     def test_generate_process_can_import_source_checkout(self):
         window = self.make_window()
-        window.current_workspace = Path(self.temp.name) / "quad"
+        window._open_workspace(self._sample_workspace())
         with mock.patch.object(
             window, "_save_before_action", return_value=True
         ), mock.patch.object(QtCore.QProcess, "start"):

@@ -312,10 +312,10 @@ def _commit_output_set(staged, workspace):
             _remove_path(backup)
 
 
-def _export_rtl_into(cfg, out_dir, *, pclk_mode="pclk_as_phy_output", sel_mode="sync", dpr=False,
-                     verible_path=None, verible_flags=None, quiet=False, display_out=None):
-    """Write the full RTL output for cfg into out_dir (a <set>/rtl/
+def _export_rtl_into(plan, out_dir, *, display_out=None):
+    """Write the full RTL output for plan into out_dir (a <set>/rtl/
     directory): a common/ snapshot, src/*.sv, flist.f."""
+    options = plan.options
     src = out_dir / "src"
     common_dst = out_dir / "common"
     # Wipe and recreate both -- otherwise a file that gets renamed or
@@ -340,7 +340,11 @@ def _export_rtl_into(cfg, out_dir, *, pclk_mode="pclk_as_phy_output", sel_mode="
             if f.suffix == ".sv":
                 _write_text(
                     common_dst / f.name,
-                    format_sv(f.read_text(encoding="utf-8"), verible_path, verible_flags),
+                    format_sv(
+                        f.read_text(encoding="utf-8"),
+                        options.verible_path,
+                        options.verible_flags,
+                    ),
                 )
             else:
                 shutil.copy2(f, common_dst / f.name)
@@ -348,33 +352,42 @@ def _export_rtl_into(cfg, out_dir, *, pclk_mode="pclk_as_phy_output", sel_mode="
     shown_out = Path(display_out) if display_out is not None else out_dir
     print(f"RTL   : {shown_out}")
     files = {
-        src / "pipe_lane_signal_pkg.sv": rtl.gen_pkg(cfg, dpr),
-        src / "pipe_lane_mode_dec.sv": rtl.gen_decoder(cfg, dpr),
-        src / "pipe_lane_sel_gen.sv": rtl.gen_sel_gen(cfg, sel_mode, pclk_mode, dpr),
-        src / "pipe_lane_clk_mux.sv": rtl.gen_clk_mux(cfg, pclk_mode, dpr),
-        src / "pipe_lane_rst_mux.sv": rtl.gen_rst_mux(cfg, dpr),
-        src / "pipe_lane_data_m2p.sv": rtl.gen_data_m2p(cfg, pclk_mode, dpr),
-        src / "pipe_lane_data_p2m.sv": rtl.gen_data_p2m(cfg, pclk_mode, dpr),
-        src / "pipe_lane_mapper.sv": rtl.gen_top(cfg, pclk_mode, sel_mode, dpr),
-        src / "pipe_lane_mapper_connection.sv": rtl.gen_connection(cfg, pclk_mode, dpr),
-        out_dir / "flist.f": rtl.gen_filelist(cfg),
+        src / "pipe_lane_signal_pkg.sv": rtl.gen_pkg(plan, options.dpr),
+        src / "pipe_lane_mode_dec.sv": rtl.gen_decoder(plan, options.dpr),
+        src / "pipe_lane_sel_gen.sv": rtl.gen_sel_gen(
+            plan, options.sel_mode, options.pclk_mode, options.dpr
+        ),
+        src / "pipe_lane_clk_mux.sv": rtl.gen_clk_mux(
+            plan, options.pclk_mode, options.dpr
+        ),
+        src / "pipe_lane_rst_mux.sv": rtl.gen_rst_mux(plan, options.dpr),
+        src / "pipe_lane_data_m2p.sv": rtl.gen_data_m2p(
+            plan, options.pclk_mode, options.dpr
+        ),
+        src / "pipe_lane_data_p2m.sv": rtl.gen_data_p2m(
+            plan, options.pclk_mode, options.dpr
+        ),
+        src / "pipe_lane_mapper.sv": rtl.gen_top(
+            plan, options.pclk_mode, options.sel_mode, options.dpr
+        ),
+        src / "pipe_lane_mapper_connection.sv": rtl.gen_connection(
+            plan, options.pclk_mode, options.dpr
+        ),
+        out_dir / "flist.f": rtl.gen_filelist(plan),
     }
     for p, c in files.items():
         if p.suffix == ".sv":
-            c = format_sv(c, verible_path, verible_flags)
+            c = format_sv(c, options.verible_path, options.verible_flags)
         _write_text(p, c)
         print(f"  generated {shown_out / p.relative_to(out_dir)}")
 
-    if not quiet:
-        print()
-        print(cfg.report())
 
 
-def _export_tb_into(cfg, out_rtl, *, pclk_mode="pclk_as_phy_output", dpr=False,
-                    verible_path=None, verible_flags=None, quiet=False, display_tb=None):
-    """Write the testbench for cfg into out_rtl.parent / "tb" (out_rtl is
+def _export_tb_into(plan, out_rtl, *, display_tb=None):
+    """Write the testbench for plan into out_rtl.parent / "tb" (out_rtl is
     the RTL output dir a set's resolve_set() gives back -- the testbench
     always lives alongside it, not inside it)."""
+    options = plan.options
     tb_dir = out_rtl.parent / "tb"
     tb_dir.mkdir(parents=True, exist_ok=True)
 
@@ -390,14 +403,13 @@ def _export_tb_into(cfg, out_rtl, *, pclk_mode="pclk_as_phy_output", dpr=False,
     tb_file = tb_dir / "tb_pipe_lane_mapper.sv"
     _write_text(
         tb_file,
-        format_sv(tb.gen_tb(cfg, pclk_mode, dpr), verible_path, verible_flags),
+        format_sv(
+            tb.gen_tb(plan, options.pclk_mode, options.dpr),
+            options.verible_path,
+            options.verible_flags,
+        ),
     )
     print(f"  generated {shown_tb / tb_file.name}")
-
-    if not quiet:
-        print()
-        print(cfg.report())
-
 
 def export_all(plan, out_rtl):
     """Generate, self-check and atomically install one matched RTL/TB set."""
@@ -410,20 +422,11 @@ def export_all(plan, out_rtl):
     try:
         _export_rtl_into(
             plan, staged / "rtl",
-            pclk_mode=options.pclk_mode,
-            sel_mode=options.sel_mode,
-            dpr=options.dpr,
-            verible_path=options.verible_path,
-            verible_flags=options.verible_flags,
-            quiet=True, display_out=workspace / "rtl",
+            display_out=workspace / "rtl",
         )
         _export_tb_into(
             plan, staged / "rtl",
-            pclk_mode=options.pclk_mode,
-            dpr=options.dpr,
-            verible_path=options.verible_path,
-            verible_flags=options.verible_flags,
-            quiet=True, display_tb=workspace / "tb",
+            display_tb=workspace / "tb",
         )
         rtl_manifest = _write_manifest(plan, staged / "rtl", "rtl")
         tb_manifest = _write_manifest(plan, staged / "tb", "tb")

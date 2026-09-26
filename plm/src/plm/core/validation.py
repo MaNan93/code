@@ -199,18 +199,3 @@ def _build_generation_plan(config, options, files):
         raise ValidationError(
             [ValidationIssue("generation", f"could not fingerprint generation inputs: {error}")]
         ) from error
-
-
-def plan_from_config(config, options):
-    """Validate an already parsed Config and create its shared plan."""
-    topology = [_topology_issue(config, message) for message in config.validate()]
-    generation = [ValidationIssue("generation", message) for message in options.errors()]
-    issues = topology + generation
-    if issues:
-        raise ValidationError(issues)
-    try:
-        return GenerationPlan.build(config, options, validated=True)
-    except (OSError, UnicodeError, ValueError) as error:
-        raise ValidationError(
-            [ValidationIssue("generation", f"could not fingerprint generation inputs: {error}")]
-        ) from error

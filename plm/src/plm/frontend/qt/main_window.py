@@ -1816,7 +1816,7 @@ class MainWindow(QtWidgets.QMainWindow):
         actions_row.addStretch(1)
         btn_generate = QtWidgets.QPushButton("Generate")
         btn_generate.setObjectName("primaryBtn")
-        btn_generate.clicked.connect(self._on_generate)
+        btn_generate.clicked.connect(self._run_tool)
         self.generation_buttons = [btn_generate]
         for b in self.generation_buttons:
             actions_row.addWidget(b)
@@ -2855,9 +2855,6 @@ class MainWindow(QtWidgets.QMainWindow):
             text = f"Could not build the summary:\n{error}"
         self._topology_payload = payload
         self.topology_summary.setPlainText(text)
-
-    def _on_generate(self):
-        self._run_tool()
 
     def _run_tool(self, then=None):
         """QProcess runs `python -m plm.cli.main generate`

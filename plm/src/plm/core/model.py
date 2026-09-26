@@ -10,7 +10,6 @@ import csv
 import io
 from pathlib import Path
 import re
-import sys
 
 
 _SV_IDENTIFIER_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_$]*$")
@@ -740,14 +739,3 @@ class Config:
                     f"unaffected {['G%d' % x for x in keep] if keep else 'none'}"
                 )
         return "\n".join(L)
-
-
-def load(cfg_dir):
-    cfg = Config(cfg_dir)
-    errs = cfg.validate()
-    if errs:
-        print("Config validation failed:", file=sys.stderr)
-        for e in errs:
-            print(f"  - {e}", file=sys.stderr)
-        sys.exit(1)
-    return cfg

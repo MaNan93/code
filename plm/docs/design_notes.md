@@ -78,6 +78,26 @@ len(controllers) == lane_count // g_min     # 数量必须与理想值一致
 
 完整的校验规则清单见 4.3 节表 1。
 
+### 1.4 模块边界与外部前置条件
+
+Lane Mapper 是 controller 与 PHY 之间的**纯切换层**。它只根据已经给定的
+`mode`/`v_lane_mask` 路由 PIPE 数据、时钟和复位，并在需要换 owner 的
+Group 内完成 non-overlap 切换。它不是模式控制器，也不负责判断 PCIe Link
+当前能否切换。
+
+因此，以下工作明确属于 Mapper 外部：
+
+- 决定何时改变 `mode` 或 `v_lane_mask`；
+- 让 owner 将发生变化的 Group 停止使用对应 PIPE lane；
+- 根据系统方案完成必要的 Controller/PHY 静默、复位和链路恢复；
+- 保证 `mode` 是合法、无组合毛刺的配置值，并在一次切换收敛期间保持稳定；
+- 保证 DPR 的 `v_lane_mask` 按 Group 整体置位，同一 Group 内只能全 0 或全 1；
+- 保证输入时钟和复位满足所选 PCLK 架构的接口要求。
+
+Mapper 不生成 `request/busy/done` 一类系统级握手，也不实现 LTSSM、链路训练、
+协议恢复或策略仲裁。owner 未变化的 Group 不受切换影响；owner 发生变化的
+Group 在外部满足上述前置条件后，由 Mapper 负责完成实际路由切换。
+
 ## 2. 支持的模式
 
 本设计有两组相互独立、各自二选一的可选方案，以及两种不区分实现、只是
@@ -183,10 +203,9 @@ controller 自己 `max_width` 条 lane 的数组；`shared` 收缩成一个标�
 Rate/PowerDown，一个 controller 通常是整条 link 一起变，不是逐 lane
 变）。PHY 侧不受这个字段影响，永远按 lane 展开——一条 PHY lane 当前属于
 哪个 controller 本来就随 mode 变化，即使某个信号在 controller 自己的
-lane 之间是共享的，PHY 侧仍然需要每条 lane 各自的值。`shared` 信号写方向
-（进 mapper）由包装层把这一个标量复制到该 controller 的每条 lane；读方向
-（出 mapper）取 lane0 的值作为这个标量输出，前提是这个 controller 自己
-的所有 lane 在这个信号上本来就该一致——这个前提不由生成器校验。
+lane 之间是共享的，PHY 侧仍然需要每条 lane 各自的值。当前版本只允许
+MAC→PHY 信号使用 `shared`：包装层把一个 controller 标量复制到它的每条
+lane。PHY→MAC 信号必须是 `perlane`，配置成 `shared` 会在生成前报错。
 
 ### 3.1.1 各模块端口一览
 
@@ -202,7 +221,6 @@ lane 之间是共享的，PHY 侧仍然需要每条 lane 各自的值。`shared`
 |---|---|---|---|
 | `phy_pclk_out[NL]` | in | pclk_as_phy_output | PHY 每条 lane 自己的 PCLK |
 | `rx_clk[NL]` | in | pclk_as_phy_input | PHY 每条 lane 的恢复时钟 |
-| `test_en` | in | 总是 | 时钟门控测试旁路 |
 | `mode` | in | 总是 | 位宽按 `$clog2(模式数)` |
 | `phy_pclk_in[NL]` | out | pclk_as_phy_output | 回灌给 PHY 的反馈时钟 |
 | `phy_pclk[NL]` | out | pclk_as_phy_input | 无毛刺选出的每 lane 工作时钟 |
@@ -225,7 +243,7 @@ lane 之间是共享的，PHY 侧仍然需要每条 lane 各自的值。`shared`
 controller 的 `mac2phy`/`phy2mac` struct 数组按 `pipe_signals.csv` 逐行拆
 成独立的 flat 信号（`phy_{signal}[NL]`、`{c}_{signal}`，`signal_type=shared`
 的收缩成标量，见 3.1 节）；其余端口（`{c}_rst_n`/`{c}_pclk`/`{c}_rx_clk`/
-`mode`/`test_en`/时钟/复位/DPR）原样透传，命名和方向都不变。
+`mode`/时钟/复位/DPR）原样透传，命名和方向都不变。
 
 **`pipe_lane_sel_gen`**——parameter `NC`，`NL`（phy_as_phy_input 或 dpr 时才有）、`SEL_SYNC`
 
@@ -245,11 +263,11 @@ controller 的 `mac2phy`/`phy2mac` struct 数组按 `pipe_signals.csv` 逐行拆
 
 **`pipe_lane_clk_mux`**——parameter `NL`、`NC`；两种模式端口完全不同
 
-phy_as_phy_output：`phy_pclk_out[NL]`、`test_en`、`ctrl_rst_n[NC]`、每个多
+phy_as_phy_output：`phy_pclk_out[NL]`、`ctrl_rst_n[NC]`、每个多
 候选 controller 的 `pclk_tgt_c{cid}`、`sel_tgt`、（dpr：`v_lane_mask[NL]`、
 `dpr_rst_n`）→ `ctrl_pclk[NC]`、（dpr：`dpr_pclk`）、`phy_pclk_in[NL]`。
 
-phy_as_phy_input：`test_en`、`ctrl_rst_n[NC]`、`rx_clk[NL]`、每个
+phy_as_phy_input：`ctrl_rst_n[NC]`、`rx_clk[NL]`、每个
 controller 的 `{c}_pclk[max_width]`、每条非 direct（或 dpr 时全部）group
 每条 lane 的 `seltgt_g{gid}_l{l}`、每条非 direct（或 dpr 时全部）group 每条
 lane 的 `rxclk_en_g{gid}_l{l}`、（dpr：外部 `dpr_pclk`）→ `phy_pclk[NL]`、
@@ -269,12 +287,8 @@ phy_as_phy_input 时用每条 group 每条 lane 的 `seltgt_g{gid}_l{l}`，否�
 **`pipe_lane_data_p2m`**（PHY→MAC 数据 mux）——parameter `NL`
 
 同样按模式用 `seltgt_g{gid}_l{l}` 或 `sel_tgt`；`phy_phy2mac[NL]` 输入；
-（dpr：`dpr_phy2mac[NL]` 输出——在这个模块（以及顶层 `pipe_lane_mapper`）
-这一层，`dpr_phy2mac` 就是普通的按 lane 的 struct 数组，`signal_type=shared`
-在这里不起作用，因为 shared/perlane 的区分只在 `pipe_lane_mapper_connection`
-拉平 struct 的那一步才存在；如果套了这层包装，DPR 自己的 shared 信号也会
-按 3.1 节同款规则收缩成一个标量——取 lane0 的值，前提同样是"DPR 当前
-mask 住的所有 lane 本该一致"，同样不由生成器校验）；
+（dpr：`dpr_phy2mac[NL]` 输出——在这个模块、顶层和可选的flat包装层都按
+lane保留；当前版本禁止PHY→MAC信号配置成`shared`）；
 每个 controller 的 `{c}_phy2mac[max_width]` 输出。
 
 **`pipe_lane_signal_pkg`**——不是模块，是 package：`mac2phy_lane_t`/
@@ -435,7 +449,7 @@ lane 上那条 ctrl lane）同步出来的，直接复用即可：
 ```systemverilog
 // pipe_lane_clk_mux 内部，直接消费 sel_gen 传来的 seltgt_gN_lL，不再自己建同步树：
 pipe_lane_clk_gate u_pclk_gate_gN_lL_bI (
-    .clk_in ({c}_pclk[port]), .en (seltgt_gN_lL[i]), .test_en (test_en), .clk_out (...)
+    .clk_in ({c}_pclk[port]), .en (seltgt_gN_lL[i]), .clk_out (...)
 );
 ```
 

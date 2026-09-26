@@ -82,9 +82,10 @@ mode=0  lane0=0-0  lane1=0-1  lane2=1-0
 `<config_dir>/../rtl/` 和 `<config_dir>/../tb/`。
 
 按钮左侧会显示当前输出状态：编辑后为 `Out of date`，已有输出与当前配置、
-参数匹配时为 `Up to date`。生成过程中依次显示 `Saving`、`Validating`、
-`Generating`、`Refreshing preview`，最终停在 `Generated`、`Up to date` 或
-`Generation failed`。输出已经完整且最新时，Generate 会直接跳过写盘。
+参数匹配时为 `Up to date`。点击 Generate 后自动完成校验、保存、生成和预览
+刷新，界面只显示 `Ready`、`Out of date`、`Generating`、`Up to date`、
+`Generation failed` 五种状态。输出已经完整且最新时，Generate 会直接跳过
+写盘并保持 `Up to date`。
 RTL 与 TB 各自带一份 `manifest.json`；两份文件的 `generation_key` 相同，
 用于确认它们来自同一份配置和同一次参数组合。
 
@@ -98,8 +99,9 @@ RTL 与 TB 各自带一份 `manifest.json`；两份文件的 `generation_key` �
 2. Controllers tab：填 controller 信息
 3. Lane Mapping tab：填 mode 和 lane 分配
 4. Pipe Signals tab：用默认值或自己改
-5. Generation tab：选生成参数（不改就用默认），点 **Generate**；程序会先完整校验，再同时生成 RTL 和 testbench
-6. 侧边栏点 **Save**
+5. Generation tab：选生成参数（不改就用默认），点 **Generate**；程序会自动校验并保存当前编辑，再同时生成 RTL 和 testbench、刷新预览
+
+只需要保存配置、不生成RTL时，才单独使用侧边栏的 **Save**。
 
 ## 常见操作
 

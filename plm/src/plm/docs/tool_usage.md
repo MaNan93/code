@@ -109,7 +109,26 @@ lane 归属要在运行时随 mode 切换，夹在 controller 和 PHY 中间的�
 - **配置非法直接报错**。拓扑上做不出正确硬件的配置在生成前就被拒绝，
   不会产出一份能编过、跑起来才错的 RTL。
 
-#### 0.5.1 mode 切换的基本运行规则
+#### 0.5.1 模块边界与外部前置条件
+
+Lane Mapper 只负责在 controller 与 PHY 之间切换 PIPE 数据、时钟和复位。
+它不负责决定何时切换，也不实现模式请求握手、LTSSM、链路训练或恢复流程。
+
+使用生成 RTL 时，上层必须满足以下前置条件：
+
+| 前置条件 | 上层责任 |
+|---|---|
+| `mode`合法且稳定 | 只提供配置中存在的mode；输入不能有组合毛刺，并在一次切换收敛期间保持不变 |
+| 变化Group可切换 | 先让owner将发生变化的Group停止使用对应PIPE lane；是否需要复位由系统方案决定 |
+| 未变化Group继续工作 | 不要因为其他Group切换而停止其时钟、数据或链路 |
+| 时钟和复位有效 | 按所选PCLK架构提供符合接口要求的Controller/PHY时钟与复位 |
+| DPR按Group控制 | 同一Group的`v_lane_mask`只能全0或全1，不能逐Lane任意屏蔽 |
+| 切换后恢复 | 新owner何时重新训练或恢复通信由Controller/PHY及上层控制决定 |
+
+生成RTL没有`mode_req`、`busy`、`done`等系统控制接口，也不生成DFT测试旁路。
+这些都不属于Lane Mapper的模块职责。
+
+#### 0.5.2 mode 切换的基本运行规则
 
 mode 切换不是让一条正在传输的 PCIe Link 瞬间换到另一个 controller，也不是
 要求整个 mapper 一起停机。系统必须先让 **ownership 将发生变化的 Group 所涉及的
@@ -130,7 +149,7 @@ Group，不是整个 mapper。配置报告中的 `switches` / `unaffected` 列�
 保持不变；不能让多 bit `mode` 在 mapper 输入端出现非法值或组合毛刺。生成器能隔离合法
 mode A → mode B 所影响的 Group，但不能从一个不连贯的外部 `mode` 波形推断真实目标。
 
-#### 0.5.2 DPR 屏蔽/解除屏蔽规则
+#### 0.5.3 DPR 屏蔽/解除屏蔽规则
 
 DPR 的 `v_lane_mask` 同样不是要求数据瞬时切换。mask 置位后，被屏蔽 lane 按 DPR
 controller 的要求通信；mask 清零后，原 controller 也要等选择、时钟、复位以及自身状态

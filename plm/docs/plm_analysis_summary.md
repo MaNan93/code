@@ -1,6 +1,6 @@
 # PLM（PIPE Lane Mapper）工具全景分析
 
-**最后更新**: 2026-09-15 | **分析工具**: Claude Haiku 4.5  
+**最后更新**: 2026-09-26 | **基线**: 当前 `main` 分支  
 **文档目标**: 记录 plm 生成器的核心原理、功能限制、术语体系，以及设计里的巧妙之处
 
 ---
@@ -169,7 +169,7 @@ dout = acc XOR safe
 | `--arch` | `original_pipe` / `serdes` | `original_pipe` | 纯粹是跟 `--pclk-mode` 的一致性交叉校验 | 不匹配直接报错 |
 | `--pclk-mode` | `pclk_as_phy_output` / `pclk_as_phy_input` | `pclk_as_phy_output` | 选择时钟架构，生成物完全不兼容 | 必须和 `--arch` 匹配 |
 | `--sel-mode` | `sync` / `comb` | `sync` | 决定顶层 `SEL_SYNC` 参数的**默认值** | 例化时仍可覆盖；`--dpr` 时必须 `sync` |
-| `--dpr` | flag | 关闭 | 加 DPR(诊断探针)overlay | 必须 `--sel-mode sync`；且只支持 `pclk_as_phy_output` |
+| `--dpr` | flag | 关闭 | 加 DPR(诊断探针)overlay | 必须 `--sel-mode sync`；两种PCLK架构都支持，PHY-input模式需要外部`dpr_pclk` |
 | `--verible-path` | 路径 | 无 | `verible-verilog-format` 路径 | 找不到就跳过（纯排版） |
 
 **设计上的克制**：时钟本身的无毛刺切换（`rx_clk` / `ctrl_pclk` 的那些 `pipe_lane_sel_sync`）永远硬编码 `SYNC=1'b1`，不接 `SEL_SYNC` 参数 —— 这条安全性质不允许使用者关掉。
@@ -201,14 +201,20 @@ dout = acc XOR safe
 - **不支持换时钟源**，只支持换宽度。代码里其实为多候选时钟切换留了代码骨架（`ctrl_pclk_cands()` 长度 > 1 的路径），但 `validate()` 禁止，现有配置从未真实触发，属于防御性保留的死路径。
 - **不做跨 group 仲裁**，直接在拓扑层面约束掉（检查 4）。
 - **不建模真实 PCIe 宽度合法性**。工具允许任意宽度（x3/x6/x12 到处都是），真实 PCIe 只允许 2 的幂。测试配置不是在建模真实 PCIe 拓扑。
+- **不做系统级切换控制**。Lane Mapper 只切换 PIPE 数据、时钟和复位；不实现模式请求握手、LTSSM、链路训练、恢复策略或 `busy/done` 状态。
+- **不生成 DFT 测试旁路**。当前顶层和 clock gate 均无 `test_en` 接口；工艺 ICG 的测试使能固定为 0。
 
 ### 3.3 生成器不校验的隐含假设（踩坑点）
 
 | 假设 | 为什么重要 | 后果 |
 |---|---|---|
-| `signal_type=shared` 的 p2m 方向，controller 自己所有 lane 在这个信号上本来就一致 | tie_off 取的是 lane0 的值做标量输出 | 如果各 lane 实际值不一致，标量看不到真相 |
+| `mode` 由上层提供合法、无毛刺的值，并在一次切换收敛期间保持稳定 | Mapper只执行所请求的路由，不判断系统何时允许切换 | 不满足时不能保证切换目标符合上层意图 |
+| owner将变化的Group在切换前已停止使用相应PIPE lane | Mapper不负责Controller/PHY静默、复位或链路恢复 | 切换期间这些Lane的数据没有功能意义 |
 | `v_lane_mask` 要求按 group 粒度拉高（一个 group 里所有 lane 一起 mask） | DPR 抢占 lane 的粒度 | 违反这个约定会导致 DPR 与真实候选的视图不一致 |
 | `safe_state` 和 `tie_off` 故意不做一致性校验 | 两列回答两个不同问题（换手中 vs 从没接过），不是同一件事的两种写法 | 可以各自取值，但需要使用者理解语义差异 |
+
+`signal_type=shared` 当前只允许用于 MAC→PHY；PHY→MAC 必须是 `perlane`，
+因此不存在从PHY多条Lane收敛成一个shared标量的隐含假设。
 
 ### 3.4 `sync`/`comb` 带来的语义差异
 
@@ -231,7 +237,7 @@ dout = acc XOR safe
 - **RTL 和 TB 由一次 `generate` 使用同一组参数生成**；一边失败时两边旧输出都保持不变。
 - **生成参数只走命令行**。`make` 靠 `Makefile` 里的 `SETFLAGS_<SET>`，Qt 前端靠 Generation 页；CLI 不读任何文件。
 - **`--dpr` 强制要求 `--sel-mode sync`**，`--dpr` + `comb` 直接报错。
-- **`--dpr` 只支持 `pclk_as_phy_output`**，配 `pclk_as_phy_input` 直接报错（DPR 在那套架构下拿不到自由跑的时钟源，会死锁）。
+- **`--dpr` 支持两种 PCLK 架构**。`pclk_as_phy_output` 下从当前Mask的PHY PCLK派生`dpr_pclk`；`pclk_as_phy_input` 下由外部提供自由运行的`dpr_pclk`，并输出逐Lane的`dpr_rx_clk`。
 - **生成物的正确性完全靠仿真验证**，`Makefile` 本身不做任何检查。
 
 ---

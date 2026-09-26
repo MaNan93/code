@@ -203,6 +203,23 @@ class WorkspaceTests(unittest.TestCase):
 
 
 class ExporterTests(unittest.TestCase):
+    def test_generated_outputs_have_no_dft_clock_bypass(self):
+        config_dir = ROOT / "test" / "bifurcate" / "config"
+        with tempfile.TemporaryDirectory() as td:
+            workspace = Path(td)
+            generate(
+                config_dir,
+                workspace / "rtl",
+                GenerationOptions(quiet=True),
+            )
+            generated_text = "\n".join(
+                path.read_text(encoding="utf-8")
+                for output in ("rtl", "tb")
+                for path in (workspace / output).rglob("*.sv")
+            )
+            self.assertNotIn("test_en", generated_text)
+            self.assertNotIn("DFT", generated_text)
+
     def test_generation_is_noop_only_for_a_verified_current_output_set(self):
         config_dir = ROOT / "test" / "bifurcate" / "config"
         options = GenerationOptions(quiet=True)

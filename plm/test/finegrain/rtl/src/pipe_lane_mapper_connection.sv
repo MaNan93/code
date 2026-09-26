@@ -15,7 +15,6 @@ module pipe_lane_mapper_connection #(
     parameter bit SEL_SYNC = 1'b1
 ) (
     input logic [NL-1:0] phy_pclk_out,
-    input logic test_en,
     input logic [1:0] mode,
     output logic [NL-1:0] phy_pclk_in,
     output logic [NL-1:0] phy_rst_n,
@@ -653,7 +652,6 @@ module pipe_lane_mapper_connection #(
         .SEL_SYNC (SEL_SYNC)
     ) u_pipe_lane_mapper (
         .phy_pclk_out (phy_pclk_out),
-        .test_en      (test_en),
         .mode         (mode),
         .phy_pclk_in  (phy_pclk_in),
         .phy_rst_n    (phy_rst_n),

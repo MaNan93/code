@@ -14,7 +14,6 @@ module pipe_lane_mapper_connection #(
     parameter int NC = 4,
     parameter bit SEL_SYNC = 1'b1
 ) (
-    input logic test_en,
     input logic [1:0] mode,
     input logic [NL-1:0] rx_clk,
     output logic [NL-1:0] phy_pclk,
@@ -1054,7 +1053,6 @@ module pipe_lane_mapper_connection #(
         .NC (NC),
         .SEL_SYNC (SEL_SYNC)
     ) u_pipe_lane_mapper (
-        .test_en      (test_en),
         .mode         (mode),
         .rx_clk       (rx_clk),
         .phy_pclk     (phy_pclk),

@@ -533,7 +533,7 @@ def gen_clk_mux(cfg, pclk_mode="pclk_as_phy_output", dpr=False):
     return gen_clk_mux_phy_output(cfg, dpr)
 
 
-def gen_glitch_free_clk_select(L, prefix, cand_clks, rst_n_expr, tgt_expr, default_bit, out_expr, test_en="test_en"):
+def gen_glitch_free_clk_select(L, prefix, cand_clks, rst_n_expr, tgt_expr, default_bit, out_expr):
     """Emit a glitch-free N-way clock select: a hold-until-valid register,
     one pipe_lane_sel_sync, one pipe_lane_clk_gate per candidate, and a
     final pipe_lane_clk_or -- appended to L in place, nothing returned.
@@ -571,7 +571,7 @@ def gen_glitch_free_clk_select(L, prefix, cand_clks, rst_n_expr, tgt_expr, defau
     for i, clk in enumerate(cand_clks):
         L.append(
             f"    pipe_lane_clk_gate u_{prefix}_gate_b{i} (.clk_in({clk}), .en({prefix}_pen[{i}]), "
-            f".test_en({test_en}), .clk_out({prefix}_pgated[{i}]));"
+            f".clk_out({prefix}_pgated[{i}]));"
         )
     L.append(f"    pipe_lane_clk_or #(.N({n})) u_{prefix}_or (.clk_in({prefix}_pgated), .clk_out({out_expr}));")
 
@@ -611,7 +611,6 @@ def gen_clk_mux_phy_output(cfg, dpr=False):
         f"    parameter int NC = {NC}",
         ") (",
         "    input logic [NL-1:0] phy_pclk_out,",
-        "    input logic test_en,",
         "    input logic [NC-1:0] ctrl_rst_n,",
     ]
     for c in muxed_c:
@@ -719,13 +718,13 @@ def gen_clk_mux_phy_output(cfg, dpr=False):
                 L.append(
                     f"    pipe_lane_clk_gate u_pin_gate_g{g.gid}_b{i} ("
                     f".clk_in(ctrl_pclk[{c}]), .en(sel_tgt.g{g.gid}[{i}]), "
-                    f".test_en(test_en), .clk_out(pin_gated_g{g.gid}[{i}]));"
+                    f".clk_out(pin_gated_g{g.gid}[{i}]));"
                 )
             if dpr:
                 L.append(
                     f"    pipe_lane_clk_gate u_pin_gate_g{g.gid}_dpr ("
                     f".clk_in(dpr_pclk), .en(sel_tgt.g{g.gid}[{g.n}]), "
-                    f".test_en(test_en), .clk_out(pin_gated_g{g.gid}[{g.n}]));"
+                    f".clk_out(pin_gated_g{g.gid}[{g.n}]));"
                 )
             L.append(
                 f"    pipe_lane_clk_or #(.N({n})) u_pin_or_g{g.gid} "
@@ -789,7 +788,6 @@ def gen_clk_mux_phy_input(cfg, dpr=False):
         f"    parameter int NL = {LC},",
         f"    parameter int NC = {NC}",
         ") (",
-        "    input logic test_en,",
         "    input logic [NC-1:0] ctrl_rst_n,",
         "    input logic [NL-1:0] rx_clk,     // PHY's per-lane recovered clock",
     ]
@@ -841,7 +839,7 @@ def gen_clk_mux_phy_input(cfg, dpr=False):
                 L.append(
                     f"    pipe_lane_clk_gate u_pclk_gate_g{g.gid}_l{l}_b{i} ("
                     f".clk_in({source}), .en(seltgt_g{g.gid}_l{l}[{i}]), "
-                    f".test_en(test_en), .clk_out(pclk_gated_g{g.gid}_l{l}[{i}]));"
+                    f".clk_out(pclk_gated_g{g.gid}_l{l}[{i}]));"
                 )
             L.append(
                 f"    pipe_lane_clk_or #(.N({n})) u_pclk_or_g{g.gid}_l{l} "
@@ -887,14 +885,14 @@ def gen_clk_mux_phy_input(cfg, dpr=False):
                     L.append(
                         f"    pipe_lane_clk_gate u_rxclk_gate_g{g.gid}_l{l}_b{i} ("
                         f".clk_in(rx_clk[{l}]), .en(rxclk_en_g{g.gid}_l{l}[{i}]), "
-                        f".test_en(test_en), .clk_out({cname}_rx_clk[{cl}]));"
+                        f".clk_out({cname}_rx_clk[{cl}]));"
                     )
                     assigned_ctrl_lanes.add((c, cl))
                 if dpr:
                     L.append(
                         f"    pipe_lane_clk_gate u_rxclk_gate_g{g.gid}_l{l}_dpr ("
                         f".clk_in(rx_clk[{l}]), .en(rxclk_en_g{g.gid}_l{l}[{g.n}]), "
-                        f".test_en(test_en), .clk_out(dpr_rx_clk[{l}]));"
+                        f".clk_out(dpr_rx_clk[{l}]));"
                     )
                 L.append("")
 
@@ -1312,14 +1310,12 @@ def gen_top(cfg, pclk_mode="pclk_as_phy_output", sel_mode="sync", dpr=False):
     )
     L.append(") (")
     if phy_input_mode:
-        L.append("    input logic test_en,")
         L.append(f"    input logic [{mode_width(nm)-1}:0] mode,")
         L.append("    input logic [NL-1:0] rx_clk,     // PHY's per-lane recovered clock")
         L.append("    output logic [NL-1:0] phy_pclk,")
         L.append("    output logic [NL-1:0] phy_rst_n,")
     else:
         L.append("    input logic [NL-1:0] phy_pclk_out,")
-        L.append("    input logic test_en,")
         L.append(f"    input logic [{mode_width(nm)-1}:0] mode,")
         L.append("    output logic [NL-1:0] phy_pclk_in,")
         L.append("    output logic [NL-1:0] phy_rst_n,")
@@ -1459,7 +1455,6 @@ def gen_top(cfg, pclk_mode="pclk_as_phy_output", sel_mode="sync", dpr=False):
     L.append("        .NC   (NC)")
     L.append("    ) u_clk_mux (")
     if phy_input_mode:
-        L.append("        .test_en      (test_en),")
         L.append("        .ctrl_rst_n   (ctrl_rst_n),")
         L.append("        .rx_clk       (rx_clk),")
         for cid in sorted(cfg.controllers):
@@ -1479,7 +1474,6 @@ def gen_top(cfg, pclk_mode="pclk_as_phy_output", sel_mode="sync", dpr=False):
         L[-1] = L[-1].rstrip(",")
     else:
         L.append("        .phy_pclk_out (phy_pclk_out),")
-        L.append("        .test_en      (test_en),")
         L.append("        .ctrl_rst_n   (ctrl_rst_n),")
         for c in muxed_c:
             L.append(f"        .pclk_tgt_c{c} (pclk_tgt_c{c}),")
@@ -1618,14 +1612,12 @@ def gen_connection(cfg, pclk_mode="pclk_as_phy_output", dpr=False):
     L.append("    parameter bit SEL_SYNC = 1'b1")
     L.append(") (")
     if phy_input_mode:
-        L.append("    input logic test_en,")
         L.append(f"    input logic [{mode_width(nm)-1}:0] mode,")
         L.append("    input logic [NL-1:0] rx_clk,")
         L.append("    output logic [NL-1:0] phy_pclk,")
         L.append("    output logic [NL-1:0] phy_rst_n,")
     else:
         L.append("    input logic [NL-1:0] phy_pclk_out,")
-        L.append("    input logic test_en,")
         L.append(f"    input logic [{mode_width(nm)-1}:0] mode,")
         L.append("    output logic [NL-1:0] phy_pclk_in,")
         L.append("    output logic [NL-1:0] phy_rst_n,")
@@ -1740,14 +1732,12 @@ def gen_connection(cfg, pclk_mode="pclk_as_phy_output", dpr=False):
     L.append("        .SEL_SYNC (SEL_SYNC)")
     L.append("    ) u_pipe_lane_mapper (")
     if phy_input_mode:
-        L.append("        .test_en      (test_en),")
         L.append("        .mode         (mode),")
         L.append("        .rx_clk       (rx_clk),")
         L.append("        .phy_pclk     (phy_pclk),")
         L.append("        .phy_rst_n    (phy_rst_n),")
     else:
         L.append("        .phy_pclk_out (phy_pclk_out),")
-        L.append("        .test_en      (test_en),")
         L.append("        .mode         (mode),")
         L.append("        .phy_pclk_in  (phy_pclk_in),")
         L.append("        .phy_rst_n    (phy_rst_n),")

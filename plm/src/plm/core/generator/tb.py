@@ -168,7 +168,6 @@ def gen_tb(cfg, pclk_mode="pclk_as_phy_output", dpr=False):
     # ---- DUT IO
     L.append("    //------------------------------------------------------------ DUT IO")
     L.append("    logic [NL-1:0]      phy_phystatus_stim = '0;")
-    L.append("    logic                       test_en = 1'b0;")
     # ctrl_rst_n stays one packed stimulus vector here (indexed by ctrl id --
     # convenient for the reset-pulse loop below), but the DUT's own ports
     # are per-controller named signals (ctrla_rst_n, ...) now -- see the
@@ -211,7 +210,6 @@ def gen_tb(cfg, pclk_mode="pclk_as_phy_output", dpr=False):
     L.append("        .NC (NC)")
     L.append("    ) dut (")
     if phy_input_mode:
-        L.append("        .test_en        (test_en),")
         L.append("        .mode           (mode),")
         L.append("        .rx_clk         (rx_clk),")
         L.append("        .phy_pclk       (phy_pclk),")
@@ -233,7 +231,6 @@ def gen_tb(cfg, pclk_mode="pclk_as_phy_output", dpr=False):
             L.append(f"        .{c.lname}_rx_clk  ({c.lname}_rx_clk),")
     else:
         L.append("        .phy_pclk_out   (phy_pclk_out),")
-        L.append("        .test_en        (test_en),")
         L.append("        .mode           (mode),")
         L.append("        .phy_pclk_in    (phy_pclk_in),")
         L.append("        .phy_rst_n      (phy_rst_n),")

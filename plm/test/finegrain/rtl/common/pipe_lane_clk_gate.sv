@@ -17,17 +17,16 @@
 module pipe_lane_clk_gate (
     input  logic clk_in,
     input  logic en,       // same domain as clk_in, already registered
-    input  logic test_en,  // DFT: force on during scan shift
     output logic clk_out
 );
 
 `ifdef PIPE_USE_ICG_CELL
   // Swap in the actual process library cell, e.g.:
-  // CKLNQD1 u_icg (.CP(clk_in), .E(en), .TE(test_en), .Q(clk_out));
+  // CKLNQD1 u_icg (.CP(clk_in), .E(en), .TE(1'b0), .Q(clk_out));
   `PIPE_ICG_CELL u_icg (
       .CP(clk_in),
       .E (en),
-      .TE(test_en),
+      .TE(1'b0),
       .Q (clk_out)
   );
 `else
@@ -35,7 +34,7 @@ module pipe_lane_clk_gate (
 
   always_latch begin
     if (!clk_in)
-      en_latched = en | test_en;  // transparent while clk is low (latch uses blocking assign)
+      en_latched = en;  // transparent while clk is low (latch uses blocking assign)
   end
 
   assign clk_out = clk_in & en_latched;

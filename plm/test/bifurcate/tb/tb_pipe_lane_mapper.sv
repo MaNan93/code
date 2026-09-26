@@ -137,7 +137,6 @@ module tb_pipe_lane_mapper;
 
     //------------------------------------------------------------ DUT IO
     logic [NL-1:0]      phy_phystatus_stim = '0;
-    logic                       test_en = 1'b0;
     logic [NC-1:0]        ctrl_rst_n = '0;
     logic [1:0] mode = '0;
 
@@ -165,7 +164,6 @@ module tb_pipe_lane_mapper;
         .NC (NC)
     ) dut (
         .phy_pclk_out   (phy_pclk_out),
-        .test_en        (test_en),
         .mode           (mode),
         .phy_pclk_in    (phy_pclk_in),
         .phy_rst_n      (phy_rst_n),

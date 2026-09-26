@@ -21,7 +21,6 @@ module pipe_lane_mapper #(
     parameter bit SEL_SYNC = 1'b1   // pipe_lane_sel_gen's data-path pipe_lane_sel_sync SYNC, see there
 ) (
     input logic [NL-1:0] phy_pclk_out,
-    input logic test_en,
     input logic [1:0] mode,
     output logic [NL-1:0] phy_pclk_in,
     output logic [NL-1:0] phy_rst_n,
@@ -79,7 +78,6 @@ module pipe_lane_mapper #(
         .NC   (NC)
     ) u_clk_mux (
         .phy_pclk_out (phy_pclk_out),
-        .test_en      (test_en),
         .ctrl_rst_n   (ctrl_rst_n),
         .sel_tgt      (sel_tgt),
         .ctrl_pclk    (ctrl_pclk),

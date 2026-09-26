@@ -7,6 +7,7 @@ import re
 
 from plm.core.model import Config
 from plm.core.plan import GenerationPlan
+from plm.core.plan import CONFIG_FILES
 
 
 @dataclass(frozen=True)
@@ -131,11 +132,16 @@ def _topology_issue(config, message):
     return ValidationIssue("topology", message, table, row, column)
 
 
-def load_validated_config(config_dir):
+def _read_config_snapshot(config_dir):
+    config_dir = Path(config_dir)
+    return {name: (config_dir / name).read_bytes() for name in CONFIG_FILES}
+
+
+def _load_validated_config(config_dir, files):
     """Run the file-format and topology layers and return Config."""
     try:
-        config = Config(config_dir)
-    except (OSError, SystemExit) as error:
+        config = Config(config_dir, file_contents=files)
+    except (OSError, SystemExit, UnicodeError, csv.Error) as error:
         raise ValidationError(_format_issues(config_dir, error)) from error
 
     topology = [_topology_issue(config, message) for message in config.validate()]
@@ -144,9 +150,21 @@ def load_validated_config(config_dir):
     return config
 
 
+def load_validated_config(config_dir):
+    try:
+        files = _read_config_snapshot(config_dir)
+    except OSError as error:
+        raise ValidationError(_format_issues(config_dir, error)) from error
+    return _load_validated_config(config_dir, files)
+
+
 def load_generation_plan(config_dir, options):
     """Run format, topology and generation-option validation in order."""
-    config = load_validated_config(config_dir)
+    try:
+        files = _read_config_snapshot(config_dir)
+    except OSError as error:
+        raise ValidationError(_format_issues(config_dir, error)) from error
+    config = _load_validated_config(config_dir, files)
 
     option_issues = [
         ValidationIssue("generation", message) for message in options.errors()
@@ -154,7 +172,14 @@ def load_generation_plan(config_dir, options):
     if option_issues:
         raise ValidationError(option_issues)
 
-    return GenerationPlan.build(config, options, validated=True)
+    try:
+        return GenerationPlan.build(
+            config, options, validated=True, config_files=files
+        )
+    except (OSError, UnicodeError, ValueError) as error:
+        raise ValidationError(
+            [ValidationIssue("generation", f"could not fingerprint generation inputs: {error}")]
+        ) from error
 
 
 def plan_from_config(config, options):
@@ -164,4 +189,9 @@ def plan_from_config(config, options):
     issues = topology + generation
     if issues:
         raise ValidationError(issues)
-    return GenerationPlan.build(config, options, validated=True)
+    try:
+        return GenerationPlan.build(config, options, validated=True)
+    except (OSError, UnicodeError, ValueError) as error:
+        raise ValidationError(
+            [ValidationIssue("generation", f"could not fingerprint generation inputs: {error}")]
+        ) from error

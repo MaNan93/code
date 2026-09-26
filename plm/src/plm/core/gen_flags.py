@@ -45,8 +45,8 @@ class GenerationOptions:
     """One immutable generation option set shared by every front end.
 
     Presentation-only switches such as ``quiet`` and formatter settings live
-    here too, but :meth:`manifest_dict` deliberately keeps only the values
-    that change the generated design.
+    here too. :meth:`manifest_dict` keeps structural design values; the plan
+    fingerprints formatter settings and the resolved formatter separately.
     """
 
     arch: str = "original_pipe"

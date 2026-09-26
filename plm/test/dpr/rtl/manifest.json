@@ -23,8 +23,29 @@
     "src/pipe_lane_sel_gen.sv": "290c4193cea713ce7242062e3e91bf7eb66a8e8ef1092e80fe871c2425bd68d8",
     "src/pipe_lane_signal_pkg.sv": "8f7bc090b7dbb887326995c10a370cae73d9cb153b597a0961dc1a0b2cbfad94"
   },
-  "generation_key": "0fc7217c91a4cd99032b85a2dc3211b5de12d57d8024a171364f7bd161474fcf",
-  "generator_fingerprint": "d432fccb58a7396803b64c57fa5c344fc196260eeaaae98e051933fe51e26d2a",
+  "formatter": {
+    "engine": "none",
+    "flags": {
+      "assignment_statement_alignment": "align",
+      "case_items_alignment": "align",
+      "column_limit": "120",
+      "distribution_items_alignment": "align",
+      "formal_parameters_alignment": "align",
+      "formal_parameters_indentation": "indent",
+      "indentation_spaces": "4",
+      "named_parameter_alignment": "align",
+      "named_parameter_indentation": "indent",
+      "named_port_alignment": "align",
+      "named_port_indentation": "indent",
+      "port_declarations_alignment": "align",
+      "port_declarations_indentation": "indent",
+      "port_declarations_right_align_packed_dimensions": "true",
+      "struct_union_members_alignment": "align",
+      "wrap_end_else_clauses": "true"
+    }
+  },
+  "generation_key": "89becb6e6f0dd49280ad905f61dad9505d3581dae4c2fa5036b328b069f8d34c",
+  "generator_fingerprint": "28ec83c8814a8ee51426a19607111c382bb0a7442461654fb3356e4c3479acce",
   "options": {
     "arch": "original_pipe",
     "dpr": true,
@@ -32,5 +53,5 @@
     "sel_mode": "sync"
   },
   "output": "rtl",
-  "schema_version": 1
+  "schema_version": 2
 }

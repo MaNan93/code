@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 
 from plm.core.gen_flags import GenerationOptions
+from plm.core.verible import formatter_identity
 
 
 CONFIG_FILES = ("controllers.csv", "lane_mapping.csv", "pipe_signals.csv")
@@ -14,6 +15,7 @@ GENERATOR_FILES = (
     "exporter.py",
     "gen_flags.py",
     "model.py",
+    "verible.py",
     "generator/rtl.py",
     "generator/tb.py",
     "tb_makefile.mk",
@@ -41,13 +43,21 @@ def _generator_fingerprint():
     return digest.hexdigest()
 
 
-def _config_hash(config_dir):
+def _normalized_content_bytes(content):
+    text = content.decode("utf-8")
+    return text.replace("\r\n", "\n").replace("\r", "\n").encode("utf-8")
+
+
+def _config_hash(config_dir, file_contents=None):
     digest = hashlib.sha256()
     for name in CONFIG_FILES:
-        path = Path(config_dir) / name
         digest.update(name.encode("utf-8"))
         digest.update(b"\0")
-        digest.update(_normalized_text_bytes(path))
+        if file_contents is None:
+            content = _normalized_text_bytes(Path(config_dir) / name)
+        else:
+            content = _normalized_content_bytes(file_contents[name])
+        digest.update(content)
         digest.update(b"\0")
     return digest.hexdigest()
 
@@ -65,11 +75,12 @@ class GenerationPlan:
     options: GenerationOptions
     config_hash: str
     generator_fingerprint: str
+    formatter: object
     pclk_sources: object
     pclk_candidates: object
 
     @classmethod
-    def build(cls, config, options, *, validated=False):
+    def build(cls, config, options, *, validated=False, config_files=None):
         if not validated:
             options.validated()
             topology_errors = config.validate()
@@ -78,8 +89,9 @@ class GenerationPlan:
         return cls(
             config=config,
             options=options,
-            config_hash=_config_hash(config.dir),
+            config_hash=_config_hash(config.dir, config_files),
             generator_fingerprint=_generator_fingerprint(),
+            formatter=formatter_identity(options.verible_path, options.verible_flags),
             pclk_sources=config.ctrl_pclk_src(),
             pclk_candidates=config.ctrl_pclk_cands(),
         )
@@ -89,6 +101,7 @@ class GenerationPlan:
         payload = {
             "config_hash": self.config_hash,
             "generator_fingerprint": self.generator_fingerprint,
+            "formatter": self.formatter,
             "options": self.options.manifest_dict(),
         }
         encoded = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
@@ -136,10 +149,11 @@ class GenerationPlan:
 
     def manifest_base(self):
         return {
-            "schema_version": 1,
+            "schema_version": 2,
             "generation_key": self.generation_key,
             "config_hash": self.config_hash,
             "generator_fingerprint": self.generator_fingerprint,
+            "formatter": self.formatter,
             "options": self.options.manifest_dict(),
             "design": {
                 "lane_count": self.lane_count,

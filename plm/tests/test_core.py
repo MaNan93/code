@@ -19,6 +19,7 @@ from plm.core.workspace import (
     write_aligned_csv,
 )
 from plm.core.validation import ValidationError, load_generation_plan
+from plm.core import validation
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -299,8 +300,101 @@ class ExporterTests(unittest.TestCase):
             self.assertEqual(old_rtl.read_text(encoding="utf-8"), "rtl")
             self.assertEqual(old_tb.read_text(encoding="utf-8"), "tb")
 
+    def test_corrupt_manifests_are_stale_and_repaired(self):
+        config_dir = ROOT / "test" / "bifurcate" / "config"
+        options = GenerationOptions(quiet=True)
+        corruptions = (
+            [],
+            {"schema_version": 2, "files": []},
+            None,
+        )
+        with tempfile.TemporaryDirectory() as td:
+            workspace = Path(td)
+            result = generate(config_dir, workspace / "rtl", options)
+            for index, corruption in enumerate(corruptions):
+                manifest_path = workspace / "rtl" / "manifest.json"
+                if corruption is None:
+                    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+                    manifest["files"]["../outside.sv"] = "0" * 64
+                    corruption = manifest
+                manifest_path.write_text(json.dumps(corruption), encoding="utf-8")
+
+                self.assertFalse(
+                    exporter.output_set_matches_plan(
+                        result.plan, workspace, verify_files=True
+                    ),
+                    f"corruption {index} was accepted",
+                )
+                repaired = generate(config_dir, workspace / "rtl", options)
+                self.assertTrue(repaired.generated)
+                self.assertTrue(
+                    exporter.output_set_matches_plan(
+                        repaired.plan, workspace, verify_files=True
+                    )
+                )
+
 
 class GenerationPlanTests(unittest.TestCase):
+    def test_config_snapshot_drives_both_parsing_and_hash(self):
+        source = ROOT / "test" / "bifurcate" / "config"
+        with tempfile.TemporaryDirectory() as td:
+            config_dir = Path(td)
+            for path in source.iterdir():
+                if path.is_file():
+                    shutil.copy2(path, config_dir / path.name)
+            baseline = load_generation_plan(config_dir, GenerationOptions())
+            original_loader = validation._load_validated_config
+
+            def mutate_after_parse(directory, files):
+                config = original_loader(directory, files)
+                (Path(directory) / "controllers.csv").write_text(
+                    "ctrl_id,ctrl_name,max_width\n0,Changed,1\n",
+                    encoding="utf-8",
+                )
+                return config
+
+            with mock.patch.object(
+                validation,
+                "_load_validated_config",
+                side_effect=mutate_after_parse,
+            ):
+                snapshotted = load_generation_plan(config_dir, GenerationOptions())
+
+        self.assertEqual(snapshotted.config_hash, baseline.config_hash)
+        self.assertEqual(snapshotted.controllers[0].name, baseline.controllers[0].name)
+
+    def test_formatter_binary_and_flags_change_generation_key(self):
+        cfg = Config(ROOT / "test" / "bifurcate" / "config")
+        with tempfile.TemporaryDirectory() as td:
+            formatter = Path(td) / "verible-verilog-format"
+            formatter.write_bytes(b"formatter-v1")
+            first = GenerationPlan.build(
+                cfg,
+                GenerationOptions(
+                    verible_path=str(formatter),
+                    verible_flags={"column_limit": "100"},
+                ),
+            )
+            changed_flags = GenerationPlan.build(
+                cfg,
+                GenerationOptions(
+                    verible_path=str(formatter),
+                    verible_flags={"column_limit": "120"},
+                ),
+            )
+            formatter.write_bytes(b"formatter-v2")
+            changed_binary = GenerationPlan.build(
+                cfg,
+                GenerationOptions(
+                    verible_path=str(formatter),
+                    verible_flags={"column_limit": "100"},
+                ),
+            )
+
+        self.assertNotEqual(first.generation_key, changed_flags.generation_key)
+        self.assertNotEqual(first.generation_key, changed_binary.generation_key)
+        self.assertRegex(first.formatter["binary_sha256"], r"^[0-9a-f]{64}$")
+
     def test_format_issues_include_editor_coordinates(self):
         payload = valid_payload()
         payload["controllers"].append({

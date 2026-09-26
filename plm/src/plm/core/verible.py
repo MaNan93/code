@@ -3,8 +3,10 @@ verible-verilog-format invocation -- best-effort auto-formatting of
 generated SystemVerilog text.
 """
 
+import hashlib
 import shutil
 import subprocess
+from functools import lru_cache
 from pathlib import Path
 
 
@@ -78,6 +80,48 @@ DEFAULT_VERIBLE_FLAGS = {
     "indentation_spaces": "4",
     "column_limit": "120",
 }
+
+
+@lru_cache(maxsize=8)
+def _binary_hash(path, size, mtime_ns):
+    """Return an executable identity, cached until its stat changes."""
+    del size, mtime_ns
+    return hashlib.sha256(Path(path).read_bytes()).hexdigest()
+
+
+def formatter_identity(verible_path=None, verible_flags=None):
+    """Describe every formatter input that can change emitted whitespace."""
+    flags = DEFAULT_VERIBLE_FLAGS if verible_flags is None else verible_flags
+    normalized_flags = {
+        str(key): str(value)
+        for key, value in sorted(flags.items())
+        if value is not None and value != ""
+    }
+    executable = find_verible(verible_path)
+    if executable is None:
+        return {"engine": "none", "flags": normalized_flags}
+
+    resolved = shutil.which(executable)
+    if resolved is None:
+        candidate = Path(executable).expanduser()
+        if candidate.is_file():
+            resolved = str(candidate.resolve())
+    if resolved is None:
+        return {
+            "engine": "unavailable",
+            "requested": str(executable),
+            "flags": normalized_flags,
+        }
+
+    path = Path(resolved)
+    stat = path.stat()
+    return {
+        "engine": "verible-verilog-format",
+        "binary_sha256": _binary_hash(
+            str(path.resolve()), stat.st_size, stat.st_mtime_ns
+        ),
+        "flags": normalized_flags,
+    }
 
 
 def format_sv(text, verible_path=None, verible_flags=None):

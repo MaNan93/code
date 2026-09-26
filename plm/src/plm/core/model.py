@@ -7,6 +7,7 @@ generators: plm.core.generator.rtl and plm.core.generator.tb.
 """
 
 import csv
+import io
 from pathlib import Path
 import re
 import sys
@@ -212,21 +213,34 @@ class LaneGroup:
 
 
 class Config:
-    def __init__(self, cfg_dir):
+    def __init__(self, cfg_dir, *, file_contents=None):
         d = Path(cfg_dir)
         self.dir = d
-        self.controllers = self._load_ctrl(d / "controllers.csv")
-        self.signals = self._load_sig(d / "pipe_signals.csv")
-        self.modes, self.lane_count, self.mapping = self._load_map(d / "lane_mapping.csv")
+        file_contents = file_contents or {}
+        self.controllers = self._load_ctrl(
+            d / "controllers.csv", file_contents.get("controllers.csv")
+        )
+        self.signals = self._load_sig(
+            d / "pipe_signals.csv", file_contents.get("pipe_signals.csv")
+        )
+        self.modes, self.lane_count, self.mapping = self._load_map(
+            d / "lane_mapping.csv", file_contents.get("lane_mapping.csv")
+        )
         self.num_ctrl = max(self.controllers) + 1
         self.groups = self._build_groups()
 
+    @staticmethod
+    def _open_csv(path, content):
+        if content is None:
+            return Path(path).open(newline="", encoding="utf-8")
+        return io.StringIO(content.decode("utf-8"), newline="")
+
     # -- controllers.csv
     @staticmethod
-    def _load_ctrl(path):
+    def _load_ctrl(path, content=None):
         out = {}
         seen_names = {}
-        with open(path, newline="", encoding="utf-8") as f:
+        with Config._open_csv(path, content) as f:
             rows = enumerate(_stripped(csv.DictReader(f)), start=2)
             for i, r in rows:
                 if r.get(None):
@@ -267,10 +281,10 @@ class Config:
 
     # -- pipe_signals.csv
     @staticmethod
-    def _load_sig(path):
+    def _load_sig(path, content=None):
         out = []
         seen = set()
-        with open(path, newline="", encoding="utf-8") as f:
+        with Config._open_csv(path, content) as f:
             rows = enumerate(_stripped(csv.DictReader(f)), start=2)
             for i, r in rows:
                 if r.get(None):
@@ -320,8 +334,8 @@ class Config:
 
     # -- lane_mapping.csv
     @staticmethod
-    def _load_map(path):
-        with open(path, newline="", encoding="utf-8") as f:
+    def _load_map(path, content=None):
+        with Config._open_csv(path, content) as f:
             rd = csv.DictReader(f)
             if rd.fieldnames is None:
                 raise SystemExit(f"{path}: file is empty")

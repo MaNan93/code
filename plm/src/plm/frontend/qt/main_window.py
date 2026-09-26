@@ -1565,6 +1565,7 @@ class MainWindow(QtWidgets.QMainWindow):
             self.preview_status.setText("Generate RTL to preview the output.")
             self.preview_status.show()
             self.preview_code.clear()
+        self._update_generation_freshness(verify_files=True)
 
     def _show_selected_preview_file(self):
         if not self._selected_preview_file:
@@ -2295,7 +2296,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self._undo_history.append(current)
         self._apply_history_payload(target)
 
-    def _validate_live_tables(self):
+    def _validate_live_tables(self, *, verify_outputs=False):
         """Render the core validator's structured issues in the editors."""
         errors = {"controllers": {}, "signals": {}, "mapping": {}}
         issues = ()
@@ -2312,6 +2313,7 @@ class MainWindow(QtWidgets.QMainWindow):
             issues = error.issues
         except (OSError, ValueError) as error:
             issues = (ValidationIssue("format", str(error)),)
+        self._live_validation_issues = tuple(issues)
 
         for issue in issues:
             if issue.table not in errors or issue.row is None or issue.column is None:
@@ -2324,7 +2326,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.controllers_table.set_cell_errors(controller_errors)
         self.signals_table.set_cell_errors(signal_errors)
         self.lane_grid.set_cell_errors(lane_errors)
-        self._live_validation_error_count = sum(len(value) for value in errors.values())
+        self._live_validation_error_count = len(issues)
 
         self._first_live_validation_error = None
         for tab_index, editor, table_errors in (
@@ -2348,11 +2350,17 @@ class MainWindow(QtWidgets.QMainWindow):
                 column,
             )
             break
-        if not self._generation_busy and self.current_workspace is not None:
-            current = self._live_plan is not None and output_set_matches_plan(
-                self._live_plan, self.current_workspace
-            )
-            self._set_generation_state("UP_TO_DATE" if current else "STALE")
+        self._update_generation_freshness(verify_files=verify_outputs)
+
+    def _update_generation_freshness(self, *, verify_files=False):
+        if self._generation_busy or self.current_workspace is None:
+            return
+        current = self._live_plan is not None and output_set_matches_plan(
+            self._live_plan,
+            self.current_workspace,
+            verify_files=verify_files,
+        )
+        self._set_generation_state("UP_TO_DATE" if current else "STALE")
 
     def _focus_first_live_validation_error(self):
         target = getattr(self, "_first_live_validation_error", None)
@@ -2517,7 +2525,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self._log(f"Loaded {path}.")
         self._mark_saved()
         self._reset_edit_history()
-        self._validate_live_tables()
+        self._validate_live_tables(verify_outputs=True)
         self._refresh_topology_summary()
         if getattr(self, "rtl_preview_panel", None) and self.rtl_preview_panel.isVisible():
             self._refresh_rtl_preview()
@@ -2556,6 +2564,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def _current_generation_options(self, **overrides):
         """Return the same typed option set used by CLI and exporter."""
+        settings = load_settings()
         values = {
             "arch": self.arch_combo.currentText()
             if self.arch_combo.currentText() in ARCH_VALUES
@@ -2567,6 +2576,8 @@ class MainWindow(QtWidgets.QMainWindow):
             if self.sel_mode_combo.currentText() in SEL_MODE_VALUES
             else "sync",
             "dpr": self.dpr_check.isChecked(),
+            "verible_path": settings.get("veriblePath"),
+            "verible_flags": settings.get("veribleFlags"),
         }
         values.update(overrides)
         return GenerationOptions(**values)
@@ -2665,6 +2676,7 @@ class MainWindow(QtWidgets.QMainWindow):
             settings = dlg.get_settings()
             save_settings(settings)
             self._apply_font(settings)
+            self._validate_live_tables(verify_outputs=True)
 
     def _exec_modal_blurred(self, dialog):
         """Run a modal dialog while softly blurring the main application.
@@ -2868,10 +2880,17 @@ class MainWindow(QtWidgets.QMainWindow):
         if self._generation_busy:
             return
         self._validate_live_tables()
-        if self._focus_first_live_validation_error():
+        if self._live_validation_issues:
+            focused = self._focus_first_live_validation_error()
             self._set_bottom_panel_page(0)
             self._set_generation_state("FAILED")
-            self._log("Generate blocked: fix the highlighted configuration cell.")
+            if focused:
+                self._log("Generate blocked: fix the highlighted configuration cell.")
+            else:
+                self._log("Generate blocked by validation errors:")
+            for issue in self._live_validation_issues:
+                if not focused or issue.table is None:
+                    self._log(str(issue))
             return
         self._set_generation_state("SAVING")
         if not self._save_before_action():

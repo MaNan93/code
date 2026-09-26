@@ -10,7 +10,7 @@ own error/exit-code handling.
 import hashlib
 import json
 import os
-from pathlib import Path
+from pathlib import Path, PurePosixPath, PureWindowsPath
 import re
 import shutil
 import tempfile
@@ -25,6 +25,8 @@ from plm.core.verible import format_sv
 
 OUTPUT_DIRS = ("rtl", "tb")
 MANIFEST_NAME = "manifest.json"
+MANIFEST_SCHEMA_VERSION = 2
+_SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 
 
 def _file_hash(path):
@@ -60,6 +62,57 @@ def _write_manifest(plan, directory, kind):
     return manifest
 
 
+def _manifest_shape_issues(manifest, kind):
+    """Return diagnostics for untrusted manifest JSON without raising."""
+    prefix = f"{kind}:"
+    if not isinstance(manifest, dict):
+        return [f"{prefix} manifest root must be an object"]
+    issues = []
+    if manifest.get("schema_version") != MANIFEST_SCHEMA_VERSION:
+        issues.append(f"{prefix} unsupported manifest schema_version")
+    if manifest.get("output") != kind:
+        issues.append(f"{prefix} manifest output must be {kind!r}")
+    for field in (
+        "generation_key",
+        "config_hash",
+        "generator_fingerprint",
+    ):
+        if not isinstance(manifest.get(field), str) or not _SHA256_RE.fullmatch(
+            manifest.get(field, "")
+        ):
+            issues.append(f"{prefix} manifest {field} must be a SHA-256 hash")
+    for field in ("formatter", "options", "design"):
+        if not isinstance(manifest.get(field), dict):
+            issues.append(f"{prefix} manifest {field} must be an object")
+
+    files = manifest.get("files")
+    if not isinstance(files, dict):
+        issues.append(f"{prefix} manifest files must be an object")
+        return issues
+    for name, expected_hash in files.items():
+        if not isinstance(name, str):
+            issues.append(f"{prefix} manifest file name must be a string")
+            continue
+        path = PurePosixPath(name)
+        windows_path = PureWindowsPath(name)
+        if (
+            not name
+            or any(ord(character) < 32 for character in name)
+            or "\\" in name
+            or path.is_absolute()
+            or windows_path.drive
+            or ".." in path.parts
+            or path == PurePosixPath(".")
+            or name != path.as_posix()
+        ):
+            issues.append(f"{prefix} unsafe manifest file name {name!r}")
+        if not isinstance(expected_hash, str) or not _SHA256_RE.fullmatch(
+            expected_hash
+        ):
+            issues.append(f"{prefix} invalid SHA-256 for {name!r}")
+    return issues
+
+
 def _self_check_output_set(plan, workspace):
     """Validate staged files before the transactional output swap."""
     workspace = Path(workspace)
@@ -88,9 +141,16 @@ def _self_check_output_set(plan, workspace):
         except (OSError, ValueError) as error:
             issues.append(ValidationIssue("output", f"{kind}: unreadable manifest: {error}"))
             continue
+        shape_issues = _manifest_shape_issues(manifest, kind)
+        issues.extend(ValidationIssue("output", message) for message in shape_issues)
+        if shape_issues:
+            continue
         manifests[kind] = manifest
-        if manifest.get("generation_key") != plan.generation_key:
-            issues.append(ValidationIssue("output", f"{kind}: manifest generation_key mismatch"))
+        for field, expected in plan.manifest_base().items():
+            if manifest.get(field) != expected:
+                issues.append(
+                    ValidationIssue("output", f"{kind}: manifest {field} mismatch")
+                )
         listed = manifest.get("files", {})
         missing = required[kind] - set(listed)
         for name in sorted(missing):
@@ -108,6 +168,7 @@ def _self_check_output_set(plan, workspace):
             "generation_key",
             "config_hash",
             "generator_fingerprint",
+            "formatter",
             "options",
             "design",
         ):
@@ -167,10 +228,13 @@ def read_manifests(workspace):
     manifests = {}
     try:
         for kind in OUTPUT_DIRS:
-            manifests[kind] = json.loads(
+            manifest = json.loads(
                 (workspace / kind / MANIFEST_NAME).read_text(encoding="utf-8")
             )
-    except (OSError, ValueError):
+            if _manifest_shape_issues(manifest, kind):
+                return {}
+            manifests[kind] = manifest
+    except (OSError, ValueError, TypeError):
         return {}
     return manifests
 
@@ -191,7 +255,7 @@ def output_set_matches_plan(plan, workspace, *, verify_files=False):
     if verify_files:
         try:
             _self_check_output_set(plan, workspace)
-        except ValidationError:
+        except (ValidationError, OSError, UnicodeError, ValueError):
             return False
     return True
 

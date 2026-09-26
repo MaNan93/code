@@ -23,8 +23,29 @@
     "src/pipe_lane_sel_gen.sv": "789eb9a9a72ecee89530afc341c50b4d9bcb4adbd8592318b51717cc02a5094f",
     "src/pipe_lane_signal_pkg.sv": "c52e96da3d1a12474ec2b6a204c0e85f0488cd89c71342a624cd984f3eaed666"
   },
-  "generation_key": "4f09d9f936f197cf1029261032ecdf0f8e0742696b8ff6d83ffc9f5115c7ee97",
-  "generator_fingerprint": "d432fccb58a7396803b64c57fa5c344fc196260eeaaae98e051933fe51e26d2a",
+  "formatter": {
+    "engine": "none",
+    "flags": {
+      "assignment_statement_alignment": "align",
+      "case_items_alignment": "align",
+      "column_limit": "120",
+      "distribution_items_alignment": "align",
+      "formal_parameters_alignment": "align",
+      "formal_parameters_indentation": "indent",
+      "indentation_spaces": "4",
+      "named_parameter_alignment": "align",
+      "named_parameter_indentation": "indent",
+      "named_port_alignment": "align",
+      "named_port_indentation": "indent",
+      "port_declarations_alignment": "align",
+      "port_declarations_indentation": "indent",
+      "port_declarations_right_align_packed_dimensions": "true",
+      "struct_union_members_alignment": "align",
+      "wrap_end_else_clauses": "true"
+    }
+  },
+  "generation_key": "e5e2412109d92619b98ae6f2b9de2327b3d7bfa5700f307619cc620fe6e27a0f",
+  "generator_fingerprint": "28ec83c8814a8ee51426a19607111c382bb0a7442461654fb3356e4c3479acce",
   "options": {
     "arch": "serdes",
     "dpr": false,
@@ -32,5 +53,5 @@
     "sel_mode": "sync"
   },
   "output": "rtl",
-  "schema_version": 1
+  "schema_version": 2
 }

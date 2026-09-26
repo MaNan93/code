@@ -10,8 +10,29 @@
     "makefile": "c25dc98bf8ee551eb196496f948599549b937f102c702b97fe7efc4579512e16",
     "tb_pipe_lane_mapper.sv": "28cac7323e85af954d52765627e028aa1a8b5c8f8b7dfc1de64bf922bbf03ed0"
   },
-  "generation_key": "6561d84fc2d9986831b22acef64e5862e299d2d63a45bde2a623f56dd4cdec6f",
-  "generator_fingerprint": "d432fccb58a7396803b64c57fa5c344fc196260eeaaae98e051933fe51e26d2a",
+  "formatter": {
+    "engine": "none",
+    "flags": {
+      "assignment_statement_alignment": "align",
+      "case_items_alignment": "align",
+      "column_limit": "120",
+      "distribution_items_alignment": "align",
+      "formal_parameters_alignment": "align",
+      "formal_parameters_indentation": "indent",
+      "indentation_spaces": "4",
+      "named_parameter_alignment": "align",
+      "named_parameter_indentation": "indent",
+      "named_port_alignment": "align",
+      "named_port_indentation": "indent",
+      "port_declarations_alignment": "align",
+      "port_declarations_indentation": "indent",
+      "port_declarations_right_align_packed_dimensions": "true",
+      "struct_union_members_alignment": "align",
+      "wrap_end_else_clauses": "true"
+    }
+  },
+  "generation_key": "3528a20fa2da9d907f015236c493d9ef28886fa4461f0dea9963842478298fda",
+  "generator_fingerprint": "28ec83c8814a8ee51426a19607111c382bb0a7442461654fb3356e4c3479acce",
   "options": {
     "arch": "original_pipe",
     "dpr": false,
@@ -19,5 +40,5 @@
     "sel_mode": "sync"
   },
   "output": "tb",
-  "schema_version": 1
+  "schema_version": 2
 }

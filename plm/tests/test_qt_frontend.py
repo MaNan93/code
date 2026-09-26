@@ -24,6 +24,7 @@ from plm.frontend.qt.widgets.theme import (
     VisibleCheckBox,
     build_stylesheet,
 )
+from plm.core.validation import ValidationError, ValidationIssue
 
 
 class QtFrontendTests(unittest.TestCase):
@@ -874,6 +875,26 @@ class QtFrontendTests(unittest.TestCase):
         self.assertEqual((table.currentRow(), table.currentColumn()), (0, 0))
         self.assertEqual(window._generation_state, "FAILED")
         self.assertIn("highlighted configuration cell", window.log.toPlainText())
+
+    def test_generate_blocks_unlocated_validation_issue(self):
+        workspace = self._sample_workspace()
+        window = self.make_window()
+        window._open_workspace(workspace)
+        issue = ValidationIssue("generation", "formatter settings are invalid")
+
+        with mock.patch.object(
+            main_window,
+            "load_generation_plan",
+            side_effect=ValidationError([issue]),
+        ), mock.patch.object(
+            window, "_save_before_action"
+        ) as save, mock.patch.object(QtCore.QProcess, "start") as start:
+            window._run_tool()
+
+        save.assert_not_called()
+        start.assert_not_called()
+        self.assertEqual(window._generation_state, "FAILED")
+        self.assertIn("formatter settings are invalid", window.log.toPlainText())
 
     def test_live_validation_rejects_shared_phy2mac(self):
         workspace = self._sample_workspace()

@@ -343,12 +343,23 @@ plm generate --config <SET> [其它参数]
 |---|---|---|
 | `--config SET` | 无（必填） | 配置集名字或路径 |
 | `--arch {original_pipe,serdes}` | `original_pipe` | PHY 宏类型，必须与 pclk-mode 匹配 |
-| `--pclk-mode {pclk_as_phy_output,pclk_as_phy_input}` | `pclk_as_phy_output` | PCLK 归属架构 |
+| `--pclk-mode {pclk_as_phy_output,pclk_as_phy_input}` | `pclk_as_phy_output` | PCLK 归属架构；方向名称以 PHY 端口为视角 |
 | `--sel-mode {sync,comb}` | `sync` | Group 选择同步方式；DPR 要求 sync |
 | `--dpr` | 关闭 | 生成并例化 DPR overlay |
 | `--verible-path PATH` | 自动搜索 | SystemVerilog 格式化器 |
 | `--verible-flags JSON` | 内置默认值 | 覆盖 Verible 参数 |
 | `--quiet` | 关闭 | 不打印拓扑报告 |
+
+两种 `pclk-mode` 的区别：
+
+| 模式 | PCLK 主路径 | 返回/反馈路径 | DPR |
+|---|---|---|---|
+| `pclk_as_phy_output` | PHY 的 `phy_pclk_out[]` 经 Mapper 选为 controller 的标量 `ctrl_pclk` | 选出的时钟回灌到当前 owner 的 `phy_pclk_in[]` | Mapper 从当前 mask 中最低编号 lane 的 PHY PCLK 派生 `dpr_pclk` |
+| `pclk_as_phy_input` | controller 的逐 lane `{c}_pclk[]` 经 Mapper 送到 `phy_pclk[]` | PHY 的逐 lane `rx_clk[]` 经 Mapper 送回 `{c}_rx_clk[]` | 外部必须提供自由运行的 `dpr_pclk`，Mapper 输出 `dpr_rx_clk[]` |
+
+因此，前者主要按 Group 选择时钟；后者的 PCLK 和返回的 RXCLK 都必须按
+物理 lane 独立路由和同步。两种模式生成的端口不兼容，必须与实际 PHY 宏
+接口一致。
 
 生成器先建立统一的 `GenerationPlan`，让 RTL、TB 和 Report 使用同一份已解析
 拓扑；随后在 workspace 旁建立 staging，同时生成 `rtl/` 和 `tb/`。生成完成后

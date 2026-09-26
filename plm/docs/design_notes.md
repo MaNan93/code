@@ -110,12 +110,20 @@ PIPE 规范允许两种截然不同的 PCLK 归属方式，两者互斥，一次
 `gen_data_p2m()` / `gen_top()` / `gen_tb()` 等生成逻辑都按所选方案
 分叉）：
 
+> **命名视角**：`input` / `output` 都是相对于 **PHY 的 PCLK 端口方向**，
+> 不是相对于 Lane Mapper。`pclk_as_phy_output` 表示 PCLK 从 PHY 流出；
+> `pclk_as_phy_input` 表示 PCLK 流入 PHY。
+
 | | `pclk_as_phy_output`（默认方案） | `pclk_as_phy_input` |
 |---|---|---|
-| PCLK 由谁产生 | PHY 产生，驱动给 MAC | 每个 controller 自己有参考时钟（一般来自外部 PLL），driving 给 PHY |
+| PHY 端口方向 | PHY output | PHY input |
+| PCLK 由谁产生 | PHY 产生，送往 controller | controller 由外部参考时钟分频产生，送往 PHY |
+| 正向 PCLK 路径 | `phy_pclk_out[l]` → Mapper → `ctrl_pclk[c]` | `{c}_pclk[port]` → Mapper → `phy_pclk[l]` |
+| PHY 返回时钟 | 不单独使用 `rx_clk` | `rx_clk[l]` → Mapper → `{c}_rx_clk[port]` |
 | controller 的工作时钟从哪来 | `pipe_lane_clk_mux` 从当前 owner 所在 lane 的 `phy_pclk_out` 里选一路，即 `ctrl_pclk` | controller 自己用参考时钟分频得到，按自己的 lane 输出成 `{c}_pclk[]`，本设计不参与产生 |
 | 有没有 `ctrl_pclk` 信号 | 有（顶层输出） | 没有（详见 3.5.2 节） |
 | 数据路径的同步粒度 | 按 group（`sel_tgt`，group 级信号） | 按物理 lane（`seltgt_gN_lL`，详见 3.5.2 节） |
+| DPR 时钟 | Mapper 从当前 mask 中最低编号 lane 的 `phy_pclk_out` 派生 `dpr_pclk` | 系统外部提供持续运行的 `dpr_pclk`；Mapper 输出逐 lane `dpr_rx_clk[]` |
 
 `pclk_as_phy_output` 是最早支持的方案，实现细节见 3.5.1 节；
 `pclk_as_phy_input` 是后加的第二种方案，实现细节见 3.5.2 节。两者

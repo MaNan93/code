@@ -143,14 +143,21 @@ dout = acc XOR safe
 
 ### 2.2 两套时钟架构（生成逻辑彻底分叉）
 
+这里的 `input` / `output` 一律以 **PHY 的 PCLK 端口方向**为准：
+`pclk_as_phy_output` 是 PCLK 从 PHY 流出，`pclk_as_phy_input` 是 PCLK
+流入 PHY，与 Lane Mapper 自身的端口方向无关。
+
 | 维度 | `pclk_as_phy_output`（默认） | `pclk_as_phy_input` |
 |---|---|---|
 | **PCLK 谁产生** | PHY 每条 lane 各自产生 | controller 自己用外部 PLL 分频 |
+| **PCLK 主路径** | `phy_pclk_out[]` → Mapper → `ctrl_pclk` | `{c}_pclk[]` → Mapper → `phy_pclk[]` |
+| **返回时钟路径** | 选出的 `ctrl_pclk` 回灌到当前 owner 的 `phy_pclk_in[]` | PHY 的 `rx_clk[]` 经 Mapper 路由到 `{c}_rx_clk[]` |
 | **controller 怎么用** | `clk_mux` 从当前 owner lane 选一路做 `ctrl_pclk`，再回灌 `phy_pclk_in` | controller 自己按**每条 lane 一根**送出 `{c}_pclk[]` |
 | **有无 `ctrl_pclk`** | 有（顶层端口） | **没有**（既不是顶层端口也不是内部 wire） |
 | **选择信号粒度** | 按 group：`sel_tgt` | 按物理 lane：`seltgt_gN_lL` |
 | **同步树棵数** | 1 类（所有信号同一棵） | 2 类（`{c}_pclk` 域一棵 + `rx_clk[l]` 域一棵） |
 | **关键点** | 可以按 group 共用一份选择 | 必须拆到每条 lane，因为每条 lane 最终被具体那条 lane 的时钟采样 |
+| **DPR** | 从当前 mask 中最低编号 lane 的 PHY PCLK 派生 `dpr_pclk` | 外部提供自由运行的 `dpr_pclk`，并输出逐 lane `dpr_rx_clk[]` |
 
 **为什么 `pclk_as_phy_input` 下必须拆到 lane**：
 - `{c}_pclk[]` 本来就是按 lane 给的（x4+x8+x2 就是 14 根，不是 3 根）

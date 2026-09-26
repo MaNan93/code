@@ -87,11 +87,7 @@ BOTTOM_EDGE_INSET = 12
 TAB_VERTICAL_GAP = 4
 GENERATION_STATE_LABELS = {
     "IDLE": "Ready",
-    "SAVING": "Saving...",
-    "VALIDATING": "Validating...",
     "GENERATING": "Generating...",
-    "REFRESHING_PREVIEW": "Refreshing preview...",
-    "DONE": "Generated",
     "STALE": "Out of date",
     "UP_TO_DATE": "Up to date",
     "FAILED": "Generation failed",
@@ -2881,14 +2877,13 @@ class MainWindow(QtWidgets.QMainWindow):
                 if not focused or issue.table is None:
                     self._log(str(issue))
             return
-        self._set_generation_state("SAVING")
         if not self._save_before_action():
-            self._set_generation_state("IDLE")
+            self._set_generation_state("FAILED")
             return
         self._clear_generation_results()
         self._set_bottom_panel_page(0)  # LOG -- the run's output streams in here
         self._set_generation_busy(True)
-        self._set_generation_state("VALIDATING")
+        self._set_generation_state("GENERATING")
         started_at = time.monotonic()
         run_workspace = self.current_workspace
         before_outputs = self._output_signature(run_workspace)
@@ -2943,7 +2938,6 @@ class MainWindow(QtWidgets.QMainWindow):
                     return
                 phase = event.get("phase")
                 if phase in ("VALIDATING", "GENERATING", "UP_TO_DATE"):
-                    self._set_generation_state(phase)
                     if phase == "UP_TO_DATE":
                         terminal_phase = phase
                     return
@@ -2973,7 +2967,7 @@ class MainWindow(QtWidgets.QMainWindow):
                     self._log("[generate skipped: outputs are up to date]")
                 else:
                     self._log("[generate finished]")
-                self._set_generation_state("REFRESHING_PREVIEW")
+                self._set_generation_state("UP_TO_DATE")
                 after_outputs = self._output_signature(run_workspace)
                 self._show_generation_results(
                     run_workspace, before_outputs, after_outputs
@@ -2981,9 +2975,6 @@ class MainWindow(QtWidgets.QMainWindow):
                 if self.current_workspace == run_workspace:
                     self._refresh_topology_summary()
                     self._refresh_rtl_preview()
-                self._set_generation_state(
-                    "UP_TO_DATE" if terminal_phase == "UP_TO_DATE" else "DONE"
-                )
             else:
                 self._log(f"[generate finished, exit code {exit_code}]")
                 self._set_generation_state("FAILED")

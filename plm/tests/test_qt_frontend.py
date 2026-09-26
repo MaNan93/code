@@ -610,11 +610,7 @@ class QtFrontendTests(unittest.TestCase):
         window = self.make_window()
         expected = [
             ("IDLE", "Ready"),
-            ("SAVING", "Saving..."),
-            ("VALIDATING", "Validating..."),
             ("GENERATING", "Generating..."),
-            ("REFRESHING_PREVIEW", "Refreshing preview..."),
-            ("DONE", "Generated"),
             ("STALE", "Out of date"),
             ("UP_TO_DATE", "Up to date"),
             ("FAILED", "Generation failed"),
@@ -624,8 +620,11 @@ class QtFrontendTests(unittest.TestCase):
             self.assertEqual(window._generation_state, state)
             self.assertEqual(window.generation_state_label.text(), label)
 
-        with self.assertRaises(ValueError):
-            window._set_generation_state("CANCELLED")
+        for removed_state in (
+            "SAVING", "VALIDATING", "REFRESHING_PREVIEW", "DONE", "CANCELLED"
+        ):
+            with self.subTest(state=removed_state), self.assertRaises(ValueError):
+                window._set_generation_state(removed_state)
 
     def test_application_activation_rechecks_output_hashes(self):
         window = self.make_window()

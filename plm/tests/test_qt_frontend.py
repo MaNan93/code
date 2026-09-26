@@ -918,7 +918,7 @@ class QtFrontendTests(unittest.TestCase):
 
         with mock.patch.object(
             main_window,
-            "load_generation_plan",
+            "load_generation_plan_from_payload",
             side_effect=ValidationError([issue]),
         ), mock.patch.object(
             window, "_save_before_action"

@@ -103,6 +103,20 @@ def apply_titlebar_theme(window):
 class RoundedComboBox(QtWidgets.QComboBox):
     """Combo box with a QSS-safe chevron and four visible rounded corners."""
 
+    def showPopup(self):
+        # Qt sizes the popup from item text alone and does not account for
+        # the padding applied to QAbstractItemView::item below. Widen narrow
+        # table-editor popups so their longest option remains fully visible.
+        view = self.view()
+        metrics = view.fontMetrics()
+        widest = max(
+            (metrics.horizontalAdvance(self.itemText(i)) for i in range(self.count())),
+            default=0,
+        )
+        item_padding = 8 * 2 + 1 * 2
+        view.setMinimumWidth(max(self.width(), widest + item_padding + 12))
+        super().showPopup()
+
     def paintEvent(self, event):
         super().paintEvent(event)
         painter = QtGui.QPainter(self)

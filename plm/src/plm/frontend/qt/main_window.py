@@ -1657,16 +1657,23 @@ class MainWindow(QtWidgets.QMainWindow):
         # same left-to-right boundary at every DPI/font size.
         if getattr(self, "editor_shell", None):
             shell_origin = self.editor_shell.mapTo(self.main_area, QtCore.QPoint(0, 0))
-            x = shell_origin.x()
-            width = max(1, min(self.editor_shell.width(), self.main_area.width() - x))
+            shell_x = shell_origin.x()
+            shell_width = max(
+                1, min(self.editor_shell.width(), self.main_area.width() - shell_x)
+            )
         else:
-            x = margin
-            width = max(1, self.main_area.width() - 2 * margin)
+            shell_x = margin
+            shell_width = max(1, self.main_area.width() - 2 * margin)
         bottom = self.main_area.height() - BOTTOM_EDGE_INSET
         if expanded:
+            x = shell_x
+            width = shell_width
             height = min(int(260 * scale), max(190, int(self.main_area.height() * 0.38)))
         else:
-            height = collapsed_height
+            margins = self.log_layout.contentsMargins()
+            height = self.log_header.sizeHint().height() + margins.top() + margins.bottom()
+            width = min(shell_width, self.log_card.sizeHint().width())
+            x = shell_x + shell_width - width
         y = max(margin, bottom - height)
         self.log_card.setGeometry(x, y, width, height)
         self.log_card.raise_()

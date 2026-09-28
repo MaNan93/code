@@ -367,6 +367,10 @@ class QtFrontendTests(unittest.TestCase):
             )
             widest = max(combo.fontMetrics().horizontalAdvance(value) for value in options)
             self.assertGreaterEqual(text_rect.width(), widest)
+            combo.showPopup()
+            self.process_events()
+            self.assertGreaterEqual(combo.view().minimumWidth(), widest + 30)
+            combo.hidePopup()
 
     def test_collapsed_log_does_not_overlap_editor(self):
         window = self.make_window()
@@ -380,6 +384,9 @@ class QtFrontendTests(unittest.TestCase):
             window.main_area, QtCore.QPoint(0, window.editor_shell.height())
         ).y()
         self.assertLessEqual(shell_bottom, window.log_card.geometry().top())
+        shell_rect = window.editor_shell.geometry()
+        self.assertLess(window.log_card.width(), shell_rect.width())
+        self.assertEqual(window.log_card.geometry().right(), shell_rect.right())
 
     def test_recent_menu_labels_and_actions(self):
         window = self.make_window()

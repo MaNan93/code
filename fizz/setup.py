@@ -5,10 +5,14 @@ from setuptools import setup, find_packages
 
 setup(
     name="fizz",
-    version="0.2.0",
+    version="0.3.0",
     packages=find_packages(where="src"),
     package_dir={"": "src"},
+    package_data={
+        "fizz.frontend.qt": ["assets/fonts/*.ttf", "assets/fonts/*.txt", "assets/fonts/*.md"],
+    },
     python_requires=">=3.12",
+    install_requires=["PyQt5>=5.15"],
     author="Developer",
     description="SV file merger with VCS Protect, Obfuscator and RLskit support",
     long_description=open("README.md", encoding="utf-8").read(),
@@ -27,7 +31,7 @@ setup(
     ],
     entry_points={
         "console_scripts": [
-            "fizz=fizz.fizz:main",
+            "fizz=fizz.frontend.qt.main:main",
         ],
     },
 )

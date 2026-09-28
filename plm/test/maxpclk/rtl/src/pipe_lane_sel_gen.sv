@@ -122,7 +122,7 @@ module pipe_lane_sel_gen #(
 
     //------------------------------------------------------------
     // rx_clk routing (PHY->controller, not feedback): one pipe_lane_sel_sync per BBM lane, synchronizing
-    // dec_tgt.gN into that lane's own rx_clk[l] domain (rx_clk has no fixed phase
+    // dec_tgt.gN into that lane's own rx_clk[lane_idx] domain (rx_clk has no fixed phase
     // relation to {c}_pclk, unlike the rest of the PIPE-level signals).
     // clk_mux does the final pipe_lane_clk_gate + assign with this enable.
     //------------------------------------------------------------

@@ -326,9 +326,10 @@ def _same_path(left, right):
     try:
         return os.path.samefile(left, right)
     except (OSError, TypeError, ValueError):
-        normalize = lambda value: os.path.normcase(
-            os.path.abspath(os.path.expanduser(os.fspath(value)))
-        )
+        def normalize(value):
+            return os.path.normcase(
+                os.path.abspath(os.path.expanduser(os.fspath(value)))
+            )
         return normalize(left) == normalize(right)
 
 

@@ -200,16 +200,16 @@ module tb_pipe_lane_mapper;
         for (int p = 0; p < 6; p++) ctrlb_mac2phy[p] = make_m2p(1, p);
         for (int p = 0; p < 8; p++) ctrlc_mac2phy[p] = make_m2p(2, p);
         for (int p = 0; p < 3; p++) ctrld_mac2phy[p] = make_m2p(3, p);
-        for (int l = 0; l < NL; l++) begin
-            phy_phy2mac[l] = make_p2m(l);
-            phy_phy2mac[l].phy_mac_phystatus = phy_phystatus_stim[l];
+        for (int lane_idx = 0; lane_idx < NL; lane_idx++) begin
+            phy_phy2mac[lane_idx] = make_p2m(lane_idx);
+            phy_phy2mac[lane_idx].phy_mac_phystatus = phy_phystatus_stim[lane_idx];
         end
     end
 
     //------------------------------------------------------------ expected mapping (from lane_mapping.csv)
-    function automatic int owner_of(input int m, input int l);
+    function automatic int owner_of(input int m, input int lane_idx);
         case (m)
-            0: case (l)
+            0: case (lane_idx)
                 0: return 0;
                 1: return 0;
                 2: return 0;
@@ -224,7 +224,7 @@ module tb_pipe_lane_mapper;
                 11: return 0;
                 default: return -1;
             endcase
-            1: case (l)
+            1: case (lane_idx)
                 0: return 0;
                 1: return 0;
                 2: return 0;
@@ -239,7 +239,7 @@ module tb_pipe_lane_mapper;
                 11: return 1;
                 default: return -1;
             endcase
-            2: case (l)
+            2: case (lane_idx)
                 0: return 0;
                 1: return 0;
                 2: return 0;
@@ -254,7 +254,7 @@ module tb_pipe_lane_mapper;
                 11: return 2;
                 default: return -1;
             endcase
-            3: case (l)
+            3: case (lane_idx)
                 0: return 0;
                 1: return 0;
                 2: return 0;
@@ -273,9 +273,9 @@ module tb_pipe_lane_mapper;
         endcase
     endfunction
 
-    function automatic int ctrl_lane_of(input int m, input int l);
+    function automatic int ctrl_lane_of(input int m, input int lane_idx);
         case (m)
-            0: case (l)
+            0: case (lane_idx)
                 0: return 0;
                 1: return 1;
                 2: return 2;
@@ -290,7 +290,7 @@ module tb_pipe_lane_mapper;
                 11: return 11;
                 default: return -1;
             endcase
-            1: case (l)
+            1: case (lane_idx)
                 0: return 0;
                 1: return 1;
                 2: return 2;
@@ -305,7 +305,7 @@ module tb_pipe_lane_mapper;
                 11: return 5;
                 default: return -1;
             endcase
-            2: case (l)
+            2: case (lane_idx)
                 0: return 0;
                 1: return 1;
                 2: return 2;
@@ -320,7 +320,7 @@ module tb_pipe_lane_mapper;
                 11: return 5;
                 default: return -1;
             endcase
-            3: case (l)
+            3: case (lane_idx)
                 0: return 0;
                 1: return 1;
                 2: return 2;
@@ -340,8 +340,8 @@ module tb_pipe_lane_mapper;
     endfunction
 
     function automatic int ctrl_pclk_src_lane(input int m, input int cid);
-        for (int l = 0; l < NL; l++)
-            if (owner_of(m, l) == cid) return l;
+        for (int lane_idx = 0; lane_idx < NL; lane_idx++)
+            if (owner_of(m, lane_idx) == cid) return lane_idx;
         return -1;
     endfunction
 
@@ -537,19 +537,19 @@ module tb_pipe_lane_mapper;
         int cid, ctrl_lane;
         int unsigned err_before;
 
-        for (int l = 0; l < NL; l++) begin
-            cid  = owner_of(m, l);
-            ctrl_lane = ctrl_lane_of(m, l);
+        for (int lane_idx = 0; lane_idx < NL; lane_idx++) begin
+            cid  = owner_of(m, lane_idx);
+            ctrl_lane = ctrl_lane_of(m, lane_idx);
             exp_m2p = make_m2p(cid, ctrl_lane);
             err_before = err_count;
-            chk_m2p(phy_mac2phy[l], exp_m2p,
-                $sformatf("mode%0d lane%0d: expected ctrl%0d lane%0d", m, l, cid, ctrl_lane));
+            chk_m2p(phy_mac2phy[lane_idx], exp_m2p,
+                $sformatf("mode%0d lane%0d: expected ctrl%0d lane%0d", m, lane_idx, cid, ctrl_lane));
             err_m2p += (err_count - err_before);
 
             err_before = err_count;
-            chk(phy_rst_n[l] == ctrl_rst_n[cid],
+            chk(phy_rst_n[lane_idx] == ctrl_rst_n[cid],
                 $sformatf("mode%0d lane%0d: phy_rst_n=%0b does not follow owner ctrl%0d",
-                          m, l, phy_rst_n[l], cid));
+                          m, lane_idx, phy_rst_n[lane_idx], cid));
             err_reset += (err_count - err_before);
 
             begin
@@ -561,11 +561,11 @@ module tb_pipe_lane_mapper;
                         real got_ns, exp_ns;
                         int unsigned err_before;
                         exp_ns = PERIOD_NS[src_lane];
-                        @(posedge phy_pclk_in[l]); t0 = $time;
-                        @(posedge phy_pclk_in[l]); got_ns = $time - t0;
+                        @(posedge phy_pclk_in[lane_idx]); t0 = $time;
+                        @(posedge phy_pclk_in[lane_idx]); got_ns = $time - t0;
                         err_before = err_count;
                         chk((got_ns > exp_ns * 0.8) && (got_ns < exp_ns * 1.2),
-                            $sformatf("%s: measured period %0.2fns, expected ~%0.2fns", $sformatf("mode%0d lane%0d phy_pclk_in", m, l), got_ns, exp_ns));
+                            $sformatf("%s: measured period %0.2fns, expected ~%0.2fns", $sformatf("mode%0d lane%0d phy_pclk_in", m, lane_idx), got_ns, exp_ns));
                         err_clock += (err_count - err_before);
                     end
             end
@@ -649,8 +649,8 @@ module tb_pipe_lane_mapper;
                 int src_lane;
                 phy2mac_lane_t got;
                 src_lane = -1;
-                for (int l = 0; l < NL; l++)
-                    if (owner_of(m, l) == c && ctrl_lane_of(m, l) == p) src_lane = l;
+                for (int lane_idx = 0; lane_idx < NL; lane_idx++)
+                    if (owner_of(m, lane_idx) == c && ctrl_lane_of(m, lane_idx) == p) src_lane = lane_idx;
 
                 case (c)
                     0: got = ctrla_phy2mac[p];
@@ -664,8 +664,8 @@ module tb_pipe_lane_mapper;
                     int active_base;
                     exp_tie = SAFE_P2M;
                     active_base = -1;
-                    for (int l = 0; l < NL; l++) begin
-                        if (owner_of(m, l) == c && active_base == -1) active_base = l;
+                    for (int lane_idx = 0; lane_idx < NL; lane_idx++) begin
+                        if (owner_of(m, lane_idx) == c && active_base == -1) active_base = lane_idx;
                     end
                     if (active_base != -1) begin
                         exp_tie.phy_mac_rxdata = 32'h00000000;
@@ -726,12 +726,12 @@ module tb_pipe_lane_mapper;
     task automatic check_dpr();
         int test_lanes[4] = '{0, 3, 6, 9};
         foreach (test_lanes[k]) begin
-            automatic int l = test_lanes[k];
-            automatic int oid = owner_of(mode, l);
-            automatic int op = ctrl_lane_of(mode, l);
+            automatic int lane_idx = test_lanes[k];
+            automatic int oid = owner_of(mode, lane_idx);
+            automatic int op = ctrl_lane_of(mode, lane_idx);
             automatic int unsigned err_before;
             v_lane_mask = '0;
-            case (l)
+            case (lane_idx)
                 0: v_lane_mask = NL'(7);
                 3: v_lane_mask = NL'(56);
                 6: v_lane_mask = NL'(448);
@@ -741,23 +741,23 @@ module tb_pipe_lane_mapper;
             err_before = err_count;
             case (oid)
                 0: chk_p2m(ctrla_phy2mac[op], exp_safe_p2m,
-                    $sformatf("dpr claimed lane%0d: real owner CtrlA[%0d] should read SAFE_P2M", l, op));
+                    $sformatf("dpr claimed lane%0d: real owner CtrlA[%0d] should read SAFE_P2M", lane_idx, op));
                 1: chk_p2m(ctrlb_phy2mac[op], exp_safe_p2m,
-                    $sformatf("dpr claimed lane%0d: real owner CtrlB[%0d] should read SAFE_P2M", l, op));
+                    $sformatf("dpr claimed lane%0d: real owner CtrlB[%0d] should read SAFE_P2M", lane_idx, op));
                 2: chk_p2m(ctrlc_phy2mac[op], exp_safe_p2m,
-                    $sformatf("dpr claimed lane%0d: real owner CtrlC[%0d] should read SAFE_P2M", l, op));
+                    $sformatf("dpr claimed lane%0d: real owner CtrlC[%0d] should read SAFE_P2M", lane_idx, op));
                 3: chk_p2m(ctrld_phy2mac[op], exp_safe_p2m,
-                    $sformatf("dpr claimed lane%0d: real owner CtrlD[%0d] should read SAFE_P2M", l, op));
+                    $sformatf("dpr claimed lane%0d: real owner CtrlD[%0d] should read SAFE_P2M", lane_idx, op));
                 default: ;
             endcase
-            chk(dpr_phy2mac[l] == phy_phy2mac[l],
-                $sformatf("dpr claimed lane%0d: dpr_phy2mac should mirror live phy_phy2mac", l));
-            $display("%0t: dpr claimed lane%0d (%0d cumulative errors)", $time, l, err_count);
+            chk(dpr_phy2mac[lane_idx] == phy_phy2mac[lane_idx],
+                $sformatf("dpr claimed lane%0d: dpr_phy2mac should mirror live phy_phy2mac", lane_idx));
+            $display("%0t: dpr claimed lane%0d (%0d cumulative errors)", $time, lane_idx, err_count);
             v_lane_mask = '0;
             #SETTLE;
-            chk(dpr_phy2mac[l] == exp_safe_p2m,
-                $sformatf("dpr released lane%0d: dpr_phy2mac should revert to tie", l));
-            $display("%0t: dpr released lane%0d (%0d cumulative errors)", $time, l, err_count);
+            chk(dpr_phy2mac[lane_idx] == exp_safe_p2m,
+                $sformatf("dpr released lane%0d: dpr_phy2mac should revert to tie", lane_idx));
+            $display("%0t: dpr released lane%0d (%0d cumulative errors)", $time, lane_idx, err_count);
             err_dpr += (err_count - err_before);
         end
     endtask
@@ -820,11 +820,11 @@ module tb_pipe_lane_mapper;
         begin
             int unsigned err_before;
             err_before = err_count;
-            for (int l = 0; l < NL; l++) begin
+            for (int lane_idx = 0; lane_idx < NL; lane_idx++) begin
                 bit expect_low;
-                expect_low = (owner_of(3, l) == 0);
-                chk(phy_rst_n[l] == (expect_low ? 1'b0 : 1'b1),
-                    $sformatf("mode3 lane%0d: ctrl_rst_n[0]=0 pulse, expected phy_rst_n=%0b", l, expect_low ? 1'b0 : 1'b1));
+                expect_low = (owner_of(3, lane_idx) == 0);
+                chk(phy_rst_n[lane_idx] == (expect_low ? 1'b0 : 1'b1),
+                    $sformatf("mode3 lane%0d: ctrl_rst_n[0]=0 pulse, expected phy_rst_n=%0b", lane_idx, expect_low ? 1'b0 : 1'b1));
             end
             err_reset += (err_count - err_before);
         end
@@ -835,11 +835,11 @@ module tb_pipe_lane_mapper;
         begin
             int unsigned err_before;
             err_before = err_count;
-            for (int l = 0; l < NL; l++) begin
+            for (int lane_idx = 0; lane_idx < NL; lane_idx++) begin
                 bit expect_low;
-                expect_low = (owner_of(3, l) == 1);
-                chk(phy_rst_n[l] == (expect_low ? 1'b0 : 1'b1),
-                    $sformatf("mode3 lane%0d: ctrl_rst_n[1]=0 pulse, expected phy_rst_n=%0b", l, expect_low ? 1'b0 : 1'b1));
+                expect_low = (owner_of(3, lane_idx) == 1);
+                chk(phy_rst_n[lane_idx] == (expect_low ? 1'b0 : 1'b1),
+                    $sformatf("mode3 lane%0d: ctrl_rst_n[1]=0 pulse, expected phy_rst_n=%0b", lane_idx, expect_low ? 1'b0 : 1'b1));
             end
             err_reset += (err_count - err_before);
         end
@@ -850,11 +850,11 @@ module tb_pipe_lane_mapper;
         begin
             int unsigned err_before;
             err_before = err_count;
-            for (int l = 0; l < NL; l++) begin
+            for (int lane_idx = 0; lane_idx < NL; lane_idx++) begin
                 bit expect_low;
-                expect_low = (owner_of(3, l) == 2);
-                chk(phy_rst_n[l] == (expect_low ? 1'b0 : 1'b1),
-                    $sformatf("mode3 lane%0d: ctrl_rst_n[2]=0 pulse, expected phy_rst_n=%0b", l, expect_low ? 1'b0 : 1'b1));
+                expect_low = (owner_of(3, lane_idx) == 2);
+                chk(phy_rst_n[lane_idx] == (expect_low ? 1'b0 : 1'b1),
+                    $sformatf("mode3 lane%0d: ctrl_rst_n[2]=0 pulse, expected phy_rst_n=%0b", lane_idx, expect_low ? 1'b0 : 1'b1));
             end
             err_reset += (err_count - err_before);
         end
@@ -865,11 +865,11 @@ module tb_pipe_lane_mapper;
         begin
             int unsigned err_before;
             err_before = err_count;
-            for (int l = 0; l < NL; l++) begin
+            for (int lane_idx = 0; lane_idx < NL; lane_idx++) begin
                 bit expect_low;
-                expect_low = (owner_of(3, l) == 3);
-                chk(phy_rst_n[l] == (expect_low ? 1'b0 : 1'b1),
-                    $sformatf("mode3 lane%0d: ctrl_rst_n[3]=0 pulse, expected phy_rst_n=%0b", l, expect_low ? 1'b0 : 1'b1));
+                expect_low = (owner_of(3, lane_idx) == 3);
+                chk(phy_rst_n[lane_idx] == (expect_low ? 1'b0 : 1'b1),
+                    $sformatf("mode3 lane%0d: ctrl_rst_n[3]=0 pulse, expected phy_rst_n=%0b", lane_idx, expect_low ? 1'b0 : 1'b1));
             end
             err_reset += (err_count - err_before);
         end

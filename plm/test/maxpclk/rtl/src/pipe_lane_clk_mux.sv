@@ -95,8 +95,8 @@ module pipe_lane_clk_mux #(
     pipe_lane_clk_or #(.N(4)) u_pclk_or_g3_l11 (.clk_in(pclk_gated_g3_l11), .clk_out(phy_pclk[11]));
 
     //------------------------------------------------------------
-    // rx_clk: glitch-free per-lane select, using rxclk_en_g{gid}_l{l} from
-    // sel_gen (already synchronized into rx_clk[l]'s own domain).
+    // rx_clk: glitch-free per-lane select, using rxclk_en_g{gid}_l{lane_idx} from
+    // sel_gen (already synchronized into rx_clk[lane_idx]'s own domain).
     //------------------------------------------------------------
     assign ctrla_rx_clk[0] = rx_clk[0];  // G0 direct to CtrlA
     assign ctrla_rx_clk[1] = rx_clk[1];  // G0 direct to CtrlA

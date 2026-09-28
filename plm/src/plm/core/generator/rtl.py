@@ -229,7 +229,7 @@ def gen_sel_gen(cfg, sel_mode="sync", pclk_mode="pclk_as_phy_output", dpr=False)
     controller using ITS OWN lane's {c.lname}_pclk[], so the select needs to
     be synchronized into that same per-ctrl-lane domain, not a
     per-controller stand-in. So instead of one sel_tgt.gN per group, this
-    module produces one seltgt_g{gid}_l{l} per BBM LANE (mirroring
+    module produces one seltgt_g{gid}_l{lane_idx} per BBM LANE (mirroring
     phy_pclk's per-lane treatment), which gen_data_m2p/gen_data_p2m
     select with per lane instead of the group-shared sel_tgt.
 
@@ -240,8 +240,8 @@ def gen_sel_gen(cfg, sel_mode="sync", pclk_mode="pclk_as_phy_output", dpr=False)
 
     In pclk_mode="pclk_as_phy_input", this module also houses every
     CDC synchronizer in the design, including ones whose output isn't the
-    data-path sel_tgt: rxclk_en_g{gid}_l{l} synchronizes dec_tgt.gN into
-    each BBM lane's own rx_clk[l] domain (rx_clk is PHY's per-lane
+    data-path sel_tgt: rxclk_en_g{gid}_l{lane_idx} synchronizes dec_tgt.gN into
+    each BBM lane's own rx_clk[lane_idx] domain (rx_clk is PHY's per-lane
     recovered clock, with no fixed phase relation to ctrl_pclk),
     for pipe_lane_clk_mux's rx_clk routing -- rx_clk flows PHY->controller,
     it is not looped back to the PHY the way phy_pclk is, so it is not
@@ -368,20 +368,20 @@ def gen_sel_gen(cfg, sel_mode="sync", pclk_mode="pclk_as_phy_output", dpr=False)
     if phy_input_mode:
         for g in (cfg.groups if dpr else [g for g in cfg.groups if not g.is_direct]):
             eff_n = g.n + 1 if dpr else g.n
-            for l in g.lanes:
+            for lane_idx in g.lanes:
                 ports.append(
                     (
-                        f"    output logic [{eff_n-1}:0] seltgt_g{g.gid}_l{l}",
+                        f"    output logic [{eff_n-1}:0] seltgt_g{g.gid}_l{lane_idx}",
                         f"   // dec_tgt.g{g.gid} synchronized into this lane's owning candidate's own ctrl lane's clock; used by data_m2p/data_p2m",
                     )
                 )
         for g in (cfg.groups if dpr else [g for g in cfg.groups if not g.is_direct]):
             eff_n = g.n + 1 if dpr else g.n
-            for l in g.lanes:
+            for lane_idx in g.lanes:
                 ports.append(
                     (
-                        f"    output logic [{eff_n-1}:0] rxclk_en_g{g.gid}_l{l}",
-                        f"   // dec_tgt.g{g.gid} synchronized into rx_clk[{l}]'s own domain, for clk_mux's rx_clk gating",
+                        f"    output logic [{eff_n-1}:0] rxclk_en_g{g.gid}_l{lane_idx}",
+                        f"   // dec_tgt.g{g.gid} synchronized into rx_clk[{lane_idx}]'s own domain, for clk_mux's rx_clk gating",
                     )
                 )
     for i, (code, comment) in enumerate(ports):
@@ -436,11 +436,11 @@ def gen_sel_gen(cfg, sel_mode="sync", pclk_mode="pclk_as_phy_output", dpr=False)
             names = ", ".join(cfg.controllers[c].name for c in g.cands) + (", DPR" if dpr else "")
             L.append(f"    // G{g.gid} lane{g.lanes[0]}~{g.lanes[-1]}: {names}, per-lane select")
             n = g.n + 1 if dpr else g.n
-            for l in g.lanes:
+            for lane_idx in g.lanes:
                 ctrl_lane_of_cand = {}
                 for c in g.cands:
                     m = next(mm for mm in cfg.modes if g.owners[mm] == c)
-                    ctrl_lane_of_cand[c] = cfg.mapping[m][l][1]
+                    ctrl_lane_of_cand[c] = cfg.mapping[m][lane_idx][1]
                 branch_clk_terms = ", ".join(
                     f"{cfg.controllers[c].lname}_pclk[{ctrl_lane_of_cand[c]}]" for c in reversed(g.cands)
                 )
@@ -448,11 +448,11 @@ def gen_sel_gen(cfg, sel_mode="sync", pclk_mode="pclk_as_phy_output", dpr=False)
                 if dpr:
                     branch_clk_terms = "dpr_pclk, " + branch_clk_terms
                     branch_rst_terms = "dpr_rst_n, " + branch_rst_terms
-                L.append(f"    pipe_lane_sel_sync #(.N({n}), .SYNC(SEL_SYNC)) u_seltgt_sel_sync_g{g.gid}_l{l} (")
+                L.append(f"    pipe_lane_sel_sync #(.N({n}), .SYNC(SEL_SYNC)) u_seltgt_sel_sync_g{g.gid}_l{lane_idx} (")
                 L.append(f"        .branch_clk   ({{{branch_clk_terms}}}),")
                 L.append(f"        .branch_rst_n ({{{branch_rst_terms}}}),")
                 L.append(f"        .tgt          (dec_tgt.g{g.gid}),")
-                L.append(f"        .en           (seltgt_g{g.gid}_l{l})")
+                L.append(f"        .en           (seltgt_g{g.gid}_l{lane_idx})")
                 L.append("    );")
                 L.append("")
     else:
@@ -482,15 +482,15 @@ def gen_sel_gen(cfg, sel_mode="sync", pclk_mode="pclk_as_phy_output", dpr=False)
     if phy_input_mode:
         L.append("    //------------------------------------------------------------")
         L.append("    // rx_clk routing (PHY->controller, not feedback): one pipe_lane_sel_sync per BBM lane, synchronizing")
-        L.append("    // dec_tgt.gN into that lane's own rx_clk[l] domain (rx_clk has no fixed phase")
+        L.append("    // dec_tgt.gN into that lane's own rx_clk[lane_idx] domain (rx_clk has no fixed phase")
         L.append("    // relation to {c}_pclk, unlike the rest of the PIPE-level signals).")
         L.append("    // clk_mux does the final pipe_lane_clk_gate + assign with this enable.")
         L.append("    //------------------------------------------------------------")
         for g in (cfg.groups if dpr else [g for g in cfg.groups if not g.is_direct]):
-            for l in g.lanes:
+            for lane_idx in g.lanes:
                 n = g.n + 1 if dpr else g.n
-                L.append(f"    pipe_lane_sel_sync #(.N({n}), .SYNC(1'b1)) u_rxclk_sel_sync_g{g.gid}_l{l} (")
-                L.append(f"        .branch_clk   ({{{n}{{rx_clk[{l}]}}}}),")
+                L.append(f"    pipe_lane_sel_sync #(.N({n}), .SYNC(1'b1)) u_rxclk_sel_sync_g{g.gid}_l{lane_idx} (")
+                L.append(f"        .branch_clk   ({{{n}{{rx_clk[{lane_idx}]}}}}),")
                 L.append(
                     "        .branch_rst_n ({"
                     + ("dpr_rst_n, " if dpr else "")
@@ -500,9 +500,9 @@ def gen_sel_gen(cfg, sel_mode="sync", pclk_mode="pclk_as_phy_output", dpr=False)
                 # RX follows the effective PCLK-domain ownership, then
                 # synchronizes it into the recovered-clock domain. RX data
                 # uses this same enable; no PCLK-domain select gates RX data.
-                tgt_expr = f"seltgt_g{g.gid}_l{l}" if dpr else f"dec_tgt.g{g.gid}"
+                tgt_expr = f"seltgt_g{g.gid}_l{lane_idx}" if dpr else f"dec_tgt.g{g.gid}"
                 L.append(f"        .tgt          ({tgt_expr}),")
-                L.append(f"        .en           (rxclk_en_g{g.gid}_l{l})")
+                L.append(f"        .en           (rxclk_en_g{g.gid}_l{lane_idx})")
                 L.append("    );")
                 L.append("")
 
@@ -676,7 +676,7 @@ def gen_clk_mux_phy_output(cfg, dpr=False):
         gen_glitch_free_clk_select(
             L,
             "dpr_pclk",
-            [f"phy_pclk_out[{l}]" for l in range(LC)],
+            [f"phy_pclk_out[{lane_idx}]" for lane_idx in range(LC)],
             "dpr_rst_n",
             "dpr_pclk_tgt",
             default_lane,
@@ -697,9 +697,9 @@ def gen_clk_mux_phy_output(cfg, dpr=False):
     for g in cfg.groups:
         if g.is_direct and not dpr:
             c = g.cands[0]
-            for l in g.lanes:
+            for lane_idx in g.lanes:
                 L.append(
-                    f"    assign phy_pclk_in[{l}] = ctrl_pclk[{c}];"
+                    f"    assign phy_pclk_in[{lane_idx}] = ctrl_pclk[{c}];"
                     f"  // G{g.gid} direct to {cfg.controllers[c].name}"
                 )
         else:
@@ -730,8 +730,8 @@ def gen_clk_mux_phy_output(cfg, dpr=False):
                 f"    pipe_lane_clk_or #(.N({n})) u_pin_or_g{g.gid} "
                 f"(.clk_in(pin_gated_g{g.gid}), .clk_out(pclk_in_g{g.gid}));"
             )
-            for l in g.lanes:
-                L.append(f"    assign phy_pclk_in[{l}] = pclk_in_g{g.gid};")
+            for lane_idx in g.lanes:
+                L.append(f"    assign phy_pclk_in[{lane_idx}] = pclk_in_g{g.gid};")
     L.append("")
     L.append("endmodule")
     return "\n".join(L) + "\n"
@@ -758,18 +758,18 @@ def gen_clk_mux_phy_input(cfg, dpr=False):
     controller, so each lane needs dec_tgt synchronized into that lane's
     own candidate ctrl lane's clock -- exactly the same synchronization the data
     path needs for its own per-lane select (see gen_sel_gen()'s
-    seltgt_g{gid}_l{l}: same tgt, same branch_clk domains), so this module
+    seltgt_g{gid}_l{lane_idx}: same tgt, same branch_clk domains), so this module
     doesn't re-synchronize dec_tgt itself -- it just reuses sel_gen's
-    already-synchronized seltgt_g{gid}_l{l} as the pipe_lane_clk_gate
+    already-synchronized seltgt_g{gid}_l{lane_idx} as the pipe_lane_clk_gate
     enable directly.
 
     rx_clk (PHY's per-lane recovered clock) is routed the other direction
-    into each controller lane's own rx_clk bit. rx_clk[l] is its own
+    into each controller lane's own rx_clk bit. rx_clk[lane_idx] is its own
     independent recovered-clock domain (no fixed phase relation to
     {c.lname}_pclk, unlike the rest of the PIPE-level signals, which all
     live in {c.lname}_pclk), so this needs its own separate
-    synchronization into rx_clk[l]'s own domain instead -- that's the one
-    other domain family dec_tgt gets synchronized into (rxclk_en_g{gid}_l{l},
+    synchronization into rx_clk[lane_idx]'s own domain instead -- that's the one
+    other domain family dec_tgt gets synchronized into (rxclk_en_g{gid}_l{lane_idx},
     also produced by pipe_lane_sel_gen, every CDC synchronizer in the
     design lives there). This module just takes both already-synchronized
     enables as inputs and does the final pipe_lane_clk_gate + pipe_lane_clk_or.
@@ -799,15 +799,15 @@ def gen_clk_mux_phy_input(cfg, dpr=False):
         )
     for g in (cfg.groups if dpr else [g for g in cfg.groups if not g.is_direct]):
         eff_n = g.n + 1 if dpr else g.n
-        for l in g.lanes:
+        for lane_idx in g.lanes:
             L.append(
-                f"    input logic [{eff_n-1}:0] seltgt_g{g.gid}_l{l},"
+                f"    input logic [{eff_n-1}:0] seltgt_g{g.gid}_l{lane_idx},"
                 f"   // dec_tgt.g{g.gid} already synchronized into this lane's owning candidate's own ctrl lane's clock, from sel_gen -- also gates phy_pclk"
             )
     for g in (cfg.groups if dpr else [g for g in cfg.groups if not g.is_direct]):
         n = g.n + 1 if dpr else g.n
-        for l in g.lanes:
-            L.append(f"    input logic [{n-1}:0] rxclk_en_g{g.gid}_l{l},")
+        for lane_idx in g.lanes:
+            L.append(f"    input logic [{n-1}:0] rxclk_en_g{g.gid}_l{lane_idx},")
     if dpr:
         L.append("    input logic dpr_pclk,   // external, running throughout takeover/release")
         L.append("    output logic [NL-1:0] dpr_rx_clk,")
@@ -822,40 +822,40 @@ def gen_clk_mux_phy_input(cfg, dpr=False):
     # One gate per original source, followed by one clock OR. In particular,
     # DPR never derives its clock from an already gated Controller branch.
     for g in cfg.groups:
-        for l in g.lanes:
+        for lane_idx in g.lanes:
             sources = []
             for cid in g.cands:
                 m = next(mm for mm in cfg.modes if g.owners[mm] == cid)
-                cl = cfg.mapping[m][l][1]
+                cl = cfg.mapping[m][lane_idx][1]
                 sources.append(f"{cfg.controllers[cid].lname}_pclk[{cl}]")
             if g.is_direct and not dpr:
-                L.append(f"    assign phy_pclk[{l}] = {sources[0]};")
+                L.append(f"    assign phy_pclk[{lane_idx}] = {sources[0]};")
                 continue
             if dpr:
                 sources.append("dpr_pclk")
             n = len(sources)
-            L.append(f"    logic [{n-1}:0] pclk_gated_g{g.gid}_l{l};")
+            L.append(f"    logic [{n-1}:0] pclk_gated_g{g.gid}_l{lane_idx};")
             for i, source in enumerate(sources):
                 L.append(
-                    f"    pipe_lane_clk_gate u_pclk_gate_g{g.gid}_l{l}_b{i} ("
-                    f".clk_in({source}), .en(seltgt_g{g.gid}_l{l}[{i}]), "
-                    f".clk_out(pclk_gated_g{g.gid}_l{l}[{i}]));"
+                    f"    pipe_lane_clk_gate u_pclk_gate_g{g.gid}_l{lane_idx}_b{i} ("
+                    f".clk_in({source}), .en(seltgt_g{g.gid}_l{lane_idx}[{i}]), "
+                    f".clk_out(pclk_gated_g{g.gid}_l{lane_idx}[{i}]));"
                 )
             L.append(
-                f"    pipe_lane_clk_or #(.N({n})) u_pclk_or_g{g.gid}_l{l} "
-                f"(.clk_in(pclk_gated_g{g.gid}_l{l}), .clk_out(phy_pclk[{l}]));"
+                f"    pipe_lane_clk_or #(.N({n})) u_pclk_or_g{g.gid}_l{lane_idx} "
+                f"(.clk_in(pclk_gated_g{g.gid}_l{lane_idx}), .clk_out(phy_pclk[{lane_idx}]));"
             )
             L.append("")
 
-    # rx_clk: glitch-free, per physical lane. rx_clk[l] is its own recovered
+    # rx_clk: glitch-free, per physical lane. rx_clk[lane_idx] is its own recovered
     # clock domain (no fixed phase relation to ctrl_pclk or to any
     # other lane), so switching which candidate currently receives it needs
-    # dec_tgt synchronized into rx_clk[l]'s own domain -- that synchronizer
-    # (rxclk_en_g{gid}_l{l}) lives in pipe_lane_sel_gen, passed in here as
+    # dec_tgt synchronized into rx_clk[lane_idx]'s own domain -- that synchronizer
+    # (rxclk_en_g{gid}_l{lane_idx}) lives in pipe_lane_sel_gen, passed in here as
     # an input; this module only does the final clk_gate + assign.
     L.append("    //------------------------------------------------------------")
-    L.append("    // rx_clk: glitch-free per-lane select, using rxclk_en_g{gid}_l{l} from")
-    L.append("    // sel_gen (already synchronized into rx_clk[l]'s own domain).")
+    L.append("    // rx_clk: glitch-free per-lane select, using rxclk_en_g{gid}_l{lane_idx} from")
+    L.append("    // sel_gen (already synchronized into rx_clk[lane_idx]'s own domain).")
     L.append("    //------------------------------------------------------------")
     assigned_ctrl_lanes = set()
     for g in cfg.groups:
@@ -863,10 +863,10 @@ def gen_clk_mux_phy_input(cfg, dpr=False):
             c = g.cands[0]
             cname = cfg.controllers[c].lname
             m0 = cfg.modes[0]
-            for l in g.lanes:
-                cl = cfg.mapping[m0][l][1]
+            for lane_idx in g.lanes:
+                cl = cfg.mapping[m0][lane_idx][1]
                 L.append(
-                    f"    assign {cname}_rx_clk[{cl}] = rx_clk[{l}];"
+                    f"    assign {cname}_rx_clk[{cl}] = rx_clk[{lane_idx}];"
                     f"  // G{g.gid} direct to {cfg.controllers[c].name}"
                 )
                 assigned_ctrl_lanes.add((c, cl))
@@ -874,25 +874,25 @@ def gen_clk_mux_phy_input(cfg, dpr=False):
         else:
             names = ", ".join(cfg.controllers[c].name for c in g.cands)
             L.append(f"    // G{g.gid} lane{g.lanes[0]}~{g.lanes[-1]}: {names}, per-lane glitch-free select")
-            for l in g.lanes:
+            for lane_idx in g.lanes:
                 ctrl_lane_of_cand = {}
                 for c in g.cands:
                     m = next(mm for mm in cfg.modes if g.owners[mm] == c)
-                    ctrl_lane_of_cand[c] = cfg.mapping[m][l][1]
+                    ctrl_lane_of_cand[c] = cfg.mapping[m][lane_idx][1]
                 for i, c in enumerate(g.cands):
                     cname = cfg.controllers[c].lname
                     cl = ctrl_lane_of_cand[c]
                     L.append(
-                        f"    pipe_lane_clk_gate u_rxclk_gate_g{g.gid}_l{l}_b{i} ("
-                        f".clk_in(rx_clk[{l}]), .en(rxclk_en_g{g.gid}_l{l}[{i}]), "
+                        f"    pipe_lane_clk_gate u_rxclk_gate_g{g.gid}_l{lane_idx}_b{i} ("
+                        f".clk_in(rx_clk[{lane_idx}]), .en(rxclk_en_g{g.gid}_l{lane_idx}[{i}]), "
                         f".clk_out({cname}_rx_clk[{cl}]));"
                     )
                     assigned_ctrl_lanes.add((c, cl))
                 if dpr:
                     L.append(
-                        f"    pipe_lane_clk_gate u_rxclk_gate_g{g.gid}_l{l}_dpr ("
-                        f".clk_in(rx_clk[{l}]), .en(rxclk_en_g{g.gid}_l{l}[{g.n}]), "
-                        f".clk_out(dpr_rx_clk[{l}]));"
+                        f"    pipe_lane_clk_gate u_rxclk_gate_g{g.gid}_l{lane_idx}_dpr ("
+                        f".clk_in(rx_clk[{lane_idx}]), .en(rxclk_en_g{g.gid}_l{lane_idx}[{g.n}]), "
+                        f".clk_out(dpr_rx_clk[{lane_idx}]));"
                     )
                 L.append("")
 
@@ -950,9 +950,9 @@ def gen_rst_mux(cfg, dpr=False):
     for g in cfg.groups:
         if g.is_direct and not dpr:
             c = g.cands[0]
-            for l in g.lanes:
+            for lane_idx in g.lanes:
                 L.append(
-                    f"    assign phy_rst_n[{l}] = ctrl_rst_n[{c}];"
+                    f"    assign phy_rst_n[{lane_idx}] = ctrl_rst_n[{c}];"
                     f"  // G{g.gid} direct to {cfg.controllers[c].name}"
                 )
         else:
@@ -969,8 +969,8 @@ def gen_rst_mux(cfg, dpr=False):
             L.append("        .safe (1'b0),")
             L.append(f"        .dout (rst_n_g{g.gid})")
             L.append("    );")
-            for l in g.lanes:
-                L.append(f"    assign phy_rst_n[{l}] = rst_n_g{g.gid};")
+            for lane_idx in g.lanes:
+                L.append(f"    assign phy_rst_n[{lane_idx}] = rst_n_g{g.gid};")
     L.append("")
     L.append("endmodule")
     return "\n".join(L) + "\n"
@@ -983,7 +983,7 @@ def gen_data_m2p(cfg, pclk_mode="pclk_as_phy_output", dpr=False):
     """mac2phy-direction data mux.
 
     In pclk_mode="pclk_as_phy_input", each pipe_lane_data_mux's .sel comes
-    from a per-lane seltgt_g{gid}_l{l} input instead of the group-shared
+    from a per-lane seltgt_g{gid}_l{lane_idx} input instead of the group-shared
     sel_tgt -- see gen_sel_gen()'s docstring for why a group-shared select
     is the wrong domain once {c.lname}_pclk is per ctrl lane.
 
@@ -1006,8 +1006,8 @@ def gen_data_m2p(cfg, pclk_mode="pclk_as_phy_output", dpr=False):
     if phy_input_mode:
         for g in (cfg.groups if dpr else [g for g in cfg.groups if not g.is_direct]):
             eff_n = g.n + 1 if dpr else g.n
-            for l in g.lanes:
-                L.append(f"    input logic [{eff_n-1}:0] seltgt_g{g.gid}_l{l},")
+            for lane_idx in g.lanes:
+                L.append(f"    input logic [{eff_n-1}:0] seltgt_g{g.gid}_l{lane_idx},")
     else:
         L.append("    input lane_sel_t sel_tgt,")
     L.append("    output mac2phy_lane_t [NL-1:0] phy_mac2phy,")
@@ -1021,31 +1021,31 @@ def gen_data_m2p(cfg, pclk_mode="pclk_as_phy_output", dpr=False):
     L.append("")
 
     for g in cfg.groups:
-        for l in g.lanes:
+        for lane_idx in g.lanes:
             if g.is_direct and not dpr:
                 c = g.cands[0]
-                cl = cfg.mapping[cfg.modes[0]][l][1]
+                cl = cfg.mapping[cfg.modes[0]][lane_idx][1]
                 L.append(
-                    f"    assign phy_mac2phy[{l}] = "
+                    f"    assign phy_mac2phy[{lane_idx}] = "
                     f"{cfg.controllers[c].lname}_mac2phy[{cl}];  // direct connection"
                 )
             else:
                 srcs = []
                 for c in g.cands:
                     m = next(mm for mm in cfg.modes if g.owners[mm] == c)
-                    cl = cfg.mapping[m][l][1]
+                    cl = cfg.mapping[m][lane_idx][1]
                     srcs.append(f"{cfg.controllers[c].lname}_mac2phy[{cl}]")
                 if dpr:
-                    srcs.append(f"dpr_mac2phy[{l}]")
+                    srcs.append(f"dpr_mac2phy[{lane_idx}]")
                 n = g.n + 1 if dpr else g.n
                 L.append(
-                    f"    pipe_lane_data_mux #(.WIDTH(MAC2PHY_W), " f".N({n})) u_m2p_l{l} ("
+                    f"    pipe_lane_data_mux #(.WIDTH(MAC2PHY_W), " f".N({n})) u_m2p_l{lane_idx} ("
                 )
-                sel_expr = f"seltgt_g{g.gid}_l{l}" if phy_input_mode else f"sel_tgt.g{g.gid}"
+                sel_expr = f"seltgt_g{g.gid}_l{lane_idx}" if phy_input_mode else f"sel_tgt.g{g.gid}"
                 L.append(f"        .sel  ({sel_expr}),")
                 L.append("        .din  ({" + ", ".join(reversed(srcs)) + "}),")
                 L.append("        .safe (SAFE_M2P),")
-                L.append(f"        .dout (phy_mac2phy[{l}])")
+                L.append(f"        .dout (phy_mac2phy[{lane_idx}])")
                 L.append("    );")
     L.append("")
     L.append("endmodule")
@@ -1061,7 +1061,7 @@ def gen_data_p2m(cfg, pclk_mode="pclk_as_phy_output", dpr=False):
     In pclk_mode="pclk_as_phy_input", there's no single group-shared select
     to use per ctrl lane: a converging ctrl lane's candidates can each own a
     DIFFERENT physical lane within the group (each with its own per-lane
-    seltgt_g{gid}_l{l}), so this mux's .sel is assembled bit-by-bit, one
+    seltgt_g{gid}_l{lane_idx}), so this mux's .sel is assembled bit-by-bit, one
     bit per branch, from that branch's own lane's own sync result -- see
     gen_sel_gen()'s docstring for why a group-shared select is the wrong
     domain once {c.lname}_pclk is per ctrl lane.
@@ -1102,7 +1102,7 @@ def gen_data_p2m(cfg, pclk_mode="pclk_as_phy_output", dpr=False):
     # This is routing only, not an asynchronous FIFO or RX-to-PCLK crossing.
     LC = cfg.lane_count
     phy_input_mode = pclk_mode == "pclk_as_phy_input"
-    p2m_sigs_all = [s for s in cfg.signals if not s.is_m2p]
+
     L = [
         "// PIPE lane mapper PHY->MAC data mux (converges by controller lane).",
         "// sel_tgt's mutual exclusivity is guaranteed by pipe_lane_sel_sync.",
@@ -1119,8 +1119,8 @@ def gen_data_p2m(cfg, pclk_mode="pclk_as_phy_output", dpr=False):
     if phy_input_mode:
         for g in (cfg.groups if dpr else [g for g in cfg.groups if not g.is_direct]):
             eff_n = g.n + 1 if dpr else g.n
-            for l in g.lanes:
-                L.append(f"    input logic [{eff_n-1}:0] seltgt_g{g.gid}_l{l},")
+            for lane_idx in g.lanes:
+                L.append(f"    input logic [{eff_n-1}:0] seltgt_g{g.gid}_l{lane_idx},")
     else:
         L.append("    input lane_sel_t sel_tgt,")
     L.append("    input phy2mac_lane_t [NL-1:0] phy_phy2mac,")
@@ -1135,11 +1135,11 @@ def gen_data_p2m(cfg, pclk_mode="pclk_as_phy_output", dpr=False):
 
     lane_src = {}
     for m in cfg.modes:
-        for l in range(LC):
-            cid, cl = cfg.mapping[m][l]
-            g = cfg.group_of_lane(l)
+        for lane_idx in range(LC):
+            cid, cl = cfg.mapping[m][lane_idx]
+            g = cfg.group_of_lane(lane_idx)
             b = 0 if g.is_direct else g.branch_of(cid)
-            lane_src.setdefault((cid, cl), set()).add((l, g.gid, b))
+            lane_src.setdefault((cid, cl), set()).add((lane_idx, g.gid, b))
     for cid in sorted(cfg.controllers):
         c = cfg.controllers[cid]
         L.append(f"    // {c.name} x{c.max_width}")
@@ -1177,10 +1177,10 @@ def gen_data_p2m(cfg, pclk_mode="pclk_as_phy_output", dpr=False):
                 )
                 continue
             if len(srcs) == 1 and cfg.groups[srcs[0][1]].is_direct and not dpr:
-                l = srcs[0][0]
+                lane_idx = srcs[0][0]
                 L.append(
-                    f"    assign {c.lname}_phy2mac[{cl}] = phy_phy2mac[{l}];"
-                    f"  // direct connection to lane{l}"
+                    f"    assign {c.lname}_phy2mac[{cl}] = phy_phy2mac[{lane_idx}];"
+                    f"  // direct connection to lane{lane_idx}"
                 )
                 continue
             gid = srcs[0][1]
@@ -1240,20 +1240,20 @@ def gen_data_p2m(cfg, pclk_mode="pclk_as_phy_output", dpr=False):
         L.append("    // its own (its owned set is a live runtime value), so tie_off has")
         L.append("    // nothing to resolve against here anyway.")
         L.append("    //------------------------------------------------------------")
-        for l in range(LC):
-            g = cfg.group_of_lane(l)
-            own_expr = f"seltgt_g{g.gid}_l{l}[{g.n}:{g.n}]" if phy_input_mode else f"sel_tgt.g{g.gid}[{g.n}:{g.n}]"
+        for lane_idx in range(LC):
+            g = cfg.group_of_lane(lane_idx)
+            own_expr = f"seltgt_g{g.gid}_l{lane_idx}[{g.n}:{g.n}]" if phy_input_mode else f"sel_tgt.g{g.gid}[{g.n}:{g.n}]"
             # Same pipe_lane_data_mux shape as every real single-candidate
             # ctrl lane above (e.g. a direct group's own u_p2m_{c.lname}_{cl}
             # with .N(1)) -- DPR's own p2m tap is architecturally nothing
             # but a single-candidate ctrl lane converging from exactly one
             # source (this lane), so it reuses that exact same
             # instantiation instead of a bespoke ternary assign.
-            L.append(f"    pipe_lane_data_mux #(.WIDTH(PHY2MAC_W), .N(1)) u_p2m_dpr_{l} (")
+            L.append(f"    pipe_lane_data_mux #(.WIDTH(PHY2MAC_W), .N(1)) u_p2m_dpr_{lane_idx} (")
             L.append(f"        .sel  ({own_expr}),")
-            L.append(f"        .din  ({{phy_phy2mac[{l}]}}),")
+            L.append(f"        .din  ({{phy_phy2mac[{lane_idx}]}}),")
             L.append("        .safe (SAFE_P2M),")
-            L.append(f"        .dout (dpr_phy2mac[{l}])")
+            L.append(f"        .dout (dpr_phy2mac[{lane_idx}])")
             L.append("    );")
         L.append("")
 
@@ -1324,7 +1324,7 @@ def gen_top(cfg, pclk_mode="pclk_as_phy_output", sel_mode="sync", dpr=False):
     L.append("    input phy2mac_lane_t [NL-1:0] phy_phy2mac,")
     if dpr:
         L.append("    // DPR (diagnostic probe): a virtual controller with link width NL,")
-        L.append("    // connected 1:1 to every PHY lane -- v_lane_mask[l]=1 overrides lane l.")
+        L.append("    // connected 1:1 to every PHY lane -- v_lane_mask[lane_idx]=1 overrides lane lane_idx.")
         L.append("    input logic [NL-1:0] v_lane_mask,")
         L.append("    input logic dpr_rst_n,")
         L.append("    input mac2phy_lane_t [NL-1:0] dpr_mac2phy,")
@@ -1384,19 +1384,19 @@ def gen_top(cfg, pclk_mode="pclk_as_phy_output", sel_mode="sync", dpr=False):
     if phy_input_mode:
         for g in (cfg.groups if dpr else [g for g in cfg.groups if not g.is_direct]):
             eff_n = g.n + 1 if dpr else g.n
-            for l in g.lanes:
-                seltgt_lanes.append((g.gid, l, eff_n))
+            for lane_idx in g.lanes:
+                seltgt_lanes.append((g.gid, lane_idx, eff_n))
                 L.append(
-                    f"    logic [{eff_n-1}:0] seltgt_g{g.gid}_l{l};"
+                    f"    logic [{eff_n-1}:0] seltgt_g{g.gid}_l{lane_idx};"
                     f"   // dec_tgt.g{g.gid} synchronized into the clock of the ctrl lane this lane routes to"
                 )
         for g in (cfg.groups if dpr else [g for g in cfg.groups if not g.is_direct]):
             n = g.n + 1 if dpr else g.n
-            for l in g.lanes:
-                rxclk_lanes.append((g.gid, l, n))
+            for lane_idx in g.lanes:
+                rxclk_lanes.append((g.gid, lane_idx, n))
                 L.append(
-                    f"    logic [{n-1}:0] rxclk_en_g{g.gid}_l{l};"
-                    f"   // dec_tgt.g{g.gid} synchronized into rx_clk[{l}]'s domain"
+                    f"    logic [{n-1}:0] rxclk_en_g{g.gid}_l{lane_idx};"
+                    f"   // dec_tgt.g{g.gid} synchronized into rx_clk[{lane_idx}]'s domain"
                 )
     L.append("")
 
@@ -1434,12 +1434,12 @@ def gen_top(cfg, pclk_mode="pclk_as_phy_output", sel_mode="sync", dpr=False):
     for i, c in enumerate(muxed_c):
         tail = "," if (i != len(muxed_c) - 1 or seltgt_lanes or rxclk_lanes) else ""
         L.append(f"        .pclk_tgt_c{c} (pclk_tgt_c{c}){tail}")
-    for i, (gid, l, _n) in enumerate(seltgt_lanes):
+    for i, (gid, lane_idx, _n) in enumerate(seltgt_lanes):
         tail = "," if (i != len(seltgt_lanes) - 1 or rxclk_lanes) else ""
-        L.append(f"        .seltgt_g{gid}_l{l} (seltgt_g{gid}_l{l}){tail}")
-    for i, (gid, l, _n) in enumerate(rxclk_lanes):
+        L.append(f"        .seltgt_g{gid}_l{lane_idx} (seltgt_g{gid}_l{lane_idx}){tail}")
+    for i, (gid, lane_idx, _n) in enumerate(rxclk_lanes):
         tail = "," if i != len(rxclk_lanes) - 1 else ""
-        L.append(f"        .rxclk_en_g{gid}_l{l} (rxclk_en_g{gid}_l{l}){tail}")
+        L.append(f"        .rxclk_en_g{gid}_l{lane_idx} (rxclk_en_g{gid}_l{lane_idx}){tail}")
     L.append("    );")
     L.append("")
 
@@ -1460,10 +1460,10 @@ def gen_top(cfg, pclk_mode="pclk_as_phy_output", sel_mode="sync", dpr=False):
         for cid in sorted(cfg.controllers):
             c = cfg.controllers[cid]
             L.append(f"        .{c.lname}_pclk ({c.lname}_pclk),")
-        for gid, l, _n in seltgt_lanes:
-            L.append(f"        .seltgt_g{gid}_l{l} (seltgt_g{gid}_l{l}),")
-        for gid, l, _n in rxclk_lanes:
-            L.append(f"        .rxclk_en_g{gid}_l{l} (rxclk_en_g{gid}_l{l}),")
+        for gid, lane_idx, _n in seltgt_lanes:
+            L.append(f"        .seltgt_g{gid}_l{lane_idx} (seltgt_g{gid}_l{lane_idx}),")
+        for gid, lane_idx, _n in rxclk_lanes:
+            L.append(f"        .rxclk_en_g{gid}_l{lane_idx} (rxclk_en_g{gid}_l{lane_idx}),")
         if dpr:
             L.append("        .dpr_pclk     (dpr_pclk),")
             L.append("        .dpr_rx_clk   (dpr_rx_clk),")
@@ -1521,8 +1521,8 @@ def gen_top(cfg, pclk_mode="pclk_as_phy_output", sel_mode="sync", dpr=False):
     L.append("        .NL (NL)")
     L.append("    ) u_data_m2p (")
     if phy_input_mode:
-        for gid, l, _n in seltgt_lanes:
-            L.append(f"        .seltgt_g{gid}_l{l} (seltgt_g{gid}_l{l}),")
+        for gid, lane_idx, _n in seltgt_lanes:
+            L.append(f"        .seltgt_g{gid}_l{lane_idx} (seltgt_g{gid}_l{lane_idx}),")
     else:
         L.append("        .sel_tgt      (sel_tgt),")
     L.append("        .phy_mac2phy  (phy_mac2phy),")
@@ -1550,9 +1550,9 @@ def gen_top(cfg, pclk_mode="pclk_as_phy_output", sel_mode="sync", dpr=False):
         # with no slicing, for every group seltgt_lanes covers (which
         # already includes previously-direct groups once --dpr widens them
         # into 2-candidate NOV groups).
-        for gid, l, _n in seltgt_lanes:
-            source = f"rxclk_en_g{gid}_l{l}" if dpr else f"seltgt_g{gid}_l{l}"
-            L.append(f"        .seltgt_g{gid}_l{l} ({source}),")
+        for gid, lane_idx, _n in seltgt_lanes:
+            source = f"rxclk_en_g{gid}_l{lane_idx}" if dpr else f"seltgt_g{gid}_l{lane_idx}"
+            L.append(f"        .seltgt_g{gid}_l{lane_idx} ({source}),")
     else:
         L.append("        .sel_tgt      (sel_tgt),")
     L.append("        .phy_phy2mac  (phy_phy2mac),")
@@ -1628,7 +1628,7 @@ def gen_connection(cfg, pclk_mode="pclk_as_phy_output", dpr=False):
         L.append(f"    input logic [{s.width-1}:0] phy_{s.name} [0:NL-1],")
     if dpr:
         L.append("    // DPR (diagnostic probe): a virtual controller with link width NL,")
-        L.append("    // connected 1:1 to every PHY lane -- v_lane_mask[l]=1 overrides lane l.")
+        L.append("    // connected 1:1 to every PHY lane -- v_lane_mask[lane_idx]=1 overrides lane lane_idx.")
         L.append("    input logic [NL-1:0] v_lane_mask,")
         L.append("    input logic dpr_rst_n,")
         for s in m2p_sigs:
@@ -1682,12 +1682,12 @@ def gen_connection(cfg, pclk_mode="pclk_as_phy_output", dpr=False):
     L.append("    //------------------------------------------------------------")
     L.append("    // PHY side (always per-lane)")
     L.append("    //------------------------------------------------------------")
-    for l in range(LC):
+    for lane_idx in range(LC):
         for s in m2p_sigs:
-            L.append(f"    assign phy_{s.name}[{l}] = w_phy_mac2phy[{l}].{s.name};")
-    for l in range(LC):
-        fields = ", ".join(f"{s.name}: phy_{s.name}[{l}]" for s in p2m_sigs)
-        L.append(f"    assign w_phy_phy2mac[{l}] = '{{{fields}}};")
+            L.append(f"    assign phy_{s.name}[{lane_idx}] = w_phy_mac2phy[{lane_idx}].{s.name};")
+    for lane_idx in range(LC):
+        fields = ", ".join(f"{s.name}: phy_{s.name}[{lane_idx}]" for s in p2m_sigs)
+        L.append(f"    assign w_phy_phy2mac[{lane_idx}] = '{{{fields}}};")
     L.append("")
 
     # ---- controller side: struct <-> flat, shared MAC-to-PHY collapses to one scalar
@@ -1696,30 +1696,30 @@ def gen_connection(cfg, pclk_mode="pclk_as_phy_output", dpr=False):
         L.append("    //------------------------------------------------------------")
         L.append(f"    // {c.name} (x{c.max_width})")
         L.append("    //------------------------------------------------------------")
-        for l in range(c.max_width):
+        for lane_idx in range(c.max_width):
             fields = []
             for s in m2p_sigs:
-                val = f"{c.lname}_{s.name}" if s.is_shared else f"{c.lname}_{s.name}[{l}]"
+                val = f"{c.lname}_{s.name}" if s.is_shared else f"{c.lname}_{s.name}[{lane_idx}]"
                 fields.append(f"{s.name}: {val}")
-            L.append(f"    assign w_{c.lname}_mac2phy[{l}] = '{{{', '.join(fields)}}};")
+            L.append(f"    assign w_{c.lname}_mac2phy[{lane_idx}] = '{{{', '.join(fields)}}};")
         for s in p2m_sigs:
-            for l in range(c.max_width):
-                L.append(f"    assign {c.lname}_{s.name}[{l}] = w_{c.lname}_phy2mac[{l}].{s.name};")
+            for lane_idx in range(c.max_width):
+                L.append(f"    assign {c.lname}_{s.name}[{lane_idx}] = w_{c.lname}_phy2mac[{lane_idx}].{s.name};")
         L.append("")
 
     if dpr:
         L.append("    //------------------------------------------------------------")
         L.append(f"    // DPR (x{LC}, one flat port per PHY lane, 1:1)")
         L.append("    //------------------------------------------------------------")
-        for l in range(LC):
+        for lane_idx in range(LC):
             fields = []
             for s in m2p_sigs:
-                val = f"dpr_{s.name}" if s.is_shared else f"dpr_{s.name}[{l}]"
+                val = f"dpr_{s.name}" if s.is_shared else f"dpr_{s.name}[{lane_idx}]"
                 fields.append(f"{s.name}: {val}")
-            L.append(f"    assign w_dpr_mac2phy[{l}] = '{{{', '.join(fields)}}};")
+            L.append(f"    assign w_dpr_mac2phy[{lane_idx}] = '{{{', '.join(fields)}}};")
         for s in p2m_sigs:
-            for l in range(LC):
-                L.append(f"    assign dpr_{s.name}[{l}] = w_dpr_phy2mac[{l}].{s.name};")
+            for lane_idx in range(LC):
+                L.append(f"    assign dpr_{s.name}[{lane_idx}] = w_dpr_phy2mac[{lane_idx}].{s.name};")
         L.append("")
 
     # ---- the real DUT

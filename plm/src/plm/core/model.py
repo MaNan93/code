@@ -419,11 +419,11 @@ class Config:
     def _build_groups(self):
         """Group lanes by their "owner sequence across modes"."""
         sig = {}
-        for l in range(self.lane_count):
-            sig[l] = tuple(self.mapping[m][l][0] for m in self.modes)
+        for lane_idx in range(self.lane_count):
+            sig[lane_idx] = tuple(self.mapping[m][lane_idx][0] for m in self.modes)
         buckets = {}
-        for l in range(self.lane_count):
-            buckets.setdefault(sig[l], []).append(l)
+        for lane_idx in range(self.lane_count):
+            buckets.setdefault(sig[lane_idx], []).append(lane_idx)
         groups = []
         for gid, (s, lanes) in enumerate(sorted(buckets.items(), key=lambda kv: kv[1][0])):
             owners = {m: s[i] for i, m in enumerate(self.modes)}
@@ -452,7 +452,7 @@ class Config:
         for cid in self.controllers:
             per = {}
             for m in self.modes:
-                owned = [l for l in range(self.lane_count) if self.mapping[m][l][0] == cid]
+                owned = [lane_idx for lane_idx in range(self.lane_count) if self.mapping[m][lane_idx][0] == cid]
                 per[m] = min(owned) if owned else None
             res[cid] = per
         return res
@@ -476,7 +476,7 @@ class Config:
         for cid in self.controllers:
             widths = []
             for m in self.modes:
-                w = sum(1 for l in range(self.lane_count) if self.mapping[m][l][0] == cid)
+                w = sum(1 for lane_idx in range(self.lane_count) if self.mapping[m][lane_idx][0] == cid)
                 if w > 0:
                     widths.append(w)
             if widths:
@@ -523,23 +523,23 @@ class Config:
 
         for m in self.modes:
             seen = {}
-            for l in range(self.lane_count):
-                cid, cl = self.mapping[m][l]
+            for lane_idx in range(self.lane_count):
+                cid, cl = self.mapping[m][lane_idx]
                 if cid not in self.controllers:
-                    err.append(f"[mode {m}] lane{l}: undefined ctrl_id={cid}")
+                    err.append(f"[mode {m}] lane{lane_idx}: undefined ctrl_id={cid}")
                     continue
                 c = self.controllers[cid]
                 if cl >= c.max_width:
                     err.append(
-                        f"[mode {m}] lane{l} -> {c.name}[{cl}] " f"exceeds max_width={c.max_width}"
+                        f"[mode {m}] lane{lane_idx} -> {c.name}[{cl}] " f"exceeds max_width={c.max_width}"
                     )
                 key = (cid, cl)
                 if key in seen:
                     err.append(
                         f"[mode {m}] {self.controllers[cid].name}[{cl}] "
-                        f"is driven by both lane{seen[key]} and lane{l}"
+                        f"is driven by both lane{seen[key]} and lane{lane_idx}"
                     )
-                seen[key] = l
+                seen[key] = lane_idx
 
         # Every driving source for a given controller lane must come from
         # the same group. Otherwise that lane's convergence mux would have
@@ -550,14 +550,14 @@ class Config:
         # implement, so this is constrained at the topology level instead.
         lane_groups_of = {}
         for m in self.modes:
-            for l in range(self.lane_count):
-                cid, cl = self.mapping[m][l]
-                g = self.group_of_lane(l)
-                lane_groups_of.setdefault((cid, cl), {})[g.gid] = l
+            for lane_idx in range(self.lane_count):
+                cid, cl = self.mapping[m][lane_idx]
+                g = self.group_of_lane(lane_idx)
+                lane_groups_of.setdefault((cid, cl), {})[g.gid] = lane_idx
         for (cid, cl), gs in sorted(lane_groups_of.items()):
             if len(gs) > 1:
                 nm = self.controllers[cid].name if cid in self.controllers else f"ctrl{cid}"
-                detail = ", ".join(f"G{g}(lane{l})" for g, l in sorted(gs.items()))
+                detail = ", ".join(f"G{g}(lane{lane_idx})" for g, lane_idx in sorted(gs.items()))
                 err.append(
                     f"{nm}[{cl}]'s driving sources span multiple lane groups: {detail}.\n"
                     f"    Every driving source for one controller lane must come from "
@@ -567,8 +567,8 @@ class Config:
 
         # A lane's ctrl-lane index, for one owner, must be the same in every
         # mode that owner holds it. The generators resolve "which lane of
-        # candidate c does phy lane l feed" exactly once, from the first mode
-        # in which c owns l (gen_sel_gen / gen_clk_mux_phy_input /
+        # candidate c does phy lane lane_idx feed" exactly once, from the first mode
+        # in which c owns lane_idx (gen_sel_gen / gen_clk_mux_phy_input /
         # gen_data_m2p, and the equivalent hit[0] pick in gen_data_p2m), and
         # then wire that one ctrl lane for every mode. Nothing downstream
         # re-derives it per mode, so a phy lane whose ctrl-lane index moves
@@ -584,10 +584,10 @@ class Config:
         # to change width on a mode switch, not renumber its own lanes.
         ctrl_lanes_of = {}
         for m in self.modes:
-            for l in range(self.lane_count):
-                cid, cl = self.mapping[m][l]
-                ctrl_lanes_of.setdefault((l, cid), {}).setdefault(cl, []).append(m)
-        for (l, cid), by_ctrl_lane in sorted(ctrl_lanes_of.items()):
+            for lane_idx in range(self.lane_count):
+                cid, cl = self.mapping[m][lane_idx]
+                ctrl_lanes_of.setdefault((lane_idx, cid), {}).setdefault(cl, []).append(m)
+        for (lane_idx, cid), by_ctrl_lane in sorted(ctrl_lanes_of.items()):
             if len(by_ctrl_lane) > 1:
                 nm = self.controllers[cid].name if cid in self.controllers else f"ctrl{cid}"
                 detail = ", ".join(
@@ -596,7 +596,7 @@ class Config:
                     for cl, ms in sorted(by_ctrl_lane.items())
                 )
                 err.append(
-                    f"lane{l} maps to more than one {nm} lane across modes: {detail}.\n"
+                    f"lane{lane_idx} maps to more than one {nm} lane across modes: {detail}.\n"
                     f"    A phy lane must keep the same ctrl lane index in every mode its "
                     f"owner holds it -- the generated mux and clock gate for that lane are "
                     f"wired to one fixed ctrl lane, so a moving index would route the other modes "

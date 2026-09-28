@@ -58,7 +58,7 @@ module pipe_lane_mapper_connection #(
     input logic [5:0] phy_phy_mac_dirfeedback [0:NL-1],
     input logic [7:0] phy_phy_mac_fomfeedback [0:NL-1],
     // DPR (diagnostic probe): a virtual controller with link width NL,
-    // connected 1:1 to every PHY lane -- v_lane_mask[l]=1 overrides lane l.
+    // connected 1:1 to every PHY lane -- v_lane_mask[lane_idx]=1 overrides lane lane_idx.
     input logic [NL-1:0] v_lane_mask,
     input logic dpr_rst_n,
     input logic [31:0] dpr_mac_phy_txdata [0:NL-1],

@@ -66,9 +66,9 @@ def gen_tb(cfg, pclk_mode="pclk_as_phy_output", dpr=False):
     # range 3..15ns; SETTLE is the slowest period * 20 (>=3 sync stages
     # plus hold margin), floored at 2us so each mode gets a comfortably
     # long, easy-to-read window between transitions.
-    periods = [3 + (l % 7) * 2 for l in range(LC)]
+    periods = [3 + (lane_idx % 7) * 2 for lane_idx in range(LC)]
     ctrl_periods = [3 + (c % 7) * 2 for c in range(NC)]
-    lane_periods = [5 + (l % 7) * 2 for l in range(LC)]  # rx_clk, offset from ctrl_periods' phase
+    lane_periods = [5 + (lane_idx % 7) * 2 for lane_idx in range(LC)]  # rx_clk, offset from ctrl_periods' phase
     settle = max(2000, (max(ctrl_periods) if phy_input_mode else max(periods)) * 20)
 
     L = [
@@ -299,10 +299,10 @@ def gen_tb(cfg, pclk_mode="pclk_as_phy_output", dpr=False):
             f"        for (int p = 0; p < {c.max_width}; p++) "
             f"{c.lname}_mac2phy[p] = make_m2p({c.id}, p);"
         )
-    L.append("        for (int l = 0; l < NL; l++) begin")
-    L.append("            phy_phy2mac[l] = make_p2m(l);")
+    L.append("        for (int lane_idx = 0; lane_idx < NL; lane_idx++) begin")
+    L.append("            phy_phy2mac[lane_idx] = make_p2m(lane_idx);")
     if "phy_mac_phystatus" in sig_names:
-        L.append("            phy_phy2mac[l].phy_mac_phystatus = phy_phystatus_stim[l];")
+        L.append("            phy_phy2mac[lane_idx].phy_mac_phystatus = phy_phystatus_stim[lane_idx];")
     L.append("        end")
     L.append("    end")
     L.append("")
@@ -311,26 +311,26 @@ def gen_tb(cfg, pclk_mode="pclk_as_phy_output", dpr=False):
     L.append(
         "    //------------------------------------------------------------ expected mapping (from lane_mapping.csv)"
     )
-    L.append("    function automatic int owner_of(input int m, input int l);")
+    L.append("    function automatic int owner_of(input int m, input int lane_idx);")
     L.append("        case (m)")
     for m in cfg.modes:
-        L.append(f"            {m}: case (l)")
-        for l in range(LC):
-            cid, _ = cfg.mapping[m][l]
-            L.append(f"                {l}: return {cid};")
+        L.append(f"            {m}: case (lane_idx)")
+        for lane_idx in range(LC):
+            cid, _ = cfg.mapping[m][lane_idx]
+            L.append(f"                {lane_idx}: return {cid};")
         L.append("                default: return -1;")
         L.append("            endcase")
     L.append("            default: return -1;")
     L.append("        endcase")
     L.append("    endfunction")
     L.append("")
-    L.append("    function automatic int ctrl_lane_of(input int m, input int l);")
+    L.append("    function automatic int ctrl_lane_of(input int m, input int lane_idx);")
     L.append("        case (m)")
     for m in cfg.modes:
-        L.append(f"            {m}: case (l)")
-        for l in range(LC):
-            _, cl = cfg.mapping[m][l]
-            L.append(f"                {l}: return {cl};")
+        L.append(f"            {m}: case (lane_idx)")
+        for lane_idx in range(LC):
+            _, cl = cfg.mapping[m][lane_idx]
+            L.append(f"                {lane_idx}: return {cl};")
         L.append("                default: return -1;")
         L.append("            endcase")
     L.append("            default: return -1;")
@@ -345,8 +345,8 @@ def gen_tb(cfg, pclk_mode="pclk_as_phy_output", dpr=False):
         # knows which phy_pclk_out[] lane {c}_pclk/phy_pclk_in should
         # currently be tracking.
         L.append("    function automatic int ctrl_pclk_src_lane(input int m, input int cid);")
-        L.append("        for (int l = 0; l < NL; l++)")
-        L.append("            if (owner_of(m, l) == cid) return l;")
+        L.append("        for (int lane_idx = 0; lane_idx < NL; lane_idx++)")
+        L.append("            if (owner_of(m, lane_idx) == cid) return lane_idx;")
         L.append("        return -1;")
         L.append("    endfunction")
         L.append("")
@@ -412,7 +412,7 @@ def gen_tb(cfg, pclk_mode="pclk_as_phy_output", dpr=False):
     L.append("")
     if muxed or dpr:
         for g in muxed:
-            lanes_str = ", ".join(str(l) for l in g.lanes)
+            lanes_str = ", ".join(str(lane_idx) for lane_idx in g.lanes)
             L.append(f"    localparam int G{g.gid}_LANES[{len(g.lanes)}] = " f"'{{{lanes_str}}};")
         L.append("")
 
@@ -444,7 +444,7 @@ def gen_tb(cfg, pclk_mode="pclk_as_phy_output", dpr=False):
 
         if phy_input_mode:
             # sel_tgt doesn't exist as a group-level signal in this mode --
-            # each BBM lane has its own independent seltgt_g{gid}_l{l}, so
+            # each BBM lane has its own independent seltgt_g{gid}_l{lane_idx}, so
             # the monitor is per lane, not per group. Every candidate's own
             # designated ctrl lane for that PHY lane is checked individually against
             # SAFE_P2M is only the group's output during the true all-zero NOV
@@ -462,19 +462,19 @@ def gen_tb(cfg, pclk_mode="pclk_as_phy_output", dpr=False):
             L.append("    // independent sync result, not shared across the group).")
             L.append("    //------------------------------------------------------------")
             for g in muxed:
-                for l in g.lanes:
+                for lane_idx in g.lanes:
                     ctrl_lane_of_cand = {}
                     for c in g.cands:
                         m = next(mm for mm in cfg.modes if g.owners[mm] == c)
-                        ctrl_lane_of_cand[c] = cfg.mapping[m][l][1]
+                        ctrl_lane_of_cand[c] = cfg.mapping[m][lane_idx][1]
                     n = g.n
-                    L.append(f"    always @(dut.seltgt_g{g.gid}_l{l}) begin")
+                    L.append(f"    always @(dut.seltgt_g{g.gid}_l{lane_idx}) begin")
                     L.append("        if ($time == 0) begin")
                     L.append("            // skip: DUT hasn't come out of its startup X state yet")
                     L.append("        end else begin")
                     L.append(f"            logic [{n-1}:0] sel_snap;")
                     L.append("            int unsigned err_before;")
-                    # dut.seltgt_g{gid}_l{l} is DPR-widened when --dpr (g.n+1
+                    # dut.seltgt_g{gid}_l{lane_idx} is DPR-widened when --dpr (g.n+1
                     # bits: real candidates in the low g.n bits, DPR at bit
                     # g.n), but this monitor only cares about real-candidate
                     # ownership -- sel_snap stays at the real width above, so
@@ -483,18 +483,18 @@ def gen_tb(cfg, pclk_mode="pclk_as_phy_output", dpr=False):
                     # all-zero whenever the sliced-off DPR bit is the one
                     # set (seltgt is one-hot), so this correctly reads as
                     # "no real candidate owns this lane" while DPR does.
-                    snap_rhs = f"dut.seltgt_g{g.gid}_l{l}[{n-1}:0]" if dpr else f"dut.seltgt_g{g.gid}_l{l}"
+                    snap_rhs = f"dut.seltgt_g{g.gid}_l{lane_idx}[{n-1}:0]" if dpr else f"dut.seltgt_g{g.gid}_l{lane_idx}"
                     L.append(f"            sel_snap = {snap_rhs};")
                     L.append("            #1;")
                     L.append("            err_before = err_count;")
                     L.append(
-                        f'            chk($onehot0(sel_snap), "seltgt_g{g.gid}_l{l} not one-hot0 (>1 branch enabled)");'
+                        f'            chk($onehot0(sel_snap), "seltgt_g{g.gid}_l{lane_idx} not one-hot0 (>1 branch enabled)");'
                     )
                     L.append("")
-                    rx_vector = f"{{{', '.join(f'dut.rxclk_en_g{g.gid}_l{l}[{i}]' for i in reversed(range(n)))}}}" if dpr else f"dut.seltgt_g{g.gid}_l{l}"
-                    L.append(f"            if (sel_snap == '0 && dut.seltgt_g{g.gid}_l{l} == '0) begin")
-                    L.append(f"                chk_m2p(phy_mac2phy[{l}], SAFE_M2P,")
-                    L.append(f'                    "G{g.gid} lane{l}: sel==0 NOV gap");')
+                    rx_vector = f"{{{', '.join(f'dut.rxclk_en_g{g.gid}_l{lane_idx}[{i}]' for i in reversed(range(n)))}}}" if dpr else f"dut.seltgt_g{g.gid}_l{lane_idx}"
+                    L.append(f"            if (sel_snap == '0 && dut.seltgt_g{g.gid}_l{lane_idx} == '0) begin")
+                    L.append(f"                chk_m2p(phy_mac2phy[{lane_idx}], SAFE_M2P,")
+                    L.append(f'                    "G{g.gid} lane{lane_idx}: sel==0 NOV gap");')
                     L.append(f"                if ({rx_vector} == '0) begin")
                     for c in g.cands:
                         cc_ = cfg.controllers[c]
@@ -517,9 +517,9 @@ def gen_tb(cfg, pclk_mode="pclk_as_phy_output", dpr=False):
         # drivers never span more than one group, so this is unambiguous.
         lane_group_of = {}
         for m in cfg.modes:
-            for l in range(LC):
-                cid, cl = cfg.mapping[m][l]
-                g = cfg.group_of_lane(l)
+            for lane_idx in range(LC):
+                cid, cl = cfg.mapping[m][lane_idx]
+                g = cfg.group_of_lane(lane_idx)
                 if not g.is_direct:
                     lane_group_of[(cid, cl)] = g.gid
 
@@ -618,32 +618,32 @@ def gen_tb(cfg, pclk_mode="pclk_as_phy_output", dpr=False):
     L.append("        int cid, ctrl_lane;")
     L.append("        int unsigned err_before;")
     L.append("")
-    L.append("        for (int l = 0; l < NL; l++) begin")
-    L.append("            cid  = owner_of(m, l);")
-    L.append("            ctrl_lane = ctrl_lane_of(m, l);")
+    L.append("        for (int lane_idx = 0; lane_idx < NL; lane_idx++) begin")
+    L.append("            cid  = owner_of(m, lane_idx);")
+    L.append("            ctrl_lane = ctrl_lane_of(m, lane_idx);")
     L.append("            exp_m2p = make_m2p(cid, ctrl_lane);")
     L.append("            err_before = err_count;")
-    L.append("            chk_m2p(phy_mac2phy[l], exp_m2p,")
+    L.append("            chk_m2p(phy_mac2phy[lane_idx], exp_m2p,")
     L.append(
-        '                $sformatf("mode%0d lane%0d: expected ctrl%0d lane%0d", m, l, cid, ctrl_lane));'
+        '                $sformatf("mode%0d lane%0d: expected ctrl%0d lane%0d", m, lane_idx, cid, ctrl_lane));'
     )
     L.append("            err_m2p += (err_count - err_before);")
     L.append("")
     L.append("            err_before = err_count;")
-    L.append("            chk(phy_rst_n[l] == ctrl_rst_n[cid],")
+    L.append("            chk(phy_rst_n[lane_idx] == ctrl_rst_n[cid],")
     L.append(
         '                $sformatf("mode%0d lane%0d: phy_rst_n=%0b does not follow owner ctrl%0d",'
     )
-    L.append("                          m, l, phy_rst_n[l], cid));")
+    L.append("                          m, lane_idx, phy_rst_n[lane_idx], cid));")
     L.append("            err_reset += (err_count - err_before);")
     L.append("")
     if phy_input_mode:
         _emit_clk_period_chk(
             L,
             12,
-            "phy_pclk[l]",
+            "phy_pclk[lane_idx]",
             "CTRL_PERIOD_NS[cid]",
-            '$sformatf("mode%0d lane%0d phy_pclk", m, l)',
+            '$sformatf("mode%0d lane%0d phy_pclk", m, lane_idx)',
         )
     else:
         L.append("            begin")
@@ -653,9 +653,9 @@ def gen_tb(cfg, pclk_mode="pclk_as_phy_output", dpr=False):
         _emit_clk_period_chk(
             L,
             20,
-            "phy_pclk_in[l]",
+            "phy_pclk_in[lane_idx]",
             "PERIOD_NS[src_lane]",
-            '$sformatf("mode%0d lane%0d phy_pclk_in", m, l)',
+            '$sformatf("mode%0d lane%0d phy_pclk_in", m, lane_idx)',
         )
         L.append("            end")
     L.append("        end")
@@ -666,10 +666,10 @@ def gen_tb(cfg, pclk_mode="pclk_as_phy_output", dpr=False):
         # ...) inside that loop's double for-nesting (c, then p) segfaulted
         # verilator's own runtime; a single for-loop here, same shape as
         # the per-controller pclk check below, doesn't.
-        L.append("        for (int l = 0; l < NL; l++) begin")
+        L.append("        for (int lane_idx = 0; lane_idx < NL; lane_idx++) begin")
         L.append("            int cid, ctrl_lane;")
-        L.append("            cid  = owner_of(m, l);")
-        L.append("            ctrl_lane = ctrl_lane_of(m, l);")
+        L.append("            cid  = owner_of(m, lane_idx);")
+        L.append("            ctrl_lane = ctrl_lane_of(m, lane_idx);")
         L.append("            case (cid)")
         for c in ctrls:
             L.append(f"                {c.id}: begin")
@@ -677,7 +677,7 @@ def gen_tb(cfg, pclk_mode="pclk_as_phy_output", dpr=False):
                 L,
                 20,
                 f"{c.lname}_rx_clk[ctrl_lane]",
-                "LANE_PERIOD_NS[l]",
+                "LANE_PERIOD_NS[lane_idx]",
                 f'$sformatf("mode%0d {c.lname}_rx_clk[%0d]", m, ctrl_lane)',
             )
             L.append("                end")
@@ -719,8 +719,8 @@ def gen_tb(cfg, pclk_mode="pclk_as_phy_output", dpr=False):
     L.append("                int src_lane;")
     L.append("                phy2mac_lane_t got;")
     L.append("                src_lane = -1;")
-    L.append("                for (int l = 0; l < NL; l++)")
-    L.append("                    if (owner_of(m, l) == c && ctrl_lane_of(m, l) == p) src_lane = l;")
+    L.append("                for (int lane_idx = 0; lane_idx < NL; lane_idx++)")
+    L.append("                    if (owner_of(m, lane_idx) == c && ctrl_lane_of(m, lane_idx) == p) src_lane = lane_idx;")
     L.append("")
     L.append("                case (c)")
     for c in ctrls:
@@ -736,9 +736,9 @@ def gen_tb(cfg, pclk_mode="pclk_as_phy_output", dpr=False):
     L.append("                    int active_base;")
     L.append("                    exp_tie = SAFE_P2M;")
     L.append("                    active_base = -1;")
-    L.append("                    for (int l = 0; l < NL; l++) begin")
+    L.append("                    for (int lane_idx = 0; lane_idx < NL; lane_idx++) begin")
     L.append(
-        "                        if (owner_of(m, l) == c && active_base == -1) active_base = l;"
+        "                        if (owner_of(m, lane_idx) == c && active_base == -1) active_base = lane_idx;"
     )
     L.append("                    end")
 
@@ -801,14 +801,14 @@ def gen_tb(cfg, pclk_mode="pclk_as_phy_output", dpr=False):
         )
         L.append("    task automatic check_dpr();")
         test_lanes = [g.lanes[0] for g in cfg.groups]
-        L.append(f"        int test_lanes[{len(test_lanes)}] = '{{{', '.join(str(l) for l in test_lanes)}}};")
+        L.append(f"        int test_lanes[{len(test_lanes)}] = '{{{', '.join(str(lane_idx) for lane_idx in test_lanes)}}};")
         L.append("        foreach (test_lanes[k]) begin")
-        L.append("            automatic int l = test_lanes[k];")
-        L.append("            automatic int oid = owner_of(mode, l);")
-        L.append("            automatic int op = ctrl_lane_of(mode, l);")
+        L.append("            automatic int lane_idx = test_lanes[k];")
+        L.append("            automatic int oid = owner_of(mode, lane_idx);")
+        L.append("            automatic int op = ctrl_lane_of(mode, lane_idx);")
         L.append("            automatic int unsigned err_before;")
         L.append("            v_lane_mask = '0;")
-        L.append("            case (l)")
+        L.append("            case (lane_idx)")
         for g in cfg.groups:
             mask = sum(1 << lane for lane in g.lanes)
             L.append(f"                {g.lanes[0]}: v_lane_mask = NL'({mask});")
@@ -819,13 +819,13 @@ def gen_tb(cfg, pclk_mode="pclk_as_phy_output", dpr=False):
         for c in ctrls:
             L.append(f"                {c.id}: chk_p2m({c.lname}_phy2mac[op], exp_safe_p2m,")
             L.append(
-                f'                    $sformatf("dpr claimed lane%0d: real owner {c.name}[%0d] should read SAFE_P2M", l, op));'
+                f'                    $sformatf("dpr claimed lane%0d: real owner {c.name}[%0d] should read SAFE_P2M", lane_idx, op));'
             )
         L.append("                default: ;")
         L.append("            endcase")
-        L.append("            chk(dpr_phy2mac[l] == phy_phy2mac[l],")
+        L.append("            chk(dpr_phy2mac[lane_idx] == phy_phy2mac[lane_idx],")
         L.append(
-            '                $sformatf("dpr claimed lane%0d: dpr_phy2mac should mirror live phy_phy2mac", l));'
+            '                $sformatf("dpr claimed lane%0d: dpr_phy2mac should mirror live phy_phy2mac", lane_idx));'
         )
         if phy_input_mode:
             L.append("            for (int lane = 0; lane < NL; lane++) begin")
@@ -839,19 +839,19 @@ def gen_tb(cfg, pclk_mode="pclk_as_phy_output", dpr=False):
             L.append("                end")
             L.append("            end")
         L.append(
-            '            $display("%0t: dpr claimed lane%0d (%0d cumulative errors)", $time, l, err_count);'
+            '            $display("%0t: dpr claimed lane%0d (%0d cumulative errors)", $time, lane_idx, err_count);'
         )
         L.append("            v_lane_mask = '0;")
         L.append("            #SETTLE;")
-        L.append("            chk(dpr_phy2mac[l] == exp_safe_p2m,")
+        L.append("            chk(dpr_phy2mac[lane_idx] == exp_safe_p2m,")
         L.append(
-            '                $sformatf("dpr released lane%0d: dpr_phy2mac should revert to tie", l));'
+            '                $sformatf("dpr released lane%0d: dpr_phy2mac should revert to tie", lane_idx));'
         )
         if phy_input_mode:
             L.append('            chk(dpr_rx_clk == 0, "released DPR RXCLK is off");')
             L.append("            check_mode(mode);")
         L.append(
-            '            $display("%0t: dpr released lane%0d (%0d cumulative errors)", $time, l, err_count);'
+            '            $display("%0t: dpr released lane%0d (%0d cumulative errors)", $time, lane_idx, err_count);'
         )
         L.append("            err_dpr += (err_count - err_before);")
         L.append("        end")
@@ -924,13 +924,13 @@ def gen_tb(cfg, pclk_mode="pclk_as_phy_output", dpr=False):
         L.append("        begin")
         L.append("            int unsigned err_before;")
         L.append("            err_before = err_count;")
-        L.append("            for (int l = 0; l < NL; l++) begin")
+        L.append("            for (int lane_idx = 0; lane_idx < NL; lane_idx++) begin")
         L.append("                bit expect_low;")
-        L.append(f"                expect_low = (owner_of({last_m}, l) == {c.id});")
-        L.append('                chk(phy_rst_n[l] == (expect_low ? 1\'b0 : 1\'b1),')
+        L.append(f"                expect_low = (owner_of({last_m}, lane_idx) == {c.id});")
+        L.append('                chk(phy_rst_n[lane_idx] == (expect_low ? 1\'b0 : 1\'b1),')
         L.append(
             f'                    $sformatf("mode{last_m} lane%0d: ctrl_rst_n[{c.id}]=0 pulse, '
-            f"expected phy_rst_n=%0b\", l, expect_low ? 1'b0 : 1'b1));"
+            f"expected phy_rst_n=%0b\", lane_idx, expect_low ? 1'b0 : 1'b1));"
         )
         L.append("            end")
         L.append("            err_reset += (err_count - err_before);")

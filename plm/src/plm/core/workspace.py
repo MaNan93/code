@@ -322,7 +322,7 @@ def write_mapping_csv(path, lane_count, rows):
     if not rows:
         raise ValueError("Lane Mapping table is empty -- at least one mode row is required.")
     path = Path(path)
-    cols = ["mode"] + [f"lane{l}" for l in range(lane_count)]
+    cols = ["mode"] + [f"lane{lane_idx}" for lane_idx in range(lane_count)]
     eol = existing_line_ending(path)  # must read this *before* opening "w" truncates the file
     write_aligned_csv(path, cols, [[r.get(c, "") for c in cols] for r in rows], eol)
 

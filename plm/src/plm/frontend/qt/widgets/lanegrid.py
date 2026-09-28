@@ -119,7 +119,7 @@ class _LaneCellDelegate(QtWidgets.QStyledItemDelegate):
         if c < 1 or c > grid.lane_count:
             super().paint(painter, option, index)
             return
-        l = c - 1
+        lane_idx = c - 1
         val = index.data(QtCore.Qt.DisplayRole) or ""
         has_dash = "-" in val
         cid = val.split("-", 1)[0] if has_dash else None
@@ -127,7 +127,7 @@ class _LaneCellDelegate(QtWidgets.QStyledItemDelegate):
         paint_color = grid.color_by_id.get(cid) if cid else None
 
         is_hover = (not grid._drag_active and grid._hover_cell is not None
-                    and grid._hover_cell[0] == r and grid._hover_cell[1] == l)
+                    and grid._hover_cell[0] == r and grid._hover_cell[1] == lane_idx)
         active_color = grid.color_by_id.get(grid.active_ctrl_id) if grid.active_ctrl_id else None
 
         rect = option.rect
@@ -144,8 +144,8 @@ class _LaneCellDelegate(QtWidgets.QStyledItemDelegate):
         # Adjacent cells assigned to the same controller join into one
         # continuous marker band. Only the two outer ends retain rounded caps.
         if paint_color:
-            joins_left = self._paint_color_at(r, l - 1) == paint_color
-            joins_right = self._paint_color_at(r, l + 1) == paint_color
+            joins_left = self._paint_color_at(r, lane_idx - 1) == paint_color
+            joins_right = self._paint_color_at(r, lane_idx + 1) == paint_color
             self._draw_marker_band(
                 painter, rect, paint_color, PAINT_OPACITY, joins_left, joins_right
             )
@@ -272,7 +272,6 @@ class _FlowLayout(QtWidgets.QLayout):
         y = rect.y()
         line_height = 0
         for item in self._items:
-            wid = item.widget()
             space_x = self._h_spacing
             space_y = self._v_spacing
             next_x = x + item.sizeHint().width() + space_x
@@ -392,8 +391,8 @@ class LaneGrid(QtWidgets.QWidget):
 
     def _insert_row_at(self, pos):
         row = {"mode": ""}
-        for l in range(self.lane_count):
-            row[f"lane{l}"] = "0-0"
+        for lane_idx in range(self.lane_count):
+            row[f"lane{lane_idx}"] = "0-0"
         self.data.insert(pos, row)
         self._render_body()
         self.changed.emit()
@@ -497,7 +496,7 @@ class LaneGrid(QtWidgets.QWidget):
         header.blockSignals(False)
         # The page already establishes that these are lanes; bare numbers stay
         # readable when all 32 columns are fitted into the viewport.
-        self.table.setHorizontalHeaderLabels(["mode"] + [str(l) for l in range(self.lane_count)])
+        self.table.setHorizontalHeaderLabels(["mode"] + [str(lane_idx) for lane_idx in range(self.lane_count)])
         self.table.blockSignals(False)
         self._building = False
         self._render_body()
@@ -525,8 +524,8 @@ class LaneGrid(QtWidgets.QWidget):
         lane_total = min(avail, max(n, int(preferred * n)))
         lane_w, remainder = divmod(lane_total, n)
         self.table.setColumnWidth(0, mode_w)
-        for l in range(self.lane_count):
-            self.table.setColumnWidth(l + 1, lane_w + (1 if l < remainder else 0))
+        for lane_idx in range(self.lane_count):
+            self.table.setColumnWidth(lane_idx + 1, lane_w + (1 if lane_idx < remainder else 0))
 
         # On very narrow x32 grids, printing every two-digit lane number
         # produces an unreadable solid string. Keep spatial orientation with
@@ -538,11 +537,11 @@ class LaneGrid(QtWidgets.QWidget):
             label_step = 2
         else:
             label_step = 4
-        for l in range(self.lane_count):
-            item = self.table.horizontalHeaderItem(l + 1)
+        for lane_idx in range(self.lane_count):
+            item = self.table.horizontalHeaderItem(lane_idx + 1)
             if item is not None:
-                item.setText(str(l) if l % label_step == 0 or l == self.lane_count - 1 else "")
-                item.setToolTip(f"Lane {l}")
+                item.setText(str(lane_idx) if lane_idx % label_step == 0 or lane_idx == self.lane_count - 1 else "")
+                item.setToolTip(f"Lane {lane_idx}")
 
     def _render_body(self):
         self._building = True
@@ -552,10 +551,10 @@ class LaneGrid(QtWidgets.QWidget):
         for r, row in enumerate(self.data):
             mode_item = QtWidgets.QTableWidgetItem(row.get("mode", ""))
             self.table.setItem(r, 0, mode_item)
-            for l in range(self.lane_count):
-                item = QtWidgets.QTableWidgetItem(row.get(f"lane{l}", ""))
-                item.setToolTip(f"L{l}: {item.text()}")
-                self.table.setItem(r, l + 1, item)
+            for lane_idx in range(self.lane_count):
+                item = QtWidgets.QTableWidgetItem(row.get(f"lane{lane_idx}", ""))
+                item.setToolTip(f"L{lane_idx}: {item.text()}")
+                self.table.setItem(r, lane_idx + 1, item)
         self.table.blockSignals(False)
         self._building = False
         self._refresh_cell_styles()
@@ -616,21 +615,21 @@ class LaneGrid(QtWidgets.QWidget):
             return None
         return r, c - 1
 
-    def _begin_paint(self, r, l):
+    def _begin_paint(self, r, lane_idx):
         self._drag_active = True
-        self._drag_anchor = (r, l)
-        self._drag_current = (r, l)
+        self._drag_anchor = (r, lane_idx)
+        self._drag_current = (r, lane_idx)
         self._drag_snapshot = copy.deepcopy(self.data)
         self._hover_cell = None  # suppress preview during drag
         # Lay the stroke down on press so a plain click (press + release,
         # no movement) still paints one cell.
         self._paint_current_rect()
 
-    def _continue_paint(self, r, l):
+    def _continue_paint(self, r, lane_idx):
         if not self._drag_active:
             return
-        if (r, l) != self._drag_current:
-            self._drag_current = (r, l)
+        if (r, lane_idx) != self._drag_current:
+            self._drag_current = (r, lane_idx)
             self._paint_current_rect()
 
     def _end_paint(self):
@@ -654,8 +653,8 @@ class LaneGrid(QtWidgets.QWidget):
                 if r >= len(self.data):
                     continue
                 i = 0
-                for l in range(lane_lo, lane_hi + 1):
-                    self.data[r][f"lane{l}"] = f"{self.active_ctrl_id}-{i}"
+                for lane_idx in range(lane_lo, lane_hi + 1):
+                    self.data[r][f"lane{lane_idx}"] = f"{self.active_ctrl_id}-{i}"
                     i += 1
         self._sync_table_from_data()
 
@@ -663,11 +662,11 @@ class LaneGrid(QtWidgets.QWidget):
         self._building = True
         self.table.blockSignals(True)
         for r, row in enumerate(self.data):
-            for l in range(self.lane_count):
-                item = self.table.item(r, l + 1)
+            for lane_idx in range(self.lane_count):
+                item = self.table.item(r, lane_idx + 1)
                 if item is not None:
-                    item.setText(row.get(f"lane{l}", ""))
-                    item.setToolTip(f"L{l}: {item.text()}")
+                    item.setText(row.get(f"lane{lane_idx}", ""))
+                    item.setToolTip(f"L{lane_idx}: {item.text()}")
         self.table.blockSignals(False)
         self._building = False
         self._refresh_cell_styles()

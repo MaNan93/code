@@ -83,6 +83,8 @@ class QtFrontendLayoutTests(unittest.TestCase):
         self.assertEqual(self.window.nav_content_gap.width(), 140)
         self.assertFalse(nav.project_list.isVisible())
         self.assertFalse(nav.logo_label.isVisible())
+        self.assertEqual(nav.new_chat_btn.objectName(), "NavIconBtn")
+        self.assertEqual(nav.save_btn.objectName(), "NavIconBtn")
         self.assertEqual(
             self.window.content_splitter.geometry().left()
             - (nav.geometry().right() + 1),
@@ -131,6 +133,8 @@ class QtFrontendLayoutTests(unittest.TestCase):
         self.assertFalse(nav.is_collapsed)
         self.assertEqual(nav.width(), 260)
         self.assertEqual(self.window.nav_content_gap.width(), 0)
+        self.assertEqual(nav.new_chat_btn.objectName(), "NavActionButton")
+        self.assertEqual(nav.save_btn.objectName(), "NavActionButton")
 
     def test_nav_actions_projects_and_drag_configuration(self):
         nav = self.window.nav_panel

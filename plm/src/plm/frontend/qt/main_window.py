@@ -854,11 +854,14 @@ class NavPanel(QtWidgets.QFrame):
         self.new_chat_btn.setText("新对话" if visible else "")
         self.save_btn.setText("保存" if visible else "")
         for button in (self.new_chat_btn, self.save_btn):
+            button.setObjectName("NavActionButton" if visible else "NavIconBtn")
             if visible:
                 button.setMinimumWidth(0)
                 button.setMaximumWidth(QtWidgets.QWIDGETSIZE_MAX)
             else:
                 button.setFixedSize(32, 32)
+            button.style().unpolish(button)
+            button.style().polish(button)
 
         self.project_title.setText("项目" if visible else "")
         self.project_list.setVisible(visible)

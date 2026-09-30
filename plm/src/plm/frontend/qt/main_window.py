@@ -594,30 +594,26 @@ class NavPanel(QtWidgets.QFrame):
         self.setObjectName("NavPanel")
         self.expanded_width = 260
         self.collapsed_width = 56
+        self.expanded_min_width = 200
+        self.expanded_max_width = 400
         self.is_collapsed = False
         self.is_animating = False
         self._target_collapsed = False
-        self.setMinimumWidth(self.expanded_width)
-        self.setMaximumWidth(self.expanded_width)
+        self.setMinimumWidth(self.expanded_min_width)
+        self.setMaximumWidth(self.expanded_max_width)
 
         self.animation_min = QtCore.QPropertyAnimation(self, b"minimumWidth", self)
         self.animation_max = QtCore.QPropertyAnimation(self, b"maximumWidth", self)
-        self.gap_widget = None
-        self.animation_gap_min = None
-        self.animation_gap_max = None
-        self.animation_layout = QtCore.QVariantAnimation(self)
         for animation in (
             self.animation_min,
             self.animation_max,
-            self.animation_layout,
         ):
             animation.setDuration(200)
             animation.setEasingCurve(QtCore.QEasingCurve.OutCubic)
-        self.animation_layout.valueChanged.connect(self._apply_animated_layout)
         self.animation_group = QtCore.QParallelAnimationGroup(self)
         self.animation_group.addAnimation(self.animation_min)
         self.animation_group.addAnimation(self.animation_max)
-        self.animation_group.addAnimation(self.animation_layout)
+        self.animation_max.valueChanged.connect(self._apply_animated_width)
         self.animation_group.finished.connect(self._on_collapse_animation_finished)
         root = QtWidgets.QVBoxLayout(self)
         root.setSizeConstraint(QtWidgets.QLayout.SetNoConstraint)
@@ -744,19 +740,6 @@ class NavPanel(QtWidgets.QFrame):
             self.app_name_label,
         ]
 
-    def attach_gap_widget(self, gap_widget):
-        self.gap_widget = gap_widget
-        self.animation_gap_min = QtCore.QPropertyAnimation(
-            gap_widget, b"minimumWidth", self
-        )
-        self.animation_gap_max = QtCore.QPropertyAnimation(
-            gap_widget, b"maximumWidth", self
-        )
-        for animation in (self.animation_gap_min, self.animation_gap_max):
-            animation.setDuration(200)
-            animation.setEasingCurve(QtCore.QEasingCurve.OutCubic)
-            self.animation_group.addAnimation(animation)
-
     def toggle_collapse(self):
         if self.is_animating:
             return
@@ -770,49 +753,29 @@ class NavPanel(QtWidgets.QFrame):
             self._set_expanded_content_visible(True)
 
         self.is_animating = True
+        splitter = self.parentWidget()
+        if isinstance(splitter, QtWidgets.QSplitter):
+            splitter.handle(1).setEnabled(False)
         for animation in (self.animation_min, self.animation_max):
             animation.setStartValue(start_width)
             animation.setEndValue(end_width)
-        if self.gap_widget is not None:
-            start_gap = self.gap_widget.width()
-            end_gap = 140 if self._target_collapsed else 0
-            for animation in (self.animation_gap_min, self.animation_gap_max):
-                animation.setStartValue(start_gap)
-                animation.setEndValue(end_gap)
-            splitter = self.parentWidget()
-            self._layout_total_width = (
-                sum(splitter.sizes())
-                if isinstance(splitter, QtWidgets.QSplitter)
-                else 0
-            )
-            self._layout_start_nav = start_width
-            self._layout_end_nav = end_width
-            self._layout_start_gap = start_gap
-            self._layout_end_gap = end_gap
-            self.animation_layout.setStartValue(0.0)
-            self.animation_layout.setEndValue(1.0)
         self.animation_group.start()
 
-    def _apply_animated_layout(self, progress):
+    def _apply_animated_width(self, width):
         splitter = self.parentWidget()
-        if not isinstance(splitter, QtWidgets.QSplitter) or splitter.count() != 3:
+        if not isinstance(splitter, QtWidgets.QSplitter) or splitter.count() != 2:
             return
-        progress = float(progress)
-        nav_width = round(
-            self._layout_start_nav
-            + (self._layout_end_nav - self._layout_start_nav) * progress
-        )
-        gap_width = round(
-            self._layout_start_gap
-            + (self._layout_end_gap - self._layout_start_gap) * progress
-        )
-        content_width = max(1, self._layout_total_width - nav_width - gap_width)
-        splitter.setSizes([nav_width, gap_width, content_width])
+        total_width = sum(splitter.sizes())
+        nav_width = int(width)
+        splitter.setSizes([nav_width, max(1, total_width - nav_width)])
 
     def _on_collapse_animation_finished(self):
         self.is_collapsed = self._target_collapsed
         if self.is_collapsed:
             self._set_expanded_content_visible(False)
+        else:
+            self.setMinimumWidth(self.expanded_min_width)
+            self.setMaximumWidth(self.expanded_max_width)
         self.collapse_btn.setIcon(
             load_lucide_icon(
                 "panel-right" if self.is_collapsed else "panel-left",
@@ -822,6 +785,9 @@ class NavPanel(QtWidgets.QFrame):
         self.collapse_btn.setToolTip(
             "展开侧边栏" if self.is_collapsed else "收起侧边栏"
         )
+        splitter = self.parentWidget()
+        if isinstance(splitter, QtWidgets.QSplitter):
+            splitter.handle(1).setEnabled(not self.is_collapsed)
         self.is_animating = False
 
     def _set_expanded_content_visible(self, visible):
@@ -1454,17 +1420,10 @@ class MainWindow(QtWidgets.QMainWindow):
 
         self.main_splitter = QtWidgets.QSplitter(QtCore.Qt.Horizontal)
         self.main_splitter.setObjectName("MainSplitter")
-        self.main_splitter.setHandleWidth(0)
-        self.main_splitter.setChildrenCollapsible(True)
+        self.main_splitter.setHandleWidth(4)
+        self.main_splitter.setChildrenCollapsible(False)
         self.nav_panel = NavPanel()
         self.main_splitter.addWidget(self.nav_panel)
-
-        self.nav_content_gap = QtWidgets.QWidget()
-        self.nav_content_gap.setObjectName("NavContentGap")
-        self.nav_content_gap.setMinimumWidth(0)
-        self.nav_content_gap.setMaximumWidth(0)
-        self.main_splitter.addWidget(self.nav_content_gap)
-        self.nav_panel.attach_gap_widget(self.nav_content_gap)
 
         self.content_splitter = QtWidgets.QSplitter(QtCore.Qt.Vertical)
         self.content_splitter.setObjectName("ContentSplitter")
@@ -1477,9 +1436,9 @@ class MainWindow(QtWidgets.QMainWindow):
         self.content_splitter.addWidget(self.config_page)
         self.content_splitter.addWidget(self.log_panel)
         self.main_splitter.addWidget(self.content_splitter)
+        self.main_splitter.handle(1).setCursor(QtCore.Qt.SplitHCursor)
         self.main_splitter.setStretchFactor(0, 0)
-        self.main_splitter.setStretchFactor(1, 0)
-        self.main_splitter.setStretchFactor(2, 1)
+        self.main_splitter.setStretchFactor(1, 1)
         self.content_splitter.setStretchFactor(0, 3)
         self.content_splitter.setStretchFactor(1, 1)
         self.setCentralWidget(self.main_splitter)
@@ -1503,7 +1462,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def _apply_initial_sizes(self):
         main_width = max(261, self.main_splitter.width())
-        self.main_splitter.setSizes([260, 0, main_width - 260])
+        self.main_splitter.setSizes([260, main_width - 260])
         self.content_splitter.setSizes(self._log_sizes)
 
     def toggle_nav(self):
@@ -1520,11 +1479,12 @@ class MainWindow(QtWidgets.QMainWindow):
     def show_nav(self):
         self.nav_panel.setVisible(True)
         total = max(1, sum(self.main_splitter.sizes()))
-        width = max(200, self._nav_width)
-        gap_width = self.nav_content_gap.width()
-        self.main_splitter.setSizes(
-            [width, gap_width, max(1, total - width - gap_width)]
+        width = (
+            self.nav_panel.collapsed_width
+            if self.nav_panel.is_collapsed
+            else min(400, max(200, self._nav_width))
         )
+        self.main_splitter.setSizes([width, max(1, total - width)])
         self.float_btn.setVisible(False)
 
     def toggle_log(self):
@@ -1561,9 +1521,12 @@ QMainWindow, QWidget#AppRoot { background-color: #F1F1F5; }
 QLabel { background: transparent; }
 QSplitter::handle { background-color: transparent; }
 QSplitter#MainSplitter { background-color: #FFFFFF; }
-QSplitter#MainSplitter::handle:horizontal { width: 0; background: transparent; }
+QSplitter::handle:horizontal {
+    background-color: transparent;
+    width: 4px;
+}
+QSplitter::handle:horizontal:hover { background-color: #D0D0D0; }
 QSplitter::handle:vertical { height: 1px; }
-QWidget#NavContentGap { background-color: #FFFFFF; }
 
 QFrame#NavPanel {
     background-color: #F1F1F5; border-right: 1px solid #E0E0E0;

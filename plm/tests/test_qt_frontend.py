@@ -48,9 +48,15 @@ class QtFrontendLayoutTests(unittest.TestCase):
         self.assertIs(self.window.centralWidget(), self.window.main_splitter)
         self.assertEqual(self.window.main_splitter.orientation(), QtCore.Qt.Horizontal)
         self.assertEqual(self.window.content_splitter.orientation(), QtCore.Qt.Vertical)
-        self.assertEqual(self.window.main_splitter.handleWidth(), 0)
-        self.assertEqual(self.window.main_splitter.count(), 3)
-        self.assertEqual(self.window.nav_content_gap.width(), 0)
+        self.assertEqual(self.window.main_splitter.handleWidth(), 4)
+        self.assertFalse(self.window.main_splitter.childrenCollapsible())
+        self.assertEqual(self.window.main_splitter.count(), 2)
+        self.assertEqual(self.window.nav_panel.minimumWidth(), 200)
+        self.assertEqual(self.window.nav_panel.maximumWidth(), 400)
+        self.assertEqual(
+            self.window.main_splitter.handle(1).cursor().shape(),
+            QtCore.Qt.SplitHCursor,
+        )
         self.assertEqual(self.window.content_splitter.handleWidth(), 1)
         self.assertIsInstance(self.window.log_panel, LogPanel)
         self.assertEqual(
@@ -74,13 +80,18 @@ class QtFrontendLayoutTests(unittest.TestCase):
         nav.collapse_btn.click()
         self.assertTrue(nav._target_collapsed)
         QtTest.QTest.qWait(100)
-        self.assertGreater(self.window.nav_content_gap.width(), 0)
-        self.assertLess(self.window.nav_content_gap.width(), 140)
+        self.assertGreater(nav.width(), 56)
+        self.assertLess(nav.width(), 260)
+        self.assertEqual(
+            self.window.content_splitter.geometry().left()
+            - (nav.geometry().right() + 1),
+            4,
+        )
         QtTest.QTest.qWait(250)
         self.assertFalse(nav.is_animating)
         self.assertTrue(nav.is_collapsed)
         self.assertEqual(nav.width(), 56)
-        self.assertEqual(self.window.nav_content_gap.width(), 140)
+        self.assertFalse(self.window.main_splitter.handle(1).isEnabled())
         self.assertFalse(nav.project_list.isVisible())
         self.assertFalse(nav.logo_label.isVisible())
         self.assertEqual(nav.new_chat_btn.objectName(), "NavIconBtn")
@@ -88,7 +99,7 @@ class QtFrontendLayoutTests(unittest.TestCase):
         self.assertEqual(
             self.window.content_splitter.geometry().left()
             - (nav.geometry().right() + 1),
-            140,
+            4,
         )
         aligned_widgets = [
             nav.collapse_btn,
@@ -132,9 +143,31 @@ class QtFrontendLayoutTests(unittest.TestCase):
         QtTest.QTest.qWait(350)
         self.assertFalse(nav.is_collapsed)
         self.assertEqual(nav.width(), 260)
-        self.assertEqual(self.window.nav_content_gap.width(), 0)
+        self.assertEqual(nav.minimumWidth(), 200)
+        self.assertEqual(nav.maximumWidth(), 400)
+        self.assertTrue(self.window.main_splitter.handle(1).isEnabled())
         self.assertEqual(nav.new_chat_btn.objectName(), "NavActionButton")
         self.assertEqual(nav.save_btn.objectName(), "NavActionButton")
+
+    def test_nav_splitter_resizes_only_while_expanded(self):
+        nav = self.window.nav_panel
+        self.window.main_splitter.moveSplitter(100, 1)
+        self.app.processEvents()
+        self.assertEqual(nav.width(), 200)
+
+        self.window.main_splitter.moveSplitter(500, 1)
+        self.app.processEvents()
+        self.assertEqual(nav.width(), 400)
+
+        self.window.main_splitter.moveSplitter(320, 1)
+        self.app.processEvents()
+        self.assertEqual(nav.width(), 320)
+
+        nav.collapse_btn.click()
+        QtTest.QTest.qWait(250)
+        self.window.main_splitter.moveSplitter(300, 1)
+        self.app.processEvents()
+        self.assertEqual(nav.width(), 56)
 
     def test_nav_actions_projects_and_drag_configuration(self):
         nav = self.window.nav_panel

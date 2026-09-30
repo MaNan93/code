@@ -17,8 +17,7 @@ except ImportError:
         "(or, offline, transfer the PyQt5/PyQt5-sip wheels to this machine and pip install those)."
     )
 
-from plm.frontend.qt.main_window import APP_ICON_PATH, MainWindow
-from plm.frontend.qt.widgets.theme import apply_titlebar_theme, build_stylesheet
+from plm.frontend.qt.main_window import APP_ICON_PATH, APP_QSS, MainWindow
 
 
 def main(argv=None):
@@ -43,21 +42,16 @@ def main(argv=None):
     # QSS below render the way it's written rather than fighting the
     # platform style underneath it.
     app.setStyle("Fusion")
-    # Set a real UI font before building any widget, not just inside
-    # MainWindow._apply_font() -- QApplication's own untouched default
-    # font is locale-dependent (on a Chinese-locale Windows install it
-    # can resolve to SimSun, a legacy bitmap CJK font, even for an
-    # English UI), and every widget built against that default bakes in
-    # its bad metrics at construction time. Setting this first means
-    # MainWindow's own _apply_font() call later is just adjusting size,
-    # not recovering from an already-wrong family.
-    app.setFont(QtGui.QFont("Segoe UI", 13))
+    font = QtGui.QFont()
+    font.setFamily("Microsoft YaHei UI")
+    font.setStyleStrategy(QtGui.QFont.PreferAntialias)
+    font.setHintingPreference(QtGui.QFont.PreferFullHinting)
+    app.setFont(font)
     # Built here rather than imported as a constant: the sheet names the
     # vendored "72" family, and fonts can only be registered once a
     # QApplication exists.
-    app.setStyleSheet(build_stylesheet())
+    app.setStyleSheet(APP_QSS)
     win = MainWindow()
-    apply_titlebar_theme(win)
     win.show()
     return app.exec_()
 

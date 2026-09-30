@@ -1,9 +1,14 @@
-"""PyQt5 interface shell for plmConsultant.
+"""Codex-style PyQt5 shell for plmConsultant using the native title bar.
 
-The module implements layout and UI interactions only. PLM workspace actions
-and RTL generation are intentionally left disconnected for this phase.
+This file is deliberately self-contained: the complete widget hierarchy,
+interactions, Lucide SVG loader, and application QSS all live here. Business
+actions are represented by signals and safe placeholders so the UI can run on
+its own while PLM generation is connected later.
 """
 
+import os
+import shutil
+import subprocess
 import sys
 from pathlib import Path
 
@@ -12,218 +17,1082 @@ from PyQt5 import QtCore, QtGui, QtSvg, QtWidgets
 
 APP_ICON_PATH = Path(__file__).resolve().parent / "assets" / "app_icon.svg"
 LUCIDE_ICON_DIR = Path(__file__).resolve().parent / "assets" / "icons"
+PROJECT_ROOT = Path(__file__).resolve().parents[4]
 ICON_SIZE = 20
 
 
-def make_label(text, object_name="", *, word_wrap=True):
-    label = QtWidgets.QLabel(text)
-    if object_name:
-        label.setObjectName(object_name)
-    label.setWordWrap(word_wrap)
-    return label
-
-
 def load_lucide_icon(name, color="#666666", size=ICON_SIZE):
-    """Render a Lucide SVG to a monochrome QIcon at a consistent size."""
+    """Load, rasterize, and recolor one Lucide SVG."""
     path = LUCIDE_ICON_DIR / f"{name}.svg"
-    pixmap = QtGui.QPixmap(size, size)
-    pixmap.fill(QtCore.Qt.transparent)
+    source = QtGui.QPixmap(size, size)
+    source.fill(QtCore.Qt.transparent)
     renderer = QtSvg.QSvgRenderer(str(path))
     if not renderer.isValid():
-        return QtGui.QIcon(pixmap)
-    painter = QtGui.QPainter(pixmap)
+        return QtGui.QIcon(source)
+    painter = QtGui.QPainter(source)
+    painter.setRenderHint(QtGui.QPainter.Antialiasing, True)
     renderer.render(painter)
     painter.end()
 
     colored = QtGui.QPixmap(size, size)
     colored.fill(QtCore.Qt.transparent)
     painter = QtGui.QPainter(colored)
-    painter.drawPixmap(0, 0, pixmap)
+    painter.drawPixmap(0, 0, source)
     painter.setCompositionMode(QtGui.QPainter.CompositionMode_SourceIn)
     painter.fillRect(colored.rect(), QtGui.QColor(color))
     painter.end()
     return QtGui.QIcon(colored)
 
 
-class SessionIconButton(QtWidgets.QPushButton):
-    def __init__(self, icon_name, object_name, tooltip, parent=None):
-        super().__init__(parent)
-        self.icon_name = icon_name
-        self.setObjectName(object_name)
-        self.setIcon(load_lucide_icon(icon_name, "#8C92A4", 16))
-        self.setIconSize(QtCore.QSize(16, 16))
-        self.setFixedSize(24, 24)
-        self.setCursor(QtCore.Qt.PointingHandCursor)
-        self.setToolTip(tooltip)
-
-    def enterEvent(self, event):
-        self.setIcon(load_lucide_icon(self.icon_name, "#1677FF", 16))
-        super().enterEvent(event)
-
-    def leaveEvent(self, event):
-        self.setIcon(load_lucide_icon(self.icon_name, "#8C92A4", 16))
-        super().leaveEvent(event)
+def make_icon_button(
+    icon_name,
+    tooltip,
+    object_name="IconButton",
+    button_size=28,
+    icon_size=ICON_SIZE,
+    color="#666666",
+):
+    button = QtWidgets.QPushButton()
+    button.setObjectName(object_name)
+    button.setIcon(load_lucide_icon(icon_name, color, icon_size))
+    button.setIconSize(QtCore.QSize(icon_size, icon_size))
+    button.setFixedSize(button_size, button_size)
+    button.setToolTip(tooltip)
+    button.setCursor(QtCore.Qt.PointingHandCursor)
+    return button
 
 
-class SessionNameLabel(QtWidgets.QLabel):
-    clicked = QtCore.pyqtSignal()
-
-    def __init__(self, text, parent=None):
-        super().__init__(text, parent)
-        self.setObjectName("SessionNameLabel")
-        self.setCursor(QtCore.Qt.PointingHandCursor)
-
-    def mouseReleaseEvent(self, event):
-        if event.button() == QtCore.Qt.LeftButton:
-            self.clicked.emit()
-        super().mouseReleaseEvent(event)
-
-    def click(self):
-        """Keep compatibility with the previous QPushButton session entry."""
-        self.clicked.emit()
+def apply_drop_shadow(widget, offset=(0, 1), blur_radius=4, alpha=15):
+    """Apply one of the shared elevation levels to a widget."""
+    shadow = QtWidgets.QGraphicsDropShadowEffect(widget)
+    shadow.setOffset(*offset)
+    shadow.setBlurRadius(blur_radius)
+    shadow.setColor(QtGui.QColor(0, 0, 0, alpha))
+    widget.setGraphicsEffect(shadow)
+    return shadow
 
 
-class SessionNameEdit(QtWidgets.QLineEdit):
-    cancel_requested = QtCore.pyqtSignal()
+def open_in_file_manager(path):
+    """Open a local path with the platform file manager."""
+    resolved_path = Path(path).resolve()
+    if not resolved_path.exists():
+        return False
+    try:
+        if sys.platform == "win32":
+            os.startfile(str(resolved_path))
+        elif sys.platform == "darwin":
+            subprocess.Popen(["open", str(resolved_path)])
+        else:
+            subprocess.Popen(["xdg-open", str(resolved_path)])
+    except OSError:
+        return False
+    return True
 
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.setObjectName("SessionName")
+
+class StyledMenu(QtWidgets.QMenu):
+    """QMenu with the shared popup elevation (QSS cannot draw shadows)."""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        apply_drop_shadow(self, offset=(0, 4), blur_radius=12, alpha=40)
+
+
+class EscapeLineEdit(QtWidgets.QLineEdit):
+    escapePressed = QtCore.pyqtSignal()
 
     def keyPressEvent(self, event):
         if event.key() == QtCore.Qt.Key_Escape:
-            self.cancel_requested.emit()
+            self.escapePressed.emit()
             event.accept()
             return
         super().keyPressEvent(event)
 
 
-class SessionEntry(QtWidgets.QWidget):
-    more_requested = QtCore.pyqtSignal(object)
-    name_changed = QtCore.pyqtSignal(object)
+class DoubleClickLabel(QtWidgets.QLabel):
+    doubleClicked = QtCore.pyqtSignal()
 
-    def __init__(self, text, on_activate, source_path=None, parent=None):
+    def mouseDoubleClickEvent(self, event):
+        if event.button() == QtCore.Qt.LeftButton:
+            self.doubleClicked.emit()
+            event.accept()
+            return
+        super().mouseDoubleClickEvent(event)
+
+
+class HoverIconButton(QtWidgets.QPushButton):
+    """Small Lucide button whose glyph changes color on hover."""
+
+    def __init__(self, icon_name, normal_color, hover_color, size=16, parent=None):
         super().__init__(parent)
-        self.setObjectName("SessionEntry")
-        self.source_path = Path(source_path).resolve() if source_path else None
-        self.original_name = text
-        self.is_editing = False
-        layout = QtWidgets.QHBoxLayout(self)
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(4)
+        self.icon_name = icon_name
+        self.normal_color = normal_color
+        self.hover_color = hover_color
+        self.icon_size = size
+        self.setIconSize(QtCore.QSize(size, size))
+        self._set_icon_color(normal_color)
 
-        self.session_label = SessionNameLabel(text)
-        self.session_label.clicked.connect(on_activate)
-        layout.addWidget(self.session_label, 1)
-
-        self.session_editor = SessionNameEdit()
-        self.session_editor.returnPressed.connect(self.exit_edit_mode)
-        self.session_editor.editingFinished.connect(self.exit_edit_mode)
-        self.session_editor.cancel_requested.connect(self.cancel_edit_mode)
-        self.session_editor.hide()
-        layout.addWidget(self.session_editor, 1)
-
-        # Compatibility alias for code that used the earlier session button.
-        self.session_button = self.session_label
-
-        self.more_button = SessionIconButton(
-            "more-horizontal", "SessionMoreBtn", "更多操作"
-        )
-        self.more_button.clicked.connect(lambda: self.more_requested.emit(self))
-        self.more_button.setVisible(False)
-        layout.addWidget(self.more_button)
+    def _set_icon_color(self, color):
+        self.setIcon(load_lucide_icon(self.icon_name, color, self.icon_size))
 
     def enterEvent(self, event):
-        self.more_button.setVisible(True)
+        self._set_icon_color(self.hover_color)
         super().enterEvent(event)
 
     def leaveEvent(self, event):
-        self.more_button.setVisible(False)
+        self._set_icon_color(self.normal_color)
         super().leaveEvent(event)
 
-    def enter_edit_mode(self):
-        if self.is_editing:
+
+class HoverCard(QtWidgets.QFrame):
+    """Shared project-details popup displayed beside a project row."""
+
+    pointerEntered = QtCore.pyqtSignal()
+    pointerLeft = QtCore.pyqtSignal()
+
+    def __init__(self, parent=None):
+        super().__init__(parent, QtCore.Qt.ToolTip | QtCore.Qt.FramelessWindowHint)
+        self.setObjectName("ProjectHoverCard")
+        self.setFixedWidth(260)
+        apply_drop_shadow(self, offset=(0, 4), blur_radius=12, alpha=30)
+        self.project_path = None
+
+        root = QtWidgets.QVBoxLayout(self)
+        root.setContentsMargins(16, 12, 16, 12)
+        root.setSpacing(0)
+
+        title_row = QtWidgets.QHBoxLayout()
+        title_row.setSpacing(8)
+        folder_icon = QtWidgets.QLabel()
+        folder_icon.setFixedSize(ICON_SIZE, ICON_SIZE)
+        folder_icon.setPixmap(
+            load_lucide_icon("folder", "#666666").pixmap(ICON_SIZE, ICON_SIZE)
+        )
+        self.name_label = QtWidgets.QLabel()
+        self.name_label.setObjectName("HoverProjectName")
+        self.pin_btn = HoverIconButton("pin", "#B0B5C0", "#666666", 16)
+        self.pin_btn.setObjectName("HoverPinButton")
+        self.pin_btn.setFixedSize(24, 24)
+        self.pin_btn.setCursor(QtCore.Qt.PointingHandCursor)
+        title_row.addWidget(folder_icon)
+        title_row.addWidget(self.name_label)
+        title_row.addStretch(1)
+        title_row.addWidget(self.pin_btn)
+        root.addLayout(title_row)
+
+        root.addSpacing(8)
+        divider = QtWidgets.QFrame()
+        divider.setObjectName("HoverCardDivider")
+        divider.setFixedHeight(1)
+        root.addWidget(divider)
+        root.addSpacing(8)
+
+        path_row = QtWidgets.QHBoxLayout()
+        path_row.setSpacing(8)
+        path_icon = QtWidgets.QLabel()
+        path_icon.setFixedSize(ICON_SIZE, ICON_SIZE)
+        path_icon.setPixmap(
+            load_lucide_icon("folder-open", "#666666").pixmap(
+                ICON_SIZE, ICON_SIZE
+            )
+        )
+        self.path_label = QtWidgets.QLabel()
+        self.path_label.setObjectName("HoverProjectPath")
+        self.path_label.setSizePolicy(
+            QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Preferred
+        )
+        self.open_btn = HoverIconButton(
+            "external-link", "#666666", "#1A1A1A", 16
+        )
+        self.open_btn.setObjectName("HoverOpenButton")
+        self.open_btn.setFixedSize(24, 24)
+        self.open_btn.setCursor(QtCore.Qt.PointingHandCursor)
+        self.open_btn.setToolTip("打开文件夹")
+        self.open_btn.clicked.connect(self.open_folder)
+        path_row.addWidget(path_icon)
+        path_row.addWidget(self.path_label, 1)
+        path_row.addWidget(self.open_btn)
+        root.addLayout(path_row)
+
+    def set_project(self, project_name, project_path):
+        self.project_path = Path(project_path).resolve()
+        full_path = str(self.project_path)
+        self.name_label.setText(project_name)
+        self.path_label.setToolTip(full_path)
+        metrics = QtGui.QFontMetrics(self.path_label.font())
+        self.path_label.setText(
+            metrics.elidedText(full_path, QtCore.Qt.ElideMiddle, 140)
+        )
+
+    def open_folder(self):
+        if self.project_path is not None:
+            open_in_file_manager(self.project_path)
+
+    def enterEvent(self, event):
+        self.pointerEntered.emit()
+        super().enterEvent(event)
+
+    def leaveEvent(self, event):
+        self.pointerLeft.emit()
+        super().leaveEvent(event)
+
+
+class ProjectItemWidget(QtWidgets.QWidget):
+    """Expandable local project with clickable session children."""
+
+    heightChanged = QtCore.pyqtSignal()
+    sessionSelected = QtCore.pyqtSignal(str)
+    hoverEntered = QtCore.pyqtSignal(object)
+    hoverLeft = QtCore.pyqtSignal(object)
+    pinRequested = QtCore.pyqtSignal(object)
+    renameRequested = QtCore.pyqtSignal(object)
+    archiveRequested = QtCore.pyqtSignal(object)
+    deleteRequested = QtCore.pyqtSignal(object)
+
+    def __init__(
+        self, project_name, sessions, expanded=False, project_path=None, parent=None
+    ):
+        super().__init__(parent)
+        self.project_name = project_name
+        self.project_path = Path(project_path or PROJECT_ROOT / project_name).resolve()
+        root = QtWidgets.QVBoxLayout(self)
+        root.setContentsMargins(0, 0, 0, 0)
+        root.setSpacing(2)
+        self.header = QtWidgets.QPushButton()
+        self.header.setObjectName("ProjectButton")
+        self.header.setCheckable(True)
+        self.header.setChecked(expanded)
+        self.header.setCursor(QtCore.Qt.PointingHandCursor)
+        self.header.clicked.connect(self.set_expanded)
+        self.header.setMouseTracking(True)
+        self.header.installEventFilter(self)
+        header_layout = QtWidgets.QHBoxLayout(self.header)
+        header_layout.setContentsMargins(0, 0, 0, 0)
+        header_layout.setSpacing(0)
+        self.folder_icon = QtWidgets.QLabel()
+        self.folder_icon.setObjectName("ProjectFolderIcon")
+        self.folder_icon.setFixedSize(ICON_SIZE, ICON_SIZE)
+        self.folder_icon.setAlignment(QtCore.Qt.AlignCenter)
+        self.folder_icon.setPixmap(
+            load_lucide_icon("folder", "#666666").pixmap(ICON_SIZE, ICON_SIZE)
+        )
+        self.folder_icon.setAttribute(QtCore.Qt.WA_TransparentForMouseEvents)
+        self.project_name_label = QtWidgets.QLabel(self.project_name)
+        self.project_name_label.setObjectName("ProjectName")
+        self.project_name_label.setAttribute(QtCore.Qt.WA_TransparentForMouseEvents)
+        header_layout.addWidget(self.folder_icon)
+        header_layout.addSpacing(8)
+        header_layout.addWidget(self.project_name_label)
+        header_layout.addStretch(1)
+        self.archive_btn = make_icon_button(
+            "archive", "归档项目", "ProjectArchiveBtn", 24, 16
+        )
+        self.more_btn = make_icon_button(
+            "more-horizontal", "更多操作", "ProjectMoreBtn", 24, 16
+        )
+        self.archive_btn.clicked.connect(
+            lambda: self.archiveRequested.emit(self)
+        )
+        self.more_btn.clicked.connect(self.show_more_menu)
+        self.archive_btn.hide()
+        self.more_btn.hide()
+        header_layout.addWidget(self.archive_btn)
+        header_layout.addSpacing(4)
+        header_layout.addWidget(self.more_btn)
+        root.addWidget(self.header)
+
+        self.children = QtWidgets.QWidget()
+        children_layout = QtWidgets.QVBoxLayout(self.children)
+        children_layout.setContentsMargins(20, 0, 0, 0)
+        children_layout.setSpacing(2)
+        self.session_buttons = []
+        for name in sessions:
+            button = QtWidgets.QPushButton(name)
+            button.setObjectName("SessionButton")
+            button.setCursor(QtCore.Qt.PointingHandCursor)
+            button.clicked.connect(
+                lambda _checked=False, value=name: self.sessionSelected.emit(value)
+            )
+            children_layout.addWidget(button)
+            self.session_buttons.append(button)
+        root.addWidget(self.children)
+        self.set_expanded(expanded)
+
+    def eventFilter(self, watched, event):
+        if watched is self.header:
+            if event.type() == QtCore.QEvent.Enter:
+                self.archive_btn.show()
+                self.more_btn.show()
+                self.hoverEntered.emit(self)
+            elif event.type() == QtCore.QEvent.Leave:
+                self.archive_btn.hide()
+                self.more_btn.hide()
+                self.hoverLeft.emit(self)
+        return super().eventFilter(watched, event)
+
+    def show_more_menu(self):
+        menu = self.build_more_menu()
+        menu.exec_(
+            self.more_btn.mapToGlobal(QtCore.QPoint(0, self.more_btn.height() + 4))
+        )
+
+    def build_more_menu(self):
+        menu = StyledMenu(self)
+        menu.setFixedWidth(180)
+        pin_action = menu.addAction(
+            load_lucide_icon("pin", "#666666", 16), "置顶"
+        )
+        rename_action = menu.addAction(
+            load_lucide_icon("pencil", "#666666", 16), "重命名"
+        )
+        menu.addSeparator()
+        open_action = menu.addAction(
+            load_lucide_icon("folder-open", "#666666", 16),
+            "在资源管理器中打开",
+        )
+        menu.addSeparator()
+        archive_action = menu.addAction(
+            load_lucide_icon("archive", "#666666", 16), "归档"
+        )
+        delete_action = QtWidgets.QWidgetAction(menu)
+        delete_action.setText("删除")
+        delete_button = QtWidgets.QPushButton("删除")
+        delete_button.setObjectName("ProjectDeleteMenuButton")
+        delete_button.setIcon(load_lucide_icon("x", "#CF222E", 16))
+        delete_button.setIconSize(QtCore.QSize(16, 16))
+        delete_button.setCursor(QtCore.Qt.PointingHandCursor)
+        delete_action.setDefaultWidget(delete_button)
+        menu.addAction(delete_action)
+
+        pin_action.triggered.connect(lambda: self.pinRequested.emit(self))
+        rename_action.triggered.connect(lambda: self.renameRequested.emit(self))
+        open_action.triggered.connect(lambda: open_in_file_manager(self.project_path))
+        archive_action.triggered.connect(lambda: self.archiveRequested.emit(self))
+
+        def request_delete():
+            menu.close()
+            self.deleteRequested.emit(self)
+
+        delete_button.clicked.connect(request_delete)
+        return menu
+
+    def rename(self, new_name):
+        self.project_name = new_name
+        self.project_name_label.setText(new_name)
+
+    def set_expanded(self, expanded):
+        self.header.setChecked(expanded)
+        self.children.setVisible(expanded)
+        self.heightChanged.emit()
+
+    def select_session(self, selected_name):
+        for button in self.session_buttons:
+            button.setProperty("selected", button.text() == selected_name)
+            button.style().unpolish(button)
+            button.style().polish(button)
+
+
+class ProjectList(QtWidgets.QListWidget):
+    """Draggable flat project list populated from local workspace names."""
+
+    sessionSelected = QtCore.pyqtSignal(str)
+    projectArchived = QtCore.pyqtSignal(str)
+    projectDeleted = QtCore.pyqtSignal(str)
+    projectRenamed = QtCore.pyqtSignal(str, str)
+
+    def __init__(self, projects, parent=None):
+        super().__init__(parent)
+        self.setObjectName("ProjectList")
+        self.setDragDropMode(QtWidgets.QAbstractItemView.InternalMove)
+        self.setSelectionMode(QtWidgets.QAbstractItemView.SingleSelection)
+        self.setDefaultDropAction(QtCore.Qt.MoveAction)
+        self.setHorizontalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOff)
+        self.hover_card = HoverCard(self)
+        self.hover_card.hide()
+        self._pending_hover_widget = None
+        self._hover_timer = QtCore.QTimer(self)
+        self._hover_timer.setSingleShot(True)
+        self._hover_timer.setInterval(400)
+        self._hover_timer.timeout.connect(self._show_hover_card)
+        self._hide_timer = QtCore.QTimer(self)
+        self._hide_timer.setSingleShot(True)
+        self._hide_timer.setInterval(150)
+        self._hide_timer.timeout.connect(self.hover_card.hide)
+        self.hover_card.pointerEntered.connect(self._hide_timer.stop)
+        self.hover_card.pointerLeft.connect(self._schedule_hover_card_hide)
+        self.project_widgets = []
+        for project_name, sessions, expanded, project_path in projects:
+            item = QtWidgets.QListWidgetItem()
+            widget = ProjectItemWidget(
+                project_name, sessions, expanded, project_path=project_path
+            )
+            widget.sessionSelected.connect(self._select_session)
+            widget.hoverEntered.connect(self._schedule_hover_card)
+            widget.hoverLeft.connect(self._project_hover_left)
+            widget.pinRequested.connect(self.pin_project)
+            widget.renameRequested.connect(self.rename_project)
+            widget.archiveRequested.connect(self.archive_project)
+            widget.deleteRequested.connect(self.delete_project)
+            widget.heightChanged.connect(
+                lambda current_item=item, current_widget=widget: self._resize_item(
+                    current_item, current_widget
+                )
+            )
+            self.addItem(item)
+            self.setItemWidget(item, widget)
+            self.project_widgets.append(widget)
+            self._resize_item(item, widget)
+
+    def _item_for_widget(self, widget):
+        for row in range(self.count()):
+            item = self.item(row)
+            if self.itemWidget(item) is widget:
+                return row, item
+        return -1, None
+
+    def pin_project(self, widget):
+        row, item = self._item_for_widget(widget)
+        if item is None or row == 0:
             return
-        self.is_editing = True
-        self.original_name = self.session_label.text()
-        self.setProperty("editing", "true")
-        self.session_label.hide()
-        self.session_editor.setText(self.original_name)
-        self.session_editor.show()
-        self.session_editor.selectAll()
-        self.session_editor.setFocus(QtCore.Qt.OtherFocusReason)
+        self.removeItemWidget(item)
+        self.takeItem(row)
+        self.insertItem(0, item)
+        self.setItemWidget(item, widget)
+        self.project_widgets.remove(widget)
+        self.project_widgets.insert(0, widget)
+        self.setCurrentItem(item)
 
-    def exit_edit_mode(self):
-        if not self.is_editing:
+    def rename_project(self, widget):
+        old_name = widget.project_name
+        new_name, accepted = QtWidgets.QInputDialog.getText(
+            self,
+            "重命名项目",
+            "请输入新的项目名称：",
+            text=old_name,
+        )
+        new_name = new_name.strip()
+        if not accepted or not new_name or new_name == old_name:
             return
-        self.is_editing = False
-        self.session_label.setText(self.session_editor.text())
-        self.setProperty("editing", "false")
-        self.session_editor.hide()
-        self.session_label.show()
-        self.name_changed.emit(self)
+        widget.rename(new_name)
+        if self.hover_card.isVisible():
+            self.hover_card.set_project(new_name, widget.project_path)
+        self.projectRenamed.emit(old_name, new_name)
 
-    def cancel_edit_mode(self):
-        if not self.is_editing:
+    def archive_project(self, widget):
+        message = (
+            f"确定要归档项目「{widget.project_name}」吗？\n\n"
+            "归档后，项目会从当前列表移除，但源文件不会删除。"
+        )
+        answer = QtWidgets.QMessageBox.question(
+            self,
+            "归档项目",
+            message,
+            QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No,
+            QtWidgets.QMessageBox.No,
+        )
+        if answer != QtWidgets.QMessageBox.Yes:
             return
-        self.session_editor.setText(self.original_name)
-        self.is_editing = False
-        self.setProperty("editing", "false")
-        self.session_editor.hide()
-        self.session_label.setText(self.original_name)
-        self.session_label.show()
+        project_name = widget.project_name
+        self._remove_project(widget)
+        self.projectArchived.emit(project_name)
+
+    def delete_project(self, widget):
+        message = (
+            f"确定要删除项目「{widget.project_name}」吗？\n\n"
+            "此操作会同时删除源文件，且不可恢复。"
+        )
+        answer = QtWidgets.QMessageBox.question(
+            self,
+            "删除项目",
+            message,
+            QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No,
+            QtWidgets.QMessageBox.No,
+        )
+        if answer != QtWidgets.QMessageBox.Yes:
+            return
+        try:
+            if widget.project_path.is_dir():
+                shutil.rmtree(str(widget.project_path))
+            elif widget.project_path.exists():
+                widget.project_path.unlink()
+        except OSError as error:
+            QtWidgets.QMessageBox.warning(
+                self, "删除失败", f"无法删除项目源文件：\n{error}"
+            )
+            return
+        project_name = widget.project_name
+        self._remove_project(widget)
+        self.projectDeleted.emit(project_name)
+
+    def _remove_project(self, widget):
+        row, item = self._item_for_widget(widget)
+        if item is None:
+            return
+        self._hover_timer.stop()
+        self._hide_timer.stop()
+        self.hover_card.hide()
+        self._pending_hover_widget = None
+        self.removeItemWidget(item)
+        self.takeItem(row)
+        self.project_widgets.remove(widget)
+        widget.deleteLater()
+
+    def _schedule_hover_card(self, widget):
+        self._hide_timer.stop()
+        self.hover_card.hide()
+        self._pending_hover_widget = widget
+        self._hover_timer.start()
+
+    def _project_hover_left(self, widget):
+        if self._pending_hover_widget is widget:
+            self._hover_timer.stop()
+            self._pending_hover_widget = None
+        self._schedule_hover_card_hide()
+
+    def _schedule_hover_card_hide(self):
+        self._hide_timer.start()
+
+    def _show_hover_card(self):
+        widget = self._pending_hover_widget
+        if widget is None or not widget.header.underMouse():
+            return
+        self.hover_card.set_project(widget.project_name, widget.project_path)
+        self.hover_card.adjustSize()
+        position = widget.header.mapToGlobal(
+            QtCore.QPoint(widget.header.width() + 8, 0)
+        )
+        screen = QtWidgets.QApplication.screenAt(position)
+        if screen is not None:
+            available = screen.availableGeometry()
+            position.setX(min(position.x(), available.right() - self.hover_card.width()))
+            position.setY(min(position.y(), available.bottom() - self.hover_card.height()))
+        self.hover_card.move(position)
+        self.hover_card.show()
+        self.hover_card.raise_()
+
+    def _resize_item(self, item, widget):
+        QtCore.QTimer.singleShot(0, lambda: item.setSizeHint(widget.sizeHint()))
+
+    def _select_session(self, name):
+        for widget in self.project_widgets:
+            widget.select_session(name)
+        self.sessionSelected.emit(name)
+
+    def select_session(self, name):
+        self._select_session(name)
 
 
-class SessionActionsMenu(QtWidgets.QMenu):
-    """QMenu that renders destructive actions with red text."""
+class NavPanel(QtWidgets.QFrame):
+    """Region 3: actions, draggable projects, and footer navigation."""
 
-    def initStyleOption(self, option, action):
-        super().initStyleOption(option, action)
-        if action.property("destructive"):
-            destructive = QtGui.QColor("#CF222E")
-            option.palette.setColor(QtGui.QPalette.Text, destructive)
-            option.palette.setColor(QtGui.QPalette.ButtonText, destructive)
-            option.palette.setColor(QtGui.QPalette.WindowText, destructive)
+    actionRequested = QtCore.pyqtSignal(str)
+    project_archived = QtCore.pyqtSignal(str)
+    project_deleted = QtCore.pyqtSignal(str)
+    project_renamed = QtCore.pyqtSignal(str, str)
 
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setObjectName("NavPanel")
+        self.expanded_width = 260
+        self.collapsed_width = 56
+        self.is_collapsed = False
+        self.is_animating = False
+        self._target_collapsed = False
+        self.setMinimumWidth(self.expanded_width)
+        self.setMaximumWidth(self.expanded_width)
 
-class SessionListItem(QtWidgets.QListWidgetItem):
-    def __init__(self):
-        super().__init__()
-        self.setSizeHint(QtCore.QSize(0, 40))
-        self.setFlags(
-            self.flags()
-            | QtCore.Qt.ItemIsDragEnabled
-            | QtCore.Qt.ItemIsDropEnabled
-            | QtCore.Qt.ItemIsSelectable
-            | QtCore.Qt.ItemIsEnabled
+        self.animation_min = QtCore.QPropertyAnimation(self, b"minimumWidth", self)
+        self.animation_max = QtCore.QPropertyAnimation(self, b"maximumWidth", self)
+        self.gap_widget = None
+        self.animation_gap_min = None
+        self.animation_gap_max = None
+        self.animation_layout = QtCore.QVariantAnimation(self)
+        for animation in (
+            self.animation_min,
+            self.animation_max,
+            self.animation_layout,
+        ):
+            animation.setDuration(200)
+            animation.setEasingCurve(QtCore.QEasingCurve.OutCubic)
+        self.animation_layout.valueChanged.connect(self._apply_animated_layout)
+        self.animation_group = QtCore.QParallelAnimationGroup(self)
+        self.animation_group.addAnimation(self.animation_min)
+        self.animation_group.addAnimation(self.animation_max)
+        self.animation_group.addAnimation(self.animation_layout)
+        self.animation_group.finished.connect(self._on_collapse_animation_finished)
+        root = QtWidgets.QVBoxLayout(self)
+        root.setSizeConstraint(QtWidgets.QLayout.SetNoConstraint)
+        root.setContentsMargins(12, 8, 12, 8)
+        root.setSpacing(8)
+
+        self.brand_row = QtWidgets.QWidget()
+        self.brand_row.setObjectName("NavBrandRow")
+        self.brand_row.setFixedHeight(40)
+        self.brand_layout = QtWidgets.QHBoxLayout(self.brand_row)
+        self.brand_layout.setContentsMargins(0, 0, 0, 0)
+        self.brand_layout.setSpacing(0)
+        self.logo_label = QtWidgets.QLabel()
+        self.logo_label.setObjectName("NavLogo")
+        self.logo_label.setPixmap(
+            load_lucide_icon("layout-dashboard", "#1677FF").pixmap(20, 20)
+        )
+        self.logo_label.setFixedSize(20, 20)
+        self.brand_layout.addWidget(self.logo_label)
+        self.brand_logo_gap = QtWidgets.QSpacerItem(
+            8, 0, QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Minimum
+        )
+        self.brand_layout.addItem(self.brand_logo_gap)
+        self.app_name_label = QtWidgets.QLabel("plmConsultant")
+        self.app_name_label.setObjectName("NavAppName")
+        self.brand_layout.addWidget(self.app_name_label)
+        self.brand_stretch = QtWidgets.QSpacerItem(
+            0, 0, QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Minimum
+        )
+        self.brand_layout.addItem(self.brand_stretch)
+        self.brand_button_gap = QtWidgets.QSpacerItem(
+            2, 0, QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Minimum
+        )
+        self.brand_layout.addItem(self.brand_button_gap)
+        self.collapse_btn = make_icon_button(
+            "panel-left", "收起侧边栏", "NavCollapseButton", 32, ICON_SIZE
+        )
+        self.collapse_btn.clicked.connect(self.toggle_collapse)
+        self.brand_layout.addWidget(self.collapse_btn)
+        self.brand_layout.setAlignment(self.collapse_btn, QtCore.Qt.AlignVCenter)
+        root.addWidget(self.brand_row)
+
+        self.new_chat_btn = self._action_button("square-pen", "新对话", "new_chat")
+        self.save_btn = self._action_button("save", "保存", "save")
+        root.addWidget(self.new_chat_btn)
+        root.addWidget(self.save_btn)
+        root.addSpacing(4)
+
+        self.project_title = QtWidgets.QLabel("项目")
+        self.project_title.setObjectName("ProjectSectionTitle")
+        root.addWidget(self.project_title)
+        config_projects = self._discover_config_projects()
+        projects = []
+        for index, (name, config_dir) in enumerate(config_projects):
+            relative_path = config_dir.relative_to(PROJECT_ROOT).as_posix()
+            projects.append((name, (relative_path,), index == 0, config_dir))
+        self.project_list = ProjectList(projects)
+        self.project_list.sessionSelected.connect(self.actionRequested.emit)
+        self.project_list.projectArchived.connect(self._project_archived)
+        self.project_list.projectDeleted.connect(self._project_deleted)
+        self.project_list.projectRenamed.connect(self._project_renamed)
+        root.addWidget(self.project_list, 1)
+
+        self.collapsed_projects = QtWidgets.QWidget()
+        collapsed_projects_layout = QtWidgets.QVBoxLayout(self.collapsed_projects)
+        collapsed_projects_layout.setContentsMargins(0, 0, 0, 0)
+        collapsed_projects_layout.setSpacing(8)
+        collapsed_projects_layout.setAlignment(
+            QtCore.Qt.AlignTop | QtCore.Qt.AlignHCenter
+        )
+        self.collapsed_project_buttons = []
+        for name, config_dir in config_projects:
+            relative_path = config_dir.relative_to(PROJECT_ROOT).as_posix()
+            button = self._collapsed_icon_button(
+                "folder",
+                name,
+                lambda _checked=False, value=relative_path: self.actionRequested.emit(
+                    value
+                ),
+            )
+            collapsed_projects_layout.addWidget(
+                button, 0, QtCore.Qt.AlignHCenter
+            )
+            self.collapsed_project_buttons.append(button)
+        collapsed_projects_layout.addStretch(1)
+        self.collapsed_projects.hide()
+        root.addWidget(self.collapsed_projects, 1)
+
+        self.footer = QtWidgets.QWidget()
+        footer_layout = QtWidgets.QVBoxLayout(self.footer)
+        footer_layout.setContentsMargins(0, 0, 0, 0)
+        footer_layout.setSpacing(8)
+        self.docs_btn = self._footer_button("file-text", "Docs", "docs")
+        self.settings_btn = self._footer_button("settings", "Settings", "settings")
+        footer_layout.addWidget(self.settings_btn)
+        footer_layout.addWidget(self.docs_btn)
+        root.addWidget(self.footer)
+
+        self.collapsed_footer = QtWidgets.QWidget()
+        collapsed_footer_layout = QtWidgets.QVBoxLayout(self.collapsed_footer)
+        collapsed_footer_layout.setContentsMargins(0, 0, 0, 0)
+        collapsed_footer_layout.setSpacing(8)
+        collapsed_footer_layout.setAlignment(QtCore.Qt.AlignHCenter)
+        self.collapsed_settings_btn = self._collapsed_icon_button(
+            "settings",
+            "Settings",
+            lambda _checked=False: self.actionRequested.emit("settings"),
+        )
+        self.collapsed_docs_btn = self._collapsed_icon_button(
+            "file-text",
+            "Docs",
+            lambda _checked=False: self.actionRequested.emit("docs"),
+        )
+        collapsed_footer_layout.addWidget(
+            self.collapsed_settings_btn, 0, QtCore.Qt.AlignHCenter
+        )
+        collapsed_footer_layout.addWidget(
+            self.collapsed_docs_btn, 0, QtCore.Qt.AlignHCenter
+        )
+        self.collapsed_footer.hide()
+        root.addWidget(self.collapsed_footer)
+        self.collapsible_widgets = [
+            self.logo_label,
+            self.app_name_label,
+        ]
+
+    def attach_gap_widget(self, gap_widget):
+        self.gap_widget = gap_widget
+        self.animation_gap_min = QtCore.QPropertyAnimation(
+            gap_widget, b"minimumWidth", self
+        )
+        self.animation_gap_max = QtCore.QPropertyAnimation(
+            gap_widget, b"maximumWidth", self
+        )
+        for animation in (self.animation_gap_min, self.animation_gap_max):
+            animation.setDuration(200)
+            animation.setEasingCurve(QtCore.QEasingCurve.OutCubic)
+            self.animation_group.addAnimation(animation)
+
+    def toggle_collapse(self):
+        if self.is_animating:
+            return
+
+        self._target_collapsed = not self.is_collapsed
+        start_width = self.width()
+        end_width = (
+            self.collapsed_width if self._target_collapsed else self.expanded_width
+        )
+        if not self._target_collapsed:
+            self._set_expanded_content_visible(True)
+
+        self.is_animating = True
+        for animation in (self.animation_min, self.animation_max):
+            animation.setStartValue(start_width)
+            animation.setEndValue(end_width)
+        if self.gap_widget is not None:
+            start_gap = self.gap_widget.width()
+            end_gap = 140 if self._target_collapsed else 0
+            for animation in (self.animation_gap_min, self.animation_gap_max):
+                animation.setStartValue(start_gap)
+                animation.setEndValue(end_gap)
+            splitter = self.parentWidget()
+            self._layout_total_width = (
+                sum(splitter.sizes())
+                if isinstance(splitter, QtWidgets.QSplitter)
+                else 0
+            )
+            self._layout_start_nav = start_width
+            self._layout_end_nav = end_width
+            self._layout_start_gap = start_gap
+            self._layout_end_gap = end_gap
+            self.animation_layout.setStartValue(0.0)
+            self.animation_layout.setEndValue(1.0)
+        self.animation_group.start()
+
+    def _apply_animated_layout(self, progress):
+        splitter = self.parentWidget()
+        if not isinstance(splitter, QtWidgets.QSplitter) or splitter.count() != 3:
+            return
+        progress = float(progress)
+        nav_width = round(
+            self._layout_start_nav
+            + (self._layout_end_nav - self._layout_start_nav) * progress
+        )
+        gap_width = round(
+            self._layout_start_gap
+            + (self._layout_end_gap - self._layout_start_gap) * progress
+        )
+        content_width = max(1, self._layout_total_width - nav_width - gap_width)
+        splitter.setSizes([nav_width, gap_width, content_width])
+
+    def _on_collapse_animation_finished(self):
+        self.is_collapsed = self._target_collapsed
+        if self.is_collapsed:
+            self._set_expanded_content_visible(False)
+        self.collapse_btn.setIcon(
+            load_lucide_icon(
+                "panel-right" if self.is_collapsed else "panel-left",
+                "#666666",
+            )
+        )
+        self.collapse_btn.setToolTip(
+            "展开侧边栏" if self.is_collapsed else "收起侧边栏"
+        )
+        self.is_animating = False
+
+    def _set_expanded_content_visible(self, visible):
+        self.setProperty("collapsed", not visible)
+        self.style().unpolish(self)
+        self.style().polish(self)
+        for widget in self.collapsible_widgets:
+            widget.setVisible(visible)
+        if visible:
+            self.brand_logo_gap.changeSize(
+                8, 0, QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Minimum
+            )
+            self.brand_stretch.changeSize(
+                0, 0, QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Minimum
+            )
+            self.brand_button_gap.changeSize(
+                2, 0, QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Minimum
+            )
+        else:
+            for spacer in (
+                self.brand_logo_gap,
+                self.brand_stretch,
+                self.brand_button_gap,
+            ):
+                spacer.changeSize(
+                    0, 0, QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Minimum
+                )
+        self.brand_layout.invalidate()
+
+        self.new_chat_btn.setText("新对话" if visible else "")
+        self.save_btn.setText("保存" if visible else "")
+        for button in (self.new_chat_btn, self.save_btn):
+            if visible:
+                button.setMinimumWidth(0)
+                button.setMaximumWidth(QtWidgets.QWIDGETSIZE_MAX)
+            else:
+                button.setFixedSize(32, 32)
+
+        self.project_title.setText("项目" if visible else "")
+        self.project_list.setVisible(visible)
+        self.collapsed_projects.setVisible(not visible)
+        self.footer.setVisible(visible)
+        self.collapsed_footer.setVisible(not visible)
+
+    def _collapsed_icon_button(self, icon_name, tooltip, callback):
+        button = make_icon_button(
+            icon_name,
+            tooltip,
+            "NavIconBtn",
+            32,
+            ICON_SIZE,
+        )
+        button.clicked.connect(callback)
+        return button
+
+    def _action_button(self, icon_name, text, action):
+        button = QtWidgets.QPushButton(text)
+        button.setObjectName("NavActionButton")
+        button.setIcon(load_lucide_icon(icon_name))
+        button.setIconSize(QtCore.QSize(ICON_SIZE, ICON_SIZE))
+        button.setCursor(QtCore.Qt.PointingHandCursor)
+        button.clicked.connect(lambda: self.actionRequested.emit(action))
+        return button
+
+    def _footer_button(self, icon_name, text, action):
+        button = QtWidgets.QPushButton(text)
+        button.setObjectName("NavFooterButton")
+        button.setIcon(load_lucide_icon(icon_name))
+        button.setIconSize(QtCore.QSize(ICON_SIZE, ICON_SIZE))
+        button.setCursor(QtCore.Qt.PointingHandCursor)
+        button.clicked.connect(lambda: self.actionRequested.emit(action))
+        return button
+
+    def _discover_config_projects(self):
+        """Return local PLM config sets, not sibling source-code directories."""
+        required_files = {"controllers.csv", "lane_mapping.csv", "pipe_signals.csv"}
+        search_roots = (PROJECT_ROOT / "test", PROJECT_ROOT / "configs")
+        discovered = []
+        seen = set()
+        for search_root in search_roots:
+            if not search_root.is_dir():
+                continue
+            for controllers_file in search_root.rglob("controllers.csv"):
+                config_dir = controllers_file.parent.resolve()
+                if config_dir in seen:
+                    continue
+                try:
+                    file_names = {path.name for path in config_dir.iterdir() if path.is_file()}
+                except OSError:
+                    continue
+                if not required_files.issubset(file_names):
+                    continue
+                seen.add(config_dir)
+                project_name = (
+                    config_dir.parent.name
+                    if config_dir.name.casefold() == "config"
+                    else config_dir.name
+                )
+                discovered.append((project_name, config_dir))
+        return sorted(discovered, key=lambda item: item[0].casefold())
+
+    def _project_archived(self, project_name):
+        self._remove_collapsed_project(project_name)
+        self.project_archived.emit(project_name)
+
+    def _project_deleted(self, project_name):
+        self._remove_collapsed_project(project_name)
+        self.project_deleted.emit(project_name)
+
+    def _project_renamed(self, old_name, new_name):
+        for button in self.collapsed_project_buttons:
+            if button.toolTip() == old_name:
+                button.setToolTip(new_name)
+                break
+        self.project_renamed.emit(old_name, new_name)
+
+    def _remove_collapsed_project(self, project_name):
+        for button in tuple(self.collapsed_project_buttons):
+            if button.toolTip() != project_name:
+                continue
+            self.collapsed_project_buttons.remove(button)
+            button.setParent(None)
+            button.deleteLater()
+            break
+
+    def set_active(self, name):
+        for button, value in ((self.docs_btn, "docs"), (self.settings_btn, "settings")):
+            selected = name == value
+            button.setProperty("selected", selected)
+            color = "#1677FF" if selected else "#666666"
+            icon_name = "file-text" if value == "docs" else "settings"
+            button.setIcon(load_lucide_icon(icon_name, color))
+            button.style().unpolish(button)
+            button.style().polish(button)
+        self.collapsed_docs_btn.setIcon(
+            load_lucide_icon("file-text", "#1677FF" if name == "docs" else "#666666")
+        )
+        self.collapsed_settings_btn.setIcon(
+            load_lucide_icon(
+                "settings", "#1677FF" if name == "settings" else "#666666"
+            )
         )
 
 
-class DragButton(QtWidgets.QWidget):
-    """A 14x36 capsule button used to resize a floating panel."""
+class ConfigHeader(QtWidgets.QFrame):
+    """Region 2.1: editable session title and panel toggles."""
 
-    def __init__(self, on_drag=None, on_release=None, parent=None):
+    logToggleRequested = QtCore.pyqtSignal()
+    artifactsToggleRequested = QtCore.pyqtSignal()
+    titleChanged = QtCore.pyqtSignal(str)
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setObjectName("ConfigHeader")
+        self.setFixedHeight(56)
+        self._original_title = ""
+        layout = QtWidgets.QHBoxLayout(self)
+        layout.setContentsMargins(20, 8, 12, 8)
+        layout.setSpacing(8)
+        self.title_label = DoubleClickLabel("重写 PLM Qt 前端布局")
+        self.title_label.setObjectName("ConfigSessionTitle")
+        self.title_label.setToolTip("双击重命名")
+        self.title_label.doubleClicked.connect(self.enter_edit_mode)
+        layout.addWidget(self.title_label)
+        self.title_edit = EscapeLineEdit()
+        self.title_edit.setObjectName("ConfigSessionEditor")
+        self.title_edit.hide()
+        self.title_edit.returnPressed.connect(self.save_title)
+        self.title_edit.editingFinished.connect(self.save_title)
+        self.title_edit.escapePressed.connect(self.cancel_title)
+        layout.addWidget(self.title_edit)
+        layout.addStretch(1)
+        self.log_btn = make_icon_button(
+            "panel-bottom", "显示/隐藏输出面板", "HeaderButton", 28
+        )
+        self.artifacts_btn = make_icon_button(
+            "panel-right", "显示/隐藏 Artifacts", "HeaderButton", 28
+        )
+        self.log_btn.clicked.connect(self.logToggleRequested.emit)
+        self.artifacts_btn.clicked.connect(self.artifactsToggleRequested.emit)
+        layout.addWidget(self.log_btn)
+        layout.addWidget(self.artifacts_btn)
+
+    def enter_edit_mode(self):
+        self._original_title = self.title_label.text()
+        self.title_edit.setText(self._original_title)
+        self.title_label.hide()
+        self.title_edit.show()
+        self.title_edit.selectAll()
+        self.title_edit.setFocus(QtCore.Qt.OtherFocusReason)
+
+    def save_title(self):
+        if not self.title_edit.isVisible():
+            return
+        new_title = self.title_edit.text().strip() or self._original_title
+        self.title_label.setText(new_title)
+        self.title_edit.hide()
+        self.title_label.show()
+        self.titleChanged.emit(new_title)
+
+    def cancel_title(self):
+        if not self.title_edit.isVisible():
+            return
+        self.title_edit.hide()
+        self.title_label.setText(self._original_title)
+        self.title_label.show()
+
+
+class ConfigTabPage(QtWidgets.QWidget):
+    def __init__(self, title, description, parent=None):
+        super().__init__(parent)
+        root = QtWidgets.QVBoxLayout(self)
+        root.setContentsMargins(20, 16, 20, 16)
+        root.setSpacing(0)
+        heading = QtWidgets.QLabel(title)
+        heading.setObjectName("ConfigTitle")
+        root.addWidget(heading)
+        root.addSpacing(8)
+        description_label = QtWidgets.QLabel(description)
+        description_label.setObjectName("ConfigDescription")
+        description_label.setWordWrap(True)
+        root.addWidget(description_label)
+        root.addSpacing(20)
+
+        scroll = QtWidgets.QScrollArea()
+        scroll.setObjectName("ConfigScroll")
+        scroll.setWidgetResizable(True)
+        scroll.setHorizontalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOff)
+        content = QtWidgets.QWidget()
+        content.setObjectName("ConfigScrollContent")
+        content_layout = QtWidgets.QVBoxLayout(content)
+        content_layout.setContentsMargins(0, 0, 8, 0)
+        content_layout.setSpacing(16)
+        for label_text in (
+            "基础配置",
+            "参数映射与校验",
+            "生成选项（业务控件将在后续阶段接入）",
+        ):
+            card = QtWidgets.QFrame()
+            card.setObjectName("ConfigPlaceholderCard")
+            apply_drop_shadow(card)
+            card_layout = QtWidgets.QHBoxLayout(card)
+            card_layout.setContentsMargins(20, 16, 20, 16)
+            label = QtWidgets.QLabel(label_text)
+            label.setObjectName("PlaceholderLabel")
+            card_layout.addWidget(label)
+            card_layout.addStretch(1)
+            content_layout.addWidget(card)
+        content_layout.addStretch(1)
+        scroll.setWidget(content)
+        root.addWidget(scroll, 1)
+
+
+class DragHandle(QtWidgets.QWidget):
+    """White capsule handle for resizing the floating Artifacts panel."""
+
+    def __init__(self, on_drag, on_release, parent=None):
         super().__init__(parent)
         self.on_drag = on_drag
         self.on_release = on_release
         self.drag_start_x = None
-        self.setCursor(QtCore.Qt.SplitHCursor)
         self.setFixedSize(14, 36)
-        self.setMouseTracking(True)
+        self.setCursor(QtCore.Qt.SplitHCursor)
 
     def paintEvent(self, event):
         painter = QtGui.QPainter(self)
         painter.setRenderHint(QtGui.QPainter.Antialiasing, True)
-        pill = QtCore.QRectF(0.5, 0.5, 13, 35)
-
-        painter.setPen(QtCore.Qt.NoPen)
-        painter.setBrush(QtGui.QColor(0, 0, 0, 15))
-        painter.drawRoundedRect(pill.translated(1, 1), 7, 7)
-
+        capsule = QtCore.QRectF(0.5, 0.5, 13, 35)
         painter.setPen(QtGui.QPen(QtGui.QColor("#C0C4CC"), 1))
         painter.setBrush(QtGui.QColor("#FFFFFF"))
-        painter.drawRoundedRect(pill, 7, 7)
-
+        painter.drawRoundedRect(capsule, 7, 7)
         painter.setPen(QtCore.Qt.NoPen)
         painter.setBrush(QtGui.QColor("#A0A5B0"))
         painter.drawRect(QtCore.QRectF(4, 14, 1.5, 8))
@@ -232,361 +1101,35 @@ class DragButton(QtWidgets.QWidget):
     def mousePressEvent(self, event):
         if event.button() == QtCore.Qt.LeftButton:
             self.drag_start_x = event.globalPos().x()
-            if self.on_drag:
-                self.on_drag("start", self.drag_start_x)
+            self.on_drag("start", self.drag_start_x)
             event.accept()
 
     def mouseMoveEvent(self, event):
-        if self.drag_start_x is not None and self.on_drag:
+        if self.drag_start_x is not None:
             self.on_drag("move", event.globalPos().x())
             event.accept()
 
     def mouseReleaseEvent(self, event):
         if self.drag_start_x is not None:
             self.drag_start_x = None
-            if self.on_release:
-                self.on_release()
+            self.on_release()
             event.accept()
-
-
-class NavPanel(QtWidgets.QFrame):
-    navChanged = QtCore.pyqtSignal(str)
-    session_deleted = QtCore.pyqtSignal(str)
-    session_archived = QtCore.pyqtSignal(str)
-
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.setObjectName("NavPanel")
-        self.setMinimumWidth(200)
-        self.setMaximumWidth(400)
-        self.is_collapsed = False
-        self.expanded_width = 260
-        self.session_order = []
-        self._session_records = {}
-        self.archived_list = None
-        self.archived_label = None
-
-        self.root_layout = QtWidgets.QVBoxLayout(self)
-        self.root_layout.setContentsMargins(15, 20, 15, 20)
-        self.root_layout.setSpacing(10)
-
-        brand = QtWidgets.QHBoxLayout()
-        self.logo_icon = QtWidgets.QLabel()
-        self.logo_icon.setObjectName("LogoIcon")
-        if APP_ICON_PATH.is_file():
-            self.logo_icon.setPixmap(QtGui.QIcon(str(APP_ICON_PATH)).pixmap(26, 26))
-        self.logo_icon.setFixedSize(26, 26)
-        brand.addWidget(self.logo_icon)
-        self.logo_text = QtWidgets.QLabel("plmConsultant")
-        self.logo_text.setObjectName("Logo")
-        brand.addWidget(self.logo_text)
-        brand.addStretch(1)
-        self.collapse_btn = QtWidgets.QPushButton("«")
-        self.collapse_btn.setObjectName("CollapseBtn")
-        self.collapse_btn.setFixedSize(30, 30)
-        self.collapse_btn.setCursor(QtCore.Qt.PointingHandCursor)
-        self.collapse_btn.setToolTip("收起侧边栏")
-        self.collapse_btn.clicked.connect(self.toggle_collapse)
-        brand.addWidget(self.collapse_btn)
-        self.root_layout.addLayout(brand)
-
-        self.logo_divider = QtWidgets.QFrame()
-        self.logo_divider.setObjectName("NavDivider")
-        self.logo_divider.setFixedHeight(1)
-        self.root_layout.addWidget(self.logo_divider)
-
-        self.action_buttons_widget = QtWidgets.QWidget()
-        action_buttons_layout = QtWidgets.QVBoxLayout(self.action_buttons_widget)
-        action_buttons_layout.setContentsMargins(0, 0, 0, 0)
-        action_buttons_layout.setSpacing(8)
-
-        self.new_chat_btn = QtWidgets.QPushButton("新对话")
-        self.new_chat_btn.setObjectName("NewChatBtn")
-        self.new_chat_btn.setIcon(load_lucide_icon("square-pen", "#333333"))
-        self.new_chat_btn.setIconSize(QtCore.QSize(ICON_SIZE, ICON_SIZE))
-        self.new_chat_btn.setCursor(QtCore.Qt.PointingHandCursor)
-        self.new_chat_btn.clicked.connect(lambda: self.navChanged.emit("new_chat"))
-        action_buttons_layout.addWidget(self.new_chat_btn)
-
-        self.save_btn = QtWidgets.QPushButton("保存")
-        self.save_btn.setObjectName("SaveBtn")
-        self.save_btn.setIcon(load_lucide_icon("save", "#333333"))
-        self.save_btn.setIconSize(QtCore.QSize(ICON_SIZE, ICON_SIZE))
-        self.save_btn.setCursor(QtCore.Qt.PointingHandCursor)
-        self.save_btn.clicked.connect(lambda: self.navChanged.emit("save"))
-        action_buttons_layout.addWidget(self.save_btn)
-        self.root_layout.addWidget(self.action_buttons_widget)
-
-        self.actions_divider = QtWidgets.QFrame()
-        self.actions_divider.setObjectName("NavDivider")
-        self.actions_divider.setFixedHeight(1)
-        self.root_layout.addWidget(self.actions_divider)
-
-        self.sessions_widget = QtWidgets.QWidget()
-        self.sessions_layout = QtWidgets.QVBoxLayout(self.sessions_widget)
-        self.sessions_layout.setContentsMargins(0, 0, 0, 0)
-        self.sessions_layout.setSpacing(4)
-
-        self.section_label = QtWidgets.QLabel("Recent sessions")
-        self.section_label.setObjectName("SidebarSection")
-        self.sessions_layout.addWidget(self.section_label)
-
-        self.recent_list = self._create_session_list("RecentSessionList")
-        self.recent_list.model().rowsMoved.connect(self._save_session_order)
-        self.sessions_layout.addWidget(self.recent_list)
-
-        self.session_item = self.add_session(
-            "PIPE Lane Mapper 配置会话",
-        )
-        self.session_btn = self.session_item.session_button
-        self.session_name_edit = self.session_item.session_editor
-        self.session_more_btn = self.session_item.more_button
-        self.root_layout.addWidget(self.sessions_widget)
-
-        self.sessions_divider = QtWidgets.QFrame()
-        self.sessions_divider.setObjectName("NavDivider")
-        self.sessions_divider.setFixedHeight(1)
-        self.root_layout.addWidget(self.sessions_divider)
-        self.root_layout.addStretch(1)
-
-        self.bottom_widget = QtWidgets.QWidget()
-        bottom = QtWidgets.QHBoxLayout(self.bottom_widget)
-        bottom.setContentsMargins(0, 0, 0, 0)
-        bottom.setSpacing(8)
-        self.docs_btn = QtWidgets.QPushButton("Docs")
-        self.docs_btn.setObjectName("BottomBtn")
-        self.docs_btn.setIcon(load_lucide_icon("file-text", "#555555"))
-        self.docs_btn.setIconSize(QtCore.QSize(ICON_SIZE, ICON_SIZE))
-        self.settings_btn = QtWidgets.QPushButton("Settings")
-        self.settings_btn.setObjectName("BottomBtn")
-        self.settings_btn.setIcon(load_lucide_icon("settings", "#555555"))
-        self.settings_btn.setIconSize(QtCore.QSize(ICON_SIZE, ICON_SIZE))
-        for button in (self.docs_btn, self.settings_btn):
-            button.setCursor(QtCore.Qt.PointingHandCursor)
-            bottom.addWidget(button)
-        self.docs_btn.clicked.connect(lambda: self.navChanged.emit("docs"))
-        self.settings_btn.clicked.connect(lambda: self.navChanged.emit("settings"))
-        self.root_layout.addWidget(self.bottom_widget)
-
-        self.collapsible_widgets = [
-            self.logo_icon,
-            self.logo_text,
-            self.logo_divider,
-            self.action_buttons_widget,
-            self.actions_divider,
-            self.sessions_widget,
-            self.sessions_divider,
-            self.bottom_widget,
-        ]
-
-    def _create_session_list(self, object_name):
-        session_list = QtWidgets.QListWidget()
-        session_list.setObjectName(object_name)
-        session_list.setDragDropMode(QtWidgets.QAbstractItemView.InternalMove)
-        session_list.setSelectionMode(QtWidgets.QAbstractItemView.SingleSelection)
-        session_list.setDefaultDropAction(QtCore.Qt.MoveAction)
-        session_list.setDragEnabled(True)
-        session_list.setAcceptDrops(True)
-        session_list.setDropIndicatorShown(True)
-        session_list.setVerticalScrollMode(QtWidgets.QAbstractItemView.ScrollPerPixel)
-        session_list.itemSelectionChanged.connect(
-            lambda current_list=session_list: self._update_session_selection(
-                current_list
-            )
-        )
-        return session_list
-
-    def add_session(self, name, source_path=None, session_list=None):
-        target_list = session_list or self.recent_list
-        entry = SessionEntry(
-            name,
-            lambda: self.navChanged.emit("config"),
-            source_path=source_path,
-        )
-        entry.more_requested.connect(self.show_session_menu)
-        entry.name_changed.connect(lambda _: self._sync_session_order())
-
-        item = SessionListItem()
-        target_list.addItem(item)
-        target_list.setItemWidget(item, entry)
-        self._session_records[entry] = (target_list, item)
-        self._resize_session_list(target_list)
-        self._sync_session_order()
-        return entry
-
-    def show_session_menu(self, entry):
-        menu = SessionActionsMenu(self)
-        edit_action = menu.addAction(
-            load_lucide_icon("square-pen", "#666666", 16), "编辑"
-        )
-        archive_action = menu.addAction(
-            load_lucide_icon("archive", "#666666", 16), "归档"
-        )
-        delete_action = menu.addAction(
-            load_lucide_icon("trash-2", "#CF222E", 16), "删除"
-        )
-        delete_action.setProperty("destructive", True)
-        edit_action.triggered.connect(entry.enter_edit_mode)
-        archive_action.triggered.connect(lambda: self.archive_session(entry))
-        delete_action.triggered.connect(lambda: self.delete_session(entry))
-
-        current_list, _ = self._session_records[entry]
-        archive_action.setEnabled(current_list is self.recent_list)
-        entry.actions_menu = menu
-        menu.popup(
-            entry.more_button.mapToGlobal(
-                QtCore.QPoint(0, entry.more_button.height())
-            )
-        )
-
-    def delete_session(self, entry):
-        answer = QtWidgets.QMessageBox.question(
-            self,
-            "删除会话",
-            "确定要删除该会话吗？此操作会删除源文件，不可恢复。",
-            QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No,
-            QtWidgets.QMessageBox.No,
-        )
-        if answer != QtWidgets.QMessageBox.Yes:
-            return
-
-        if entry.source_path is not None:
-            try:
-                if entry.source_path.is_file():
-                    entry.source_path.unlink()
-                elif entry.source_path.exists():
-                    raise OSError("源路径不是普通文件")
-            except OSError as error:
-                QtWidgets.QMessageBox.warning(
-                    self, "删除失败", f"无法删除源文件：{error}"
-                )
-                return
-
-        session_name = entry.session_label.text()
-        self._remove_session_entry(entry)
-        self.session_deleted.emit(session_name)
-
-    def archive_session(self, entry):
-        source_list, item = self._session_records[entry]
-        if source_list is not self.recent_list:
-            return
-        archived_list = self._ensure_archived_list()
-        source_list.removeItemWidget(item)
-        source_list.takeItem(source_list.row(item))
-        archived_list.addItem(item)
-        archived_list.setItemWidget(item, entry)
-        self._session_records[entry] = (archived_list, item)
-        self._resize_session_list(source_list)
-        self._resize_session_list(archived_list)
-        self._sync_session_order()
-        self.session_archived.emit(entry.session_label.text())
-
-    def _ensure_archived_list(self):
-        if self.archived_list is None:
-            self.archived_label = QtWidgets.QLabel("Archived sessions")
-            self.archived_label.setObjectName("SidebarSection")
-            self.sessions_layout.addWidget(self.archived_label)
-            self.archived_list = self._create_session_list("ArchivedSessionList")
-            self.sessions_layout.addWidget(self.archived_list)
-        return self.archived_list
-
-    def _remove_session_entry(self, entry):
-        session_list, item = self._session_records.pop(entry)
-        session_list.removeItemWidget(item)
-        session_list.takeItem(session_list.row(item))
-        entry.deleteLater()
-        self._resize_session_list(session_list)
-        self._sync_session_order()
-
-    def _resize_session_list(self, session_list):
-        visible_rows = max(1, min(session_list.count(), 5))
-        session_list.setFixedHeight(visible_rows * 40 + 2)
-
-    def _save_session_order(self, *args):
-        QtCore.QTimer.singleShot(0, self._sync_session_order)
-
-    def _update_session_selection(self, session_list):
-        selected_items = set(session_list.selectedItems())
-        for row in range(session_list.count()):
-            item = session_list.item(row)
-            entry = session_list.itemWidget(item)
-            if entry is None:
-                continue
-            name_label = entry.session_label
-            name_label.setProperty("selected", item in selected_items)
-            name_label.style().unpolish(name_label)
-            name_label.style().polish(name_label)
-
-    def _sync_session_order(self):
-        self.session_order = []
-        for row in range(self.recent_list.count()):
-            item = self.recent_list.item(row)
-            entry = self.recent_list.itemWidget(item)
-            if entry is not None:
-                self.session_order.append(entry.session_label.text())
-
-    def set_active(self, name):
-        self.docs_btn.setProperty("selected", "true" if name == "docs" else "false")
-        self.settings_btn.setProperty(
-            "selected", "true" if name == "settings" else "false"
-        )
-        if name == "docs":
-            self.docs_btn.setIcon(load_lucide_icon("file-text", "#1677FF"))
-            self.settings_btn.setIcon(load_lucide_icon("settings", "#555555"))
-        elif name == "settings":
-            self.docs_btn.setIcon(load_lucide_icon("file-text", "#555555"))
-            self.settings_btn.setIcon(load_lucide_icon("settings", "#1677FF"))
-        else:
-            self.docs_btn.setIcon(load_lucide_icon("file-text", "#555555"))
-            self.settings_btn.setIcon(load_lucide_icon("settings", "#555555"))
-        for button in (self.docs_btn, self.settings_btn):
-            button.style().unpolish(button)
-            button.style().polish(button)
-
-    def toggle_collapse(self):
-        self.is_collapsed = not self.is_collapsed
-        for widget in self.collapsible_widgets:
-            widget.setVisible(not self.is_collapsed)
-        if self.is_collapsed:
-            self.expanded_width = max(200, min(self.width(), 400))
-            self.root_layout.setContentsMargins(5, 20, 5, 20)
-            self.setMinimumWidth(40)
-            self.setMaximumWidth(40)
-            self.collapse_btn.setFixedSize(30, 30)
-            self.collapse_btn.setText("»")
-            self.collapse_btn.setToolTip("展开侧边栏")
-        else:
-            self.root_layout.setContentsMargins(15, 20, 15, 20)
-            self.setMinimumWidth(200)
-            self.setMaximumWidth(400)
-            self.collapse_btn.setText("«")
-            self.collapse_btn.setToolTip("收起侧边栏")
-        splitter = self.parentWidget()
-        if isinstance(splitter, QtWidgets.QSplitter):
-            widths = splitter.sizes()
-            total_width = sum(widths)
-            nav_width = 40 if self.is_collapsed else self.expanded_width
-            splitter.setSizes([nav_width, max(1, total_width - nav_width)])
 
 
 class DiffLine(QtWidgets.QWidget):
     def __init__(self, old_number, new_number, text, mode="ctx", parent=None):
         super().__init__(parent)
         self.setObjectName("DiffLine")
-        self.setAttribute(QtCore.Qt.WA_StyledBackground, True)
         self.setProperty("mode", mode)
         layout = QtWidgets.QHBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
-
-        old_label = QtWidgets.QLabel("" if old_number is None else str(old_number))
-        new_label = QtWidgets.QLabel("" if new_number is None else str(new_number))
-        for number_label in (old_label, new_label):
-            number_label.setObjectName("DiffLineNumber")
-            number_label.setFixedWidth(34)
-            number_label.setAlignment(QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter)
-            layout.addWidget(number_label)
-
+        for number in (old_number, new_number):
+            label = QtWidgets.QLabel("" if number is None else str(number))
+            label.setObjectName("DiffLineNumber")
+            label.setFixedWidth(32)
+            label.setAlignment(QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter)
+            layout.addWidget(label)
         prefix = "+" if mode == "add" else "-" if mode == "del" else " "
         code = QtWidgets.QLabel(f"{prefix} {text}")
         code.setObjectName("DiffCode")
@@ -594,585 +1137,676 @@ class DiffLine(QtWidgets.QWidget):
         layout.addWidget(code, 1)
 
 
-def make_diff_line(old_number, new_number, code_text, mode="ctx"):
-    """Create one dual-line-number diff row with high-contrast colouring."""
-    mode = {"context": "ctx", "delete": "del"}.get(mode, mode)
-    styles = {
-        "add": ("#D8F5DC", "#1A7F37"),
-        "del": ("#FFE0DC", "#CF222E"),
-        "ctx": ("#F6F8FA", "#333333"),
-    }
-    normalized_mode = mode if mode in styles else "ctx"
-    background, foreground = styles[normalized_mode]
-    line = DiffLine(old_number, new_number, code_text, normalized_mode)
-    line.setStyleSheet(
-        f"""
-        QWidget#DiffLine {{ background-color: {background}; min-height: 24px; }}
-        QWidget#DiffLine QLabel {{ background-color: transparent; }}
-        QWidget#DiffLine QLabel#DiffCode {{ color: {foreground}; }}
-        """
-    )
-    return line
-
-
-class DiffCard(QtWidgets.QFrame):
-    def __init__(self, filename, lines, parent=None):
+class FileDiffCard(QtWidgets.QFrame):
+    def __init__(self, file_path, lines, parent=None):
         super().__init__(parent)
-        self.setObjectName("DiffCard")
-        layout = QtWidgets.QVBoxLayout(self)
-        layout.setContentsMargins(0, 0, 0, 8)
-        layout.setSpacing(0)
-
-        header = QtWidgets.QWidget()
-        header.setObjectName("DiffHeader")
-        header_layout = QtWidgets.QHBoxLayout(header)
-        header_layout.setContentsMargins(12, 9, 12, 9)
-        marker = QtWidgets.QLabel("M")
-        marker.setObjectName("DiffMarker")
-        marker.setAlignment(QtCore.Qt.AlignCenter)
-        marker.setFixedSize(22, 20)
-        header_layout.addWidget(marker)
-        filename_label = QtWidgets.QLabel(filename)
-        filename_label.setObjectName("DiffFileTitle")
-        filename_label.setTextInteractionFlags(QtCore.Qt.TextSelectableByMouse)
-        header_layout.addWidget(filename_label)
-        header_layout.addStretch(1)
-        layout.addWidget(header)
-
-        for old_number, new_number, text, mode in lines:
-            layout.addWidget(make_diff_line(old_number, new_number, text, mode))
-
-
-class ConfigHeader(QtWidgets.QFrame):
-    toggle_sidebar = QtCore.pyqtSignal()
-
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.setObjectName("ConfigHeader")
-        self.setFixedHeight(48)
-
-        layout = QtWidgets.QHBoxLayout(self)
-        layout.setContentsMargins(16, 0, 16, 0)
-        layout.setSpacing(12)
-
-        document_icon = QtWidgets.QLabel()
-        document_icon.setPixmap(
-            load_lucide_icon("file-text").pixmap(ICON_SIZE, ICON_SIZE)
-        )
-        document_icon.setFixedSize(ICON_SIZE, ICON_SIZE)
-        layout.addWidget(document_icon)
-
-        self.title_label = QtWidgets.QLabel("重写 PLM Qt 前端布局")
-        self.title_label.setObjectName("ConfigTitle")
-        layout.addWidget(self.title_label)
-
-        layout.addStretch(1)
-
-        self.sidebar_btn = QtWidgets.QPushButton()
-        self.sidebar_btn.setObjectName("HeaderIconBtn")
-        self.sidebar_btn.setIcon(load_lucide_icon("panel-right"))
-        self.sidebar_btn.setIconSize(QtCore.QSize(ICON_SIZE, ICON_SIZE))
-        self.sidebar_btn.setFixedSize(28, 28)
-        self.sidebar_btn.setCursor(QtCore.Qt.PointingHandCursor)
-        self.sidebar_btn.setToolTip("打开/关闭右侧 Diff 面板")
-        self.sidebar_btn.clicked.connect(self.toggle_sidebar.emit)
-        layout.addWidget(self.sidebar_btn)
-
-class ConfigPage(QtWidgets.QWidget):
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.right_panel_width = 400
-        self.preview_maximized = False
-        self.restore_panel_width = self.right_panel_width
-        self.drag_start_global_x = None
-        self.drag_start_width = None
-
+        self.file_path = Path(file_path)
+        self.setObjectName("FileDiffCard")
+        apply_drop_shadow(self)
         root = QtWidgets.QVBoxLayout(self)
-        root.setContentsMargins(0, 0, 0, 0)
+        root.setContentsMargins(0, 0, 0, 8)
         root.setSpacing(0)
-
-        self.config_header = ConfigHeader()
-        self.config_header.toggle_sidebar.connect(self.toggle_diff_panel)
-        root.addWidget(self.config_header)
-
-        main_content = QtWidgets.QWidget()
-        main_content.setObjectName("ConfigMainContent")
-        main_layout = QtWidgets.QVBoxLayout(main_content)
-        main_layout.setContentsMargins(20, 10, 20, 18)
-        main_layout.setSpacing(0)
-
-        self.tabs = QtWidgets.QTabWidget()
-        self.tabs.setObjectName("ConfigTabs")
-        self.tabs.setUsesScrollButtons(False)
-        pages = (
-            ("Controller", "Controller Configuration", "在这里配置控制器 ID、名称与最大 Lane 宽度。"),
-            ("LaneMapping", "Lane Mapping Configuration", "在这里配置物理 Lane 与控制器 Lane 的映射关系。"),
-            ("Signals", "PIPE Signals", "在这里配置 PIPE 信号、方向、位宽和安全值。"),
-            ("Generation", "Generation Settings", "RTL 生成功能将在后续阶段接入。"),
+        header = QtWidgets.QWidget()
+        header.setObjectName("FileCardHeader")
+        header_layout = QtWidgets.QHBoxLayout(header)
+        header_layout.setContentsMargins(16, 12, 16, 12)
+        header_layout.setSpacing(8)
+        marker = QtWidgets.QLabel("M")
+        marker.setObjectName("ModifiedMarker")
+        marker.setAlignment(QtCore.Qt.AlignCenter)
+        marker.setFixedSize(20, 18)
+        header_layout.addWidget(marker)
+        path_label = QtWidgets.QLabel(str(file_path))
+        path_label.setObjectName("FilePathLabel")
+        path_label.setTextInteractionFlags(QtCore.Qt.TextSelectableByMouse)
+        header_layout.addWidget(path_label, 1)
+        copy_btn = make_icon_button("link", "复制路径", "CardActionButton", 24, 16)
+        open_btn = make_icon_button(
+            "square-pen", "在编辑器中打开", "CardActionButton", 24, 16
         )
-        for tab_name, title, description in pages:
-            page = QtWidgets.QWidget()
-            page_layout = QtWidgets.QVBoxLayout(page)
-            page_layout.setContentsMargins(18, 18, 18, 18)
-            page_layout.setSpacing(0)
-            page_layout.addWidget(make_label(title, "SectionTitle", word_wrap=False))
-            page_layout.addSpacing(8)
-            page_layout.addWidget(make_label(description, "MutedText"))
-            page_layout.addSpacing(20)
-            placeholder = QtWidgets.QFrame()
-            placeholder.setObjectName("PlaceholderCard")
-            placeholder_layout = QtWidgets.QVBoxLayout(placeholder)
-            placeholder_layout.setContentsMargins(40, 40, 40, 40)
-            placeholder_layout.addWidget(
-                make_label("页面内容占位区域", "PlaceholderText"),
-                alignment=QtCore.Qt.AlignTop | QtCore.Qt.AlignLeft,
+        copy_btn.clicked.connect(self.copy_path)
+        open_btn.clicked.connect(self.open_in_editor)
+        header_layout.addWidget(copy_btn)
+        header_layout.addWidget(open_btn)
+        root.addWidget(header)
+        for old_number, new_number, text, mode in lines:
+            root.addWidget(DiffLine(old_number, new_number, text, mode))
+
+    def copy_path(self):
+        QtWidgets.QApplication.clipboard().setText(str(self.file_path))
+
+    def open_in_editor(self):
+        editor = "notepad++" if sys.platform == "win32" else "gvim"
+        executable = shutil.which(editor)
+        if executable is None:
+            QtWidgets.QMessageBox.warning(
+                self, "无法打开编辑器", f"未找到 {editor}，请先安装并加入 PATH。"
             )
-            page_layout.addWidget(placeholder, 1)
-            self.tabs.addTab(page, tab_name)
-        main_layout.addWidget(self.tabs, 1)
-        root.addWidget(main_content, 1)
+            return
+        try:
+            subprocess.Popen([executable, str(self.file_path)])
+        except OSError as error:
+            QtWidgets.QMessageBox.warning(self, "无法打开编辑器", str(error))
 
-        self.drag_button = DragButton(
-            on_drag=self.handle_drag,
-            on_release=self.handle_release,
-        )
-        self.drag_button.setParent(self)
-        self.drag_button.hide()
-        # Compatibility alias for callers that used the earlier name.
-        self.drag_handle = self.drag_button
 
-        self.right_panel = QtWidgets.QFrame(self)
-        self.right_panel.setObjectName("RightPanel")
-        panel_shadow = QtWidgets.QGraphicsDropShadowEffect(self.right_panel)
-        panel_shadow.setOffset(0, 2)
-        panel_shadow.setColor(QtGui.QColor(0, 0, 0, 30))
-        panel_shadow.setBlurRadius(12)
-        self.right_panel.setGraphicsEffect(panel_shadow)
-        self.right_panel.hide()
-        panel_layout = QtWidgets.QVBoxLayout(self.right_panel)
-        panel_layout.setContentsMargins(12, 10, 12, 12)
-        panel_layout.setSpacing(8)
+class ArtifactsPanel(QtWidgets.QFrame):
+    """Region 5: floating generated-file and diff viewer."""
 
+    maximizeRequested = QtCore.pyqtSignal()
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setObjectName("ArtifactsPanel")
+        apply_drop_shadow(self, offset=(0, 2), blur_radius=12, alpha=30)
+        root = QtWidgets.QVBoxLayout(self)
+        root.setContentsMargins(12, 0, 12, 12)
+        root.setSpacing(12)
         toolbar = QtWidgets.QWidget()
-        toolbar.setObjectName("RightPanelToolbar")
+        toolbar.setObjectName("ArtifactsToolbar")
+        toolbar.setFixedHeight(40)
         toolbar_layout = QtWidgets.QHBoxLayout(toolbar)
         toolbar_layout.setContentsMargins(0, 0, 0, 0)
         toolbar_layout.setSpacing(8)
-
-        def add_tool_button(attribute, icon_name, tooltip, *, checkable=False, checked=False):
-            button = QtWidgets.QToolButton()
-            button.setObjectName("RightPanelToolButton")
-            button.setIcon(load_lucide_icon(icon_name))
-            button.setIconSize(QtCore.QSize(ICON_SIZE, ICON_SIZE))
-            button.setFixedSize(24, 24)
-            button.setCheckable(checkable)
-            button.setChecked(checked)
-            button.setToolTip(tooltip)
-            button.setAccessibleName(tooltip)
-            button.setCursor(QtCore.Qt.PointingHandCursor)
-            setattr(self, attribute, button)
+        self.toolbar_buttons = []
+        for index, (icon_name, tooltip) in enumerate(
+            (
+                ("folder", "打开文件夹"),
+                ("refresh-cw", "刷新"),
+                ("square-pen", "编辑"),
+                ("braces", "查看代码"),
+                ("search", "搜索"),
+                ("link", "复制链接"),
+                ("file", "文件"),
+                ("more-horizontal", "更多"),
+                ("maximize", "展开"),
+            )
+        ):
+            button = make_icon_button(
+                icon_name, tooltip, "ArtifactsToolButton", 20, ICON_SIZE
+            )
             toolbar_layout.addWidget(button)
-            return button
-
-        add_tool_button("preview_root_btn", "folder", "文件")
-        toolbar_layout.addStretch(1)
-        add_tool_button("preview_refresh_btn", "refresh-cw", "刷新生成文件")
-        add_tool_button("preview_edit_btn", "square-pen", "编辑当前文件")
-        add_tool_button(
-            "preview_highlight_btn",
-            "braces",
-            "语法高亮",
-            checkable=True,
-            checked=True,
-        )
-        add_tool_button("preview_search_btn", "search", "在文件中查找")
-        add_tool_button("preview_copy_path_btn", "link", "复制文件路径")
-        add_tool_button(
-            "preview_diff_btn",
-            "file",
-            "显示文件差异",
-            checkable=True,
-        )
-        add_tool_button("preview_more_btn", "more-horizontal", "更多操作")
-        add_tool_button("preview_expand_btn", "maximize", "最大化预览")
-        self.preview_expand_btn.clicked.connect(self.toggle_preview_maximized)
-        self.preview_buttons = [
-            self.preview_root_btn,
-            self.preview_refresh_btn,
-            self.preview_edit_btn,
-            self.preview_highlight_btn,
-            self.preview_diff_btn,
-            self.preview_search_btn,
-            self.preview_copy_path_btn,
-            self.preview_more_btn,
-            self.preview_expand_btn,
-        ]
-        panel_layout.addWidget(toolbar)
+            self.toolbar_buttons.append(button)
+            if index == 0:
+                toolbar_layout.addStretch(1)
+        self.toolbar_buttons[-1].clicked.connect(self.maximizeRequested.emit)
+        root.addWidget(toolbar)
 
         scroll = QtWidgets.QScrollArea()
+        scroll.setObjectName("ArtifactsScroll")
         scroll.setWidgetResizable(True)
         scroll.setHorizontalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOff)
         content = QtWidgets.QWidget()
-        content.setObjectName("DiffContent")
+        content.setObjectName("ArtifactsContent")
         content_layout = QtWidgets.QVBoxLayout(content)
         content_layout.setContentsMargins(0, 0, 0, 0)
-        content_layout.setSpacing(12)
-        diffs = (
-            (
-                "src/plm/core/generator/rtl.py",
-                (
-                    (21, 21, "def generate_rtl(config):", "context"),
-                    (22, None, "    validate_legacy_config(config)", "delete"),
-                    (None, 22, "    validate_config(config)", "add"),
-                    (23, 23, "    return render_modules(config)", "context"),
-                ),
-            ),
-            (
-                "src/plm/core/model.py",
-                (
-                    (10, 10, "class LaneMapping:", "context"),
-                    (11, None, "    lanes = {}", "delete"),
-                    (None, 11, "    lanes: dict[int, Lane]", "add"),
-                    (12, 12, "", "context"),
-                    (13, 13, "    def validate(self):", "context"),
-                    (None, 14, "        return bool(self.lanes)", "add"),
-                ),
-            ),
+        content_layout.setSpacing(16)
+        examples = (
             (
                 "src/plm/frontend/qt/main_window.py",
-                (
-                    (88, 88, "class ConfigPage(QWidget):", "context"),
-                    (89, None, "    pass", "delete"),
-                    (None, 89, "    right_panel_width = 400", "add"),
-                ),
+                ((81, 81, "class ConfigPage(QFrame):", "ctx"),
+                 (82, None, "    pass", "del"),
+                 (None, 82, "    artifacts_width = 400", "add")),
+            ),
+            (
+                "src/plm/core/generator/rtl.py",
+                ((21, 21, "def generate_rtl(config):", "ctx"),
+                 (22, None, "    legacy_validate(config)", "del"),
+                 (None, 22, "    validate_config(config)", "add"),
+                 (23, 23, "    return render(config)", "ctx")),
+            ),
+            (
+                "test/plm_config.json",
+                ((4, 4, '  "lanes": [', "ctx"),
+                 (5, None, '    {"id": 0}', "del"),
+                 (None, 5, '    {"id": 0, "width": 8}', "add")),
             ),
         )
-        for filename, lines in diffs:
-            content_layout.addWidget(DiffCard(filename, lines))
-        content_layout.addSpacing(10)
+        for file_path, lines in examples:
+            content_layout.addWidget(FileDiffCard(file_path, lines))
         content_layout.addStretch(1)
         scroll.setWidget(content)
-        panel_layout.addWidget(scroll, 1)
+        root.addWidget(scroll, 1)
 
-    def toggle_diff_panel(self):
-        if self.right_panel.isVisible():
-            self.hide_diff_panel()
-        else:
-            self.show_diff_panel()
 
-    def show_diff_panel(self):
-        self.right_panel.show()
-        self.drag_button.setVisible(not self.preview_maximized)
-        self.reposition_right_panel()
-        self.right_panel.raise_()
-        self.drag_button.raise_()
+class ConfigPage(QtWidgets.QFrame):
+    """Region 2 with an absolute-positioned Region 5 overlay."""
 
-    def hide_diff_panel(self):
-        if self.preview_maximized:
-            self.preview_maximized = False
-            self.right_panel_width = self.restore_panel_width
-            self._update_expand_button()
-        self.right_panel.hide()
-        self.drag_button.hide()
+    logToggleRequested = QtCore.pyqtSignal()
 
-    def toggle_preview_maximized(self):
-        if not self.right_panel.isVisible():
-            return
-        if self.preview_maximized:
-            self.preview_maximized = False
-            self.right_panel_width = self.restore_panel_width
-            self.drag_button.show()
-        else:
-            self.restore_panel_width = self.right_panel.width()
-            self.preview_maximized = True
-            self.drag_button.hide()
-        self._update_expand_button()
-        self.reposition_right_panel()
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setObjectName("ConfigPage")
+        apply_drop_shadow(self)
+        self.artifacts_width = 400
+        self.restore_artifacts_width = 400
+        self.artifacts_maximized = False
+        self.drag_start_global_x = None
+        self.drag_start_width = None
+        root = QtWidgets.QVBoxLayout(self)
+        root.setContentsMargins(0, 0, 0, 0)
+        root.setSpacing(0)
+        self.header = ConfigHeader()
+        self.header.logToggleRequested.connect(self.logToggleRequested.emit)
+        self.header.artifactsToggleRequested.connect(self.toggle_artifacts)
+        root.addWidget(self.header)
 
-    def _update_expand_button(self):
-        if self.preview_maximized:
-            label = "恢复预览"
-        else:
-            label = "最大化预览"
-        self.preview_expand_btn.setIcon(
-            load_lucide_icon("maximize")
+        self.config_area = QtWidgets.QWidget()
+        self.config_area.setObjectName("ConfigArea")
+        config_layout = QtWidgets.QVBoxLayout(self.config_area)
+        config_layout.setContentsMargins(0, 0, 0, 0)
+        self.tabs = QtWidgets.QTabWidget()
+        self.tabs.setObjectName("ConfigTabs")
+        self.tabs.setUsesScrollButtons(False)
+        for tab_name, title, description in (
+            ("Controller", "Controller Configuration", "配置控制器 ID、名称和最大 Lane 宽度。"),
+            ("LaneMapping", "Lane Mapping Configuration", "配置物理 Lane 与控制器 Lane 的映射关系。"),
+            ("Signals", "PIPE Signals", "配置 PIPE 信号、方向、位宽与安全值。"),
+            ("Generation", "Generation Settings", "检查输出目录和 RTL 生成参数。"),
+        ):
+            self.tabs.addTab(ConfigTabPage(title, description), tab_name)
+        config_layout.addWidget(self.tabs, 1)
+        root.addWidget(self.config_area, 1)
+
+        self.artifacts_panel = ArtifactsPanel(self.config_area)
+        self.artifacts_panel.maximizeRequested.connect(self.toggle_artifacts_maximized)
+        self.drag_handle = DragHandle(
+            self.handle_artifacts_drag, self.finish_artifacts_drag, self.config_area
         )
-        self.preview_expand_btn.setToolTip(label)
-        self.preview_expand_btn.setAccessibleName(label)
+        self.artifacts_panel.show()
+        self.drag_handle.show()
+        self.config_area.installEventFilter(self)
+        QtCore.QTimer.singleShot(0, self.reposition_artifacts)
 
-    def reposition_right_panel(self):
-        if not self.right_panel.isVisible():
+    def eventFilter(self, watched, event):
+        if watched is self.config_area and event.type() == QtCore.QEvent.Resize:
+            self.reposition_artifacts()
+        return super().eventFilter(watched, event)
+
+    def toggle_artifacts(self):
+        visible = not self.artifacts_panel.isVisible()
+        self.artifacts_panel.setVisible(visible)
+        self.drag_handle.setVisible(visible and not self.artifacts_maximized)
+        if visible:
+            self.reposition_artifacts()
+            self.artifacts_panel.raise_()
+            self.drag_handle.raise_()
+
+    def toggle_artifacts_maximized(self):
+        if not self.artifacts_panel.isVisible():
             return
-        total_width = self.width()
-        total_height = self.height()
-        panel_top = self.config_header.height()
-        panel_height = max(0, total_height - panel_top)
+        if self.artifacts_maximized:
+            self.artifacts_maximized = False
+            self.artifacts_width = self.restore_artifacts_width
+            self.drag_handle.show()
+        else:
+            self.restore_artifacts_width = self.artifacts_panel.width()
+            self.artifacts_maximized = True
+            self.drag_handle.hide()
+        self.reposition_artifacts()
+
+    def reposition_artifacts(self):
+        if not self.artifacts_panel.isVisible():
+            return
+        total_width = self.config_area.width()
+        total_height = self.config_area.height()
+        if total_width <= 0 or total_height <= 0:
+            return
+        minimum = min(300, total_width)
         panel_width = (
             total_width
-            if self.preview_maximized
-            else max(300, min(self.right_panel_width, total_width))
+            if self.artifacts_maximized
+            else max(minimum, min(self.artifacts_width, total_width))
         )
         panel_x = total_width - panel_width
-        self.right_panel.setGeometry(panel_x, panel_top, panel_width, panel_height)
-        button_x = panel_x - self.drag_button.width() // 2
-        button_y = panel_top + (panel_height - self.drag_button.height()) // 2
-        self.drag_button.setGeometry(
-            button_x,
-            button_y,
-            self.drag_button.width(),
-            self.drag_button.height(),
-        )
+        self.artifacts_panel.setGeometry(panel_x, 0, panel_width, total_height)
+        handle_x = panel_x - self.drag_handle.width() // 2
+        handle_y = (total_height - self.drag_handle.height()) // 2
+        self.drag_handle.setGeometry(handle_x, handle_y, 14, 36)
+        self.artifacts_panel.raise_()
+        self.drag_handle.raise_()
 
-    def resizeEvent(self, event):
-        super().resizeEvent(event)
-        self.reposition_right_panel()
-
-    def handle_drag(self, action, global_x):
+    def handle_artifacts_drag(self, action, global_x):
         if action == "start":
             self.drag_start_global_x = global_x
-            self.drag_start_width = self.right_panel.width()
+            self.drag_start_width = self.artifacts_panel.width()
             return
         if action != "move" or self.drag_start_global_x is None:
             return
         delta = self.drag_start_global_x - global_x
-        self.right_panel_width = max(
-            300,
-            min(self.drag_start_width + delta, self.width()),
+        maximum = self.config_area.width()
+        minimum = min(300, maximum)
+        self.artifacts_width = max(
+            minimum, min(self.drag_start_width + delta, maximum)
         )
-        self.reposition_right_panel()
+        self.reposition_artifacts()
 
-    def handle_release(self):
+    def finish_artifacts_drag(self):
         self.drag_start_global_x = None
         self.drag_start_width = None
 
 
-class DocsPage(QtWidgets.QWidget):
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        layout = QtWidgets.QVBoxLayout(self)
-        layout.setContentsMargins(40, 36, 40, 36)
-        layout.setSpacing(14)
-        layout.addWidget(make_label("Documentation", "LargePageTitle", word_wrap=False))
-        layout.addWidget(make_label("PLM 配置工具的使用文档与参考资料。", "MutedText"))
-        for title, description in (
-            ("快速开始", "创建项目并完成第一份 Controller 配置。"),
-            ("配置指南", "了解 Controller、LaneMapping、Signals 和 Generation 页面。"),
-            ("数据格式", "查看 PLM 使用的 CSV 配置字段与约束。"),
-            ("常见问题", "处理配置校验和界面使用中常见的问题。"),
-        ):
-            card = QtWidgets.QFrame()
-            card.setObjectName("DocCard")
-            card_layout = QtWidgets.QVBoxLayout(card)
-            card_layout.setContentsMargins(20, 15, 20, 15)
-            card_layout.addWidget(make_label(title, "CardTitle", word_wrap=False))
-            card_layout.addWidget(make_label(description, "MutedText"))
-            layout.addWidget(card)
-        layout.addStretch(1)
+class LogPanel(QtWidgets.QFrame):
+    """Region 4: output tab, clear action, and auto-scrolling log."""
 
-
-class SettingsMenu(QtWidgets.QFrame):
-    pageChanged = QtCore.pyqtSignal(int)
-
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.setObjectName("SettingsMenu")
-        self.setFixedWidth(220)
-        layout = QtWidgets.QVBoxLayout(self)
-        layout.setContentsMargins(10, 24, 10, 20)
-        layout.setSpacing(5)
-        self.buttons = []
-        group = QtWidgets.QButtonGroup(self)
-        group.setExclusive(True)
-        for index, text in enumerate(("General", "Formatter", "Appearance", "About")):
-            button = QtWidgets.QPushButton(text)
-            button.setObjectName("SettingsMenuButton")
-            button.setCheckable(True)
-            button.setCursor(QtCore.Qt.PointingHandCursor)
-            button.setChecked(index == 0)
-            button.clicked.connect(lambda _checked=False, value=index: self.pageChanged.emit(value))
-            group.addButton(button)
-            layout.addWidget(button)
-            self.buttons.append(button)
-        layout.addStretch(1)
-
-
-class SettingsPage(QtWidgets.QWidget):
     closeRequested = QtCore.pyqtSignal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        root = QtWidgets.QHBoxLayout(self)
+        self.setObjectName("LogPanel")
+        root = QtWidgets.QVBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(0)
-
-        self.menu = SettingsMenu()
-        root.addWidget(self.menu)
-        self.content_stack = QtWidgets.QStackedWidget()
-        for title, description in (
-            ("General", "应用的常规行为设置将在这里提供。"),
-            ("Formatter", "代码格式化工具路径和参数将在这里配置。"),
-            ("Appearance", "字体、字号和界面密度将在这里配置。"),
-            ("About", "plmConsultant — PIPE Lane Mapper 配置工具。"),
+        header = QtWidgets.QFrame()
+        header.setObjectName("LogHeader")
+        header.setFixedHeight(32)
+        header_layout = QtWidgets.QHBoxLayout(header)
+        header_layout.setContentsMargins(16, 0, 12, 0)
+        header_layout.setSpacing(8)
+        title = QtWidgets.QLabel("输出")
+        title.setObjectName("LogTabTitle")
+        header_layout.addWidget(title)
+        header_layout.addStretch(1)
+        self.clear_btn = make_icon_button(
+            "trash-2", "清空日志", "LogClearButton", 20, 20
+        )
+        self.clear_btn.clicked.connect(self.clear)
+        header_layout.addWidget(self.clear_btn)
+        self.close_btn = make_icon_button(
+            "x", "关闭输出面板", "LogCloseBtn", 24, ICON_SIZE
+        )
+        self.close_btn.clicked.connect(self.closeRequested.emit)
+        header_layout.addWidget(self.close_btn)
+        root.addWidget(header)
+        self.output = QtWidgets.QPlainTextEdit()
+        self.output.setObjectName("LogOutput")
+        self.output.setReadOnly(True)
+        root.addWidget(self.output, 1)
+        for line in (
+            "[10:24:01] PLM workspace loaded",
+            "[10:24:02] Controller configuration validated",
+            "[10:24:03] Waiting for generation command...",
         ):
-            page = QtWidgets.QWidget()
-            layout = QtWidgets.QVBoxLayout(page)
-            layout.setContentsMargins(40, 36, 40, 36)
-            layout.setSpacing(14)
-            layout.addWidget(make_label(title, "LargePageTitle", word_wrap=False))
-            layout.addWidget(make_label(description, "MutedText"))
-            layout.addWidget(make_label("设置内容占位区域", "SettingsPlaceholder"), 1)
-            self.content_stack.addWidget(page)
-        root.addWidget(self.content_stack, 1)
-        self.menu.pageChanged.connect(self.content_stack.setCurrentIndex)
+            self.append_log(line)
 
+    def append_log(self, text):
+        self.output.appendPlainText(text)
+        bar = self.output.verticalScrollBar()
+        bar.setValue(bar.maximum())
 
-class CustomTitleBar(QtWidgets.QFrame):
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.setObjectName("CustomTitleBar")
-        self.setFixedHeight(36)
-        self.drag_position = None
-
-        layout = QtWidgets.QHBoxLayout(self)
-        layout.setContentsMargins(10, 0, 0, 0)
-        layout.setSpacing(8)
-
-        self.app_icon = QtWidgets.QLabel()
-        self.app_icon.setFixedSize(18, 18)
-        self.app_icon.setAttribute(QtCore.Qt.WA_TransparentForMouseEvents)
-        if APP_ICON_PATH.is_file():
-            self.app_icon.setPixmap(
-                QtGui.QIcon(str(APP_ICON_PATH)).pixmap(18, 18)
-            )
-        layout.addWidget(self.app_icon)
-
-        self.title_label = QtWidgets.QLabel("plmConsultant")
-        self.title_label.setObjectName("TitleBarTitle")
-        self.title_label.setAttribute(QtCore.Qt.WA_TransparentForMouseEvents)
-        layout.addWidget(self.title_label)
-        layout.addStretch(1)
-
-        self.minimize_btn = self._make_control_button("─", "最小化")
-        self.maximize_btn = self._make_control_button("⛶", "最大化")
-        self.close_btn = self._make_control_button("✕", "关闭", role="close")
-        self.minimize_btn.clicked.connect(lambda: self.window().showMinimized())
-        self.maximize_btn.clicked.connect(self.toggle_maximized)
-        self.close_btn.clicked.connect(lambda: self.window().close())
-        layout.addWidget(self.minimize_btn)
-        layout.addWidget(self.maximize_btn)
-        layout.addWidget(self.close_btn)
-
-    def _make_control_button(self, text, tooltip, role="normal"):
-        button = QtWidgets.QPushButton(text)
-        button.setObjectName("TitleBarBtn")
-        button.setProperty("role", role)
-        button.setFixedSize(46, 36)
-        button.setToolTip(tooltip)
-        button.setCursor(QtCore.Qt.PointingHandCursor)
-        return button
-
-    def toggle_maximized(self):
-        window = self.window()
-        if window.isMaximized():
-            window.showNormal()
-            self.maximize_btn.setText("⛶")
-            self.maximize_btn.setToolTip("最大化")
-        else:
-            window.showMaximized()
-            self.maximize_btn.setText("❐")
-            self.maximize_btn.setToolTip("还原")
-
-    def mousePressEvent(self, event):
-        if event.button() == QtCore.Qt.LeftButton:
-            self.drag_position = (
-                event.globalPos() - self.window().frameGeometry().topLeft()
-            )
-            event.accept()
-            return
-        super().mousePressEvent(event)
-
-    def mouseMoveEvent(self, event):
-        if (
-            self.drag_position is not None
-            and event.buttons() & QtCore.Qt.LeftButton
-            and not self.window().isMaximized()
-        ):
-            self.window().move(event.globalPos() - self.drag_position)
-            event.accept()
-            return
-        super().mouseMoveEvent(event)
-
-    def mouseReleaseEvent(self, event):
-        if event.button() == QtCore.Qt.LeftButton:
-            self.drag_position = None
-        super().mouseReleaseEvent(event)
-
-    def mouseDoubleClickEvent(self, event):
-        if event.button() == QtCore.Qt.LeftButton:
-            self.toggle_maximized()
-            event.accept()
-            return
-        super().mouseDoubleClickEvent(event)
+    def clear(self):
+        self.output.clear()
 
 
 class MainWindow(QtWidgets.QMainWindow):
+    """Native QMainWindow containing horizontal and vertical splitters."""
+
     def __init__(self):
         super().__init__()
-        self.setWindowFlags(QtCore.Qt.FramelessWindowHint | QtCore.Qt.Window)
         self.setWindowTitle("plmConsultant")
-        self.resize(1400, 850)
-        self.setMinimumSize(900, 600)
-        if APP_ICON_PATH.is_file():
-            self.setWindowIcon(QtGui.QIcon(str(APP_ICON_PATH)))
+        self.resize(1400, 900)
+        self.setMinimumSize(960, 640)
+        self.setWindowIcon(load_lucide_icon("layout-dashboard", "#1677FF"))
+        self._nav_width = 260
+        self._log_sizes = [700, 200]
 
-        central = QtWidgets.QWidget()
-        self.setCentralWidget(central)
-        root = QtWidgets.QVBoxLayout(central)
-        root.setContentsMargins(0, 0, 0, 0)
-        root.setSpacing(0)
-
-        self.title_bar = CustomTitleBar()
-        root.addWidget(self.title_bar)
-
-        self.splitter = QtWidgets.QSplitter(QtCore.Qt.Horizontal)
-        self.splitter.setHandleWidth(1)
-        self.splitter.setChildrenCollapsible(False)
-        root.addWidget(self.splitter, 1)
-
+        self.main_splitter = QtWidgets.QSplitter(QtCore.Qt.Horizontal)
+        self.main_splitter.setObjectName("MainSplitter")
+        self.main_splitter.setHandleWidth(0)
+        self.main_splitter.setChildrenCollapsible(True)
         self.nav_panel = NavPanel()
-        self.splitter.addWidget(self.nav_panel)
-        self.stack = QtWidgets.QStackedWidget()
+        self.main_splitter.addWidget(self.nav_panel)
+
+        self.nav_content_gap = QtWidgets.QWidget()
+        self.nav_content_gap.setObjectName("NavContentGap")
+        self.nav_content_gap.setMinimumWidth(0)
+        self.nav_content_gap.setMaximumWidth(0)
+        self.main_splitter.addWidget(self.nav_content_gap)
+        self.nav_panel.attach_gap_widget(self.nav_content_gap)
+
+        self.content_splitter = QtWidgets.QSplitter(QtCore.Qt.Vertical)
+        self.content_splitter.setObjectName("ContentSplitter")
+        self.content_splitter.setHandleWidth(1)
+        self.content_splitter.setChildrenCollapsible(True)
         self.config_page = ConfigPage()
-        self.docs_page = DocsPage()
-        self.settings_page = SettingsPage()
-        self.stack.addWidget(self.config_page)
-        self.stack.addWidget(self.docs_page)
-        self.stack.addWidget(self.settings_page)
-        self.splitter.addWidget(self.stack)
-        self.splitter.setStretchFactor(0, 0)
-        self.splitter.setStretchFactor(1, 1)
-        self.splitter.setSizes([260, 1000])
+        self.log_panel = LogPanel()
+        self.config_page.logToggleRequested.connect(self.toggle_log)
+        self.log_panel.closeRequested.connect(self.hide_log)
+        self.content_splitter.addWidget(self.config_page)
+        self.content_splitter.addWidget(self.log_panel)
+        self.main_splitter.addWidget(self.content_splitter)
+        self.main_splitter.setStretchFactor(0, 0)
+        self.main_splitter.setStretchFactor(1, 0)
+        self.main_splitter.setStretchFactor(2, 1)
+        self.content_splitter.setStretchFactor(0, 3)
+        self.content_splitter.setStretchFactor(1, 1)
+        self.setCentralWidget(self.main_splitter)
 
-        self.nav_panel.navChanged.connect(self.on_nav_changed)
-        self.settings_page.closeRequested.connect(lambda: self.on_nav_changed("config"))
+        self.float_btn = make_icon_button(
+            "panel-left",
+            "展开侧边栏",
+            "FloatingNavButton",
+            32,
+            ICON_SIZE,
+            "#1677FF",
+        )
+        self.float_btn.setParent(self)
+        self.float_btn.setGeometry(12, 12, 32, 32)
+        apply_drop_shadow(self.float_btn, offset=(0, 1), blur_radius=4, alpha=20)
+        self.float_btn.clicked.connect(self.show_nav)
+        self.float_btn.hide()
+        QtCore.QTimer.singleShot(0, self._apply_initial_sizes)
 
-    def on_nav_changed(self, destination):
-        if destination == "docs":
-            self.config_page.hide_diff_panel()
-            self.stack.setCurrentWidget(self.docs_page)
-            self.nav_panel.set_active("docs")
-        elif destination == "settings":
-            self.config_page.hide_diff_panel()
-            self.stack.setCurrentWidget(self.settings_page)
-            self.nav_panel.set_active("settings")
+        self.nav_panel.actionRequested.connect(self._handle_nav_action)
+
+    def _apply_initial_sizes(self):
+        main_width = max(261, self.main_splitter.width())
+        self.main_splitter.setSizes([260, 0, main_width - 260])
+        self.content_splitter.setSizes(self._log_sizes)
+
+    def toggle_nav(self):
+        self.nav_panel.toggle_collapse()
+
+    def hide_nav(self):
+        sizes = self.main_splitter.sizes()
+        if sizes and sizes[0] > 0:
+            self._nav_width = sizes[0]
+        self.nav_panel.setVisible(False)
+        self.float_btn.setVisible(True)
+        self.float_btn.raise_()
+
+    def show_nav(self):
+        self.nav_panel.setVisible(True)
+        total = max(1, sum(self.main_splitter.sizes()))
+        width = max(200, self._nav_width)
+        gap_width = self.nav_content_gap.width()
+        self.main_splitter.setSizes(
+            [width, gap_width, max(1, total - width - gap_width)]
+        )
+        self.float_btn.setVisible(False)
+
+    def toggle_log(self):
+        sizes = self.content_splitter.sizes()
+        total = sum(sizes)
+        if sizes[1] > 0:
+            self._log_sizes = sizes
+            self.content_splitter.setSizes([total, 0])
         else:
-            self.config_page.hide_diff_panel()
-            self.stack.setCurrentWidget(self.config_page)
-            self.nav_panel.set_active("")
+            bottom = max(140, int(total * 0.25))
+            self.content_splitter.setSizes([max(1, total - bottom), bottom])
+
+    def hide_log(self):
+        sizes = self.content_splitter.sizes()
+        if sizes[1] <= 0:
+            return
+        self._log_sizes = sizes
+        self.content_splitter.setSizes([sum(sizes), 0])
+
+    def _handle_nav_action(self, action):
+        self.nav_panel.set_active(action)
+        if action == "save":
+            self.log_panel.append_log("[UI] 当前配置已加入保存队列")
+
+APP_QSS = r"""
+QWidget {
+    color: #333333;
+    font-family: "Microsoft YaHei UI", "Segoe UI", "PingFang SC", sans-serif;
+    font-size: 13px;
+    font-weight: normal;
+}
+QWidget:disabled { color: #B0B5C0; }
+QMainWindow, QWidget#AppRoot { background-color: #F1F1F5; }
+QLabel { background: transparent; }
+QSplitter::handle { background-color: transparent; }
+QSplitter#MainSplitter { background-color: #FFFFFF; }
+QSplitter#MainSplitter::handle:horizontal { width: 0; background: transparent; }
+QSplitter::handle:vertical { height: 1px; }
+QWidget#NavContentGap { background-color: #FFFFFF; }
+
+QFrame#NavPanel {
+    background-color: #F1F1F5; border-right: 1px solid #E0E0E0;
+}
+QFrame#NavPanel[collapsed="true"] {
+    background-color: #F6F6FA; border-right: none;
+}
+QWidget#NavBrandRow { background: transparent; }
+QLabel#NavAppName { color: #1A1A1A; font-size: 14px; font-weight: bold; }
+QPushButton#NavCollapseButton {
+    background: transparent; border: none; border-radius: 6px; padding: 0;
+}
+QPushButton#NavCollapseButton:hover { background-color: #E2E2EC; }
+QPushButton#NavCollapseButton:pressed { background-color: #D5D5E0; }
+QPushButton#NavIconBtn {
+    min-width: 32px; max-width: 32px; min-height: 32px; max-height: 32px;
+    background: transparent; border: none; border-radius: 6px;
+    padding: 0; text-align: center;
+}
+QPushButton#NavIconBtn:hover { background-color: #E2E2EC; }
+QPushButton#NavIconBtn:pressed { background-color: #D5D5E0; }
+QFrame#NavPanel[collapsed="true"] QPushButton#NavActionButton {
+    min-width: 32px; max-width: 32px; min-height: 32px; max-height: 32px;
+    padding: 0; text-align: center;
+}
+QPushButton#FloatingNavButton {
+    background-color: #FFFFFF; border: 1px solid #E0E0E0;
+    border-radius: 6px; padding: 0;
+}
+QPushButton#FloatingNavButton:hover { background-color: #F0F2F5; }
+QPushButton#FloatingNavButton:pressed { background-color: #E2E2EC; }
+QPushButton#NavActionButton {
+    min-height: 32px; max-height: 32px; background: transparent; border: none;
+    border-radius: 6px; color: #333333; text-align: left; padding: 0;
+}
+QPushButton#NavActionButton:hover {
+    background-color: #E2E2EC; color: #1A1A1A;
+}
+QPushButton#NavActionButton:pressed { background-color: #D5D5E0; }
+QLabel#ProjectSectionTitle {
+    color: #8C92A4; font-size: 12px; font-weight: bold; padding: 4px 8px;
+}
+QListWidget#ProjectList {
+    background: transparent; border: none; outline: none; padding: 0;
+}
+QListWidget#ProjectList::item { background: transparent; border: none; padding: 0; }
+QPushButton#ProjectButton {
+    min-height: 32px; max-height: 32px; background: transparent; border: none;
+    border-radius: 6px; padding: 0;
+}
+QPushButton#ProjectArchiveBtn, QPushButton#ProjectMoreBtn {
+    min-width: 24px; max-width: 24px; min-height: 24px; max-height: 24px;
+    background: transparent; border: none; border-radius: 4px; padding: 0;
+}
+QPushButton#ProjectArchiveBtn:hover, QPushButton#ProjectMoreBtn:hover {
+    background-color: #E2E2EC;
+}
+QLabel#ProjectName {
+    color: #1A1A1A; font-size: 14px; font-weight: bold;
+}
+QFrame#ProjectHoverCard {
+    background-color: #FFFFFF; border: 1px solid #EAEAEA; border-radius: 8px;
+}
+QLabel#HoverProjectName {
+    color: #1A1A1A; font-size: 14px; font-weight: bold;
+}
+QLabel#HoverProjectPath {
+    color: #666666; font-size: 13px; font-weight: normal;
+}
+QFrame#HoverCardDivider {
+    background-color: #EAEAEA; border: none;
+}
+QPushButton#HoverPinButton, QPushButton#HoverOpenButton {
+    background: transparent; border: none; border-radius: 4px; padding: 0;
+}
+QPushButton#HoverPinButton:hover, QPushButton#HoverOpenButton:hover {
+    background-color: #F0F2F5;
+}
+QPushButton#SessionButton {
+    min-height: 28px; max-height: 28px; background: transparent; border: none;
+    border-radius: 6px; color: #666666; text-align: left; padding: 0 8px;
+    font-size: 13px; font-weight: normal;
+}
+QPushButton#ProjectButton:hover, QPushButton#SessionButton:hover {
+    background-color: #E2E2EC; color: #1A1A1A;
+}
+QPushButton#ProjectButton:pressed, QPushButton#SessionButton:pressed {
+    background-color: #D5D5E0;
+}
+QPushButton#SessionButton[selected="true"] {
+    background-color: #E6F0FF; color: #1677FF; font-weight: bold;
+}
+QPushButton#NavFooterButton {
+    min-height: 32px; max-height: 32px; background: transparent; border: none;
+    border-radius: 6px; color: #666666; padding: 0; text-align: left;
+}
+QPushButton#NavFooterButton:hover { background-color: #E2E2EC; color: #1A1A1A; }
+QPushButton#NavFooterButton:pressed { background-color: #D5D5E0; }
+QPushButton#NavFooterButton[selected="true"] {
+    background-color: #E6F0FF; color: #1677FF; font-weight: bold;
+}
+
+QPushButton#ProjectDeleteMenuButton {
+    min-height: 32px; max-height: 32px; background: transparent; border: none;
+    border-radius: 4px; padding: 4px 12px; text-align: left;
+    color: #CF222E; font-size: 13px;
+}
+QPushButton#ProjectDeleteMenuButton:hover { background-color: #F0F2F5; }
+
+QFrame#ConfigPage {
+    background-color: #FFFFFF; border-top-left-radius: 8px;
+}
+QFrame#ConfigHeader {
+    background-color: #FFFFFF; border-bottom: 1px solid #EAEAEA;
+    border-top-left-radius: 8px;
+}
+QLabel#ConfigSessionTitle {
+    color: #1A1A1A; font-size: 15px; font-weight: bold;
+}
+QLineEdit#ConfigSessionEditor {
+    background: #FFFFFF; border: 1px solid #1677FF; border-radius: 8px;
+    color: #1A1A1A; padding: 4px 8px; selection-background-color: #E6F0FF;
+}
+QPushButton#HeaderButton {
+    background: transparent; border: none; border-radius: 6px; padding: 0;
+}
+QPushButton#HeaderButton:hover { background-color: #F0F2F5; }
+QPushButton#HeaderButton:pressed { background-color: #D5D5E0; }
+QWidget#ConfigArea { background-color: #FFFFFF; }
+QTabWidget#ConfigTabs::pane { border: none; background: #FFFFFF; top: -1px; }
+QTabWidget#ConfigTabs QTabBar { background: #FFFFFF; }
+QTabWidget#ConfigTabs QTabBar::tab {
+    background: transparent; color: #4A5060; padding: 8px 20px 10px 20px;
+    margin-right: 4px; border: none; border-bottom: 2px solid transparent;
+    font-size: 13px; min-width: 80px;
+}
+QTabWidget#ConfigTabs QTabBar::tab:hover:!selected {
+    color: #1A1A1A;
+}
+QTabWidget#ConfigTabs QTabBar::tab:selected {
+    color: #1677FF; border-bottom: 2px solid #1677FF;
+}
+QLabel#ConfigTitle { color: #1A1A1A; font-size: 15px; font-weight: bold; }
+QLabel#ConfigDescription { color: #666666; font-size: 13px; font-weight: normal; }
+QScrollArea#ConfigScroll { background: #FFFFFF; border: none; }
+QWidget#ConfigScrollContent { background: #FFFFFF; }
+QFrame#ConfigPlaceholderCard {
+    background-color: #FFFFFF; border: 1px solid #EAEAEA; border-radius: 6px;
+}
+QLabel#PlaceholderLabel { color: #1A1A1A; font-size: 14px; font-weight: bold; }
+
+QFrame#LogPanel { background-color: #FFFFFF; border-top: 1px solid #E0E0E0; }
+QFrame#LogHeader { background-color: #FFFFFF; border: none; }
+QLabel#LogTabTitle { color: #333333; font-size: 13px; font-weight: bold; }
+QPushButton#LogClearButton, QPushButton#LogCloseBtn {
+    background: transparent; border: none; border-radius: 6px; padding: 0;
+}
+QPushButton#LogClearButton:hover, QPushButton#LogCloseBtn:hover {
+    background-color: #E2E2EC; border-radius: 4px;
+}
+QPushButton#LogClearButton:pressed, QPushButton#LogCloseBtn:pressed {
+    background-color: #D5D5E0;
+}
+QPlainTextEdit#LogOutput {
+    background-color: #FFFFFF; color: #333333; border: none; padding: 8px 16px;
+    font-family: Consolas, "Courier New", monospace; font-size: 12px;
+}
+
+QFrame#ArtifactsPanel {
+    background-color: #FAFAFB; border: 1px solid #E0E0E0; border-radius: 8px;
+}
+QWidget#ArtifactsToolbar, QWidget#ArtifactsContent { background: transparent; }
+QPushButton#ArtifactsToolButton, QPushButton#CardActionButton {
+    background: transparent; border: none; border-radius: 6px; padding: 0;
+}
+QPushButton#ArtifactsToolButton:hover, QPushButton#CardActionButton:hover {
+    background-color: #F0F2F5;
+}
+QPushButton#ArtifactsToolButton:pressed, QPushButton#CardActionButton:pressed {
+    background-color: #D5D5E0;
+}
+QScrollArea#ArtifactsScroll { background: transparent; border: none; }
+QFrame#FileDiffCard {
+    background-color: #FFFFFF; border: 1px solid #EAEAEA; border-radius: 6px;
+}
+QWidget#FileCardHeader {
+    background-color: #F6F8FA; border-bottom: 1px solid #EAEAEA;
+}
+QLabel#ModifiedMarker {
+    background-color: #F0F2F5; color: #8C92A4; border-radius: 4px;
+    font-size: 12px; font-weight: bold;
+}
+QLabel#FilePathLabel { color: #1A1A1A; font-size: 13px; font-weight: bold; }
+QWidget#DiffLine { background-color: #F6F8FA; min-height: 24px; }
+QWidget#DiffLine[mode="add"] { background-color: #D8F5DC; }
+QWidget#DiffLine[mode="del"] { background-color: #FFE0DC; }
+QWidget#DiffLine QLabel { background: transparent; }
+QWidget#DiffLine[mode="add"] QLabel#DiffCode { color: #1A7F37; }
+QWidget#DiffLine[mode="del"] QLabel#DiffCode { color: #CF222E; }
+QLabel#DiffLineNumber {
+    color: #A0A5B0; padding-right: 6px; border-right: 1px solid #EAEAEA;
+    font-family: Consolas, "Courier New", monospace; font-size: 12px;
+}
+QLabel#DiffCode {
+    color: #333333; padding: 3px 7px;
+    font-family: Consolas, "Courier New", monospace; font-size: 12px;
+}
+
+QScrollBar:vertical { width: 6px; background: transparent; border: none; margin: 0; }
+QScrollBar::handle:vertical {
+    background: #DCDCDC; border-radius: 3px; min-height: 30px;
+}
+QScrollBar::handle:vertical:hover { background: #B0B5C0; }
+QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0; }
+QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical { background: transparent; }
+QMenu {
+    min-width: 180px; background-color: #FFFFFF; border: 1px solid #EAEAEA;
+    border-radius: 8px; padding: 6px;
+}
+QMenu::item {
+    height: 32px; padding: 4px 12px; border-radius: 4px;
+    color: #333333; font-size: 13px;
+}
+QMenu::item:selected { background-color: #F0F2F5; color: #1A1A1A; }
+QMenu::item:disabled { color: #B0B5C0; }
+QMenu::separator { height: 1px; background: #EAEAEA; margin: 4px 8px; }
+QToolTip {
+    background: #333333; color: #FFFFFF; border: none; border-radius: 6px;
+    padding: 5px 7px;
+}
+"""
 
 
 if __name__ == "__main__":
+    if hasattr(QtCore.Qt, "AA_EnableHighDpiScaling"):
+        QtWidgets.QApplication.setAttribute(QtCore.Qt.AA_EnableHighDpiScaling, True)
+    if hasattr(QtCore.Qt, "AA_UseHighDpiPixmaps"):
+        QtWidgets.QApplication.setAttribute(QtCore.Qt.AA_UseHighDpiPixmaps, True)
     app = QtWidgets.QApplication(sys.argv)
+    app.setStyle("Fusion")
+    font = QtGui.QFont()
+    font.setFamily("Microsoft YaHei UI")
+    font.setStyleStrategy(QtGui.QFont.PreferAntialias)
+    font.setHintingPreference(QtGui.QFont.PreferFullHinting)
+    app.setFont(font)
+    app.setStyleSheet(APP_QSS)
     window = MainWindow()
     window.show()
     sys.exit(app.exec_())

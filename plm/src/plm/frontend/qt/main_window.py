@@ -1415,7 +1415,6 @@ class MainWindow(QtWidgets.QMainWindow):
         self.resize(1400, 900)
         self.setMinimumSize(960, 640)
         self.setWindowIcon(load_lucide_icon("layout-dashboard", "#1677FF"))
-        self._nav_width = 260
         self._log_sizes = [700, 200]
 
         self.main_splitter = QtWidgets.QSplitter(QtCore.Qt.Horizontal)
@@ -1443,19 +1442,6 @@ class MainWindow(QtWidgets.QMainWindow):
         self.content_splitter.setStretchFactor(1, 1)
         self.setCentralWidget(self.main_splitter)
 
-        self.float_btn = make_icon_button(
-            "panel-left",
-            "展开侧边栏",
-            "FloatingNavButton",
-            32,
-            ICON_SIZE,
-            "#1677FF",
-        )
-        self.float_btn.setParent(self)
-        self.float_btn.setGeometry(12, 12, 32, 32)
-        apply_drop_shadow(self.float_btn, offset=(0, 1), blur_radius=4, alpha=20)
-        self.float_btn.clicked.connect(self.show_nav)
-        self.float_btn.hide()
         QtCore.QTimer.singleShot(0, self._apply_initial_sizes)
 
         self.nav_panel.actionRequested.connect(self._handle_nav_action)
@@ -1464,28 +1450,6 @@ class MainWindow(QtWidgets.QMainWindow):
         main_width = max(261, self.main_splitter.width())
         self.main_splitter.setSizes([260, main_width - 260])
         self.content_splitter.setSizes(self._log_sizes)
-
-    def toggle_nav(self):
-        self.nav_panel.toggle_collapse()
-
-    def hide_nav(self):
-        sizes = self.main_splitter.sizes()
-        if sizes and sizes[0] > 0:
-            self._nav_width = sizes[0]
-        self.nav_panel.setVisible(False)
-        self.float_btn.setVisible(True)
-        self.float_btn.raise_()
-
-    def show_nav(self):
-        self.nav_panel.setVisible(True)
-        total = max(1, sum(self.main_splitter.sizes()))
-        width = (
-            self.nav_panel.collapsed_width
-            if self.nav_panel.is_collapsed
-            else min(400, max(200, self._nav_width))
-        )
-        self.main_splitter.setSizes([width, max(1, total - width)])
-        self.float_btn.setVisible(False)
 
     def toggle_log(self):
         sizes = self.content_splitter.sizes()

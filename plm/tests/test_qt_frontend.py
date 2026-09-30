@@ -358,8 +358,6 @@ class QtFrontendLayoutTests(unittest.TestCase):
         icon_names = (
             "layout-dashboard",
             "panel-left",
-            "minus",
-            "square",
             "x",
             "panel-bottom",
             "panel-right",
@@ -368,7 +366,12 @@ class QtFrontendLayoutTests(unittest.TestCase):
             "file-text",
             "settings",
             "trash-2",
+            "archive",
             "folder",
+            "folder-open",
+            "pin",
+            "pencil",
+            "external-link",
             "refresh-cw",
             "braces",
             "search",
@@ -377,7 +380,11 @@ class QtFrontendLayoutTests(unittest.TestCase):
             "more-horizontal",
             "maximize",
         )
-        self.assertEqual(len(icon_names), 20)
+        self.assertEqual(len(icon_names), 23)
+        self.assertEqual(
+            {path.stem for path in LUCIDE_ICON_DIR.glob("*.svg")},
+            set(icon_names),
+        )
         for name in icon_names:
             self.assertTrue((LUCIDE_ICON_DIR / f"{name}.svg").is_file())
             self.assertFalse(load_lucide_icon(name).isNull())

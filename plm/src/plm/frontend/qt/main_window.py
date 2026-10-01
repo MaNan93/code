@@ -18,7 +18,11 @@ from PyQt5 import QtCore, QtGui, QtSvg, QtWidgets
 APP_ICON_PATH = Path(__file__).resolve().parent / "assets" / "app_icon.svg"
 LUCIDE_ICON_DIR = Path(__file__).resolve().parent / "assets" / "icons"
 PROJECT_ROOT = Path(__file__).resolve().parents[4]
+DOCS_DIR = Path(__file__).resolve().parents[2] / "docs"
 ICON_SIZE = 20
+DEFAULT_FONT_FAMILY = "Microsoft YaHei UI"
+DEFAULT_FONT_SIZE = 13
+DEFAULT_EDITOR = "notepad++" if sys.platform == "win32" else "gvim"
 
 
 def load_lucide_icon(
@@ -1187,8 +1191,10 @@ class FileDiffCard(QtWidgets.QFrame):
         QtWidgets.QApplication.clipboard().setText(str(self.file_path))
 
     def open_in_editor(self):
-        editor = "notepad++" if sys.platform == "win32" else "gvim"
-        executable = shutil.which(editor)
+        settings = QtCore.QSettings("plm", "plmConsultant")
+        editor = settings.value("tools/editor_path", DEFAULT_EDITOR, type=str)
+        configured_path = Path(editor).expanduser()
+        executable = str(configured_path) if configured_path.is_file() else shutil.which(editor)
         if executable is None:
             QtWidgets.QMessageBox.warning(
                 self, "无法打开编辑器", f"未找到 {editor}，请先安装并加入 PATH。"
@@ -1454,9 +1460,10 @@ class LogPanel(QtWidgets.QFrame):
 
 
 class PlaceholderOverlay(QtWidgets.QFrame):
-    """Visual-only Settings/Docs page shown above the current workspace."""
+    """Full-window Settings or documentation page."""
 
     closeRequested = QtCore.pyqtSignal()
+    preferencesSaved = QtCore.pyqtSignal(dict)
 
     def __init__(self, page, parent=None):
         super().__init__(parent)
@@ -1503,10 +1510,16 @@ class PlaceholderOverlay(QtWidgets.QFrame):
         panel_layout = QtWidgets.QHBoxLayout(panel)
         panel_layout.setContentsMargins(0, 0, 0, 0)
         panel_layout.setSpacing(0)
+        self.content = (
+            self._build_settings_content()
+            if page == "settings"
+            else self._build_docs_content()
+        )
         panel_layout.addWidget(self._build_menu(page))
-        panel_layout.addWidget(self._build_content(page), 1)
+        panel_layout.addWidget(self.content, 1)
         page_area_layout.addWidget(panel, 1, QtCore.Qt.AlignCenter)
         root.addWidget(page_area, 1)
+        self._select_section(0)
 
     def _build_menu(self, page):
         menu = QtWidgets.QFrame()
@@ -1515,6 +1528,7 @@ class PlaceholderOverlay(QtWidgets.QFrame):
         layout = QtWidgets.QVBoxLayout(menu)
         layout.setContentsMargins(12, 16, 12, 16)
         layout.setSpacing(4)
+        self.menu_buttons = []
         entries = (
             ("General", "Appearance", "Tools")
             if page == "settings"
@@ -1523,65 +1537,234 @@ class PlaceholderOverlay(QtWidgets.QFrame):
         for index, text in enumerate(entries):
             button = QtWidgets.QPushButton(text)
             button.setObjectName("PlaceholderMenuButton")
-            button.setProperty("selected", index == 0)
             button.setCursor(QtCore.Qt.PointingHandCursor)
+            button.clicked.connect(
+                lambda _checked=False, selected=index: self._select_section(selected)
+            )
             layout.addWidget(button)
+            self.menu_buttons.append(button)
         layout.addStretch(1)
         return menu
 
-    def _build_content(self, page):
+    def _content_shell(self, heading, description):
         content = QtWidgets.QWidget()
         content.setObjectName("PlaceholderContent")
         layout = QtWidgets.QVBoxLayout(content)
         layout.setContentsMargins(28, 24, 28, 24)
         layout.setSpacing(10)
-
-        heading = QtWidgets.QLabel(
-            "General" if page == "settings" else "Getting Started"
-        )
-        heading.setObjectName("PlaceholderHeading")
-        layout.addWidget(heading)
-        description = QtWidgets.QLabel(
-            "配置 plmConsultant 的通用偏好。"
-            if page == "settings"
-            else "从项目配置开始，快速完成 PLM 生成流程。"
-        )
-        description.setObjectName("PlaceholderDescription")
-        layout.addWidget(description)
+        self.heading_label = QtWidgets.QLabel(heading)
+        self.heading_label.setObjectName("PlaceholderHeading")
+        layout.addWidget(self.heading_label)
+        self.description_label = QtWidgets.QLabel(description)
+        self.description_label.setObjectName("PlaceholderDescription")
+        self.description_label.setWordWrap(True)
+        layout.addWidget(self.description_label)
         layout.addSpacing(10)
+        return content, layout
 
-        rows = (
-            (
-                ("界面字体", "Microsoft YaHei UI"),
-                ("字体大小", "13 px"),
-                ("默认编辑器", "gvim"),
-            )
-            if page == "settings"
-            else (
-                ("1", "选择或创建一个 PLM 项目"),
-                ("2", "配置 Controller、Lane Mapping 和 PIPE Signals"),
-                ("3", "在 Generation 页面生成 RTL 与 Testbench"),
+    def _setting_row(self, label, control):
+        row = QtWidgets.QFrame()
+        row.setObjectName("PlaceholderSettingRow")
+        row.setFixedHeight(58)
+        row_layout = QtWidgets.QHBoxLayout(row)
+        row_layout.setContentsMargins(16, 0, 16, 0)
+        key_label = QtWidgets.QLabel(label)
+        key_label.setObjectName("PlaceholderRowLabel")
+        row_layout.addWidget(key_label)
+        row_layout.addStretch(1)
+        row_layout.addWidget(control)
+        return row
+
+    def _build_settings_content(self):
+        content, layout = self._content_shell(
+            "General", "配置会保存在本机，并在下次启动时自动恢复。"
+        )
+        settings = QtCore.QSettings("plm", "plmConsultant")
+
+        self.font_family_combo = QtWidgets.QFontComboBox()
+        self.font_family_combo.setObjectName("SettingsFontFamily")
+        self.font_family_combo.setCurrentFont(
+            QtGui.QFont(
+                settings.value("appearance/font_family", DEFAULT_FONT_FAMILY, type=str)
             )
         )
-        for label, value in rows:
-            row = QtWidgets.QFrame()
-            row.setObjectName("PlaceholderSettingRow")
-            row.setFixedHeight(56)
-            row_layout = QtWidgets.QHBoxLayout(row)
-            row_layout.setContentsMargins(16, 0, 16, 0)
-            key_label = QtWidgets.QLabel(label)
-            key_label.setObjectName("PlaceholderRowLabel")
-            value_label = QtWidgets.QLabel(value)
-            value_label.setObjectName("PlaceholderRowValue")
-            row_layout.addWidget(key_label)
-            row_layout.addStretch(1)
-            row_layout.addWidget(value_label)
+        self.font_family_combo.setFixedWidth(240)
+
+        self.font_size_spin = QtWidgets.QSpinBox()
+        self.font_size_spin.setObjectName("SettingsFontSize")
+        self.font_size_spin.setRange(10, 20)
+        self.font_size_spin.setSuffix(" px")
+        self.font_size_spin.setValue(
+            settings.value("appearance/font_size", DEFAULT_FONT_SIZE, type=int)
+        )
+        self.font_size_spin.setFixedWidth(100)
+
+        editor_control = QtWidgets.QWidget()
+        editor_control.setObjectName("SettingsEditorControl")
+        editor_layout = QtWidgets.QHBoxLayout(editor_control)
+        editor_layout.setContentsMargins(0, 0, 0, 0)
+        editor_layout.setSpacing(8)
+        self.editor_path_edit = QtWidgets.QLineEdit(
+            settings.value("tools/editor_path", DEFAULT_EDITOR, type=str)
+        )
+        self.editor_path_edit.setObjectName("SettingsEditorPath")
+        self.editor_path_edit.setFixedWidth(190)
+        browse_btn = QtWidgets.QPushButton("浏览…")
+        browse_btn.setObjectName("SettingsBrowseButton")
+        browse_btn.clicked.connect(self._browse_editor)
+        editor_layout.addWidget(self.editor_path_edit)
+        editor_layout.addWidget(browse_btn)
+
+        self.setting_rows = {
+            "font": self._setting_row("界面字体", self.font_family_combo),
+            "size": self._setting_row("字体大小", self.font_size_spin),
+            "editor": self._setting_row("默认编辑器", editor_control),
+        }
+        for row in self.setting_rows.values():
             layout.addWidget(row)
         layout.addStretch(1)
-        note = QtWidgets.QLabel("视觉占位页面 · 功能将在后续阶段接入")
-        note.setObjectName("PlaceholderNote")
-        layout.addWidget(note)
+
+        actions = QtWidgets.QHBoxLayout()
+        self.settings_status = QtWidgets.QLabel("")
+        self.settings_status.setObjectName("SettingsStatus")
+        actions.addWidget(self.settings_status)
+        actions.addStretch(1)
+        reset_btn = QtWidgets.QPushButton("恢复默认")
+        reset_btn.setObjectName("SettingsSecondaryButton")
+        reset_btn.clicked.connect(self._reset_settings)
+        self.save_settings_btn = QtWidgets.QPushButton("保存设置")
+        self.save_settings_btn.setObjectName("SettingsPrimaryButton")
+        self.save_settings_btn.clicked.connect(self._save_settings)
+        actions.addWidget(reset_btn)
+        actions.addWidget(self.save_settings_btn)
+        layout.addLayout(actions)
         return content
+
+    def _build_docs_content(self):
+        content, layout = self._content_shell(
+            "Getting Started", "从项目配置开始，快速完成 PLM 生成流程。"
+        )
+        self.doc_browser = QtWidgets.QTextBrowser()
+        self.doc_browser.setObjectName("DocumentationBrowser")
+        self.doc_browser.setOpenExternalLinks(True)
+        self.doc_browser.setSearchPaths([str(DOCS_DIR)])
+        layout.addWidget(self.doc_browser, 1)
+        return content
+
+    def _select_section(self, index):
+        for button_index, button in enumerate(self.menu_buttons):
+            button.setProperty("selected", button_index == index)
+            button.style().unpolish(button)
+            button.style().polish(button)
+
+        if self.page == "settings":
+            titles = ("General", "Appearance", "Tools")
+            descriptions = (
+                "配置会保存在本机，并在下次启动时自动恢复。",
+                "调整整个应用的字体与字号。",
+                "设置从 Artifacts 面板打开文件时使用的编辑器。",
+            )
+            visible_rows = (
+                {"font", "size", "editor"},
+                {"font", "size"},
+                {"editor"},
+            )[index]
+            self.heading_label.setText(titles[index])
+            self.description_label.setText(descriptions[index])
+            for name, row in self.setting_rows.items():
+                row.setVisible(name in visible_rows)
+            return
+
+        docs = (
+            (
+                "Getting Started",
+                "Qt 前端的项目配置、标签页与常用操作。",
+                "qt_frontend_guide.md",
+                None,
+            ),
+            (
+                "Configuration",
+                "Controller、Lane Mapping 与 PIPE Signals 配置格式。",
+                "tool_usage.md",
+                "## 2. 配置文件格式（`config/` 下三个 CSV）",
+            ),
+            (
+                "Generation",
+                "生成 RTL 与 Testbench 的命令、参数和输出规则。",
+                "tool_usage.md",
+                "## 3. `plm generate`：生成匹配的 RTL 与 testbench",
+            ),
+        )
+        title, description, filename, section = docs[index]
+        self.heading_label.setText(title)
+        self.description_label.setText(description)
+        self._load_document(filename, section)
+
+    @staticmethod
+    def _extract_markdown_section(markdown, heading):
+        if not heading:
+            return markdown
+        lines = markdown.splitlines()
+        try:
+            start = next(i for i, line in enumerate(lines) if line.strip() == heading)
+        except StopIteration:
+            return markdown
+        level = len(heading) - len(heading.lstrip("#"))
+        end = len(lines)
+        for index in range(start + 1, len(lines)):
+            stripped = lines[index].lstrip()
+            if not stripped.startswith("#"):
+                continue
+            next_level = len(stripped) - len(stripped.lstrip("#"))
+            if next_level <= level:
+                end = index
+                break
+        return "\n".join(lines[start:end])
+
+    def _load_document(self, filename, section=None):
+        path = DOCS_DIR / filename
+        try:
+            markdown = path.read_text(encoding="utf-8")
+        except OSError as error:
+            self.doc_browser.setPlainText(f"无法读取文档：{path}\n\n{error}")
+            return
+        self.doc_browser.setMarkdown(
+            self._extract_markdown_section(markdown, section)
+        )
+        self.doc_browser.verticalScrollBar().setValue(0)
+
+    def _browse_editor(self):
+        path, _selected_filter = QtWidgets.QFileDialog.getOpenFileName(
+            self,
+            "选择默认编辑器",
+            self.editor_path_edit.text().strip(),
+            "Executables (*.exe);;All files (*)",
+        )
+        if path:
+            self.editor_path_edit.setText(path)
+
+    def _preferences(self):
+        return {
+            "font_family": self.font_family_combo.currentFont().family(),
+            "font_size": self.font_size_spin.value(),
+            "editor_path": self.editor_path_edit.text().strip() or DEFAULT_EDITOR,
+        }
+
+    def _save_settings(self):
+        preferences = self._preferences()
+        settings = QtCore.QSettings("plm", "plmConsultant")
+        settings.setValue("appearance/font_family", preferences["font_family"])
+        settings.setValue("appearance/font_size", preferences["font_size"])
+        settings.setValue("tools/editor_path", preferences["editor_path"])
+        settings.sync()
+        self.preferencesSaved.emit(preferences)
+        self.settings_status.setText("设置已保存")
+
+    def _reset_settings(self):
+        self.font_family_combo.setCurrentFont(QtGui.QFont(DEFAULT_FONT_FAMILY))
+        self.font_size_spin.setValue(DEFAULT_FONT_SIZE)
+        self.editor_path_edit.setText(DEFAULT_EDITOR)
+        self._save_settings()
 
     def keyPressEvent(self, event):
         if event.key() == QtCore.Qt.Key_Escape:
@@ -1596,6 +1779,8 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def __init__(self):
         super().__init__()
+        self._settings = QtCore.QSettings("plm", "plmConsultant")
+        self._apply_preferences(self._read_preferences())
         self.setWindowTitle("plmConsultant")
         self.resize(1400, 900)
         self.setMinimumSize(960, 640)
@@ -1668,6 +1853,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.placeholder_overlay = PlaceholderOverlay(page, self)
         self.placeholder_overlay.setGeometry(self.rect())
         self.placeholder_overlay.closeRequested.connect(self._close_placeholder)
+        self.placeholder_overlay.preferencesSaved.connect(self._apply_preferences)
         self.placeholder_overlay.show()
         self.placeholder_overlay.raise_()
         self.placeholder_overlay.setFocus(QtCore.Qt.OtherFocusReason)
@@ -1684,6 +1870,37 @@ class MainWindow(QtWidgets.QMainWindow):
         super().resizeEvent(event)
         if self.placeholder_overlay is not None:
             self.placeholder_overlay.setGeometry(self.rect())
+
+    def _read_preferences(self):
+        return {
+            "font_family": self._settings.value(
+                "appearance/font_family", DEFAULT_FONT_FAMILY, type=str
+            ),
+            "font_size": self._settings.value(
+                "appearance/font_size", DEFAULT_FONT_SIZE, type=int
+            ),
+            "editor_path": self._settings.value(
+                "tools/editor_path", DEFAULT_EDITOR, type=str
+            ),
+        }
+
+    def _apply_preferences(self, preferences):
+        app = QtWidgets.QApplication.instance()
+        if app is None:
+            return
+        family = preferences.get("font_family") or DEFAULT_FONT_FAMILY
+        size = int(preferences.get("font_size") or DEFAULT_FONT_SIZE)
+        font = QtGui.QFont(family)
+        font.setPixelSize(size)
+        font.setStyleStrategy(QtGui.QFont.PreferAntialias)
+        app.setFont(font)
+        safe_family = family.replace('"', "")
+        stylesheet = APP_QSS.replace(
+            'font-family: "Microsoft YaHei UI", "Segoe UI", "PingFang SC", sans-serif;',
+            f'font-family: "{safe_family}", "Segoe UI", "PingFang SC", sans-serif;',
+            1,
+        ).replace("font-size: 13px;", f"font-size: {size}px;", 1)
+        app.setStyleSheet(stylesheet)
 
 APP_QSS = r"""
 QWidget {
@@ -1979,8 +2196,30 @@ QFrame#PlaceholderSettingRow {
     background-color: #FAFAFB; border: 1px solid #EAEAEA; border-radius: 7px;
 }
 QLabel#PlaceholderRowLabel { color: #333333; font-weight: bold; }
-QLabel#PlaceholderRowValue { color: #62697A; }
-QLabel#PlaceholderNote { color: #A0A5B0; font-size: 12px; }
+QFontComboBox#SettingsFontFamily, QSpinBox#SettingsFontSize,
+QLineEdit#SettingsEditorPath {
+    min-height: 30px; background-color: #FFFFFF; border: 1px solid #D9DDE5;
+    border-radius: 5px; padding: 0 8px; color: #333333;
+}
+QWidget#SettingsEditorControl { background: transparent; }
+QPushButton#SettingsBrowseButton, QPushButton#SettingsSecondaryButton,
+QPushButton#SettingsPrimaryButton {
+    min-height: 32px; border: 1px solid #D9DDE5; border-radius: 6px;
+    padding: 0 14px; background-color: #FFFFFF;
+}
+QPushButton#SettingsBrowseButton:hover, QPushButton#SettingsSecondaryButton:hover {
+    background-color: #F0F2F5;
+}
+QPushButton#SettingsPrimaryButton {
+    background-color: #1677FF; border-color: #1677FF; color: #FFFFFF;
+    font-weight: bold;
+}
+QPushButton#SettingsPrimaryButton:hover { background-color: #0F6FE8; }
+QLabel#SettingsStatus { color: #28965A; font-size: 12px; }
+QTextBrowser#DocumentationBrowser {
+    background-color: #FFFFFF; border: 1px solid #EAEAEA; border-radius: 7px;
+    padding: 12px 16px; color: #333333; selection-background-color: #CDE1FF;
+}
 
 QToolTip {
     background: #333333; color: #FFFFFF; border: none; border-radius: 6px;

@@ -1,5 +1,7 @@
 import os
+import tempfile
 import unittest
+from pathlib import Path
 from unittest.mock import patch
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
@@ -511,6 +513,27 @@ class QtFrontendLayoutTests(unittest.TestCase):
             QtWidgets.QApplication.clipboard().text(), str(cards[0].file_path)
         )
 
+    def test_artifact_open_uses_configured_editor(self):
+        settings = QtCore.QSettings("plm", "plmConsultant")
+        original = settings.value("tools/editor_path")
+        try:
+            with tempfile.TemporaryDirectory() as directory:
+                editor = Path(directory) / "custom-editor"
+                editor.write_text("editor", encoding="utf-8")
+                settings.setValue("tools/editor_path", str(editor))
+                card = self.window.config_page.artifacts_panel.findChildren(
+                    FileDiffCard
+                )[0]
+                with patch("subprocess.Popen") as popen:
+                    card.open_in_editor()
+                popen.assert_called_once_with([str(editor), str(card.file_path)])
+        finally:
+            if original is None:
+                settings.remove("tools/editor_path")
+            else:
+                settings.setValue("tools/editor_path", original)
+            settings.sync()
+
     def test_settings_and_docs_open_visual_placeholders(self):
         nav = self.window.nav_panel
         nav.settings_btn.click()
@@ -545,6 +568,77 @@ class QtFrontendLayoutTests(unittest.TestCase):
         QtTest.QTest.keyClick(overlay, QtCore.Qt.Key_Escape)
         self.app.processEvents()
         self.assertIsNone(self.window.placeholder_overlay)
+
+    def test_settings_are_saved_and_applied(self):
+        settings = QtCore.QSettings("plm", "plmConsultant")
+        original = {
+            key: settings.value(key)
+            for key in (
+                "appearance/font_family",
+                "appearance/font_size",
+                "tools/editor_path",
+            )
+        }
+        try:
+            self.window.nav_panel.settings_btn.click()
+            self.app.processEvents()
+            overlay = self.window.placeholder_overlay
+            overlay.font_size_spin.setValue(15)
+            overlay.editor_path_edit.setText("custom-editor")
+            overlay.save_settings_btn.click()
+            self.app.processEvents()
+
+            self.assertEqual(settings.value("appearance/font_size", type=int), 15)
+            self.assertEqual(
+                settings.value("tools/editor_path", type=str), "custom-editor"
+            )
+            self.assertEqual(self.app.font().pixelSize(), 15)
+            self.assertEqual(overlay.settings_status.text(), "设置已保存")
+        finally:
+            for key, value in original.items():
+                if value is None:
+                    settings.remove(key)
+                else:
+                    settings.setValue(key, value)
+            settings.sync()
+            self.window._apply_preferences(self.window._read_preferences())
+
+    def test_docs_menu_loads_real_markdown_sections(self):
+        with tempfile.TemporaryDirectory() as directory:
+            docs_dir = Path(directory)
+            (docs_dir / "qt_frontend_guide.md").write_text(
+                "# Frontend Guide\n\nOpen a project and edit its configuration.\n",
+                encoding="utf-8",
+            )
+            (docs_dir / "tool_usage.md").write_text(
+                "# Tool Usage\n\n"
+                "## 2. 配置文件格式（`config/` 下三个 CSV）\n\n"
+                "Controller configuration content.\n\n"
+                "## 3. `plm generate`：生成匹配的 RTL 与 testbench\n\n"
+                "Generation command content.\n",
+                encoding="utf-8",
+            )
+            with patch("plm.frontend.qt.main_window.DOCS_DIR", docs_dir):
+                self.window.nav_panel.docs_btn.click()
+                self.app.processEvents()
+                overlay = self.window.placeholder_overlay
+                self.assertIn("Frontend Guide", overlay.doc_browser.toPlainText())
+
+                overlay.menu_buttons[1].click()
+                self.assertIn(
+                    "Controller configuration content",
+                    overlay.doc_browser.toPlainText(),
+                )
+                self.assertNotIn("Tool Usage", overlay.doc_browser.toPlainText())
+
+                overlay.menu_buttons[2].click()
+                self.assertIn(
+                    "Generation command content", overlay.doc_browser.toPlainText()
+                )
+                self.assertNotIn(
+                    "Controller configuration content",
+                    overlay.doc_browser.toPlainText(),
+                )
 
     def test_required_lucide_assets_exist_and_render(self):
         icon_names = (

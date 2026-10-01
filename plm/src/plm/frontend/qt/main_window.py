@@ -1596,11 +1596,17 @@ class PlaceholderOverlay(QtWidgets.QFrame):
             )
         )
         self.font_family_combo.setFixedSize(280, 36)
+        chevron_path = (LUCIDE_ICON_DIR / "chevron-down.svg").as_posix()
+        self.font_family_combo.setStyleSheet(
+            "QComboBox::drop-down { border: none; width: 40px; }"
+            f"QComboBox::down-arrow {{ image: url({chevron_path});"
+            " width: 16px; height: 16px; }"
+        )
 
         self.font_size_spin = QtWidgets.QSpinBox()
         self.font_size_spin.setObjectName("SettingsFontSize")
         self.font_size_spin.setRange(10, 20)
-        self.font_size_spin.setSuffix(" px")
+        self.font_size_spin.setButtonSymbols(QtWidgets.QAbstractSpinBox.NoButtons)
         self.font_size_spin.setValue(
             settings.value("appearance/font_size", DEFAULT_FONT_SIZE, type=int)
         )
@@ -1665,6 +1671,7 @@ class PlaceholderOverlay(QtWidgets.QFrame):
         self.doc_browser.setObjectName("DocumentationBrowser")
         self.doc_browser.setOpenExternalLinks(True)
         self.doc_browser.setSearchPaths([str(DOCS_DIR)])
+        self.doc_browser.setVerticalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOff)
         self.doc_browser.document().setDefaultStyleSheet(
             "h1 { color: #1A1A1A; font-size: 16px; font-weight: 600; margin: 16px 0 8px 0; }"
             "h2, h3 { color: #1A1A1A; font-size: 14px; font-weight: 600;"
@@ -1810,7 +1817,7 @@ class PlaceholderOverlay(QtWidgets.QFrame):
                 table_format.setCellPadding(8)
                 table_format.setCellSpacing(0)
                 table_format.setWidth(
-                    QtGui.QTextLength(QtGui.QTextLength.PercentageLength, 100)
+                    QtGui.QTextLength(QtGui.QTextLength.FixedLength, 600)
                 )
                 table.setFormat(table_format)
                 for column in range(table.columns()):
@@ -1828,6 +1835,16 @@ class PlaceholderOverlay(QtWidgets.QFrame):
                     header_format.setProperty(QtGui.QTextFormat.FontPixelSize, 13)
                     header_format.setFontWeight(QtGui.QFont.Bold)
                     cell_cursor.mergeCharFormat(header_format)
+            if block_format.property(QtGui.QTextFormat.BlockCodeFence):
+                cursor.select(QtGui.QTextCursor.BlockUnderCursor)
+                code_format = QtGui.QTextCharFormat()
+                code_format.setFontFamilies(["Consolas", "Courier New", "monospace"])
+                code_format.setProperty(QtGui.QTextFormat.FontPixelSize, 13)
+                cursor.setCharFormat(code_format)
+                block_format.setLineHeight(
+                    160, QtGui.QTextBlockFormat.ProportionalHeight
+                )
+                cursor.setBlockFormat(block_format)
             block = block.next()
 
     def _browse_editor(self):

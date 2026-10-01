@@ -560,6 +560,11 @@ class QtFrontendLayoutTests(unittest.TestCase):
             self.assertEqual(row.height(), 56)
         self.assertEqual(overlay.font_family_combo.size(), QtCore.QSize(280, 36))
         self.assertEqual(overlay.font_size_spin.size(), QtCore.QSize(280, 36))
+        self.assertIn("chevron-down.svg", overlay.font_family_combo.styleSheet())
+        self.assertEqual(
+            overlay.font_size_spin.buttonSymbols(),
+            QtWidgets.QAbstractSpinBox.NoButtons,
+        )
 
         nav.docs_btn.click()
         self.app.processEvents()
@@ -618,7 +623,8 @@ class QtFrontendLayoutTests(unittest.TestCase):
             (docs_dir / "qt_frontend_guide.md").write_text(
                 "# Frontend Guide\n\n"
                 "| Name | Meaning |\n|---|---|\n| ctrl_id | Controller ID |\n\n"
-                "操作：右键菜单增删行。\n",
+                "操作：右键菜单增删行。\n\n"
+                "```text\nmode=0  lane0=0-0\n        ↓\n       CtrlA[0]\n```\n",
                 encoding="utf-8",
             )
             (docs_dir / "tool_usage.md").write_text(
@@ -634,13 +640,18 @@ class QtFrontendLayoutTests(unittest.TestCase):
                 self.app.processEvents()
                 overlay = self.window.placeholder_overlay
                 self.assertIn("Frontend Guide", overlay.doc_browser.toPlainText())
-                self.assertTrue(
-                    any(
-                        isinstance(frame, QtGui.QTextTable)
-                        for frame in overlay.doc_browser.document()
-                        .rootFrame()
-                        .childFrames()
-                    )
+                tables = [
+                    frame
+                    for frame in overlay.doc_browser.document()
+                    .rootFrame()
+                    .childFrames()
+                    if isinstance(frame, QtGui.QTextTable)
+                ]
+                self.assertTrue(tables)
+                self.assertEqual(tables[0].format().width().rawValue(), 600)
+                self.assertEqual(
+                    overlay.doc_browser.verticalScrollBarPolicy(),
+                    QtCore.Qt.ScrollBarAlwaysOff,
                 )
 
                 overlay.menu_buttons[1].click()
@@ -663,6 +674,7 @@ class QtFrontendLayoutTests(unittest.TestCase):
         icon_names = (
             "layout-dashboard",
             "arrow-left",
+            "chevron-down",
             "panel-left",
             "x",
             "panel-bottom",
@@ -686,7 +698,7 @@ class QtFrontendLayoutTests(unittest.TestCase):
             "more-horizontal",
             "maximize",
         )
-        self.assertEqual(len(icon_names), 24)
+        self.assertEqual(len(icon_names), 25)
         self.assertEqual(
             {path.stem for path in LUCIDE_ICON_DIR.glob("*.svg")},
             set(icon_names),

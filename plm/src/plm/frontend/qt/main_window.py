@@ -248,10 +248,8 @@ class HoverCard(QtWidgets.QFrame):
 
 
 class ProjectItemWidget(QtWidgets.QWidget):
-    """Expandable local project with clickable session children."""
+    """Single-line selectable project row."""
 
-    heightChanged = QtCore.pyqtSignal()
-    sessionSelected = QtCore.pyqtSignal(str)
     hoverEntered = QtCore.pyqtSignal(object)
     hoverLeft = QtCore.pyqtSignal(object)
     pinRequested = QtCore.pyqtSignal(object)
@@ -260,9 +258,7 @@ class ProjectItemWidget(QtWidgets.QWidget):
     deleteRequested = QtCore.pyqtSignal(object)
     projectSelected = QtCore.pyqtSignal(str)
 
-    def __init__(
-        self, project_name, sessions, expanded=False, project_path=None, parent=None
-    ):
+    def __init__(self, project_name, project_path=None, parent=None):
         super().__init__(parent)
         self.project_name = project_name
         self.project_path = Path(project_path or PROJECT_ROOT / project_name).resolve()
@@ -271,8 +267,6 @@ class ProjectItemWidget(QtWidgets.QWidget):
         root.setSpacing(2)
         self.header = QtWidgets.QPushButton()
         self.header.setObjectName("ProjectButton")
-        self.header.setCheckable(True)
-        self.header.setChecked(expanded)
         self.header.setCursor(QtCore.Qt.PointingHandCursor)
         self.header.clicked.connect(self._header_clicked)
         self.header.setMouseTracking(True)
@@ -314,25 +308,7 @@ class ProjectItemWidget(QtWidgets.QWidget):
         header_layout.addWidget(self.more_btn)
         root.addWidget(self.header)
 
-        self.children = QtWidgets.QWidget()
-        children_layout = QtWidgets.QVBoxLayout(self.children)
-        children_layout.setContentsMargins(20, 0, 0, 0)
-        children_layout.setSpacing(2)
-        self.session_buttons = []
-        for name in sessions:
-            button = QtWidgets.QPushButton(name)
-            button.setObjectName("SessionButton")
-            button.setCursor(QtCore.Qt.PointingHandCursor)
-            button.clicked.connect(
-                lambda _checked=False, value=name: self.sessionSelected.emit(value)
-            )
-            children_layout.addWidget(button)
-            self.session_buttons.append(button)
-        root.addWidget(self.children)
-        self.set_expanded(expanded)
-
-    def _header_clicked(self, expanded):
-        self.set_expanded(expanded)
+    def _header_clicked(self, _checked=False):
         self.projectSelected.emit(self.project_name)
 
     def set_selected(self, selected):
@@ -404,22 +380,9 @@ class ProjectItemWidget(QtWidgets.QWidget):
         self.project_name = new_name
         self.project_name_label.setText(new_name)
 
-    def set_expanded(self, expanded):
-        self.header.setChecked(expanded)
-        self.children.setVisible(expanded)
-        self.heightChanged.emit()
-
-    def select_session(self, selected_name):
-        for button in self.session_buttons:
-            button.setProperty("selected", button.text() == selected_name)
-            button.style().unpolish(button)
-            button.style().polish(button)
-
-
 class ProjectList(QtWidgets.QListWidget):
     """Draggable flat project list populated from local workspace names."""
 
-    sessionSelected = QtCore.pyqtSignal(str)
     projectArchived = QtCore.pyqtSignal(str)
     projectDeleted = QtCore.pyqtSignal(str)
     projectRenamed = QtCore.pyqtSignal(str, str)
@@ -447,12 +410,9 @@ class ProjectList(QtWidgets.QListWidget):
         self.hover_card.pointerLeft.connect(self._schedule_hover_card_hide)
         self.project_widgets = []
         self.selected_project_name = None
-        for project_name, sessions, expanded, project_path in projects:
+        for project_name, project_path in projects:
             item = QtWidgets.QListWidgetItem()
-            widget = ProjectItemWidget(
-                project_name, sessions, expanded, project_path=project_path
-            )
-            widget.sessionSelected.connect(self._select_session)
+            widget = ProjectItemWidget(project_name, project_path=project_path)
             widget.hoverEntered.connect(self._schedule_hover_card)
             widget.hoverLeft.connect(self._project_hover_left)
             widget.pinRequested.connect(self.pin_project)
@@ -460,11 +420,6 @@ class ProjectList(QtWidgets.QListWidget):
             widget.archiveRequested.connect(self.archive_project)
             widget.deleteRequested.connect(self.delete_project)
             widget.projectSelected.connect(self.select_project)
-            widget.heightChanged.connect(
-                lambda current_item=item, current_widget=widget: self._resize_item(
-                    current_item, current_widget
-                )
-            )
             self.addItem(item)
             self.setItemWidget(item, widget)
             self.project_widgets.append(widget)
@@ -633,15 +588,6 @@ class ProjectList(QtWidgets.QListWidget):
     def _resize_item(self, item, widget):
         QtCore.QTimer.singleShot(0, lambda: item.setSizeHint(widget.sizeHint()))
 
-    def _select_session(self, name):
-        for widget in self.project_widgets:
-            widget.select_session(name)
-        self.sessionSelected.emit(name)
-
-    def select_session(self, name):
-        self._select_session(name)
-
-
 class NavPanel(QtWidgets.QFrame):
     """Region 3: actions, draggable projects, and footer navigation."""
 
@@ -735,11 +681,9 @@ class NavPanel(QtWidgets.QFrame):
         root.addWidget(self.project_title)
         config_projects = self._discover_config_projects()
         projects = []
-        for index, (name, config_dir) in enumerate(config_projects):
-            relative_path = config_dir.relative_to(PROJECT_ROOT).as_posix()
-            projects.append((name, (relative_path,), index == 0, config_dir))
+        for name, config_dir in config_projects:
+            projects.append((name, config_dir))
         self.project_list = ProjectList(projects)
-        self.project_list.sessionSelected.connect(self.actionRequested.emit)
         self.project_list.projectArchived.connect(self._project_archived)
         self.project_list.projectDeleted.connect(self._project_deleted)
         self.project_list.projectRenamed.connect(self._project_renamed)
@@ -761,11 +705,10 @@ class NavPanel(QtWidgets.QFrame):
         )
         self.collapsed_project_buttons = []
         for name, config_dir in config_projects:
-            relative_path = config_dir.relative_to(PROJECT_ROOT).as_posix()
             button = self._collapsed_icon_button(
                 "folder",
                 name,
-                lambda _checked=False, value=relative_path: self.actionRequested.emit(
+                lambda _checked=False, value=name: self.project_list.select_project(
                     value
                 ),
             )
@@ -1691,19 +1634,11 @@ QPushButton#HoverPinButton, QPushButton#HoverOpenButton {
 QPushButton#HoverPinButton:hover, QPushButton#HoverOpenButton:hover {
     background-color: #F0F2F5;
 }
-QPushButton#SessionButton {
-    min-height: 28px; max-height: 28px; background: transparent; border: none;
-    border-radius: 6px; color: #666666; text-align: left; padding: 0 8px;
-    font-size: 13px; font-weight: normal;
-}
-QPushButton#ProjectButton:hover, QPushButton#SessionButton:hover {
+QPushButton#ProjectButton:hover {
     background-color: #E2E2EC; color: #1A1A1A;
 }
-QPushButton#ProjectButton:pressed, QPushButton#SessionButton:pressed {
+QPushButton#ProjectButton:pressed {
     background-color: #D5D5E0;
-}
-QPushButton#SessionButton[selected="true"] {
-    background-color: #E6F0FF; color: #1677FF; font-weight: bold;
 }
 QPushButton#NavFooterButton {
     min-height: 32px; max-height: 32px; background: transparent; border: none;

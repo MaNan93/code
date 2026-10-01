@@ -195,6 +195,11 @@ class QtFrontendLayoutTests(unittest.TestCase):
         )
         self.assertEqual(first_project.project_name_label.text(), first_project.project_name)
         self.assertEqual(first_project.header.text(), "")
+        self.assertFalse(first_project.header.isCheckable())
+        self.assertFalse(hasattr(first_project, "session_buttons"))
+        self.assertEqual(
+            first_project.findChildren(QtWidgets.QPushButton, "SessionButton"), []
+        )
         self.assertEqual(first_project.archive_btn.size(), QtCore.QSize(24, 24))
         self.assertEqual(first_project.more_btn.size(), QtCore.QSize(24, 24))
         self.assertTrue(first_project.archive_btn.isHidden())
@@ -215,6 +220,22 @@ class QtFrontendLayoutTests(unittest.TestCase):
         self.assertTrue(nav.docs_btn.property("selected"))
         nav.set_active("settings")
         self.assertTrue(nav.settings_btn.property("selected"))
+
+    def test_project_list_is_flat_and_project_click_does_not_expand(self):
+        project_list = self.window.nav_panel.project_list
+        initial_count = project_list.count()
+        self.assertGreater(initial_count, 0)
+        for row, widget in enumerate(project_list.project_widgets):
+            self.assertEqual(project_list.item(row).sizeHint().height(), 32)
+            self.assertEqual(widget.layout().count(), 1)
+            self.assertIs(widget.layout().itemAt(0).widget(), widget.header)
+            self.assertFalse(widget.header.isCheckable())
+
+        target = project_list.project_widgets[-1]
+        target.header.click()
+        self.assertEqual(project_list.count(), initial_count)
+        self.assertEqual(project_list.selected_project_name, target.project_name)
+        self.assertTrue(target.header.property("selected"))
 
     def test_expanded_nav_icons_share_one_left_edge(self):
         nav = self.window.nav_panel

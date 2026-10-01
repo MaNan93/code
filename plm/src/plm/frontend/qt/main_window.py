@@ -1466,45 +1466,47 @@ class PlaceholderOverlay(QtWidgets.QFrame):
         self.setFocusPolicy(QtCore.Qt.StrongFocus)
 
         root = QtWidgets.QVBoxLayout(self)
-        root.setContentsMargins(32, 32, 32, 32)
-        root.setAlignment(QtCore.Qt.AlignCenter)
-
-        card = QtWidgets.QFrame()
-        card.setObjectName("PlaceholderDialogCard")
-        card.setFixedSize(720, 520)
-        apply_drop_shadow(card, offset=(0, 8), blur_radius=32, alpha=45)
-        root.addWidget(card)
-
-        card_layout = QtWidgets.QVBoxLayout(card)
-        card_layout.setContentsMargins(0, 0, 0, 0)
-        card_layout.setSpacing(0)
+        root.setContentsMargins(0, 0, 0, 0)
+        root.setSpacing(0)
 
         header = QtWidgets.QFrame()
         header.setObjectName("PlaceholderDialogHeader")
-        header.setFixedHeight(56)
+        header.setFixedHeight(64)
         header_layout = QtWidgets.QHBoxLayout(header)
-        header_layout.setContentsMargins(20, 0, 16, 0)
+        header_layout.setContentsMargins(20, 0, 20, 0)
+        header_layout.setSpacing(12)
+        self.back_btn = QtWidgets.QPushButton("←  返回")
+        self.back_btn.setObjectName("PlaceholderBackButton")
+        self.back_btn.setFixedSize(76, 32)
+        self.back_btn.setCursor(QtCore.Qt.PointingHandCursor)
+        self.back_btn.clicked.connect(self.closeRequested.emit)
+        header_layout.addWidget(self.back_btn)
         self.title_label = QtWidgets.QLabel(
             "Settings" if page == "settings" else "Documentation"
         )
         self.title_label.setObjectName("PlaceholderDialogTitle")
         header_layout.addWidget(self.title_label)
         header_layout.addStretch(1)
-        self.close_btn = make_icon_button(
-            "x", "关闭", "PlaceholderCloseButton", 28, 18, "#666666"
-        )
-        self.close_btn.clicked.connect(self.closeRequested.emit)
-        header_layout.addWidget(self.close_btn)
-        card_layout.addWidget(header)
+        root.addWidget(header)
 
-        body = QtWidgets.QWidget()
-        body.setObjectName("PlaceholderDialogBody")
-        body_layout = QtWidgets.QHBoxLayout(body)
-        body_layout.setContentsMargins(0, 0, 0, 0)
-        body_layout.setSpacing(0)
-        body_layout.addWidget(self._build_menu(page))
-        body_layout.addWidget(self._build_content(page), 1)
-        card_layout.addWidget(body, 1)
+        page_area = QtWidgets.QWidget()
+        page_area.setObjectName("PlaceholderPageArea")
+        page_area_layout = QtWidgets.QVBoxLayout(page_area)
+        page_area_layout.setContentsMargins(32, 32, 32, 32)
+
+        panel = QtWidgets.QFrame()
+        panel.setObjectName("PlaceholderPagePanel")
+        panel.setFixedWidth(900)
+        panel.setMinimumHeight(460)
+        panel.setMaximumHeight(620)
+        apply_drop_shadow(panel, offset=(0, 4), blur_radius=20, alpha=22)
+        panel_layout = QtWidgets.QHBoxLayout(panel)
+        panel_layout.setContentsMargins(0, 0, 0, 0)
+        panel_layout.setSpacing(0)
+        panel_layout.addWidget(self._build_menu(page))
+        panel_layout.addWidget(self._build_content(page), 1)
+        page_area_layout.addWidget(panel, 1, QtCore.Qt.AlignCenter)
+        root.addWidget(page_area, 1)
 
     def _build_menu(self, page):
         menu = QtWidgets.QFrame()
@@ -1937,25 +1939,31 @@ QMenu::item:selected { background-color: #F0F2F5; color: #1A1A1A; }
 QMenu::item:disabled { color: #B0B5C0; }
 QMenu::separator { height: 1px; background: #EAEAEA; margin: 4px 8px; }
 
-QFrame#PlaceholderOverlay { background-color: rgba(22, 28, 40, 105); }
-QFrame#PlaceholderDialogCard {
-    background-color: #FFFFFF; border: 1px solid #E0E0E0; border-radius: 10px;
-}
+QFrame#PlaceholderOverlay { background-color: #F5F6F8; }
 QFrame#PlaceholderDialogHeader {
-    background-color: #FFFFFF; border: none; border-bottom: 1px solid #EAEAEA;
-    border-top-left-radius: 10px; border-top-right-radius: 10px;
+    background-color: #FFFFFF; border: none; border-bottom: 1px solid #E0E0E0;
 }
 QLabel#PlaceholderDialogTitle {
     color: #1A1A1A; font-size: 17px; font-weight: bold;
 }
-QPushButton#PlaceholderCloseButton {
-    background: transparent; border: none; border-radius: 6px; padding: 0;
+QPushButton#PlaceholderBackButton {
+    background: transparent; border: 1px solid #E0E0E0; border-radius: 6px;
+    color: #4A5060; padding: 0;
 }
-QPushButton#PlaceholderCloseButton:hover { background-color: #F0F2F5; }
-QWidget#PlaceholderDialogBody, QWidget#PlaceholderContent { background: #FFFFFF; }
+QPushButton#PlaceholderBackButton:hover {
+    background-color: #F0F2F5; border-color: #D0D4DC; color: #1A1A1A;
+}
+QWidget#PlaceholderPageArea { background-color: #F5F6F8; }
+QFrame#PlaceholderPagePanel {
+    background-color: #FFFFFF; border: 1px solid #E0E0E0; border-radius: 10px;
+}
+QWidget#PlaceholderContent {
+    background: #FFFFFF; border-top-right-radius: 10px;
+    border-bottom-right-radius: 10px;
+}
 QFrame#PlaceholderMenu {
     background-color: #F7F7FA; border: none; border-right: 1px solid #EAEAEA;
-    border-bottom-left-radius: 10px;
+    border-top-left-radius: 10px; border-bottom-left-radius: 10px;
 }
 QPushButton#PlaceholderMenuButton {
     min-height: 36px; background: transparent; border: none; border-radius: 6px;

@@ -521,6 +521,13 @@ class QtFrontendLayoutTests(unittest.TestCase):
         self.assertEqual(overlay.page, "settings")
         self.assertEqual(overlay.title_label.text(), "Settings")
         self.assertEqual(overlay.geometry(), self.window.rect())
+        self.assertEqual(overlay.back_btn.text(), "←  返回")
+        panel = overlay.findChild(QtWidgets.QFrame, "PlaceholderPagePanel")
+        self.assertEqual(panel.width(), 900)
+        self.assertEqual(
+            panel.mapTo(overlay, panel.rect().center()).x(),
+            overlay.rect().center().x(),
+        )
 
         nav.docs_btn.click()
         self.app.processEvents()
@@ -528,7 +535,13 @@ class QtFrontendLayoutTests(unittest.TestCase):
         self.assertIsNotNone(overlay)
         self.assertEqual(overlay.page, "docs")
         self.assertEqual(overlay.title_label.text(), "Documentation")
+        overlay.back_btn.click()
+        self.app.processEvents()
+        self.assertIsNone(self.window.placeholder_overlay)
 
+        nav.settings_btn.click()
+        self.app.processEvents()
+        overlay = self.window.placeholder_overlay
         QtTest.QTest.keyClick(overlay, QtCore.Qt.Key_Escape)
         self.app.processEvents()
         self.assertIsNone(self.window.placeholder_overlay)

@@ -544,13 +544,22 @@ class QtFrontendLayoutTests(unittest.TestCase):
         self.assertEqual(overlay.page, "settings")
         self.assertEqual(overlay.title_label.text(), "Settings")
         self.assertEqual(overlay.geometry(), self.window.rect())
-        self.assertEqual(overlay.back_btn.text(), "←  返回")
+        self.assertEqual(overlay.back_btn.text(), "")
+        self.assertEqual(overlay.back_btn.size(), QtCore.QSize(32, 32))
+        self.assertEqual(overlay.back_btn.iconSize(), QtCore.QSize(20, 20))
         panel = overlay.findChild(QtWidgets.QFrame, "PlaceholderPagePanel")
         self.assertEqual(panel.width(), 900)
+        self.assertEqual(panel.mapTo(overlay, QtCore.QPoint()).y(), 104)
         self.assertEqual(
             panel.mapTo(overlay, panel.rect().center()).x(),
             overlay.rect().center().x(),
         )
+        divider = overlay.findChild(QtWidgets.QFrame, "PlaceholderVerticalDivider")
+        self.assertEqual(divider.width(), 1)
+        for row in overlay.setting_rows.values():
+            self.assertEqual(row.height(), 48)
+        self.assertEqual(overlay.font_family_combo.size(), QtCore.QSize(240, 32))
+        self.assertEqual(overlay.font_size_spin.size(), QtCore.QSize(240, 32))
 
         nav.docs_btn.click()
         self.app.processEvents()
@@ -607,7 +616,9 @@ class QtFrontendLayoutTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             docs_dir = Path(directory)
             (docs_dir / "qt_frontend_guide.md").write_text(
-                "# Frontend Guide\n\nOpen a project and edit its configuration.\n",
+                "# Frontend Guide\n\n"
+                "| Name | Meaning |\n|---|---|\n| ctrl_id | Controller ID |\n\n"
+                "操作：右键菜单增删行。\n",
                 encoding="utf-8",
             )
             (docs_dir / "tool_usage.md").write_text(
@@ -623,6 +634,14 @@ class QtFrontendLayoutTests(unittest.TestCase):
                 self.app.processEvents()
                 overlay = self.window.placeholder_overlay
                 self.assertIn("Frontend Guide", overlay.doc_browser.toPlainText())
+                self.assertTrue(
+                    any(
+                        isinstance(frame, QtGui.QTextTable)
+                        for frame in overlay.doc_browser.document()
+                        .rootFrame()
+                        .childFrames()
+                    )
+                )
 
                 overlay.menu_buttons[1].click()
                 self.assertIn(
@@ -643,6 +662,7 @@ class QtFrontendLayoutTests(unittest.TestCase):
     def test_required_lucide_assets_exist_and_render(self):
         icon_names = (
             "layout-dashboard",
+            "arrow-left",
             "panel-left",
             "x",
             "panel-bottom",
@@ -666,7 +686,7 @@ class QtFrontendLayoutTests(unittest.TestCase):
             "more-horizontal",
             "maximize",
         )
-        self.assertEqual(len(icon_names), 23)
+        self.assertEqual(len(icon_names), 24)
         self.assertEqual(
             {path.stem for path in LUCIDE_ICON_DIR.glob("*.svg")},
             set(icon_names),

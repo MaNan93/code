@@ -1,10 +1,4 @@
-"""Codex-style PyQt5 shell for plmConsultant using the native title bar.
-
-This file is deliberately self-contained: the complete widget hierarchy,
-interactions, Lucide SVG loader, and application QSS all live here. Business
-actions are represented by signals and safe placeholders so the UI can run on
-its own while PLM generation is connected later.
-"""
+"""Codex-style PyQt5 views for plmConsultant using the native title bar."""
 
 import os
 import shutil
@@ -14,15 +8,21 @@ from pathlib import Path
 
 from PyQt5 import QtCore, QtGui, QtSvg, QtWidgets
 
+from plm.frontend.qt.services import (
+    DEFAULT_EDITOR,
+    DEFAULT_FONT_FAMILY,
+    DEFAULT_FONT_SIZE,
+    ProjectService,
+    SettingsStore,
+)
+from plm.frontend.qt.styles import APP_QSS, build_app_stylesheet
+
 
 APP_ICON_PATH = Path(__file__).resolve().parent / "assets" / "app_icon.svg"
 LUCIDE_ICON_DIR = Path(__file__).resolve().parent / "assets" / "icons"
 PROJECT_ROOT = Path(__file__).resolve().parents[4]
 DOCS_DIR = Path(__file__).resolve().parents[2] / "docs"
 ICON_SIZE = 20
-DEFAULT_FONT_FAMILY = "Microsoft YaHei UI"
-DEFAULT_FONT_SIZE = 13
-DEFAULT_EDITOR = "notepad++" if sys.platform == "win32" else "gvim"
 
 
 def load_lucide_icon(
@@ -601,8 +601,10 @@ class NavPanel(QtWidgets.QFrame):
     project_renamed = QtCore.pyqtSignal(str, str)
     project_selected = QtCore.pyqtSignal(str)
 
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, project_service=None, settings_store=None):
         super().__init__(parent)
+        self.project_service = project_service or ProjectService(PROJECT_ROOT)
+        self.settings_store = settings_store or SettingsStore()
         self.setObjectName("NavPanel")
         self.expanded_width = 260
         self.collapsed_width = 56
@@ -683,7 +685,7 @@ class NavPanel(QtWidgets.QFrame):
         self.project_title = QtWidgets.QLabel("项目")
         self.project_title.setObjectName("ProjectSectionTitle")
         root.addWidget(self.project_title)
-        config_projects = self._discover_config_projects()
+        config_projects = self.project_service.discover()
         projects = []
         for name, config_dir in config_projects:
             projects.append((name, config_dir))
@@ -694,8 +696,7 @@ class NavPanel(QtWidgets.QFrame):
         self.project_list.projectSelected.connect(self._project_selected)
         root.addWidget(self.project_list, 1)
 
-        self._settings = QtCore.QSettings("plm", "plmConsultant")
-        recent_project = self._settings.value("navigation/recent_project", "")
+        recent_project = self.settings_store.recent_project()
         self.current_project_name = self.project_list.select_project(
             recent_project, emit_signal=False
         )
@@ -899,34 +900,6 @@ class NavPanel(QtWidgets.QFrame):
         button.clicked.connect(lambda: self.actionRequested.emit(action))
         return button
 
-    def _discover_config_projects(self):
-        """Return local PLM config sets, not sibling source-code directories."""
-        required_files = {"controllers.csv", "lane_mapping.csv", "pipe_signals.csv"}
-        search_roots = (PROJECT_ROOT / "test", PROJECT_ROOT / "configs")
-        discovered = []
-        seen = set()
-        for search_root in search_roots:
-            if not search_root.is_dir():
-                continue
-            for controllers_file in search_root.rglob("controllers.csv"):
-                config_dir = controllers_file.parent.resolve()
-                if config_dir in seen:
-                    continue
-                try:
-                    file_names = {path.name for path in config_dir.iterdir() if path.is_file()}
-                except OSError:
-                    continue
-                if not required_files.issubset(file_names):
-                    continue
-                seen.add(config_dir)
-                project_name = (
-                    config_dir.parent.name
-                    if config_dir.name.casefold() == "config"
-                    else config_dir.name
-                )
-                discovered.append((project_name, config_dir))
-        return sorted(discovered, key=lambda item: item[0].casefold())
-
     def _project_archived(self, project_name):
         self._remove_collapsed_project(project_name)
         self.project_archived.emit(project_name)
@@ -944,7 +917,7 @@ class NavPanel(QtWidgets.QFrame):
 
     def _project_selected(self, project_name):
         self.current_project_name = project_name
-        self._settings.setValue("navigation/recent_project", project_name)
+        self.settings_store.set_recent_project(project_name)
         self.project_selected.emit(project_name)
 
     def emit_current_project(self):
@@ -1191,8 +1164,7 @@ class FileDiffCard(QtWidgets.QFrame):
         QtWidgets.QApplication.clipboard().setText(str(self.file_path))
 
     def open_in_editor(self):
-        settings = QtCore.QSettings("plm", "plmConsultant")
-        editor = settings.value("tools/editor_path", DEFAULT_EDITOR, type=str)
+        editor = SettingsStore().editor_path()
         configured_path = Path(editor).expanduser()
         executable = str(configured_path) if configured_path.is_file() else shutil.which(editor)
         if executable is None:
@@ -1465,9 +1437,10 @@ class PlaceholderOverlay(QtWidgets.QFrame):
     closeRequested = QtCore.pyqtSignal()
     preferencesSaved = QtCore.pyqtSignal(dict)
 
-    def __init__(self, page, parent=None):
+    def __init__(self, page, parent=None, settings_store=None):
         super().__init__(parent)
         self.page = page
+        self.settings_store = settings_store or SettingsStore()
         self.setObjectName("PlaceholderOverlay")
         self.setAttribute(QtCore.Qt.WA_StyledBackground, True)
         self.setFocusPolicy(QtCore.Qt.StrongFocus)
@@ -1586,13 +1559,13 @@ class PlaceholderOverlay(QtWidgets.QFrame):
         content, layout = self._content_shell(
             "General", "配置会保存在本机，并在下次启动时自动恢复。"
         )
-        settings = QtCore.QSettings("plm", "plmConsultant")
+        preferences = self.settings_store.preferences()
 
         self.font_family_combo = QtWidgets.QFontComboBox()
         self.font_family_combo.setObjectName("SettingsFontFamily")
         self.font_family_combo.setCurrentFont(
             QtGui.QFont(
-                settings.value("appearance/font_family", DEFAULT_FONT_FAMILY, type=str)
+                preferences["font_family"]
             )
         )
         self.font_family_combo.setFixedSize(280, 36)
@@ -1609,7 +1582,7 @@ class PlaceholderOverlay(QtWidgets.QFrame):
         self.font_size_spin.setRange(10, 20)
         self.font_size_spin.setButtonSymbols(QtWidgets.QAbstractSpinBox.NoButtons)
         self.font_size_spin.setValue(
-            settings.value("appearance/font_size", DEFAULT_FONT_SIZE, type=int)
+            preferences["font_size"]
         )
         self.font_size_spin.setFixedSize(280, 36)
 
@@ -1620,7 +1593,7 @@ class PlaceholderOverlay(QtWidgets.QFrame):
         editor_layout.setContentsMargins(0, 0, 0, 0)
         editor_layout.setSpacing(8)
         self.editor_path_edit = QtWidgets.QLineEdit(
-            settings.value("tools/editor_path", DEFAULT_EDITOR, type=str)
+            preferences["editor_path"]
         )
         self.editor_path_edit.setObjectName("SettingsEditorPath")
         self.editor_path_edit.setFixedHeight(36)
@@ -1867,11 +1840,7 @@ class PlaceholderOverlay(QtWidgets.QFrame):
 
     def _save_settings(self):
         preferences = self._preferences()
-        settings = QtCore.QSettings("plm", "plmConsultant")
-        settings.setValue("appearance/font_family", preferences["font_family"])
-        settings.setValue("appearance/font_size", preferences["font_size"])
-        settings.setValue("tools/editor_path", preferences["editor_path"])
-        settings.sync()
+        self.settings_store.save_preferences(preferences)
         self.preferencesSaved.emit(preferences)
         self.settings_status.setText("设置已保存")
 
@@ -1897,7 +1866,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def __init__(self):
         super().__init__()
-        self._settings = QtCore.QSettings("plm", "plmConsultant")
+        self.settings_store = SettingsStore()
         self._apply_preferences(self._read_preferences())
         self.setWindowTitle("plmConsultant")
         self.resize(1400, 900)
@@ -1910,7 +1879,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.main_splitter.setObjectName("MainSplitter")
         self.main_splitter.setHandleWidth(4)
         self.main_splitter.setChildrenCollapsible(False)
-        self.nav_panel = NavPanel()
+        self.nav_panel = NavPanel(settings_store=self.settings_store)
         self.main_splitter.addWidget(self.nav_panel)
 
         self.content_splitter = QtWidgets.QSplitter(QtCore.Qt.Vertical)
@@ -1968,7 +1937,9 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def _show_placeholder(self, page):
         self._close_placeholder()
-        self.placeholder_overlay = PlaceholderOverlay(page, self)
+        self.placeholder_overlay = PlaceholderOverlay(
+            page, self, settings_store=self.settings_store
+        )
         self.placeholder_overlay.setGeometry(self.rect())
         self.placeholder_overlay.closeRequested.connect(self._close_placeholder)
         self.placeholder_overlay.preferencesSaved.connect(self._apply_preferences)
@@ -1990,17 +1961,7 @@ class MainWindow(QtWidgets.QMainWindow):
             self.placeholder_overlay.setGeometry(self.rect())
 
     def _read_preferences(self):
-        return {
-            "font_family": self._settings.value(
-                "appearance/font_family", DEFAULT_FONT_FAMILY, type=str
-            ),
-            "font_size": self._settings.value(
-                "appearance/font_size", DEFAULT_FONT_SIZE, type=int
-            ),
-            "editor_path": self._settings.value(
-                "tools/editor_path", DEFAULT_EDITOR, type=str
-            ),
-        }
+        return self.settings_store.preferences()
 
     def _apply_preferences(self, preferences):
         app = QtWidgets.QApplication.instance()
@@ -2012,338 +1973,8 @@ class MainWindow(QtWidgets.QMainWindow):
         font.setPixelSize(size)
         font.setStyleStrategy(QtGui.QFont.PreferAntialias)
         app.setFont(font)
-        safe_family = family.replace('"', "")
-        stylesheet = APP_QSS.replace(
-            'font-family: "Microsoft YaHei UI", "Segoe UI", "PingFang SC", sans-serif;',
-            f'font-family: "{safe_family}", "Segoe UI", "PingFang SC", sans-serif;',
-            1,
-        ).replace("font-size: 13px;", f"font-size: {size}px;", 1)
-        app.setStyleSheet(stylesheet)
+        app.setStyleSheet(build_app_stylesheet(family, size))
 
-APP_QSS = r"""
-QWidget {
-    color: #333333;
-    font-family: "Microsoft YaHei UI", "Segoe UI", "PingFang SC", sans-serif;
-    font-size: 13px;
-    font-weight: normal;
-}
-QWidget:disabled { color: #B0B5C0; }
-QMainWindow, QWidget#AppRoot { background-color: #F1F1F5; }
-QLabel { background: transparent; }
-QSplitter::handle { background-color: transparent; }
-QSplitter#MainSplitter { background-color: #FFFFFF; }
-QSplitter::handle:horizontal {
-    background-color: transparent;
-    width: 4px;
-}
-QSplitter::handle:horizontal:hover { background-color: #D0D0D0; }
-QSplitter::handle:vertical { height: 1px; }
-
-QFrame#NavPanel {
-    background-color: #F1F1F5; border-right: 1px solid #E0E0E0;
-}
-QFrame#NavPanel[collapsed="true"] {
-    background-color: #F6F6FA; border-right: none;
-}
-QWidget#NavBrandRow { background: transparent; }
-QLabel#NavAppName { color: #1A1A1A; font-size: 14px; font-weight: bold; }
-QLabel#NavLogo,
-QLabel#ProjectFolderIcon,
-QPushButton#NavCollapseButton,
-QPushButton#NavIconBtn,
-QPushButton#NavActionButton,
-QPushButton#ProjectButton,
-QPushButton#ProjectArchiveBtn,
-QPushButton#ProjectMoreBtn,
-QPushButton#NavFooterButton {
-    margin: 0; padding: 0;
-}
-QPushButton#NavCollapseButton {
-    background: transparent; border: none; border-radius: 6px; padding: 0;
-}
-QPushButton#NavCollapseButton:hover { background-color: #E2E2EC; }
-QPushButton#NavCollapseButton:pressed { background-color: #D5D5E0; }
-QPushButton#NavIconBtn {
-    min-width: 32px; max-width: 32px; min-height: 32px; max-height: 32px;
-    background: transparent; border: none; border-radius: 6px;
-    padding: 0; text-align: center;
-}
-QPushButton#NavIconBtn:hover { background-color: #E2E2EC; }
-QPushButton#NavIconBtn:pressed { background-color: #D5D5E0; }
-QFrame#NavPanel[collapsed="true"] QPushButton#NavActionButton {
-    min-width: 32px; max-width: 32px; min-height: 32px; max-height: 32px;
-    padding: 0; text-align: center;
-}
-QPushButton#FloatingNavButton {
-    background-color: #FFFFFF; border: 1px solid #E0E0E0;
-    border-radius: 6px; padding: 0;
-}
-QPushButton#FloatingNavButton:hover { background-color: #F0F2F5; }
-QPushButton#FloatingNavButton:pressed { background-color: #E2E2EC; }
-QPushButton#NavActionButton {
-    min-height: 32px; max-height: 32px; background: transparent; border: none;
-    border-radius: 6px; color: #333333; text-align: left; padding: 0;
-}
-QPushButton#NavActionButton:hover {
-    background-color: #E2E2EC; color: #1A1A1A;
-}
-QPushButton#NavActionButton:pressed { background-color: #D5D5E0; }
-QLabel#ProjectSectionTitle {
-    color: #8C92A4; font-size: 12px; font-weight: bold; padding: 4px 8px;
-}
-QListWidget#ProjectList {
-    background: transparent; border: none; outline: none; padding: 0;
-}
-QListWidget#ProjectList::item { background: transparent; border: none; padding: 0; }
-QPushButton#ProjectButton {
-    min-height: 32px; max-height: 32px; background: transparent; border: none;
-    border-radius: 6px; padding: 0;
-}
-QPushButton#ProjectButton[selected="true"] {
-    background-color: #E6F0FF;
-}
-QPushButton#ProjectArchiveBtn, QPushButton#ProjectMoreBtn {
-    min-width: 24px; max-width: 24px; min-height: 24px; max-height: 24px;
-    background: transparent; border: none; border-radius: 4px; padding: 0;
-}
-QPushButton#ProjectArchiveBtn:hover, QPushButton#ProjectMoreBtn:hover {
-    background-color: #E2E2EC;
-}
-QLabel#ProjectName {
-    color: #1A1A1A; font-size: 14px; font-weight: bold;
-}
-QLabel#ProjectName[selected="true"] {
-    color: #1677FF; font-weight: bold;
-}
-QFrame#ProjectHoverCard {
-    background-color: #FFFFFF; border: 1px solid #EAEAEA; border-radius: 8px;
-}
-QLabel#HoverProjectName {
-    color: #1A1A1A; font-size: 14px; font-weight: bold;
-}
-QLabel#HoverProjectPath {
-    color: #666666; font-size: 13px; font-weight: normal;
-}
-QFrame#HoverCardDivider {
-    background-color: #EAEAEA; border: none;
-}
-QPushButton#HoverPinButton, QPushButton#HoverOpenButton {
-    background: transparent; border: none; border-radius: 4px; padding: 0;
-}
-QPushButton#HoverPinButton:hover, QPushButton#HoverOpenButton:hover {
-    background-color: #F0F2F5;
-}
-QPushButton#ProjectButton:hover {
-    background-color: #E2E2EC; color: #1A1A1A;
-}
-QPushButton#ProjectButton:pressed {
-    background-color: #D5D5E0;
-}
-QPushButton#NavFooterButton {
-    min-height: 32px; max-height: 32px; background: transparent; border: none;
-    border-radius: 6px; color: #666666; padding: 0; text-align: left;
-}
-QPushButton#NavFooterButton:hover { background-color: #E2E2EC; color: #1A1A1A; }
-QPushButton#NavFooterButton:pressed { background-color: #D5D5E0; }
-QPushButton#NavFooterButton[selected="true"] {
-    background-color: #E6F0FF; color: #1677FF; font-weight: bold;
-}
-
-QPushButton#ProjectDeleteMenuButton {
-    min-height: 32px; max-height: 32px; background: transparent; border: none;
-    border-radius: 4px; padding: 4px 12px; text-align: left;
-    color: #CF222E; font-size: 13px;
-}
-QPushButton#ProjectDeleteMenuButton:hover { background-color: #F0F2F5; }
-
-QFrame#ConfigPage {
-    background-color: #FFFFFF; border-top-left-radius: 8px;
-}
-QFrame#ConfigHeader {
-    background-color: #FFFFFF; border-bottom: 1px solid #EAEAEA;
-    border-top-left-radius: 8px;
-}
-QLabel#ConfigSessionTitle {
-    color: #1A1A1A; font-size: 15px; font-weight: bold;
-}
-QLineEdit#ConfigSessionEditor {
-    background: #FFFFFF; border: 1px solid #1677FF; border-radius: 8px;
-    color: #1A1A1A; padding: 4px 8px; selection-background-color: #E6F0FF;
-}
-QPushButton#HeaderButton {
-    background: transparent; border: none; border-radius: 6px; padding: 0;
-}
-QPushButton#HeaderButton:hover { background-color: #F0F2F5; }
-QPushButton#HeaderButton:pressed { background-color: #D5D5E0; }
-QWidget#ConfigArea { background-color: #FFFFFF; }
-QTabWidget#ConfigTabs::pane { border: none; background: #FFFFFF; top: -1px; }
-QTabWidget#ConfigTabs QTabBar { background: #FFFFFF; }
-QTabWidget#ConfigTabs QTabBar::tab {
-    background: transparent; color: #4A5060; padding: 8px 20px 10px 20px;
-    margin-right: 4px; border: none; border-bottom: 2px solid transparent;
-    font-size: 13px; min-width: 80px;
-}
-QTabWidget#ConfigTabs QTabBar::tab:hover:!selected {
-    color: #1A1A1A;
-}
-QTabWidget#ConfigTabs QTabBar::tab:selected {
-    color: #1677FF; border-bottom: 2px solid #1677FF;
-}
-QLabel#ConfigTitle { color: #1A1A1A; font-size: 15px; font-weight: bold; }
-QLabel#ConfigDescription { color: #666666; font-size: 13px; font-weight: normal; }
-QScrollArea#ConfigScroll { background: #FFFFFF; border: none; }
-QWidget#ConfigScrollContent { background: #FFFFFF; }
-QFrame#ConfigPlaceholderCard {
-    background-color: #FFFFFF; border: 1px solid #EAEAEA; border-radius: 6px;
-}
-QLabel#PlaceholderLabel { color: #1A1A1A; font-size: 14px; font-weight: bold; }
-
-QFrame#LogPanel { background-color: #FFFFFF; border-top: 1px solid #E0E0E0; }
-QFrame#LogHeader { background-color: #FFFFFF; border: none; }
-QLabel#LogTabTitle { color: #333333; font-size: 13px; font-weight: bold; }
-QPushButton#LogClearButton, QPushButton#LogCloseBtn {
-    background: transparent; border: none; border-radius: 6px; padding: 0;
-}
-QPushButton#LogClearButton:hover, QPushButton#LogCloseBtn:hover {
-    background-color: #E2E2EC; border-radius: 4px;
-}
-QPushButton#LogClearButton:pressed, QPushButton#LogCloseBtn:pressed {
-    background-color: #D5D5E0;
-}
-QPlainTextEdit#LogOutput {
-    background-color: #FFFFFF; color: #333333; border: none; padding: 8px 16px;
-    font-family: Consolas, "Courier New", monospace; font-size: 12px;
-}
-
-QFrame#ArtifactsPanel {
-    background-color: #FAFAFB; border: 1px solid #E0E0E0; border-radius: 8px;
-}
-QWidget#ArtifactsToolbar, QWidget#ArtifactsContent { background: transparent; }
-QPushButton#ArtifactsToolButton, QPushButton#CardActionButton {
-    background: transparent; border: none; border-radius: 6px; padding: 0;
-}
-QPushButton#ArtifactsToolButton:hover, QPushButton#CardActionButton:hover {
-    background-color: #F0F2F5;
-}
-QPushButton#ArtifactsToolButton:pressed, QPushButton#CardActionButton:pressed {
-    background-color: #D5D5E0;
-}
-QScrollArea#ArtifactsScroll { background: transparent; border: none; }
-QFrame#FileDiffCard {
-    background-color: #FFFFFF; border: 1px solid #EAEAEA; border-radius: 6px;
-}
-QWidget#FileCardHeader {
-    background-color: #F6F8FA; border-bottom: 1px solid #EAEAEA;
-}
-QLabel#ModifiedMarker {
-    background-color: #F0F2F5; color: #8C92A4; border-radius: 4px;
-    font-size: 12px; font-weight: bold;
-}
-QLabel#FilePathLabel { color: #1A1A1A; font-size: 13px; font-weight: bold; }
-QWidget#DiffLine { background-color: #F6F8FA; min-height: 24px; }
-QWidget#DiffLine[mode="add"] { background-color: #D8F5DC; }
-QWidget#DiffLine[mode="del"] { background-color: #FFE0DC; }
-QWidget#DiffLine QLabel { background: transparent; }
-QWidget#DiffLine[mode="add"] QLabel#DiffCode { color: #1A7F37; }
-QWidget#DiffLine[mode="del"] QLabel#DiffCode { color: #CF222E; }
-QLabel#DiffLineNumber {
-    color: #A0A5B0; padding-right: 6px; border-right: 1px solid #EAEAEA;
-    font-family: Consolas, "Courier New", monospace; font-size: 12px;
-}
-QLabel#DiffCode {
-    color: #333333; padding: 3px 7px;
-    font-family: Consolas, "Courier New", monospace; font-size: 12px;
-}
-
-QScrollBar:vertical { width: 6px; background: transparent; border: none; margin: 0; }
-QScrollBar::handle:vertical {
-    background: #DCDCDC; border-radius: 3px; min-height: 30px;
-}
-QScrollBar::handle:vertical:hover { background: #B0B5C0; }
-QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0; }
-QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical { background: transparent; }
-QMenu {
-    min-width: 180px; background-color: #FFFFFF; border: 1px solid #EAEAEA;
-    border-radius: 8px; padding: 6px;
-}
-QMenu::item {
-    height: 32px; padding: 4px 12px; border-radius: 4px;
-    color: #333333; font-size: 13px;
-}
-QMenu::item:selected { background-color: #F0F2F5; color: #1A1A1A; }
-QMenu::item:disabled { color: #B0B5C0; }
-QMenu::separator { height: 1px; background: #EAEAEA; margin: 4px 8px; }
-
-QFrame#PlaceholderOverlay { background-color: #FFFFFF; }
-QFrame#PlaceholderDialogHeader {
-    background-color: #FFFFFF; border: none; border-bottom: 1px solid #EAEAEA;
-}
-QLabel#PlaceholderDialogTitle {
-    color: #1A1A1A; font-size: 18px; font-weight: bold;
-}
-QPushButton#PlaceholderBackButton {
-    background: transparent; border: none; border-radius: 6px; padding: 0;
-}
-QPushButton#PlaceholderBackButton:hover {
-    background-color: #F0F2F5;
-}
-QWidget#PlaceholderPageArea, QWidget#PlaceholderPagePanel,
-QWidget#PlaceholderContent, QWidget#PlaceholderTabs { background-color: #FFFFFF; }
-QFrame#PlaceholderTabDivider { background-color: #EAEAEA; border: none; }
-QPushButton#PlaceholderMenuButton {
-    min-height: 36px; max-height: 36px; background: transparent;
-    border: none; border-bottom: 2px solid transparent; border-radius: 0;
-    color: #666666; font-size: 13px; padding: 0 12px;
-}
-QPushButton#PlaceholderMenuButton:hover { color: #1A1A1A; }
-QPushButton#PlaceholderMenuButton[selected="true"] {
-    background: transparent; color: #1677FF; font-size: 13px; font-weight: bold;
-    border-bottom: 2px solid #1677FF;
-}
-QLabel#PlaceholderHeading { color: #1A1A1A; font-size: 18px; font-weight: bold; }
-QLabel#PlaceholderDescription { color: #666666; font-size: 13px; }
-QFrame#PlaceholderSettingRow {
-    background-color: #FFFFFF; border: none; border-bottom: 1px solid #EAEAEA;
-    border-radius: 0;
-}
-QLabel#PlaceholderRowLabel { color: #333333; font-size: 13px; font-weight: normal; }
-QFontComboBox#SettingsFontFamily, QSpinBox#SettingsFontSize,
-QLineEdit#SettingsEditorPath {
-    min-height: 34px; max-height: 34px; background-color: #FFFFFF;
-    border: 1px solid #E0E0E0; border-radius: 6px; padding: 0 12px; color: #333333;
-}
-QFontComboBox#SettingsFontFamily:focus, QSpinBox#SettingsFontSize:focus,
-QLineEdit#SettingsEditorPath:focus { border-color: #1677FF; }
-QWidget#SettingsEditorControl { background: transparent; }
-QPushButton#SettingsBrowseButton {
-    min-height: 34px; max-height: 34px; border: 1px solid #E0E0E0;
-    border-radius: 6px; padding: 0 10px; background-color: #FFFFFF; color: #333333;
-}
-QPushButton#SettingsSecondaryButton, QPushButton#SettingsPrimaryButton {
-    min-height: 34px; max-height: 34px; border: 1px solid #E0E0E0; border-radius: 6px;
-    padding: 0 20px; background-color: #FFFFFF; color: #333333;
-}
-QPushButton#SettingsBrowseButton:hover, QPushButton#SettingsSecondaryButton:hover {
-    background-color: #F0F2F5;
-}
-QPushButton#SettingsPrimaryButton {
-    background-color: #1677FF; border-color: #1677FF; color: #FFFFFF;
-    font-weight: bold;
-}
-QPushButton#SettingsPrimaryButton:hover {
-    background-color: #4096FF; border-color: #4096FF;
-}
-QLabel#SettingsStatus { color: #28965A; font-size: 12px; }
-QTextBrowser#DocumentationBrowser {
-    background-color: #FFFFFF; border: none; padding: 0;
-    color: #333333; selection-background-color: #CDE1FF;
-}
-
-QToolTip {
-    background: #333333; color: #FFFFFF; border: none; border-radius: 6px;
-    padding: 5px 7px;
-}
-"""
 
 
 if __name__ == "__main__":

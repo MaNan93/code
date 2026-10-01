@@ -19,6 +19,7 @@ from plm.frontend.qt.main_window import (
     LogPanel,
     MainWindow,
     NavPanel,
+    ProjectItemWidget,
     ProjectList,
     load_lucide_icon,
 )
@@ -492,6 +493,48 @@ class QtFrontendLayoutTests(unittest.TestCase):
         self.assertEqual(len(archived_spy), 1)
         self.assertEqual(archived_spy[0][0], archived_name)
         self.assertTrue(archived_path.exists())
+
+    def test_project_item_is_independent_and_keeps_its_action_menu(self):
+        self.assertEqual(
+            ProjectItemWidget.__module__,
+            "plm.frontend.qt.widgets.project_item",
+        )
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            widget = ProjectItemWidget("demo", temporary_directory)
+            pin_spy = QtTest.QSignalSpy(widget.pinRequested)
+            rename_spy = QtTest.QSignalSpy(widget.renameRequested)
+            archive_spy = QtTest.QSignalSpy(widget.archiveRequested)
+            delete_spy = QtTest.QSignalSpy(widget.deleteRequested)
+            menu = widget.build_more_menu()
+            actions = {action.text(): action for action in menu.actions()}
+
+            self.assertIn("置顶", actions)
+            self.assertIn("重命名", actions)
+            self.assertIn("在资源管理器中打开", actions)
+            self.assertIn("归档", actions)
+            self.assertIn("删除", actions)
+
+            actions["置顶"].trigger()
+            actions["重命名"].trigger()
+            actions["归档"].trigger()
+            delete_button = menu.findChild(
+                QtWidgets.QPushButton, "ProjectDeleteMenuButton"
+            )
+            delete_button.click()
+
+            self.assertEqual(len(pin_spy), 1)
+            self.assertEqual(len(rename_spy), 1)
+            self.assertEqual(len(archive_spy), 1)
+            self.assertEqual(len(delete_spy), 1)
+
+            with patch(
+                "plm.frontend.qt.widgets.project_item.open_in_file_manager"
+            ) as open_path:
+                actions["在资源管理器中打开"].trigger()
+                open_path.assert_called_once_with(widget.project_path)
+
+            menu.deleteLater()
+            widget.deleteLater()
 
     def test_tabs_and_scrollable_configuration_pages(self):
         tabs = self.window.config_page.tabs

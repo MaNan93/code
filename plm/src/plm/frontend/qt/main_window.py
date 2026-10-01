@@ -1,12 +1,11 @@
 """Codex-style PyQt5 views for plmConsultant using the native title bar."""
 
-import os
 import shutil
 import subprocess
 import sys
 from pathlib import Path
 
-from PyQt5 import QtCore, QtGui, QtSvg, QtWidgets
+from PyQt5 import QtCore, QtGui, QtWidgets
 
 from plm.frontend.qt.services import (
     DEFAULT_EDITOR,
@@ -16,100 +15,22 @@ from plm.frontend.qt.services import (
     SettingsStore,
 )
 from plm.frontend.qt.styles import APP_QSS, build_app_stylesheet
+from plm.frontend.qt.widgets.common import (
+    ICON_SIZE,
+    LUCIDE_ICON_DIR,
+    PROJECT_ROOT,
+    apply_drop_shadow,
+    load_lucide_icon,
+    make_icon_button,
+    open_in_file_manager,
+)
+from plm.frontend.qt.widgets.project_item import ProjectItemWidget
 
 
 APP_ICON_PATH = Path(__file__).resolve().parent / "assets" / "app_icon.svg"
-LUCIDE_ICON_DIR = Path(__file__).resolve().parent / "assets" / "icons"
-PROJECT_ROOT = Path(__file__).resolve().parents[4]
 DOCS_DIR = Path(__file__).resolve().parents[2] / "docs"
-ICON_SIZE = 20
 
 
-def load_lucide_icon(
-    name, color="#666666", size=ICON_SIZE, align_visible_left=False
-):
-    """Load, rasterize, and recolor one Lucide SVG."""
-    path = LUCIDE_ICON_DIR / f"{name}.svg"
-    source = QtGui.QPixmap(size, size)
-    source.fill(QtCore.Qt.transparent)
-    renderer = QtSvg.QSvgRenderer(str(path))
-    if not renderer.isValid():
-        return QtGui.QIcon(source)
-    painter = QtGui.QPainter(source)
-    painter.setRenderHint(QtGui.QPainter.Antialiasing, True)
-    renderer.render(painter)
-    painter.end()
-
-    colored = QtGui.QPixmap(size, size)
-    colored.fill(QtCore.Qt.transparent)
-    painter = QtGui.QPainter(colored)
-    painter.drawPixmap(0, 0, source)
-    painter.setCompositionMode(QtGui.QPainter.CompositionMode_SourceIn)
-    painter.fillRect(colored.rect(), QtGui.QColor(color))
-    painter.end()
-    if align_visible_left:
-        visible_bounds = QtGui.QRegion(colored.mask()).boundingRect()
-        if visible_bounds.isValid() and visible_bounds.left() > 0:
-            aligned = QtGui.QPixmap(size, size)
-            aligned.fill(QtCore.Qt.transparent)
-            painter = QtGui.QPainter(aligned)
-            painter.drawPixmap(-visible_bounds.left(), 0, colored)
-            painter.end()
-            colored = aligned
-    return QtGui.QIcon(colored)
-
-
-def make_icon_button(
-    icon_name,
-    tooltip,
-    object_name="IconButton",
-    button_size=28,
-    icon_size=ICON_SIZE,
-    color="#666666",
-):
-    button = QtWidgets.QPushButton()
-    button.setObjectName(object_name)
-    button.setIcon(load_lucide_icon(icon_name, color, icon_size))
-    button.setIconSize(QtCore.QSize(icon_size, icon_size))
-    button.setFixedSize(button_size, button_size)
-    button.setToolTip(tooltip)
-    button.setCursor(QtCore.Qt.PointingHandCursor)
-    return button
-
-
-def apply_drop_shadow(widget, offset=(0, 1), blur_radius=4, alpha=15):
-    """Apply one of the shared elevation levels to a widget."""
-    shadow = QtWidgets.QGraphicsDropShadowEffect(widget)
-    shadow.setOffset(*offset)
-    shadow.setBlurRadius(blur_radius)
-    shadow.setColor(QtGui.QColor(0, 0, 0, alpha))
-    widget.setGraphicsEffect(shadow)
-    return shadow
-
-
-def open_in_file_manager(path):
-    """Open a local path with the platform file manager."""
-    resolved_path = Path(path).resolve()
-    if not resolved_path.exists():
-        return False
-    try:
-        if sys.platform == "win32":
-            os.startfile(str(resolved_path))
-        elif sys.platform == "darwin":
-            subprocess.Popen(["open", str(resolved_path)])
-        else:
-            subprocess.Popen(["xdg-open", str(resolved_path)])
-    except OSError:
-        return False
-    return True
-
-
-class StyledMenu(QtWidgets.QMenu):
-    """QMenu with the shared popup elevation (QSS cannot draw shadows)."""
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        apply_drop_shadow(self, offset=(0, 4), blur_radius=12, alpha=40)
 
 
 class EscapeLineEdit(QtWidgets.QLineEdit):
@@ -251,138 +172,6 @@ class HoverCard(QtWidgets.QFrame):
         super().leaveEvent(event)
 
 
-class ProjectItemWidget(QtWidgets.QWidget):
-    """Single-line selectable project row."""
-
-    hoverEntered = QtCore.pyqtSignal(object)
-    hoverLeft = QtCore.pyqtSignal(object)
-    pinRequested = QtCore.pyqtSignal(object)
-    renameRequested = QtCore.pyqtSignal(object)
-    archiveRequested = QtCore.pyqtSignal(object)
-    deleteRequested = QtCore.pyqtSignal(object)
-    projectSelected = QtCore.pyqtSignal(str)
-
-    def __init__(self, project_name, project_path=None, parent=None):
-        super().__init__(parent)
-        self.project_name = project_name
-        self.project_path = Path(project_path or PROJECT_ROOT / project_name).resolve()
-        root = QtWidgets.QVBoxLayout(self)
-        root.setContentsMargins(0, 0, 0, 0)
-        root.setSpacing(2)
-        self.header = QtWidgets.QPushButton()
-        self.header.setObjectName("ProjectButton")
-        self.header.setCursor(QtCore.Qt.PointingHandCursor)
-        self.header.clicked.connect(self._header_clicked)
-        self.header.setMouseTracking(True)
-        self.header.installEventFilter(self)
-        header_layout = QtWidgets.QHBoxLayout(self.header)
-        header_layout.setContentsMargins(0, 0, 0, 0)
-        header_layout.setSpacing(0)
-        self.folder_icon = QtWidgets.QLabel()
-        self.folder_icon.setObjectName("ProjectFolderIcon")
-        self.folder_icon.setFixedSize(ICON_SIZE, ICON_SIZE)
-        self.folder_icon.setAlignment(QtCore.Qt.AlignCenter)
-        self.folder_icon.setPixmap(
-            load_lucide_icon(
-                "folder", "#666666", align_visible_left=True
-            ).pixmap(ICON_SIZE, ICON_SIZE)
-        )
-        self.folder_icon.setAttribute(QtCore.Qt.WA_TransparentForMouseEvents)
-        self.project_name_label = QtWidgets.QLabel(self.project_name)
-        self.project_name_label.setObjectName("ProjectName")
-        self.project_name_label.setAttribute(QtCore.Qt.WA_TransparentForMouseEvents)
-        header_layout.addWidget(self.folder_icon)
-        header_layout.addSpacing(8)
-        header_layout.addWidget(self.project_name_label)
-        header_layout.addStretch(1)
-        self.archive_btn = make_icon_button(
-            "archive", "归档项目", "ProjectArchiveBtn", 24, 16
-        )
-        self.more_btn = make_icon_button(
-            "more-horizontal", "更多操作", "ProjectMoreBtn", 24, 16
-        )
-        self.archive_btn.clicked.connect(
-            lambda: self.archiveRequested.emit(self)
-        )
-        self.more_btn.clicked.connect(self.show_more_menu)
-        self.archive_btn.hide()
-        self.more_btn.hide()
-        header_layout.addWidget(self.archive_btn)
-        header_layout.addSpacing(4)
-        header_layout.addWidget(self.more_btn)
-        root.addWidget(self.header)
-
-    def _header_clicked(self, _checked=False):
-        self.projectSelected.emit(self.project_name)
-
-    def set_selected(self, selected):
-        self.header.setProperty("selected", selected)
-        self.project_name_label.setProperty("selected", selected)
-        for widget in (self.header, self.project_name_label):
-            widget.style().unpolish(widget)
-            widget.style().polish(widget)
-
-    def eventFilter(self, watched, event):
-        if watched is self.header:
-            if event.type() == QtCore.QEvent.Enter:
-                self.archive_btn.show()
-                self.more_btn.show()
-                self.hoverEntered.emit(self)
-            elif event.type() == QtCore.QEvent.Leave:
-                self.archive_btn.hide()
-                self.more_btn.hide()
-                self.hoverLeft.emit(self)
-        return super().eventFilter(watched, event)
-
-    def show_more_menu(self):
-        menu = self.build_more_menu()
-        menu.exec_(
-            self.more_btn.mapToGlobal(QtCore.QPoint(0, self.more_btn.height() + 4))
-        )
-
-    def build_more_menu(self):
-        menu = StyledMenu(self)
-        menu.setFixedWidth(180)
-        pin_action = menu.addAction(
-            load_lucide_icon("pin", "#666666", 16), "置顶"
-        )
-        rename_action = menu.addAction(
-            load_lucide_icon("pencil", "#666666", 16), "重命名"
-        )
-        menu.addSeparator()
-        open_action = menu.addAction(
-            load_lucide_icon("folder-open", "#666666", 16),
-            "在资源管理器中打开",
-        )
-        menu.addSeparator()
-        archive_action = menu.addAction(
-            load_lucide_icon("archive", "#666666", 16), "归档"
-        )
-        delete_action = QtWidgets.QWidgetAction(menu)
-        delete_action.setText("删除")
-        delete_button = QtWidgets.QPushButton("删除")
-        delete_button.setObjectName("ProjectDeleteMenuButton")
-        delete_button.setIcon(load_lucide_icon("x", "#CF222E", 16))
-        delete_button.setIconSize(QtCore.QSize(16, 16))
-        delete_button.setCursor(QtCore.Qt.PointingHandCursor)
-        delete_action.setDefaultWidget(delete_button)
-        menu.addAction(delete_action)
-
-        pin_action.triggered.connect(lambda: self.pinRequested.emit(self))
-        rename_action.triggered.connect(lambda: self.renameRequested.emit(self))
-        open_action.triggered.connect(lambda: open_in_file_manager(self.project_path))
-        archive_action.triggered.connect(lambda: self.archiveRequested.emit(self))
-
-        def request_delete():
-            menu.close()
-            self.deleteRequested.emit(self)
-
-        delete_button.clicked.connect(request_delete)
-        return menu
-
-    def rename(self, new_name):
-        self.project_name = new_name
-        self.project_name_label.setText(new_name)
 
 class ProjectList(QtWidgets.QListWidget):
     """Draggable flat project list populated from local workspace names."""

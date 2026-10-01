@@ -597,7 +597,10 @@ class ProjectList(QtWidgets.QListWidget):
 class NavPanel(QtWidgets.QFrame):
     """Region 3: actions, draggable projects, and footer navigation."""
 
-    actionRequested = QtCore.pyqtSignal(str)
+    new_chat_requested = QtCore.pyqtSignal()
+    save_requested = QtCore.pyqtSignal()
+    settings_requested = QtCore.pyqtSignal()
+    docs_requested = QtCore.pyqtSignal()
     project_archived = QtCore.pyqtSignal(str)
     project_deleted = QtCore.pyqtSignal(str)
     project_renamed = QtCore.pyqtSignal(str, str)
@@ -674,8 +677,10 @@ class NavPanel(QtWidgets.QFrame):
         self.brand_layout.setAlignment(self.collapse_btn, QtCore.Qt.AlignVCenter)
         root.addWidget(self.brand_row)
 
-        self.new_chat_btn = self._action_button("square-pen", "新对话", "new_chat")
-        self.save_btn = self._action_button("save", "保存", "save")
+        self.new_chat_btn = self._action_button(
+            "square-pen", "新对话", self.new_chat_requested
+        )
+        self.save_btn = self._action_button("save", "保存", self.save_requested)
         self.new_chat_row, self.new_chat_row_layout = self._nav_row(
             self.new_chat_btn
         )
@@ -728,8 +733,12 @@ class NavPanel(QtWidgets.QFrame):
         footer_layout = QtWidgets.QVBoxLayout(self.footer)
         footer_layout.setContentsMargins(0, 0, 0, 0)
         footer_layout.setSpacing(8)
-        self.docs_btn = self._footer_button("file-text", "Docs", "docs")
-        self.settings_btn = self._footer_button("settings", "Settings", "settings")
+        self.docs_btn = self._footer_button(
+            "file-text", "Docs", self.docs_requested
+        )
+        self.settings_btn = self._footer_button(
+            "settings", "Settings", self.settings_requested
+        )
         self.settings_row, self.settings_row_layout = self._nav_row(
             self.settings_btn
         )
@@ -746,12 +755,12 @@ class NavPanel(QtWidgets.QFrame):
         self.collapsed_settings_btn = self._collapsed_icon_button(
             "settings",
             "Settings",
-            lambda _checked=False: self.actionRequested.emit("settings"),
+            lambda _checked=False: self.settings_requested.emit(),
         )
         self.collapsed_docs_btn = self._collapsed_icon_button(
             "file-text",
             "Docs",
-            lambda _checked=False: self.actionRequested.emit("docs"),
+            lambda _checked=False: self.docs_requested.emit(),
         )
         collapsed_footer_layout.addWidget(
             self.collapsed_settings_btn, 0, QtCore.Qt.AlignHCenter
@@ -881,22 +890,26 @@ class NavPanel(QtWidgets.QFrame):
         layout.addWidget(widget)
         return row, layout
 
-    def _action_button(self, icon_name, text, action):
+    def _action_button(self, icon_name, text, requested_signal):
         button = QtWidgets.QPushButton(text)
         button.setObjectName("NavActionButton")
         button.setIcon(load_lucide_icon(icon_name, align_visible_left=True))
         button.setIconSize(QtCore.QSize(ICON_SIZE, ICON_SIZE))
         button.setCursor(QtCore.Qt.PointingHandCursor)
-        button.clicked.connect(lambda: self.actionRequested.emit(action))
+        button.clicked.connect(
+            lambda _checked=False: requested_signal.emit()
+        )
         return button
 
-    def _footer_button(self, icon_name, text, action):
+    def _footer_button(self, icon_name, text, requested_signal):
         button = QtWidgets.QPushButton(text)
         button.setObjectName("NavFooterButton")
         button.setIcon(load_lucide_icon(icon_name, align_visible_left=True))
         button.setIconSize(QtCore.QSize(ICON_SIZE, ICON_SIZE))
         button.setCursor(QtCore.Qt.PointingHandCursor)
-        button.clicked.connect(lambda: self.actionRequested.emit(action))
+        button.clicked.connect(
+            lambda _checked=False: requested_signal.emit()
+        )
         return button
 
     def _project_archived(self, project_name):
@@ -1901,7 +1914,10 @@ class MainWindow(QtWidgets.QMainWindow):
 
         QtCore.QTimer.singleShot(0, self._apply_initial_sizes)
 
-        self.nav_panel.actionRequested.connect(self._handle_nav_action)
+        self.nav_panel.new_chat_requested.connect(self.on_new_chat)
+        self.nav_panel.save_requested.connect(self.on_save)
+        self.nav_panel.settings_requested.connect(self.on_open_settings)
+        self.nav_panel.docs_requested.connect(self.on_open_docs)
         self.nav_panel.project_selected.connect(self.config_page.update_title)
         self.nav_panel.emit_current_project()
 
@@ -1927,12 +1943,20 @@ class MainWindow(QtWidgets.QMainWindow):
         self._log_sizes = sizes
         self.content_splitter.setSizes([sum(sizes), 0])
 
-    def _handle_nav_action(self, action):
-        self.nav_panel.set_active(action)
-        if action == "save":
-            self.log_panel.append_log("[UI] 当前配置已加入保存队列")
-        elif action in {"settings", "docs"}:
-            self._show_placeholder(action)
+    def on_new_chat(self):
+        self.nav_panel.set_active(None)
+
+    def on_save(self):
+        self.nav_panel.set_active(None)
+        self.log_panel.append_log("[UI] 当前配置已加入保存队列")
+
+    def on_open_settings(self):
+        self.nav_panel.set_active("settings")
+        self._show_placeholder("settings")
+
+    def on_open_docs(self):
+        self.nav_panel.set_active("docs")
+        self._show_placeholder("docs")
 
     def _show_placeholder(self, page):
         self._close_placeholder()

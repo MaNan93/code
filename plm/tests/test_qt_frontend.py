@@ -173,6 +173,7 @@ class QtFrontendLayoutTests(unittest.TestCase):
 
     def test_nav_actions_projects_and_drag_configuration(self):
         nav = self.window.nav_panel
+        self.assertFalse(hasattr(nav, "actionRequested"))
         self.assertEqual(nav.new_chat_btn.text(), "新对话")
         self.assertEqual(nav.save_btn.text(), "保存")
         self.assertEqual(nav.docs_btn.text(), "Docs")
@@ -222,6 +223,26 @@ class QtFrontendLayoutTests(unittest.TestCase):
         self.assertTrue(nav.docs_btn.property("selected"))
         nav.set_active("settings")
         self.assertTrue(nav.settings_btn.property("selected"))
+
+    def test_nav_action_buttons_emit_semantic_signals(self):
+        nav = self.window.nav_panel
+        new_chat_spy = QtTest.QSignalSpy(nav.new_chat_requested)
+        save_spy = QtTest.QSignalSpy(nav.save_requested)
+        settings_spy = QtTest.QSignalSpy(nav.settings_requested)
+        docs_spy = QtTest.QSignalSpy(nav.docs_requested)
+
+        nav.new_chat_btn.click()
+        nav.save_btn.click()
+        nav.settings_btn.click()
+        self.assertEqual(self.window.placeholder_overlay.page, "settings")
+        self.window._close_placeholder()
+        nav.docs_btn.click()
+        self.assertEqual(self.window.placeholder_overlay.page, "docs")
+
+        self.assertEqual(len(new_chat_spy), 1)
+        self.assertEqual(len(save_spy), 1)
+        self.assertEqual(len(settings_spy), 1)
+        self.assertEqual(len(docs_spy), 1)
 
     def test_project_list_is_flat_and_project_click_does_not_expand(self):
         project_list = self.window.nav_panel.project_list

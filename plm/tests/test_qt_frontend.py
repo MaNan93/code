@@ -511,6 +511,28 @@ class QtFrontendLayoutTests(unittest.TestCase):
             QtWidgets.QApplication.clipboard().text(), str(cards[0].file_path)
         )
 
+    def test_settings_and_docs_open_visual_placeholders(self):
+        nav = self.window.nav_panel
+        nav.settings_btn.click()
+        self.app.processEvents()
+        overlay = self.window.placeholder_overlay
+        self.assertIsNotNone(overlay)
+        self.assertTrue(overlay.isVisible())
+        self.assertEqual(overlay.page, "settings")
+        self.assertEqual(overlay.title_label.text(), "Settings")
+        self.assertEqual(overlay.geometry(), self.window.rect())
+
+        nav.docs_btn.click()
+        self.app.processEvents()
+        overlay = self.window.placeholder_overlay
+        self.assertIsNotNone(overlay)
+        self.assertEqual(overlay.page, "docs")
+        self.assertEqual(overlay.title_label.text(), "Documentation")
+
+        QtTest.QTest.keyClick(overlay, QtCore.Qt.Key_Escape)
+        self.app.processEvents()
+        self.assertIsNone(self.window.placeholder_overlay)
+
     def test_required_lucide_assets_exist_and_render(self):
         icon_names = (
             "layout-dashboard",

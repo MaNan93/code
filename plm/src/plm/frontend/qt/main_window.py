@@ -1453,6 +1453,142 @@ class LogPanel(QtWidgets.QFrame):
         self.output.clear()
 
 
+class PlaceholderOverlay(QtWidgets.QFrame):
+    """Visual-only Settings/Docs page shown above the current workspace."""
+
+    closeRequested = QtCore.pyqtSignal()
+
+    def __init__(self, page, parent=None):
+        super().__init__(parent)
+        self.page = page
+        self.setObjectName("PlaceholderOverlay")
+        self.setAttribute(QtCore.Qt.WA_StyledBackground, True)
+        self.setFocusPolicy(QtCore.Qt.StrongFocus)
+
+        root = QtWidgets.QVBoxLayout(self)
+        root.setContentsMargins(32, 32, 32, 32)
+        root.setAlignment(QtCore.Qt.AlignCenter)
+
+        card = QtWidgets.QFrame()
+        card.setObjectName("PlaceholderDialogCard")
+        card.setFixedSize(720, 520)
+        apply_drop_shadow(card, offset=(0, 8), blur_radius=32, alpha=45)
+        root.addWidget(card)
+
+        card_layout = QtWidgets.QVBoxLayout(card)
+        card_layout.setContentsMargins(0, 0, 0, 0)
+        card_layout.setSpacing(0)
+
+        header = QtWidgets.QFrame()
+        header.setObjectName("PlaceholderDialogHeader")
+        header.setFixedHeight(56)
+        header_layout = QtWidgets.QHBoxLayout(header)
+        header_layout.setContentsMargins(20, 0, 16, 0)
+        self.title_label = QtWidgets.QLabel(
+            "Settings" if page == "settings" else "Documentation"
+        )
+        self.title_label.setObjectName("PlaceholderDialogTitle")
+        header_layout.addWidget(self.title_label)
+        header_layout.addStretch(1)
+        self.close_btn = make_icon_button(
+            "x", "关闭", "PlaceholderCloseButton", 28, 18, "#666666"
+        )
+        self.close_btn.clicked.connect(self.closeRequested.emit)
+        header_layout.addWidget(self.close_btn)
+        card_layout.addWidget(header)
+
+        body = QtWidgets.QWidget()
+        body.setObjectName("PlaceholderDialogBody")
+        body_layout = QtWidgets.QHBoxLayout(body)
+        body_layout.setContentsMargins(0, 0, 0, 0)
+        body_layout.setSpacing(0)
+        body_layout.addWidget(self._build_menu(page))
+        body_layout.addWidget(self._build_content(page), 1)
+        card_layout.addWidget(body, 1)
+
+    def _build_menu(self, page):
+        menu = QtWidgets.QFrame()
+        menu.setObjectName("PlaceholderMenu")
+        menu.setFixedWidth(180)
+        layout = QtWidgets.QVBoxLayout(menu)
+        layout.setContentsMargins(12, 16, 12, 16)
+        layout.setSpacing(4)
+        entries = (
+            ("General", "Appearance", "Tools")
+            if page == "settings"
+            else ("Getting Started", "Configuration", "Generation")
+        )
+        for index, text in enumerate(entries):
+            button = QtWidgets.QPushButton(text)
+            button.setObjectName("PlaceholderMenuButton")
+            button.setProperty("selected", index == 0)
+            button.setCursor(QtCore.Qt.PointingHandCursor)
+            layout.addWidget(button)
+        layout.addStretch(1)
+        return menu
+
+    def _build_content(self, page):
+        content = QtWidgets.QWidget()
+        content.setObjectName("PlaceholderContent")
+        layout = QtWidgets.QVBoxLayout(content)
+        layout.setContentsMargins(28, 24, 28, 24)
+        layout.setSpacing(10)
+
+        heading = QtWidgets.QLabel(
+            "General" if page == "settings" else "Getting Started"
+        )
+        heading.setObjectName("PlaceholderHeading")
+        layout.addWidget(heading)
+        description = QtWidgets.QLabel(
+            "配置 plmConsultant 的通用偏好。"
+            if page == "settings"
+            else "从项目配置开始，快速完成 PLM 生成流程。"
+        )
+        description.setObjectName("PlaceholderDescription")
+        layout.addWidget(description)
+        layout.addSpacing(10)
+
+        rows = (
+            (
+                ("界面字体", "Microsoft YaHei UI"),
+                ("字体大小", "13 px"),
+                ("默认编辑器", "gvim"),
+            )
+            if page == "settings"
+            else (
+                ("1", "选择或创建一个 PLM 项目"),
+                ("2", "配置 Controller、Lane Mapping 和 PIPE Signals"),
+                ("3", "在 Generation 页面生成 RTL 与 Testbench"),
+            )
+        )
+        for label, value in rows:
+            row = QtWidgets.QFrame()
+            row.setObjectName("PlaceholderSettingRow")
+            row.setFixedHeight(56)
+            row_layout = QtWidgets.QHBoxLayout(row)
+            row_layout.setContentsMargins(16, 0, 16, 0)
+            key_label = QtWidgets.QLabel(label)
+            key_label.setObjectName("PlaceholderRowLabel")
+            value_label = QtWidgets.QLabel(value)
+            value_label.setObjectName("PlaceholderRowValue")
+            row_layout.addWidget(key_label)
+            row_layout.addStretch(1)
+            row_layout.addWidget(value_label)
+            layout.addWidget(row)
+        layout.addStretch(1)
+        note = QtWidgets.QLabel("视觉占位页面 · 功能将在后续阶段接入")
+        note.setObjectName("PlaceholderNote")
+        layout.addWidget(note)
+        return content
+
+    def keyPressEvent(self, event):
+        if event.key() == QtCore.Qt.Key_Escape:
+            self.closeRequested.emit()
+            event.accept()
+            return
+        super().keyPressEvent(event)
+
+
 class MainWindow(QtWidgets.QMainWindow):
     """Native QMainWindow containing horizontal and vertical splitters."""
 
@@ -1463,6 +1599,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.setMinimumSize(960, 640)
         self.setWindowIcon(load_lucide_icon("layout-dashboard", "#1677FF"))
         self._log_sizes = [700, 200]
+        self.placeholder_overlay = None
 
         self.main_splitter = QtWidgets.QSplitter(QtCore.Qt.Horizontal)
         self.main_splitter.setObjectName("MainSplitter")
@@ -1521,6 +1658,30 @@ class MainWindow(QtWidgets.QMainWindow):
         self.nav_panel.set_active(action)
         if action == "save":
             self.log_panel.append_log("[UI] 当前配置已加入保存队列")
+        elif action in {"settings", "docs"}:
+            self._show_placeholder(action)
+
+    def _show_placeholder(self, page):
+        self._close_placeholder()
+        self.placeholder_overlay = PlaceholderOverlay(page, self)
+        self.placeholder_overlay.setGeometry(self.rect())
+        self.placeholder_overlay.closeRequested.connect(self._close_placeholder)
+        self.placeholder_overlay.show()
+        self.placeholder_overlay.raise_()
+        self.placeholder_overlay.setFocus(QtCore.Qt.OtherFocusReason)
+
+    def _close_placeholder(self):
+        if self.placeholder_overlay is None:
+            return
+        overlay = self.placeholder_overlay
+        self.placeholder_overlay = None
+        overlay.hide()
+        overlay.deleteLater()
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        if self.placeholder_overlay is not None:
+            self.placeholder_overlay.setGeometry(self.rect())
 
 APP_QSS = r"""
 QWidget {
@@ -1775,6 +1936,44 @@ QMenu::item {
 QMenu::item:selected { background-color: #F0F2F5; color: #1A1A1A; }
 QMenu::item:disabled { color: #B0B5C0; }
 QMenu::separator { height: 1px; background: #EAEAEA; margin: 4px 8px; }
+
+QFrame#PlaceholderOverlay { background-color: rgba(22, 28, 40, 105); }
+QFrame#PlaceholderDialogCard {
+    background-color: #FFFFFF; border: 1px solid #E0E0E0; border-radius: 10px;
+}
+QFrame#PlaceholderDialogHeader {
+    background-color: #FFFFFF; border: none; border-bottom: 1px solid #EAEAEA;
+    border-top-left-radius: 10px; border-top-right-radius: 10px;
+}
+QLabel#PlaceholderDialogTitle {
+    color: #1A1A1A; font-size: 17px; font-weight: bold;
+}
+QPushButton#PlaceholderCloseButton {
+    background: transparent; border: none; border-radius: 6px; padding: 0;
+}
+QPushButton#PlaceholderCloseButton:hover { background-color: #F0F2F5; }
+QWidget#PlaceholderDialogBody, QWidget#PlaceholderContent { background: #FFFFFF; }
+QFrame#PlaceholderMenu {
+    background-color: #F7F7FA; border: none; border-right: 1px solid #EAEAEA;
+    border-bottom-left-radius: 10px;
+}
+QPushButton#PlaceholderMenuButton {
+    min-height: 36px; background: transparent; border: none; border-radius: 6px;
+    color: #4A5060; padding: 0 12px; text-align: left;
+}
+QPushButton#PlaceholderMenuButton:hover { background-color: #ECECF2; }
+QPushButton#PlaceholderMenuButton[selected="true"] {
+    background-color: #E6F0FF; color: #1677FF; font-weight: bold;
+}
+QLabel#PlaceholderHeading { color: #1A1A1A; font-size: 18px; font-weight: bold; }
+QLabel#PlaceholderDescription { color: #707687; font-size: 13px; }
+QFrame#PlaceholderSettingRow {
+    background-color: #FAFAFB; border: 1px solid #EAEAEA; border-radius: 7px;
+}
+QLabel#PlaceholderRowLabel { color: #333333; font-weight: bold; }
+QLabel#PlaceholderRowValue { color: #62697A; }
+QLabel#PlaceholderNote { color: #A0A5B0; font-size: 12px; }
+
 QToolTip {
     background: #333333; color: #FFFFFF; border: none; border-radius: 6px;
     padding: 5px 7px;

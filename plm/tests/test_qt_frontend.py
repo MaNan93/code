@@ -289,6 +289,61 @@ class QtFrontendLayoutTests(unittest.TestCase):
             {0},
         )
 
+    def test_nav_panel_layout_contract(self):
+        nav = self.window.nav_panel
+        root = nav.layout()
+        first_project = nav.project_list.project_widgets[0]
+
+        self.assertIsInstance(root, QtWidgets.QVBoxLayout)
+        self.assertEqual(root.spacing(), 8)
+        self.assertEqual(nav.expanded_width, 260)
+        self.assertEqual(nav.collapsed_width, 56)
+        self.assertEqual(nav.expanded_min_width, 200)
+        self.assertEqual(nav.expanded_max_width, 400)
+        self.assertEqual(nav.brand_row.height(), 40)
+        self.assertEqual(nav.brand_layout.spacing(), 0)
+        self.assertEqual(nav.logo_label.size(), QtCore.QSize(20, 20))
+        self.assertEqual(nav.brand_logo_gap.sizeHint().width(), 8)
+        self.assertEqual(nav.brand_button_gap.sizeHint().width(), 2)
+        self.assertEqual(nav.collapse_btn.size(), QtCore.QSize(32, 32))
+
+        for row_layout in (
+            nav.new_chat_row_layout,
+            nav.save_row_layout,
+            first_project.header.layout(),
+            nav.settings_row_layout,
+            nav.docs_row_layout,
+        ):
+            self.assertEqual(row_layout.spacing(), 0)
+
+        for button in (
+            nav.new_chat_btn,
+            nav.save_btn,
+            nav.settings_btn,
+            nav.docs_btn,
+        ):
+            self.assertEqual(button.height(), 32)
+
+        project_index = root.indexOf(nav.project_list)
+        collapsed_project_index = root.indexOf(nav.collapsed_projects)
+        self.assertEqual(root.stretch(project_index), 1)
+        self.assertEqual(root.stretch(collapsed_project_index), 1)
+        self.assertEqual(first_project.header.height(), 32)
+
+        footer_layout = nav.footer.layout()
+        self.assertIsInstance(footer_layout, QtWidgets.QVBoxLayout)
+        self.assertEqual(footer_layout.spacing(), 8)
+        self.assertIs(footer_layout.itemAt(0).widget(), nav.settings_row)
+        self.assertIs(footer_layout.itemAt(1).widget(), nav.docs_row)
+        self.assertEqual(nav.collapsed_projects.layout().spacing(), 8)
+        self.assertEqual(nav.collapsed_footer.layout().spacing(), 8)
+
+        for animation in (nav.animation_min, nav.animation_max):
+            self.assertEqual(animation.duration(), 200)
+            self.assertEqual(
+                animation.easingCurve().type(), QtCore.QEasingCurve.OutCubic
+            )
+
     def test_project_selection_updates_header_and_recent_project(self):
         nav = self.window.nav_panel
         project_list = nav.project_list

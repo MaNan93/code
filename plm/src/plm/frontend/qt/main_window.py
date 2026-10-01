@@ -1598,6 +1598,7 @@ class PlaceholderOverlay(QtWidgets.QFrame):
         self.font_family_combo.setFixedSize(280, 36)
         chevron_path = (LUCIDE_ICON_DIR / "chevron-down.svg").as_posix()
         self.font_family_combo.setStyleSheet(
+            "QFontComboBox { border: 1px solid #E0E0E0; border-radius: 6px; }"
             "QComboBox::drop-down { border: none; width: 40px; }"
             f"QComboBox::down-arrow {{ image: url({chevron_path});"
             " width: 16px; height: 16px; }"
@@ -1680,7 +1681,7 @@ class PlaceholderOverlay(QtWidgets.QFrame):
             " margin: 4px 0 10px 0; }"
             "table { border-collapse: collapse; border: 1px solid #EAEAEA;"
             " border-radius: 6px; }"
-            "th { background-color: #F6F8FA; color: #1A1A1A; font-size: 13px;"
+            "th { background-color: #F0F2F5; color: #1A1A1A; font-size: 13px;"
             " font-weight: 600; padding: 8px 12px; border-bottom: 1px solid #EAEAEA; }"
             "td { color: #333333; font-size: 13px; font-weight: 400;"
             " padding: 8px 12px; }"
@@ -1823,7 +1824,7 @@ class PlaceholderOverlay(QtWidgets.QFrame):
                 for column in range(table.columns()):
                     cell = table.cellAt(0, column)
                     cell_format = cell.format()
-                    cell_format.setBackground(QtGui.QColor("#F6F8FA"))
+                    cell_format.setBackground(QtGui.QColor("#F0F2F5"))
                     cell.setFormat(cell_format)
                     cell_cursor = cell.firstCursorPosition()
                     cell_cursor.setPosition(

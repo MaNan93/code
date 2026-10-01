@@ -414,9 +414,11 @@ class ProjectList(QtWidgets.QListWidget):
         self.hover_card.pointerLeft.connect(self._schedule_hover_card_hide)
         self.project_widgets = []
         self.selected_project_name = None
-        for project_name, project_path in projects:
+        for project in projects:
             item = QtWidgets.QListWidgetItem()
-            widget = ProjectItemWidget(project_name, project_path=project_path)
+            widget = ProjectItemWidget(
+                project.name, project_path=project.config_dir
+            )
             widget.hoverEntered.connect(self._schedule_hover_card)
             widget.hoverLeft.connect(self._project_hover_left)
             widget.pinRequested.connect(self.pin_project)
@@ -686,10 +688,7 @@ class NavPanel(QtWidgets.QFrame):
         self.project_title.setObjectName("ProjectSectionTitle")
         root.addWidget(self.project_title)
         config_projects = self.project_service.discover()
-        projects = []
-        for name, config_dir in config_projects:
-            projects.append((name, config_dir))
-        self.project_list = ProjectList(projects)
+        self.project_list = ProjectList(config_projects)
         self.project_list.projectArchived.connect(self._project_archived)
         self.project_list.projectDeleted.connect(self._project_deleted)
         self.project_list.projectRenamed.connect(self._project_renamed)
@@ -709,12 +708,12 @@ class NavPanel(QtWidgets.QFrame):
             QtCore.Qt.AlignTop | QtCore.Qt.AlignHCenter
         )
         self.collapsed_project_buttons = []
-        for name, config_dir in config_projects:
+        for project in config_projects:
             button = self._collapsed_icon_button(
                 "folder",
-                name,
-                lambda _checked=False, value=name: self.project_list.select_project(
-                    value
+                project.name,
+                lambda _checked=False, value=project.name: (
+                    self.project_list.select_project(value)
                 ),
             )
             collapsed_projects_layout.addWidget(

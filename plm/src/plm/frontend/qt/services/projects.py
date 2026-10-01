@@ -1,6 +1,9 @@
 """Project discovery independent of Qt widgets."""
 
 from pathlib import Path
+from typing import List
+
+from plm.frontend.qt.models import ProjectInfo
 
 
 class ProjectService:
@@ -13,7 +16,7 @@ class ProjectService:
     def __init__(self, project_root):
         self.project_root = Path(project_root).resolve()
 
-    def discover(self):
+    def discover(self) -> List[ProjectInfo]:
         discovered = []
         seen = set()
         for search_root in (
@@ -40,5 +43,13 @@ class ProjectService:
                     if config_dir.name.casefold() == "config"
                     else config_dir.name
                 )
-                discovered.append((project_name, config_dir))
-        return sorted(discovered, key=lambda item: item[0].casefold())
+                discovered.append(
+                    ProjectInfo(
+                        name=project_name,
+                        config_dir=config_dir,
+                        controllers_csv=config_dir / "controllers.csv",
+                        lane_mapping_csv=config_dir / "lane_mapping.csv",
+                        pipe_signals_csv=config_dir / "pipe_signals.csv",
+                    )
+                )
+        return sorted(discovered, key=lambda project: project.name.casefold())

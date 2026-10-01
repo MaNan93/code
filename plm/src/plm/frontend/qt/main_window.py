@@ -1503,8 +1503,7 @@ class PlaceholderOverlay(QtWidgets.QFrame):
         self.page_panel = QtWidgets.QFrame()
         self.page_panel.setObjectName("PlaceholderPagePanel")
         self.page_panel.setFixedWidth(900)
-        self.page_panel.setMinimumHeight(460)
-        self.page_panel.setMaximumHeight(620)
+        self.page_panel.setFixedHeight(350 if page == "settings" else 700)
         apply_drop_shadow(
             self.page_panel, offset=(0, 4), blur_radius=20, alpha=22
         )
@@ -1637,7 +1636,7 @@ class PlaceholderOverlay(QtWidgets.QFrame):
         for row in self.setting_rows.values():
             rows_layout.addWidget(row)
         layout.addLayout(rows_layout)
-        layout.addStretch(1)
+        layout.addSpacing(14)
 
         actions = QtWidgets.QHBoxLayout()
         actions.setSpacing(12)
@@ -1654,6 +1653,7 @@ class PlaceholderOverlay(QtWidgets.QFrame):
         actions.addWidget(reset_btn)
         actions.addWidget(self.save_settings_btn)
         layout.addLayout(actions)
+        layout.addStretch(1)
         return content
 
     def _build_docs_content(self):
@@ -1665,6 +1665,10 @@ class PlaceholderOverlay(QtWidgets.QFrame):
         self.doc_browser.setOpenExternalLinks(True)
         self.doc_browser.setSearchPaths([str(DOCS_DIR)])
         self.doc_browser.document().setDefaultStyleSheet(
+            "h1 { color: #1A1A1A; font-size: 22px; font-weight: 600; margin: 0 0 14px 0; }"
+            "h2 { color: #1A1A1A; font-size: 18px; font-weight: 600; margin: 18px 0 8px 0; }"
+            "h3 { color: #1A1A1A; font-size: 15px; font-weight: 600; margin: 14px 0 6px 0; }"
+            "p { color: #333333; font-size: 13px; margin: 4px 0 10px 0; }"
             "table { border-collapse: collapse; border: 1px solid #EAEAEA; }"
             "th { background-color: #F6F8FA; color: #1A1A1A; font-size: 13px;"
             " font-weight: 600; padding: 8px 12px; border-bottom: 1px solid #EAEAEA; }"
@@ -1779,6 +1783,9 @@ class PlaceholderOverlay(QtWidgets.QFrame):
                 table_format.setBorderBrush(QtGui.QColor("#EAEAEA"))
                 table_format.setCellPadding(8)
                 table_format.setCellSpacing(0)
+                table_format.setWidth(
+                    QtGui.QTextLength(QtGui.QTextLength.PercentageLength, 100)
+                )
                 table.setFormat(table_format)
                 for column in range(table.columns()):
                     cell = table.cellAt(0, column)
@@ -1841,6 +1848,10 @@ class PlaceholderOverlay(QtWidgets.QFrame):
         super().resizeEvent(event)
         if hasattr(self, "page_panel"):
             self.page_panel.setFixedWidth(min(900, max(600, self.width() - 64)))
+            if self.page == "docs":
+                self.page_panel.setFixedHeight(
+                    min(700, max(460, self.height() - 64 - 40 - 32))
+                )
 
 
 class MainWindow(QtWidgets.QMainWindow):
@@ -2290,8 +2301,8 @@ QPushButton#SettingsPrimaryButton:hover {
 }
 QLabel#SettingsStatus { color: #28965A; font-size: 12px; }
 QTextBrowser#DocumentationBrowser {
-    background-color: #FFFFFF; border: 1px solid #EAEAEA; border-radius: 7px;
-    padding: 12px 16px; color: #333333; selection-background-color: #CDE1FF;
+    background-color: #FFFFFF; border: none; padding: 0;
+    color: #333333; selection-background-color: #CDE1FF;
 }
 
 QToolTip {

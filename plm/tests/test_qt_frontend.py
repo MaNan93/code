@@ -547,19 +547,19 @@ class QtFrontendLayoutTests(unittest.TestCase):
         self.assertEqual(overlay.back_btn.text(), "")
         self.assertEqual(overlay.back_btn.size(), QtCore.QSize(32, 32))
         self.assertEqual(overlay.back_btn.iconSize(), QtCore.QSize(20, 20))
-        panel = overlay.findChild(QtWidgets.QFrame, "PlaceholderPagePanel")
-        self.assertEqual(panel.width(), 900)
-        self.assertEqual(panel.mapTo(overlay, QtCore.QPoint()).y(), 104)
+        panel = overlay.findChild(QtWidgets.QWidget, "PlaceholderPagePanel")
+        self.assertEqual(panel.width(), 800)
+        self.assertEqual(panel.mapTo(overlay, QtCore.QPoint()).y(), 96)
         self.assertEqual(
             panel.mapTo(overlay, panel.rect().center()).x(),
             overlay.rect().center().x(),
         )
-        divider = overlay.findChild(QtWidgets.QFrame, "PlaceholderVerticalDivider")
-        self.assertEqual(divider.width(), 1)
+        divider = overlay.findChild(QtWidgets.QFrame, "PlaceholderTabDivider")
+        self.assertEqual(divider.height(), 1)
         for row in overlay.setting_rows.values():
-            self.assertEqual(row.height(), 48)
-        self.assertEqual(overlay.font_family_combo.size(), QtCore.QSize(240, 32))
-        self.assertEqual(overlay.font_size_spin.size(), QtCore.QSize(240, 32))
+            self.assertEqual(row.height(), 56)
+        self.assertEqual(overlay.font_family_combo.size(), QtCore.QSize(280, 36))
+        self.assertEqual(overlay.font_size_spin.size(), QtCore.QSize(280, 36))
 
         nav.docs_btn.click()
         self.app.processEvents()

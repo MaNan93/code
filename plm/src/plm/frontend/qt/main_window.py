@@ -1478,7 +1478,7 @@ class PlaceholderOverlay(QtWidgets.QFrame):
 
         header = QtWidgets.QFrame()
         header.setObjectName("PlaceholderDialogHeader")
-        header.setFixedHeight(64)
+        header.setFixedHeight(56)
         header_layout = QtWidgets.QHBoxLayout(header)
         header_layout.setContentsMargins(20, 0, 20, 0)
         header_layout.setSpacing(12)
@@ -1497,17 +1497,18 @@ class PlaceholderOverlay(QtWidgets.QFrame):
 
         page_area = QtWidgets.QWidget()
         page_area.setObjectName("PlaceholderPageArea")
-        page_area_layout = QtWidgets.QVBoxLayout(page_area)
-        page_area_layout.setContentsMargins(32, 40, 32, 32)
+        page_area_layout = QtWidgets.QHBoxLayout(page_area)
+        page_area_layout.setContentsMargins(32, 40, 32, 40)
+        page_area_layout.setSpacing(0)
+        page_area_layout.addStretch(1)
 
-        self.page_panel = QtWidgets.QFrame()
+        self.page_panel = QtWidgets.QWidget()
         self.page_panel.setObjectName("PlaceholderPagePanel")
-        self.page_panel.setFixedWidth(900)
-        self.page_panel.setFixedHeight(350 if page == "settings" else 700)
-        apply_drop_shadow(
-            self.page_panel, offset=(0, 4), blur_radius=20, alpha=22
+        self.page_panel.setFixedWidth(800)
+        self.page_panel.setSizePolicy(
+            QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Expanding
         )
-        panel_layout = QtWidgets.QHBoxLayout(self.page_panel)
+        panel_layout = QtWidgets.QVBoxLayout(self.page_panel)
         panel_layout.setContentsMargins(0, 0, 0, 0)
         panel_layout.setSpacing(0)
         self.content = (
@@ -1517,24 +1518,22 @@ class PlaceholderOverlay(QtWidgets.QFrame):
         )
         panel_layout.addWidget(self._build_menu(page))
         divider = QtWidgets.QFrame()
-        divider.setObjectName("PlaceholderVerticalDivider")
-        divider.setFixedWidth(1)
+        divider.setObjectName("PlaceholderTabDivider")
+        divider.setFixedHeight(1)
         panel_layout.addWidget(divider)
+        panel_layout.addSpacing(24)
         panel_layout.addWidget(self.content, 1)
-        page_area_layout.addWidget(
-            self.page_panel, 0, QtCore.Qt.AlignTop | QtCore.Qt.AlignHCenter
-        )
+        page_area_layout.addWidget(self.page_panel, 0)
         page_area_layout.addStretch(1)
         root.addWidget(page_area, 1)
         self._select_section(0)
 
     def _build_menu(self, page):
-        menu = QtWidgets.QFrame()
-        menu.setObjectName("PlaceholderMenu")
-        menu.setFixedWidth(180)
-        layout = QtWidgets.QVBoxLayout(menu)
-        layout.setContentsMargins(12, 16, 12, 16)
-        layout.setSpacing(4)
+        menu = QtWidgets.QWidget()
+        menu.setObjectName("PlaceholderTabs")
+        layout = QtWidgets.QHBoxLayout(menu)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(8)
         self.menu_buttons = []
         entries = (
             ("General", "Appearance", "Tools")
@@ -1557,24 +1556,25 @@ class PlaceholderOverlay(QtWidgets.QFrame):
         content = QtWidgets.QWidget()
         content.setObjectName("PlaceholderContent")
         layout = QtWidgets.QVBoxLayout(content)
-        layout.setContentsMargins(28, 24, 28, 24)
-        layout.setSpacing(10)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
         self.heading_label = QtWidgets.QLabel(heading)
         self.heading_label.setObjectName("PlaceholderHeading")
         layout.addWidget(self.heading_label)
+        layout.addSpacing(4)
         self.description_label = QtWidgets.QLabel(description)
         self.description_label.setObjectName("PlaceholderDescription")
         self.description_label.setWordWrap(True)
         layout.addWidget(self.description_label)
-        layout.addSpacing(10)
+        layout.addSpacing(24)
         return content, layout
 
     def _setting_row(self, label, control):
         row = QtWidgets.QFrame()
         row.setObjectName("PlaceholderSettingRow")
-        row.setFixedHeight(48)
+        row.setFixedHeight(56)
         row_layout = QtWidgets.QHBoxLayout(row)
-        row_layout.setContentsMargins(16, 0, 16, 0)
+        row_layout.setContentsMargins(0, 0, 0, 0)
         key_label = QtWidgets.QLabel(label)
         key_label.setObjectName("PlaceholderRowLabel")
         row_layout.addWidget(key_label)
@@ -1595,8 +1595,7 @@ class PlaceholderOverlay(QtWidgets.QFrame):
                 settings.value("appearance/font_family", DEFAULT_FONT_FAMILY, type=str)
             )
         )
-        self.font_family_combo.setFixedWidth(240)
-        self.font_family_combo.setFixedHeight(32)
+        self.font_family_combo.setFixedSize(280, 36)
 
         self.font_size_spin = QtWidgets.QSpinBox()
         self.font_size_spin.setObjectName("SettingsFontSize")
@@ -1605,11 +1604,11 @@ class PlaceholderOverlay(QtWidgets.QFrame):
         self.font_size_spin.setValue(
             settings.value("appearance/font_size", DEFAULT_FONT_SIZE, type=int)
         )
-        self.font_size_spin.setFixedSize(240, 32)
+        self.font_size_spin.setFixedSize(280, 36)
 
         editor_control = QtWidgets.QWidget()
         editor_control.setObjectName("SettingsEditorControl")
-        editor_control.setFixedSize(240, 32)
+        editor_control.setFixedSize(280, 36)
         editor_layout = QtWidgets.QHBoxLayout(editor_control)
         editor_layout.setContentsMargins(0, 0, 0, 0)
         editor_layout.setSpacing(8)
@@ -1617,10 +1616,10 @@ class PlaceholderOverlay(QtWidgets.QFrame):
             settings.value("tools/editor_path", DEFAULT_EDITOR, type=str)
         )
         self.editor_path_edit.setObjectName("SettingsEditorPath")
-        self.editor_path_edit.setFixedHeight(32)
+        self.editor_path_edit.setFixedHeight(36)
         browse_btn = QtWidgets.QPushButton("浏览…")
         browse_btn.setObjectName("SettingsBrowseButton")
-        browse_btn.setFixedSize(64, 32)
+        browse_btn.setFixedSize(68, 36)
         browse_btn.clicked.connect(self._browse_editor)
         editor_layout.addWidget(self.editor_path_edit)
         editor_layout.addWidget(browse_btn)
@@ -1632,11 +1631,11 @@ class PlaceholderOverlay(QtWidgets.QFrame):
         }
         rows_layout = QtWidgets.QVBoxLayout()
         rows_layout.setContentsMargins(0, 0, 0, 0)
-        rows_layout.setSpacing(8)
+        rows_layout.setSpacing(0)
         for row in self.setting_rows.values():
             rows_layout.addWidget(row)
         layout.addLayout(rows_layout)
-        layout.addSpacing(14)
+        layout.addSpacing(24)
 
         actions = QtWidgets.QHBoxLayout()
         actions.setSpacing(12)
@@ -1646,9 +1645,11 @@ class PlaceholderOverlay(QtWidgets.QFrame):
         actions.addStretch(1)
         reset_btn = QtWidgets.QPushButton("恢复默认")
         reset_btn.setObjectName("SettingsSecondaryButton")
+        reset_btn.setFixedHeight(36)
         reset_btn.clicked.connect(self._reset_settings)
         self.save_settings_btn = QtWidgets.QPushButton("保存设置")
         self.save_settings_btn.setObjectName("SettingsPrimaryButton")
+        self.save_settings_btn.setFixedHeight(36)
         self.save_settings_btn.clicked.connect(self._save_settings)
         actions.addWidget(reset_btn)
         actions.addWidget(self.save_settings_btn)
@@ -1665,11 +1666,13 @@ class PlaceholderOverlay(QtWidgets.QFrame):
         self.doc_browser.setOpenExternalLinks(True)
         self.doc_browser.setSearchPaths([str(DOCS_DIR)])
         self.doc_browser.document().setDefaultStyleSheet(
-            "h1 { color: #1A1A1A; font-size: 22px; font-weight: 600; margin: 0 0 14px 0; }"
-            "h2 { color: #1A1A1A; font-size: 18px; font-weight: 600; margin: 18px 0 8px 0; }"
-            "h3 { color: #1A1A1A; font-size: 15px; font-weight: 600; margin: 14px 0 6px 0; }"
-            "p { color: #333333; font-size: 13px; margin: 4px 0 10px 0; }"
-            "table { border-collapse: collapse; border: 1px solid #EAEAEA; }"
+            "h1 { color: #1A1A1A; font-size: 16px; font-weight: 600; margin: 16px 0 8px 0; }"
+            "h2, h3 { color: #1A1A1A; font-size: 14px; font-weight: 600;"
+            " margin: 12px 0 6px 0; }"
+            "p { color: #333333; font-size: 13px; line-height: 160%;"
+            " margin: 4px 0 10px 0; }"
+            "table { border-collapse: collapse; border: 1px solid #EAEAEA;"
+            " border-radius: 6px; }"
             "th { background-color: #F6F8FA; color: #1A1A1A; font-size: 13px;"
             " font-weight: 600; padding: 8px 12px; border-bottom: 1px solid #EAEAEA; }"
             "td { color: #333333; font-size: 13px; font-weight: 400;"
@@ -1767,6 +1770,29 @@ class PlaceholderOverlay(QtWidgets.QFrame):
         block = document.begin()
         while block.isValid():
             cursor = QtGui.QTextCursor(block)
+            block_format = block.blockFormat()
+            heading_level = block_format.headingLevel()
+            if heading_level:
+                cursor.select(QtGui.QTextCursor.BlockUnderCursor)
+                heading_format = QtGui.QTextCharFormat()
+                heading_format.setForeground(QtGui.QColor("#1A1A1A"))
+                heading_format.setFontFamily(self.doc_browser.font().family())
+                heading_format.clearProperty(QtGui.QTextFormat.FontSizeAdjustment)
+                heading_format.setProperty(
+                    QtGui.QTextFormat.FontPixelSize,
+                    16 if heading_level == 1 else 14,
+                )
+                heading_format.setFontWeight(QtGui.QFont.Bold)
+                cursor.setCharFormat(heading_format)
+                block_format.setTopMargin(16 if heading_level == 1 else 12)
+                block_format.setBottomMargin(8 if heading_level == 1 else 6)
+                cursor.setBlockFormat(block_format)
+            elif cursor.currentTable() is None:
+                block_format.setLineHeight(
+                    160, QtGui.QTextBlockFormat.ProportionalHeight
+                )
+                cursor.setBlockFormat(block_format)
+
             if block.text().strip().startswith("操作："):
                 cursor.select(QtGui.QTextCursor.BlockUnderCursor)
                 note_format = QtGui.QTextCharFormat()
@@ -1846,12 +1872,6 @@ class PlaceholderOverlay(QtWidgets.QFrame):
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
-        if hasattr(self, "page_panel"):
-            self.page_panel.setFixedWidth(min(900, max(600, self.width() - 64)))
-            if self.page == "docs":
-                self.page_panel.setFixedHeight(
-                    min(700, max(460, self.height() - 64 - 40 - 32))
-                )
 
 
 class MainWindow(QtWidgets.QMainWindow):
@@ -2236,9 +2256,9 @@ QMenu::item:selected { background-color: #F0F2F5; color: #1A1A1A; }
 QMenu::item:disabled { color: #B0B5C0; }
 QMenu::separator { height: 1px; background: #EAEAEA; margin: 4px 8px; }
 
-QFrame#PlaceholderOverlay { background-color: #F5F6F8; }
+QFrame#PlaceholderOverlay { background-color: #FFFFFF; }
 QFrame#PlaceholderDialogHeader {
-    background-color: #FFFFFF; border: none; border-bottom: 1px solid #E0E0E0;
+    background-color: #FFFFFF; border: none; border-bottom: 1px solid #EAEAEA;
 }
 QLabel#PlaceholderDialogTitle {
     color: #1A1A1A; font-size: 18px; font-weight: bold;
@@ -2249,45 +2269,41 @@ QPushButton#PlaceholderBackButton {
 QPushButton#PlaceholderBackButton:hover {
     background-color: #F0F2F5;
 }
-QWidget#PlaceholderPageArea { background-color: #F5F6F8; }
-QFrame#PlaceholderPagePanel {
-    background-color: #FFFFFF; border: 1px solid #E0E0E0; border-radius: 10px;
-}
-QWidget#PlaceholderContent {
-    background: #FFFFFF; border-top-right-radius: 10px;
-    border-bottom-right-radius: 10px;
-}
-QFrame#PlaceholderMenu {
-    background-color: #F7F7FA; border: none;
-    border-top-left-radius: 10px; border-bottom-left-radius: 10px;
-}
-QFrame#PlaceholderVerticalDivider { background-color: #EAEAEA; border: none; }
+QWidget#PlaceholderPageArea, QWidget#PlaceholderPagePanel,
+QWidget#PlaceholderContent, QWidget#PlaceholderTabs { background-color: #FFFFFF; }
+QFrame#PlaceholderTabDivider { background-color: #EAEAEA; border: none; }
 QPushButton#PlaceholderMenuButton {
-    min-height: 36px; background: transparent; border: none; border-radius: 6px;
-    color: #666666; font-size: 13px; padding: 0 12px; text-align: left;
+    min-height: 36px; max-height: 36px; background: transparent;
+    border: none; border-bottom: 2px solid transparent; border-radius: 0;
+    color: #666666; font-size: 13px; padding: 0 12px;
 }
-QPushButton#PlaceholderMenuButton:hover { background-color: #F0F2F5; }
+QPushButton#PlaceholderMenuButton:hover { color: #1A1A1A; }
 QPushButton#PlaceholderMenuButton[selected="true"] {
-    background-color: #E6F0FF; color: #1677FF; font-size: 13px; font-weight: bold;
+    background: transparent; color: #1677FF; font-size: 13px; font-weight: bold;
+    border-bottom: 2px solid #1677FF;
 }
 QLabel#PlaceholderHeading { color: #1A1A1A; font-size: 18px; font-weight: bold; }
-QLabel#PlaceholderDescription { color: #707687; font-size: 13px; }
+QLabel#PlaceholderDescription { color: #666666; font-size: 13px; }
 QFrame#PlaceholderSettingRow {
-    background-color: #F9FAFB; border: none; border-radius: 6px;
+    background-color: #FFFFFF; border: none; border-bottom: 1px solid #EAEAEA;
+    border-radius: 0;
 }
 QLabel#PlaceholderRowLabel { color: #333333; font-size: 13px; font-weight: normal; }
 QFontComboBox#SettingsFontFamily, QSpinBox#SettingsFontSize,
 QLineEdit#SettingsEditorPath {
-    min-height: 30px; max-height: 30px; background-color: #FFFFFF;
-    border: 1px solid #E0E0E0; border-radius: 6px; padding: 0 8px; color: #333333;
+    min-height: 34px; max-height: 34px; background-color: #FFFFFF;
+    border: 1px solid #E0E0E0; border-radius: 6px; padding: 0 12px; color: #333333;
 }
 QFontComboBox#SettingsFontFamily:focus, QSpinBox#SettingsFontSize:focus,
 QLineEdit#SettingsEditorPath:focus { border-color: #1677FF; }
 QWidget#SettingsEditorControl { background: transparent; }
-QPushButton#SettingsBrowseButton, QPushButton#SettingsSecondaryButton,
-QPushButton#SettingsPrimaryButton {
-    min-height: 32px; max-height: 32px; border: 1px solid #E0E0E0; border-radius: 6px;
-    padding: 0 14px; background-color: #FFFFFF;
+QPushButton#SettingsBrowseButton {
+    min-height: 34px; max-height: 34px; border: 1px solid #E0E0E0;
+    border-radius: 6px; padding: 0 10px; background-color: #FFFFFF; color: #333333;
+}
+QPushButton#SettingsSecondaryButton, QPushButton#SettingsPrimaryButton {
+    min-height: 34px; max-height: 34px; border: 1px solid #E0E0E0; border-radius: 6px;
+    padding: 0 20px; background-color: #FFFFFF; color: #333333;
 }
 QPushButton#SettingsBrowseButton:hover, QPushButton#SettingsSecondaryButton:hover {
     background-color: #F0F2F5;

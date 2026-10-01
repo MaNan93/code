@@ -1216,7 +1216,7 @@ class ArtifactsPanel(QtWidgets.QFrame):
         toolbar.setObjectName("ArtifactsToolbar")
         toolbar.setFixedHeight(40)
         toolbar_layout = QtWidgets.QHBoxLayout(toolbar)
-        toolbar_layout.setContentsMargins(0, 0, 0, 0)
+        toolbar_layout.setContentsMargins(16, 0, 16, 0)
         toolbar_layout.setSpacing(8)
         self.toolbar_buttons = []
         for index, (icon_name, tooltip) in enumerate(
@@ -1233,7 +1233,7 @@ class ArtifactsPanel(QtWidgets.QFrame):
             )
         ):
             button = make_icon_button(
-                icon_name, tooltip, "ArtifactsToolButton", 20, ICON_SIZE
+                icon_name, tooltip, "ArtifactsToolButton", 24, ICON_SIZE
             )
             toolbar_layout.addWidget(button)
             self.toolbar_buttons.append(button)
@@ -1250,7 +1250,7 @@ class ArtifactsPanel(QtWidgets.QFrame):
         content.setObjectName("ArtifactsContent")
         content_layout = QtWidgets.QVBoxLayout(content)
         content_layout.setContentsMargins(0, 0, 0, 0)
-        content_layout.setSpacing(16)
+        content_layout.setSpacing(12)
         examples = (
             (
                 "src/plm/frontend/qt/main_window.py",
@@ -1301,6 +1301,7 @@ class ConfigPage(QtWidgets.QFrame):
         self.header.logToggleRequested.connect(self.logToggleRequested.emit)
         self.header.artifactsToggleRequested.connect(self.toggle_artifacts)
         root.addWidget(self.header)
+        root.addSpacing(12)
 
         self.config_area = QtWidgets.QWidget()
         self.config_area.setObjectName("ConfigArea")

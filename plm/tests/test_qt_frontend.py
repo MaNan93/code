@@ -459,9 +459,29 @@ class QtFrontendLayoutTests(unittest.TestCase):
             panel.geometry().left(),
         )
         self.assertEqual(len(panel.toolbar_buttons), 9)
+        toolbar = panel.findChild(QtWidgets.QWidget, "ArtifactsToolbar")
+        toolbar_margins = toolbar.layout().contentsMargins()
+        self.assertEqual(
+            (
+                toolbar_margins.left(),
+                toolbar_margins.top(),
+                toolbar_margins.right(),
+                toolbar_margins.bottom(),
+            ),
+            (16, 0, 16, 0),
+        )
+        self.assertEqual(toolbar.layout().spacing(), 8)
         for button in panel.toolbar_buttons:
-            self.assertEqual(button.size(), QtCore.QSize(20, 20))
+            self.assertEqual(button.size(), QtCore.QSize(24, 24))
             self.assertEqual(button.iconSize(), QtCore.QSize(20, 20))
+
+        content = panel.findChild(QtWidgets.QWidget, "ArtifactsContent")
+        self.assertEqual(content.layout().spacing(), 12)
+
+    def test_config_header_has_twelve_pixel_gap_before_tabs(self):
+        page = self.window.config_page
+        gap = page.config_area.geometry().top() - (page.header.geometry().bottom() + 1)
+        self.assertEqual(gap, 12)
 
     def test_artifacts_drag_visibility_and_maximize(self):
         page = self.window.config_page

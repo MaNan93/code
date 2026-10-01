@@ -216,6 +216,122 @@ class QtFrontendLayoutTests(unittest.TestCase):
         nav.set_active("settings")
         self.assertTrue(nav.settings_btn.property("selected"))
 
+    def test_expanded_nav_icons_share_one_left_edge(self):
+        nav = self.window.nav_panel
+        first_project = nav.project_list.project_widgets[0]
+        margins = nav.layout().contentsMargins()
+        self.assertEqual(
+            (margins.left(), margins.top(), margins.right(), margins.bottom()),
+            (12, 8, 12, 8),
+        )
+        for layout in (
+            nav.brand_layout,
+            nav.new_chat_row_layout,
+            nav.save_row_layout,
+            first_project.header.layout(),
+            nav.settings_row_layout,
+            nav.docs_row_layout,
+        ):
+            margins = layout.contentsMargins()
+            self.assertEqual(
+                (margins.left(), margins.top(), margins.right(), margins.bottom()),
+                (0, 0, 0, 0),
+            )
+
+        aligned_widgets = (
+            nav.logo_label,
+            nav.new_chat_btn,
+            nav.save_btn,
+            first_project.folder_icon,
+            nav.settings_btn,
+            nav.docs_btn,
+        )
+        self.assertEqual(
+            {widget.mapTo(nav, QtCore.QPoint()).x() for widget in aligned_widgets},
+            {12},
+        )
+        icon_pixmaps = (
+            nav.logo_label.pixmap(),
+            nav.new_chat_btn.icon().pixmap(ICON_SIZE, ICON_SIZE),
+            nav.save_btn.icon().pixmap(ICON_SIZE, ICON_SIZE),
+            first_project.folder_icon.pixmap(),
+            nav.settings_btn.icon().pixmap(ICON_SIZE, ICON_SIZE),
+            nav.docs_btn.icon().pixmap(ICON_SIZE, ICON_SIZE),
+        )
+        self.assertEqual(
+            {
+                QtGui.QRegion(pixmap.mask()).boundingRect().left()
+                for pixmap in icon_pixmaps
+            },
+            {0},
+        )
+
+    def test_project_selection_updates_header_and_recent_project(self):
+        nav = self.window.nav_panel
+        project_list = nav.project_list
+        self.assertIsNotNone(nav.current_project_name)
+        self.assertEqual(
+            self.window.config_page.header.title_label.text(),
+            nav.current_project_name,
+        )
+        self.assertEqual(
+            sum(
+                bool(widget.header.property("selected"))
+                for widget in project_list.project_widgets
+            ),
+            1,
+        )
+
+        target = next(
+            widget
+            for widget in project_list.project_widgets
+            if widget.project_name != nav.current_project_name
+        )
+        selected_spy = QtTest.QSignalSpy(nav.project_selected)
+        target.header.click()
+        self.assertEqual(nav.current_project_name, target.project_name)
+        self.assertEqual(project_list.selected_project_name, target.project_name)
+        self.assertEqual(
+            self.window.config_page.header.title_label.text(), target.project_name
+        )
+        self.assertTrue(target.header.property("selected"))
+        self.assertEqual(len(selected_spy), 1)
+        self.assertEqual(selected_spy[0][0], target.project_name)
+        self.assertEqual(
+            sum(
+                bool(widget.header.property("selected"))
+                for widget in project_list.project_widgets
+            ),
+            1,
+        )
+
+    def test_recent_project_is_restored_or_falls_back_to_first(self):
+        settings = QtCore.QSettings("plm", "plmConsultant")
+        key = "navigation/recent_project"
+        original = settings.value(key, None)
+        try:
+            settings.setValue(key, "dpr")
+            restored = MainWindow()
+            self.assertEqual(restored.nav_panel.current_project_name, "dpr")
+            self.assertEqual(restored.config_page.header.title_label.text(), "dpr")
+            restored.close()
+            restored.deleteLater()
+
+            settings.setValue(key, "missing-project")
+            fallback = MainWindow()
+            first_name = fallback.nav_panel.project_list.project_widgets[0].project_name
+            self.assertEqual(fallback.nav_panel.current_project_name, first_name)
+            self.assertEqual(
+                fallback.config_page.header.title_label.text(), first_name
+            )
+            fallback.close()
+            fallback.deleteLater()
+        finally:
+            if original is None:
+                settings.remove(key)
+            else:
+                settings.setValue(key, original)
+
     def test_config_header_inline_rename_save_and_cancel(self):
         header = self.window.config_page.header
         self.assertIsInstance(header, ConfigHeader)

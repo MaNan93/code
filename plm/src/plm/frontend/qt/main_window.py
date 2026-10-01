@@ -21,7 +21,9 @@ PROJECT_ROOT = Path(__file__).resolve().parents[4]
 ICON_SIZE = 20
 
 
-def load_lucide_icon(name, color="#666666", size=ICON_SIZE):
+def load_lucide_icon(
+    name, color="#666666", size=ICON_SIZE, align_visible_left=False
+):
     """Load, rasterize, and recolor one Lucide SVG."""
     path = LUCIDE_ICON_DIR / f"{name}.svg"
     source = QtGui.QPixmap(size, size)
@@ -41,6 +43,15 @@ def load_lucide_icon(name, color="#666666", size=ICON_SIZE):
     painter.setCompositionMode(QtGui.QPainter.CompositionMode_SourceIn)
     painter.fillRect(colored.rect(), QtGui.QColor(color))
     painter.end()
+    if align_visible_left:
+        visible_bounds = QtGui.QRegion(colored.mask()).boundingRect()
+        if visible_bounds.isValid() and visible_bounds.left() > 0:
+            aligned = QtGui.QPixmap(size, size)
+            aligned.fill(QtCore.Qt.transparent)
+            painter = QtGui.QPainter(aligned)
+            painter.drawPixmap(-visible_bounds.left(), 0, colored)
+            painter.end()
+            colored = aligned
     return QtGui.QIcon(colored)
 
 
@@ -247,6 +258,7 @@ class ProjectItemWidget(QtWidgets.QWidget):
     renameRequested = QtCore.pyqtSignal(object)
     archiveRequested = QtCore.pyqtSignal(object)
     deleteRequested = QtCore.pyqtSignal(object)
+    projectSelected = QtCore.pyqtSignal(str)
 
     def __init__(
         self, project_name, sessions, expanded=False, project_path=None, parent=None
@@ -262,7 +274,7 @@ class ProjectItemWidget(QtWidgets.QWidget):
         self.header.setCheckable(True)
         self.header.setChecked(expanded)
         self.header.setCursor(QtCore.Qt.PointingHandCursor)
-        self.header.clicked.connect(self.set_expanded)
+        self.header.clicked.connect(self._header_clicked)
         self.header.setMouseTracking(True)
         self.header.installEventFilter(self)
         header_layout = QtWidgets.QHBoxLayout(self.header)
@@ -273,7 +285,9 @@ class ProjectItemWidget(QtWidgets.QWidget):
         self.folder_icon.setFixedSize(ICON_SIZE, ICON_SIZE)
         self.folder_icon.setAlignment(QtCore.Qt.AlignCenter)
         self.folder_icon.setPixmap(
-            load_lucide_icon("folder", "#666666").pixmap(ICON_SIZE, ICON_SIZE)
+            load_lucide_icon(
+                "folder", "#666666", align_visible_left=True
+            ).pixmap(ICON_SIZE, ICON_SIZE)
         )
         self.folder_icon.setAttribute(QtCore.Qt.WA_TransparentForMouseEvents)
         self.project_name_label = QtWidgets.QLabel(self.project_name)
@@ -316,6 +330,17 @@ class ProjectItemWidget(QtWidgets.QWidget):
             self.session_buttons.append(button)
         root.addWidget(self.children)
         self.set_expanded(expanded)
+
+    def _header_clicked(self, expanded):
+        self.set_expanded(expanded)
+        self.projectSelected.emit(self.project_name)
+
+    def set_selected(self, selected):
+        self.header.setProperty("selected", selected)
+        self.project_name_label.setProperty("selected", selected)
+        for widget in (self.header, self.project_name_label):
+            widget.style().unpolish(widget)
+            widget.style().polish(widget)
 
     def eventFilter(self, watched, event):
         if watched is self.header:
@@ -398,6 +423,7 @@ class ProjectList(QtWidgets.QListWidget):
     projectArchived = QtCore.pyqtSignal(str)
     projectDeleted = QtCore.pyqtSignal(str)
     projectRenamed = QtCore.pyqtSignal(str, str)
+    projectSelected = QtCore.pyqtSignal(str)
 
     def __init__(self, projects, parent=None):
         super().__init__(parent)
@@ -420,6 +446,7 @@ class ProjectList(QtWidgets.QListWidget):
         self.hover_card.pointerEntered.connect(self._hide_timer.stop)
         self.hover_card.pointerLeft.connect(self._schedule_hover_card_hide)
         self.project_widgets = []
+        self.selected_project_name = None
         for project_name, sessions, expanded, project_path in projects:
             item = QtWidgets.QListWidgetItem()
             widget = ProjectItemWidget(
@@ -432,6 +459,7 @@ class ProjectList(QtWidgets.QListWidget):
             widget.renameRequested.connect(self.rename_project)
             widget.archiveRequested.connect(self.archive_project)
             widget.deleteRequested.connect(self.delete_project)
+            widget.projectSelected.connect(self.select_project)
             widget.heightChanged.connect(
                 lambda current_item=item, current_widget=widget: self._resize_item(
                     current_item, current_widget
@@ -441,6 +469,31 @@ class ProjectList(QtWidgets.QListWidget):
             self.setItemWidget(item, widget)
             self.project_widgets.append(widget)
             self._resize_item(item, widget)
+
+    def select_project(self, project_name, emit_signal=True):
+        selected_widget = next(
+            (
+                widget
+                for widget in self.project_widgets
+                if widget.project_name == project_name
+            ),
+            None,
+        )
+        if selected_widget is None and self.project_widgets:
+            selected_widget = self.project_widgets[0]
+        if selected_widget is None:
+            self.selected_project_name = None
+            return None
+
+        self.selected_project_name = selected_widget.project_name
+        for widget in self.project_widgets:
+            widget.set_selected(widget is selected_widget)
+        _row, item = self._item_for_widget(selected_widget)
+        if item is not None:
+            self.setCurrentItem(item)
+        if emit_signal:
+            self.projectSelected.emit(self.selected_project_name)
+        return self.selected_project_name
 
     def _item_for_widget(self, widget):
         for row in range(self.count()):
@@ -473,6 +526,9 @@ class ProjectList(QtWidgets.QListWidget):
         if not accepted or not new_name or new_name == old_name:
             return
         widget.rename(new_name)
+        if self.selected_project_name == old_name:
+            self.selected_project_name = new_name
+            self.projectSelected.emit(new_name)
         if self.hover_card.isVisible():
             self.hover_card.set_project(new_name, widget.project_path)
         self.projectRenamed.emit(old_name, new_name)
@@ -531,10 +587,15 @@ class ProjectList(QtWidgets.QListWidget):
         self._hide_timer.stop()
         self.hover_card.hide()
         self._pending_hover_widget = None
+        was_selected = widget.project_name == self.selected_project_name
         self.removeItemWidget(item)
         self.takeItem(row)
         self.project_widgets.remove(widget)
         widget.deleteLater()
+        if was_selected:
+            self.selected_project_name = None
+            if self.project_widgets:
+                self.select_project(self.project_widgets[0].project_name)
 
     def _schedule_hover_card(self, widget):
         self._hide_timer.stop()
@@ -588,6 +649,7 @@ class NavPanel(QtWidgets.QFrame):
     project_archived = QtCore.pyqtSignal(str)
     project_deleted = QtCore.pyqtSignal(str)
     project_renamed = QtCore.pyqtSignal(str, str)
+    project_selected = QtCore.pyqtSignal(str)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -629,7 +691,9 @@ class NavPanel(QtWidgets.QFrame):
         self.logo_label = QtWidgets.QLabel()
         self.logo_label.setObjectName("NavLogo")
         self.logo_label.setPixmap(
-            load_lucide_icon("layout-dashboard", "#1677FF").pixmap(20, 20)
+            load_lucide_icon(
+                "layout-dashboard", "#1677FF", align_visible_left=True
+            ).pixmap(20, 20)
         )
         self.logo_label.setFixedSize(20, 20)
         self.brand_layout.addWidget(self.logo_label)
@@ -658,8 +722,12 @@ class NavPanel(QtWidgets.QFrame):
 
         self.new_chat_btn = self._action_button("square-pen", "新对话", "new_chat")
         self.save_btn = self._action_button("save", "保存", "save")
-        root.addWidget(self.new_chat_btn)
-        root.addWidget(self.save_btn)
+        self.new_chat_row, self.new_chat_row_layout = self._nav_row(
+            self.new_chat_btn
+        )
+        self.save_row, self.save_row_layout = self._nav_row(self.save_btn)
+        root.addWidget(self.new_chat_row)
+        root.addWidget(self.save_row)
         root.addSpacing(4)
 
         self.project_title = QtWidgets.QLabel("项目")
@@ -675,7 +743,14 @@ class NavPanel(QtWidgets.QFrame):
         self.project_list.projectArchived.connect(self._project_archived)
         self.project_list.projectDeleted.connect(self._project_deleted)
         self.project_list.projectRenamed.connect(self._project_renamed)
+        self.project_list.projectSelected.connect(self._project_selected)
         root.addWidget(self.project_list, 1)
+
+        self._settings = QtCore.QSettings("plm", "plmConsultant")
+        recent_project = self._settings.value("navigation/recent_project", "")
+        self.current_project_name = self.project_list.select_project(
+            recent_project, emit_signal=False
+        )
 
         self.collapsed_projects = QtWidgets.QWidget()
         collapsed_projects_layout = QtWidgets.QVBoxLayout(self.collapsed_projects)
@@ -708,8 +783,12 @@ class NavPanel(QtWidgets.QFrame):
         footer_layout.setSpacing(8)
         self.docs_btn = self._footer_button("file-text", "Docs", "docs")
         self.settings_btn = self._footer_button("settings", "Settings", "settings")
-        footer_layout.addWidget(self.settings_btn)
-        footer_layout.addWidget(self.docs_btn)
+        self.settings_row, self.settings_row_layout = self._nav_row(
+            self.settings_btn
+        )
+        self.docs_row, self.docs_row_layout = self._nav_row(self.docs_btn)
+        footer_layout.addWidget(self.settings_row)
+        footer_layout.addWidget(self.docs_row)
         root.addWidget(self.footer)
 
         self.collapsed_footer = QtWidgets.QWidget()
@@ -846,10 +925,19 @@ class NavPanel(QtWidgets.QFrame):
         button.clicked.connect(callback)
         return button
 
+    @staticmethod
+    def _nav_row(widget):
+        row = QtWidgets.QWidget()
+        layout = QtWidgets.QHBoxLayout(row)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+        layout.addWidget(widget)
+        return row, layout
+
     def _action_button(self, icon_name, text, action):
         button = QtWidgets.QPushButton(text)
         button.setObjectName("NavActionButton")
-        button.setIcon(load_lucide_icon(icon_name))
+        button.setIcon(load_lucide_icon(icon_name, align_visible_left=True))
         button.setIconSize(QtCore.QSize(ICON_SIZE, ICON_SIZE))
         button.setCursor(QtCore.Qt.PointingHandCursor)
         button.clicked.connect(lambda: self.actionRequested.emit(action))
@@ -858,7 +946,7 @@ class NavPanel(QtWidgets.QFrame):
     def _footer_button(self, icon_name, text, action):
         button = QtWidgets.QPushButton(text)
         button.setObjectName("NavFooterButton")
-        button.setIcon(load_lucide_icon(icon_name))
+        button.setIcon(load_lucide_icon(icon_name, align_visible_left=True))
         button.setIconSize(QtCore.QSize(ICON_SIZE, ICON_SIZE))
         button.setCursor(QtCore.Qt.PointingHandCursor)
         button.clicked.connect(lambda: self.actionRequested.emit(action))
@@ -907,6 +995,15 @@ class NavPanel(QtWidgets.QFrame):
                 break
         self.project_renamed.emit(old_name, new_name)
 
+    def _project_selected(self, project_name):
+        self.current_project_name = project_name
+        self._settings.setValue("navigation/recent_project", project_name)
+        self.project_selected.emit(project_name)
+
+    def emit_current_project(self):
+        if self.current_project_name:
+            self.project_selected.emit(self.current_project_name)
+
     def _remove_collapsed_project(self, project_name):
         for button in tuple(self.collapsed_project_buttons):
             if button.toolTip() != project_name:
@@ -922,7 +1019,9 @@ class NavPanel(QtWidgets.QFrame):
             button.setProperty("selected", selected)
             color = "#1677FF" if selected else "#666666"
             icon_name = "file-text" if value == "docs" else "settings"
-            button.setIcon(load_lucide_icon(icon_name, color))
+            button.setIcon(
+                load_lucide_icon(icon_name, color, align_visible_left=True)
+            )
             button.style().unpolish(button)
             button.style().polish(button)
         self.collapsed_docs_btn.setIcon(
@@ -1251,6 +1350,7 @@ class ConfigPage(QtWidgets.QFrame):
         self.artifacts_maximized = False
         self.drag_start_global_x = None
         self.drag_start_width = None
+
         root = QtWidgets.QVBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(0)
@@ -1285,6 +1385,9 @@ class ConfigPage(QtWidgets.QFrame):
         self.drag_handle.show()
         self.config_area.installEventFilter(self)
         QtCore.QTimer.singleShot(0, self.reposition_artifacts)
+
+    def update_title(self, project_name):
+        self.header.title_label.setText(project_name)
 
     def eventFilter(self, watched, event):
         if watched is self.config_area and event.type() == QtCore.QEvent.Resize:
@@ -1445,6 +1548,8 @@ class MainWindow(QtWidgets.QMainWindow):
         QtCore.QTimer.singleShot(0, self._apply_initial_sizes)
 
         self.nav_panel.actionRequested.connect(self._handle_nav_action)
+        self.nav_panel.project_selected.connect(self.config_page.update_title)
+        self.nav_panel.emit_current_project()
 
     def _apply_initial_sizes(self):
         main_width = max(261, self.main_splitter.width())
@@ -1500,6 +1605,17 @@ QFrame#NavPanel[collapsed="true"] {
 }
 QWidget#NavBrandRow { background: transparent; }
 QLabel#NavAppName { color: #1A1A1A; font-size: 14px; font-weight: bold; }
+QLabel#NavLogo,
+QLabel#ProjectFolderIcon,
+QPushButton#NavCollapseButton,
+QPushButton#NavIconBtn,
+QPushButton#NavActionButton,
+QPushButton#ProjectButton,
+QPushButton#ProjectArchiveBtn,
+QPushButton#ProjectMoreBtn,
+QPushButton#NavFooterButton {
+    margin: 0; padding: 0;
+}
 QPushButton#NavCollapseButton {
     background: transparent; border: none; border-radius: 6px; padding: 0;
 }
@@ -1541,6 +1657,9 @@ QPushButton#ProjectButton {
     min-height: 32px; max-height: 32px; background: transparent; border: none;
     border-radius: 6px; padding: 0;
 }
+QPushButton#ProjectButton[selected="true"] {
+    background-color: #E6F0FF;
+}
 QPushButton#ProjectArchiveBtn, QPushButton#ProjectMoreBtn {
     min-width: 24px; max-width: 24px; min-height: 24px; max-height: 24px;
     background: transparent; border: none; border-radius: 4px; padding: 0;
@@ -1550,6 +1669,9 @@ QPushButton#ProjectArchiveBtn:hover, QPushButton#ProjectMoreBtn:hover {
 }
 QLabel#ProjectName {
     color: #1A1A1A; font-size: 14px; font-weight: bold;
+}
+QLabel#ProjectName[selected="true"] {
+    color: #1677FF; font-weight: bold;
 }
 QFrame#ProjectHoverCard {
     background-color: #FFFFFF; border: 1px solid #EAEAEA; border-radius: 8px;

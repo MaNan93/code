@@ -438,7 +438,9 @@ class QtFrontendLayoutTests(unittest.TestCase):
         settings = QtCore.QSettings("plm", "plmConsultant")
         key = "navigation/recent_project"
         original = settings.value(key, None)
+        original_path = settings.value("navigation/recent_path", None)
         try:
+            settings.remove("navigation/recent_path")
             settings.setValue(key, "dpr")
             restored = MainWindow()
             self.assertEqual(restored.nav_panel.current_project_name, "dpr")
@@ -447,6 +449,7 @@ class QtFrontendLayoutTests(unittest.TestCase):
             restored.deleteLater()
 
             settings.setValue(key, "missing-project")
+            settings.remove("navigation/recent_path")
             fallback = MainWindow()
             first_name = fallback.nav_panel.project_list.project_widgets[0].project_name
             self.assertEqual(fallback.nav_panel.current_project_name, first_name)
@@ -460,6 +463,11 @@ class QtFrontendLayoutTests(unittest.TestCase):
                 settings.remove(key)
             else:
                 settings.setValue(key, original)
+
+            if original_path is None:
+                settings.remove("navigation/recent_path")
+            else:
+                settings.setValue("navigation/recent_path", original_path)
 
     def test_config_header_inline_rename_save_and_cancel(self):
         header = self.window.config_page.header

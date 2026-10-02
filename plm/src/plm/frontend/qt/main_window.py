@@ -115,7 +115,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.content_splitter.setSizes([sum(sizes), 0])
 
     def on_new_chat(self):
-        self.nav_panel.set_active(None)
+        self.controller.show_project_menu()
 
     def on_save(self):
         self.nav_panel.set_active(None)

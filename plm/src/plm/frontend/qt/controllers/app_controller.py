@@ -9,6 +9,8 @@ from plm.frontend.qt.views.documentation_page import DocumentationPage
 from plm.frontend.qt.views.nav_panel import NavPanel
 from plm.frontend.qt.views.settings_page import SettingsPage
 from plm.frontend.qt.widgets.common import PROJECT_ROOT
+from plm.frontend.qt.views.new_project_dialog import NewProjectDialog
+from pathlib import Path
 
 
 class AppController:
@@ -18,17 +20,27 @@ class AppController:
         self.workspaces = workspace_service or WorkspaceService()
         self.current_name = None
         self.current_project = None
+        for path in self.settings.project_paths():
+            try:
+                self.projects.register(path)
+            except (OSError, ValueError):
+                continue
+
+    def _available_projects(self):
+        discovered = self.projects.discover()
+        self.settings.bind_projects(discovered)
+        projects = [p for p in discovered if not self.settings.get_project_state(p.name).is_archived]
+        return sorted(projects, key=lambda p: (
+            not self.settings.get_project_state(p.name).is_pinned, p.name.casefold()
+        ))
 
     def create_navigation(self):
-        states = self.settings.get_project_states()
-        projects = [
-            info for info in self.projects.discover()
-            if not states.get(info.name) or not states[info.name].is_archived
-        ]
-        projects.sort(key=lambda info: (not states.get(info.name, None) or not states[info.name].is_pinned, info.name.casefold()))
+        projects = self._available_projects()
+        recent = next((p.name for p in projects if str(p.config_dir) == self.settings.recent_path()),
+                      self.settings.recent_project())
         return NavPanel(
             projects=projects,
-            recent_project=self.settings.recent_project(),
+            recent_project=recent,
         )
 
     def connect_navigation(self, nav, config_page, log_panel, window):
@@ -36,7 +48,8 @@ class AppController:
         self.config_page = config_page
         self.log_panel = log_panel
         self.window = window
-        nav.new_chat_requested.connect(window.on_new_chat)
+        nav.new_chat_requested.connect(self.show_project_menu)
+        nav.new_chat_btn.setToolTip("新建或打开 PLM 项目")
         nav.save_requested.connect(window.on_save)
         nav.settings_requested.connect(window.on_open_settings)
         nav.docs_requested.connect(window.on_open_docs)
@@ -49,6 +62,74 @@ class AppController:
         config_page.artifacts_panel.refreshRequested.connect(self.refresh_artifacts)
         nav.emit_current_project()
         self._show_empty_project()
+
+    def show_project_menu(self):
+        menu = QtWidgets.QMenu(self.window)
+        self.project_menu = menu
+        menu.addAction("新建项目", self.new_project)
+        menu.addAction("打开项目…", self.open_project)
+        button = self.nav.new_chat_btn
+        menu.popup(button.mapToGlobal(button.rect().bottomLeft()))
+
+    def _confirm_switch(self):
+        if not self.current_project or not self.config_page.dirty:
+            return True
+        answer = QtWidgets.QMessageBox.question(
+            self.window, "未保存的修改", "当前项目有未保存的修改，是否先保存？",
+            QtWidgets.QMessageBox.Save | QtWidgets.QMessageBox.Discard | QtWidgets.QMessageBox.Cancel,
+            QtWidgets.QMessageBox.Save,
+        )
+        return answer != QtWidgets.QMessageBox.Cancel and (
+            answer != QtWidgets.QMessageBox.Save or self.save_current()
+        )
+
+    def _activate_path(self, config_dir):
+        projects = self._available_projects()
+        project = next(p for p in self.projects.discover() if p.config_dir == config_dir)
+        state = self.settings.get_project_state(project.name)
+        state.is_archived = False
+        self.settings.save_project_state(state)
+        projects = self._available_projects()
+        self.settings.save_project_paths(self.projects.external_dirs)
+        self.nav.set_projects(projects, project.name)
+        # The caller has already resolved unsaved edits before changing the list.
+        self.current_name = None
+        self.select_project(project.name)
+
+    def open_project(self):
+        path = QtWidgets.QFileDialog.getExistingDirectory(
+            self.window, "打开 PLM 项目", str(self.current_project.config_dir.parent if self.current_project else Path.home())
+        )
+        if not path:
+            return
+        try:
+            previous_dirs = set(self.projects.external_dirs)
+            config_dir = self.projects.register(path)
+        except (OSError, ValueError) as error:
+            QtWidgets.QMessageBox.warning(self.window, "打开项目失败", str(error))
+            return
+        if not self._confirm_switch():
+            self.projects.external_dirs = previous_dirs
+            return
+        self._activate_path(config_dir)
+
+    def new_project(self):
+        default = self.current_project.config_dir.parent.parent if self.current_project else Path.home()
+        dialog = NewProjectDialog(default, self.window)
+        if dialog.exec_() != QtWidgets.QDialog.Accepted:
+            return
+        name, location = dialog.values()
+        if not location:
+            QtWidgets.QMessageBox.warning(self.window, "新建项目失败", "请选择保存位置")
+            return
+        if not self._confirm_switch():
+            return
+        try:
+            config_dir = self.projects.create(location, name)
+        except (OSError, ValueError) as error:
+            QtWidgets.QMessageBox.warning(self.window, "新建项目失败", str(error))
+            return
+        self._activate_path(config_dir)
 
     def _project(self, name):
         return next((info for info in self.projects.discover() if info.name == name), None)
@@ -141,16 +222,26 @@ class AppController:
         self._show_empty_project()
 
     def delete_project(self, name):
+        preferred = self.current_project.config_dir if self.current_project and self.current_name != name else None
         try:
             self.projects.delete(name)
         except (OSError, ValueError) as error:
             QtWidgets.QMessageBox.warning(self.window, "删除失败", str(error))
             return
         self.settings.remove_project_state(name)
-        if self.current_name == name:
+        self.settings.save_project_paths(self.projects.external_dirs)
+        projects = self._available_projects()
+        target = next((p for p in projects if p.config_dir == preferred), None)
+        self.nav.set_projects(projects, target.name if target else "")
+        if target:
+            self.current_project = target
+            self.current_name = target.name
+            self.config_page.update_title(target.name)
+            self.settings.set_recent_project(target.name)
+        else:
             self.current_name = None
             self.current_project = None
-        self.nav.apply_remove(name)
+            self.nav.emit_current_project()
         self._show_empty_project()
 
     def _show_empty_project(self):
@@ -159,22 +250,46 @@ class AppController:
             self.config_page.update_title("无项目")
             self.refresh_artifacts()
 
+    def _refresh_project_names(self):
+        # Names may change when a duplicate is introduced, renamed or removed.
+        projects = self._available_projects()
+        by_path = {p.config_dir: p for p in projects}
+        self.nav.blockSignals(True)
+        try:
+            for widget in self.nav.project_list.project_widgets:
+                project = by_path.get(widget.project_path)
+                if project and widget.project_name != project.name:
+                    self.nav.apply_rename(widget.project_name, project.name, project.config_dir)
+        finally:
+            self.nav.blockSignals(False)
+        if self.current_project and self.current_project.config_dir in by_path:
+            self.current_project = by_path[self.current_project.config_dir]
+            self.current_name = self.current_project.name
+            self.nav.current_project_name = self.current_name
+            self.config_page.update_title(self.current_name)
+            self.settings.set_recent_project(self.current_name)
+
     def rename_project(self, old_name, new_name):
+        state = self.settings.get_project_state(old_name)
         try:
             config_dir = self.projects.rename(old_name, new_name)
         except (OSError, ValueError) as error:
             QtWidgets.QMessageBox.warning(self.window, "重命名失败", str(error))
             return
-        state = self.settings.get_project_state(old_name)
         self.settings.remove_project_state(old_name)
-        state.name = new_name
+        discovered = self.projects.discover()
+        self.settings.bind_projects(discovered)
+        renamed = next(p for p in discovered if p.config_dir == config_dir)
+        state.name = renamed.name
         self.settings.save_project_state(state)
+        self.settings.save_project_paths(self.projects.external_dirs)
         if self.current_name == old_name:
-            self.current_name = new_name
-            self.current_project = self._project(new_name)
-            self.settings.set_recent_project(new_name)
-            self.config_page.update_title(new_name)
-        self.nav.apply_rename(old_name, new_name, config_dir)
+            self.current_name = renamed.name
+            self.current_project = renamed
+            self.settings.set_recent_project(renamed.name)
+            self.config_page.update_title(renamed.name)
+        self.nav.apply_rename(old_name, renamed.name, config_dir)
+        self._refresh_project_names()
 
     def pin_project(self, name):
         state = self.settings.get_project_state(name)

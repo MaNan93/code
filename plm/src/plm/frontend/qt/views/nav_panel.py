@@ -349,6 +349,31 @@ class NavPanel(QtWidgets.QFrame):
         self._remove_collapsed_project(name)
         self.current_project_name = self.project_list.selected_project_name
 
+    def set_projects(self, projects, selected_name):
+        old = self.project_list
+        self.project_list = ProjectList(projects)
+        self.project_list.projectArchived.connect(self._project_archived)
+        self.project_list.projectDeleted.connect(self._project_deleted)
+        self.project_list.projectRenamed.connect(self._project_renamed)
+        self.project_list.projectPinned.connect(self.project_pinned.emit)
+        self.project_list.projectSelected.connect(self._project_selected)
+        self.layout().replaceWidget(old, self.project_list)
+        old.hide()
+        old.deleteLater()
+        self.project_list.setVisible(not self.is_collapsed)
+        self.current_project_name = self.project_list.select_project(selected_name, emit_signal=False)
+        for button in tuple(self.collapsed_project_buttons):
+            self._remove_collapsed_project(button.toolTip())
+        for project in projects:
+            button = self._collapsed_icon_button(
+                "folder", project.name,
+                lambda _checked=False, value=project.name: self.project_list.select_project(value),
+            )
+            self.collapsed_projects_layout.insertWidget(
+                len(self.collapsed_project_buttons), button, 0, QtCore.Qt.AlignHCenter
+            )
+            self.collapsed_project_buttons.append(button)
+
     def apply_pin(self, name):
         self.project_list.apply_pin(name)
         for button in self.collapsed_project_buttons:

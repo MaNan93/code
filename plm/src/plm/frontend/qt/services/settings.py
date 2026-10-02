@@ -21,12 +21,36 @@ class SettingsStore:
             if settings is not None
             else QtCore.QSettings("plm", "plmConsultant")
         )
+        self._project_paths = {}
+
+    def bind_projects(self, projects):
+        self._project_paths = {p.name: str(p.config_dir) for p in projects}
+        for name, path in self._project_paths.items():
+            old = "projects/state/" + quote(name, safe="")
+            new = "projects/state/" + quote(path, safe="")
+            if self._settings.contains(old + "/is_archived") and not self._settings.contains(new + "/is_archived"):
+                for key in ("is_archived", "is_pinned", "last_opened"):
+                    self._settings.setValue(new + "/" + key, self._settings.value(old + "/" + key))
+                self._settings.remove(old)
+        self._settings.sync()
+
+    def project_paths(self):
+        return self._settings.value("projects/paths", [], type=list)
+
+    def save_project_paths(self, paths):
+        self._settings.setValue("projects/paths", sorted(str(p) for p in paths))
+        self._settings.sync()
+
+    def recent_path(self):
+        return self._settings.value("navigation/recent_path", "", type=str)
 
     def recent_project(self):
         return self._settings.value("navigation/recent_project", "", type=str)
 
     def set_recent_project(self, project_name):
         self._settings.setValue("navigation/recent_project", project_name)
+        if project_name in self._project_paths:
+            self._settings.setValue("navigation/recent_path", self._project_paths[project_name])
         state = self.get_project_state(project_name)
         state.last_opened = datetime.now(timezone.utc)
         self.save_project_state(state)
@@ -34,6 +58,7 @@ class SettingsStore:
     def clear_recent_project(self, project_name):
         if self.recent_project() == project_name:
             self._settings.remove("navigation/recent_project")
+            self._settings.remove("navigation/recent_path")
 
     def remove_project_state(self, name):
         self._settings.beginGroup("projects/state")
@@ -42,9 +67,8 @@ class SettingsStore:
         self.clear_recent_project(name)
         self._settings.sync()
 
-    @staticmethod
-    def _project_group(name):
-        return quote(name, safe="")
+    def _project_group(self, name):
+        return quote(self._project_paths.get(name, name), safe="")
 
     def get_project_state(self, name: str) -> ProjectState:
         self._settings.beginGroup("projects/state")

@@ -188,6 +188,117 @@ class QtWorkflowTests(unittest.TestCase):
         self.assertEqual(empty_window.config_page.header.title_label.text(), "无项目")
         self.assertFalse(restarted.save_current())
 
+    def test_new_project_uses_custom_location_and_restores_after_restart(self):
+        controller = AppController(self.projects, self.store, self.workspaces)
+        with patch("plm.frontend.qt.main_window.AppController", return_value=controller):
+            window = MainWindow()
+        self.addCleanup(window.close)
+        location = self.root / "custom"
+        with patch("plm.frontend.qt.controllers.app_controller.NewProjectDialog") as dialog:
+            dialog.return_value.exec_.return_value = QtWidgets.QDialog.Accepted
+            dialog.return_value.values.return_value = ("newdemo", str(location))
+            controller.new_project()
+        config = location / "newdemo/config"
+        self.assertEqual(controller.current_project.config_dir, config)
+        self.assertTrue((config.parent / ".plm-workspace").is_file())
+        self.assertEqual(self.store.recent_path(), str(config))
+        self.assertTrue(controller.save_current())
+        controller.generate_current()
+        self.assertTrue((config.parent / "rtl/src/pipe_lane_mapper.sv").is_file())
+
+        restarted = AppController(ProjectService(self.root), self.store, self.workspaces)
+        with patch("plm.frontend.qt.main_window.AppController", return_value=restarted):
+            restored = MainWindow()
+        self.addCleanup(restored.close)
+        self.assertEqual(restarted.current_project.config_dir, config)
+
+    def test_open_duplicate_names_uses_paths_and_cancel_keeps_current_edits(self):
+        controller = AppController(self.projects, self.store, self.workspaces)
+        with patch("plm.frontend.qt.main_window.AppController", return_value=controller):
+            window = MainWindow()
+        self.addCleanup(window.close)
+        external = self.root / "outside/demo"
+        shutil.copytree(self.root / "test/demo/config", external / "config")
+        window.config_page.controllers_editor.table.item(0, 1).setText("unsaved")
+        with patch.object(QtWidgets.QFileDialog, "getExistingDirectory", return_value=str(external)), \
+                patch.object(QtWidgets.QMessageBox, "question", return_value=QtWidgets.QMessageBox.Cancel):
+            controller.open_project()
+        self.assertEqual(controller.current_name, "demo")
+        self.assertTrue(window.config_page.dirty)
+        self.assertNotIn(external / "config", self.projects.external_dirs)
+
+        with patch.object(QtWidgets.QFileDialog, "getExistingDirectory", return_value=str(external)), \
+                patch.object(QtWidgets.QMessageBox, "question", return_value=QtWidgets.QMessageBox.Discard):
+            controller.open_project()
+        self.assertEqual(controller.current_project.config_dir, external / "config")
+        duplicates = [p for p in self.projects.discover() if p.name.startswith("demo [")]
+        self.assertEqual(len(duplicates), 2)
+        self.assertEqual(len({p.name for p in duplicates}), 2)
+        state = self.store.get_project_state(controller.current_name)
+        state.is_pinned = True
+        self.store.save_project_state(state)
+        other = next(p for p in duplicates if p.config_dir != external / "config")
+        self.assertFalse(self.store.get_project_state(other.name).is_pinned)
+
+        restarted = AppController(ProjectService(self.root), self.store, self.workspaces)
+        with patch("plm.frontend.qt.main_window.AppController", return_value=restarted):
+            restored = MainWindow()
+        self.addCleanup(restored.close)
+        self.assertEqual(restarted.current_project.config_dir, external / "config")
+
+    def test_open_invalid_and_create_existing_do_not_change_current_project(self):
+        controller = AppController(self.projects, self.store, self.workspaces)
+        with patch("plm.frontend.qt.main_window.AppController", return_value=controller):
+            window = MainWindow()
+        self.addCleanup(window.close)
+        before = controller.current_project
+        with patch.object(QtWidgets.QFileDialog, "getExistingDirectory", return_value=str(self.root)), \
+                patch.object(QtWidgets.QMessageBox, "warning") as warning:
+            controller.open_project()
+        warning.assert_called_once()
+        self.assertEqual(controller.current_project, before)
+        original = before.controllers_csv.read_bytes()
+        with patch("plm.frontend.qt.controllers.app_controller.NewProjectDialog") as dialog, \
+                patch.object(QtWidgets.QMessageBox, "warning") as warning:
+            dialog.return_value.exec_.return_value = QtWidgets.QDialog.Accepted
+            dialog.return_value.values.return_value = ("demo", str(self.root / "test"))
+            controller.new_project()
+        warning.assert_called_once()
+        self.assertEqual(controller.current_project, before)
+        self.assertEqual(before.controllers_csv.read_bytes(), original)
+
+    def test_duplicate_rename_and_delete_keep_other_project_usable(self):
+        controller = AppController(self.projects, self.store, self.workspaces)
+        with patch("plm.frontend.qt.main_window.AppController", return_value=controller):
+            window = MainWindow()
+        self.addCleanup(window.close)
+        external = self.root / "outside/demo"
+        self.projects.create(external.parent, external.name)
+        controller._activate_path(external / "config")
+        controller.rename_project(controller.current_name, "renamed")
+        self.assertEqual(controller.current_name, "renamed")
+        self.assertIn("demo", [w.project_name for w in window.nav_panel.project_list.project_widgets])
+        self.assertEqual(controller.current_project.config_dir, external.parent / "renamed/config")
+        controller.delete_project("renamed")
+        self.assertEqual(controller.current_name, "demo")
+        self.assertFalse((external.parent / "renamed").exists())
+        self.assertTrue(controller.save_current())
+        self.assertEqual(self.store.project_paths(), [])
+
+    def test_archived_external_project_can_be_reopened_and_restored(self):
+        controller = AppController(self.projects, self.store, self.workspaces)
+        with patch("plm.frontend.qt.main_window.AppController", return_value=controller):
+            window = MainWindow()
+        self.addCleanup(window.close)
+        config = self.projects.create(self.root / "external", "custom")
+        controller._activate_path(config)
+        controller.archive_project("custom")
+        self.assertTrue(self.store.get_project_state(str(config)).is_archived)
+        with patch.object(QtWidgets.QFileDialog, "getExistingDirectory", return_value=str(config)):
+            controller.open_project()
+        self.assertFalse(self.store.get_project_state("custom").is_archived)
+        self.assertEqual(controller.current_project.config_dir, config)
+
 
 if __name__ == "__main__":
     unittest.main()

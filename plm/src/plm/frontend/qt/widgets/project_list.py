@@ -113,7 +113,7 @@ class ProjectList(QtWidgets.QListWidget):
             self,
             "重命名项目",
             "请输入新的项目名称：",
-            text=old_name,
+            text=widget.project_path.parent.name if widget.project_path.name == "config" else widget.project_path.name,
         )
         new_name = new_name.strip()
         if not accepted or not new_name or new_name == old_name:

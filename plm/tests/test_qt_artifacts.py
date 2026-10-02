@@ -59,7 +59,7 @@ class ArtifactPreviewTests(unittest.TestCase):
         self.panel.set_files([one, two], self.root)
         self.assertEqual(self.panel.current_path, two)
         self.assertIn("refreshed", self.panel.preview.toPlainText())
-        self.assertEqual(self.panel.file_selector.currentText(), "tb/two.sv")
+        self.assertEqual(self.panel.file_selector.currentText(), str(Path("tb") / "two.sv"))
         self.panel.set_files([one], self.root)
         self.assertEqual(self.panel.current_path, one)
         self.panel.set_files([], self.root / "other")

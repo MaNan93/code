@@ -211,42 +211,24 @@ QPlainTextEdit#LogOutput {
 QFrame#ArtifactsPanel {
     background-color: #FAFAFB; border: 1px solid $border; border-radius: 8px;
 }
-QWidget#ArtifactsToolbar, QWidget#ArtifactsContent { background: transparent; }
-QPushButton#ArtifactsToolButton, QPushButton#CardActionButton {
+QWidget#ArtifactsToolbar { background: transparent; }
+QPushButton#ArtifactsToolButton {
     background: transparent; border: none; border-radius: 6px; padding: 0;
 }
-QPushButton#ArtifactsToolButton:hover, QPushButton#CardActionButton:hover {
-    background-color: #F0F2F5;
+QPushButton#ArtifactsToolButton:hover { background-color: #F0F2F5; }
+QPushButton#ArtifactsToolButton:pressed, QPushButton#ArtifactsToolButton:checked {
+    background-color: #E6F0FF;
 }
-QPushButton#ArtifactsToolButton:pressed, QPushButton#CardActionButton:pressed {
-    background-color: #D5D5E0;
-}
-QScrollArea#ArtifactsScroll { background: transparent; border: none; }
-QFrame#FileDiffCard {
-    background-color: #FFFFFF; border: 1px solid #EAEAEA; border-radius: 6px;
-}
-QWidget#FileCardHeader {
-    background-color: #F6F8FA; border-bottom: 1px solid #EAEAEA;
-}
-QLabel#ModifiedMarker {
-    background-color: #F0F2F5; color: $text_muted; border-radius: 4px;
-    font-size: 12px; font-weight: bold;
-}
-QLabel#FilePathLabel { color: #1A1A1A; font-size: 13px; font-weight: bold; }
-QWidget#DiffLine { background-color: #F6F8FA; min-height: 24px; }
-QWidget#DiffLine[mode="add"] { background-color: #D8F5DC; }
-QWidget#DiffLine[mode="del"] { background-color: #FFE0DC; }
-QWidget#DiffLine QLabel { background: transparent; }
-QWidget#DiffLine[mode="add"] QLabel#DiffCode { color: #1A7F37; }
-QWidget#DiffLine[mode="del"] QLabel#DiffCode { color: #CF222E; }
-QLabel#DiffLineNumber {
-    color: #A0A5B0; padding-right: 6px; border-right: 1px solid #EAEAEA;
+QPlainTextEdit#ArtifactCodePreview {
+    background-color: #FFFFFF; color: #24292E; border: 1px solid #EAEAEA;
+    border-radius: 4px; selection-background-color: #CDE1FF;
     font-family: Consolas, "Courier New", monospace; font-size: 12px;
 }
-QLabel#DiffCode {
-    color: $text; padding: 3px 7px;
-    font-family: Consolas, "Courier New", monospace; font-size: 12px;
+QComboBox#ArtifactFileSelector, QLineEdit#ArtifactSearchInput {
+    background-color: #FFFFFF; border: 1px solid #EAEAEA; border-radius: 4px;
+    padding: 5px 8px; color: #24292E;
 }
+QLabel#ArtifactStatus { color: $text_muted; font-size: 12px; }
 
 QScrollBar:vertical { width: 6px; background: transparent; border: none; margin: 0; }
 QScrollBar::handle:vertical {

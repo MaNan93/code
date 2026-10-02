@@ -101,9 +101,13 @@ class QtWorkflowTests(unittest.TestCase):
         page.generation_editor.generate_btn.click()
         self.assertTrue((self.root / "test/demo/rtl/src/pipe_lane_mapper.sv").is_file())
         self.assertTrue((self.root / "test/demo/tb/tb_pipe_lane_mapper.sv").is_file())
-        from plm.frontend.qt.views.artifacts_panel import FileDiffCard
-        cards = page.artifacts_panel.findChildren(FileDiffCard)
-        self.assertTrue(any(card.file_path.name == "pipe_lane_mapper.sv" for card in cards))
+        panel = page.artifacts_panel
+        files = [Path(panel.file_selector.itemData(i)) for i in range(panel.file_selector.count())]
+        generated = self.root / "test/demo/rtl/src/pipe_lane_mapper.sv"
+        panel.file_selector.setCurrentIndex(files.index(generated))
+        self.assertEqual(panel.preview.toPlainText(), generated.read_text())
+        self.assertIn("endmodule", panel.preview.toPlainText())
+        self.assertTrue(panel.preview.isReadOnly())
         self.assertIn("生成完成", window.log_panel.output.toPlainText())
 
     def test_project_actions_flow_through_controller_and_keep_selection(self):

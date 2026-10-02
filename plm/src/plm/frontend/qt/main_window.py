@@ -8,7 +8,7 @@ from PyQt5 import QtCore, QtGui, QtWidgets
 from plm.frontend.qt.controllers import AppController
 from plm.frontend.qt.styles import APP_QSS
 from plm.frontend.qt.views.nav_panel import NavPanel
-from plm.frontend.qt.views.artifacts_panel import ArtifactsPanel, DiffLine, FileDiffCard
+from plm.frontend.qt.views.artifacts_panel import ArtifactsPanel
 from plm.frontend.qt.views.config_page import ConfigHeader, ConfigPage, DragHandle
 from plm.frontend.qt.views.log_panel import LogPanel
 from plm.frontend.qt.widgets.common import (
@@ -29,8 +29,6 @@ __all__ = [
     "ProjectList",
     "NavPanel",
     "ArtifactsPanel",
-    "DiffLine",
-    "FileDiffCard",
     "ConfigHeader",
     "ConfigPage",
     "DragHandle",

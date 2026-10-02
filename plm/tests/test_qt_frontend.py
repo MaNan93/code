@@ -16,7 +16,6 @@ from plm.frontend.qt.main_window import (
     ArtifactsPanel,
     ConfigHeader,
     DragHandle,
-    FileDiffCard,
     LogPanel,
     MainWindow,
     NavPanel,
@@ -641,8 +640,9 @@ class QtFrontendLayoutTests(unittest.TestCase):
             self.assertEqual(button.size(), QtCore.QSize(24, 24))
             self.assertEqual(button.iconSize(), QtCore.QSize(20, 20))
 
-        content = panel.findChild(QtWidgets.QWidget, "ArtifactsContent")
-        self.assertEqual(content.layout().spacing(), 12)
+        self.assertEqual(panel.layout().spacing(), 12)
+        self.assertIsInstance(panel.preview, QtWidgets.QPlainTextEdit)
+        self.assertIsInstance(panel.file_selector, QtWidgets.QComboBox)
 
     def test_config_header_has_twelve_pixel_gap_before_tabs(self):
         page = self.window.config_page
@@ -668,15 +668,15 @@ class QtFrontendLayoutTests(unittest.TestCase):
         page.toggle_artifacts()
         self.assertTrue(page.artifacts_panel.isVisible())
 
-    def test_artifact_cards_and_copy_path(self):
+    def test_artifact_file_selection_and_copy_path(self):
         panel = self.window.config_page.artifacts_panel
         with tempfile.TemporaryDirectory() as directory:
             generated = Path(directory) / "generated.sv"
             generated.write_text("module generated; endmodule\n", encoding="utf-8")
             panel.set_files([generated], Path(directory))
-            cards = panel.findChildren(FileDiffCard)
-            self.assertEqual(len(cards), 1)
-            cards[0].copy_path()
+            self.assertEqual(panel.file_selector.count(), 1)
+            self.assertEqual(panel.preview.toPlainText(), generated.read_text())
+            panel.copy_path()
             self.assertEqual(QtWidgets.QApplication.clipboard().text(), str(generated))
 
     def test_artifact_open_uses_configured_editor(self):
@@ -690,12 +690,10 @@ class QtFrontendLayoutTests(unittest.TestCase):
                 generated = Path(directory) / "generated.sv"
                 generated.write_text("module generated; endmodule\n", encoding="utf-8")
                 self.window.config_page.artifacts_panel.set_files([generated], Path(directory))
-                card = self.window.config_page.artifacts_panel.findChildren(
-                    FileDiffCard
-                )[0]
+                panel = self.window.config_page.artifacts_panel
                 with patch("subprocess.Popen") as popen:
-                    card.open_in_editor()
-                popen.assert_called_once_with([str(editor), str(card.file_path)])
+                    panel.open_in_editor()
+                popen.assert_called_once_with([str(editor), str(generated)])
         finally:
             if original is None:
                 settings.remove("tools/editor_path")

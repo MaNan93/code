@@ -26,7 +26,7 @@ class QtWorkflowTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
-        self.root = Path(self.temp.name)
+        self.root = Path(self.temp.name).resolve()
         for name in ("demo", "other"):
             shutil.copytree(
                 PROJECT_ROOT / "test/bifurcate/config",

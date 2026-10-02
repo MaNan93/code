@@ -20,7 +20,7 @@ class ArtifactPreviewTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
-        self.root = Path(self.temp.name)
+        self.root = Path(self.temp.name).resolve()
         self.panel = ArtifactsPanel()
         self.panel.resize(400, 630)
         self.panel.show()

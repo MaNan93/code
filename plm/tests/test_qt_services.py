@@ -12,7 +12,7 @@ from plm.frontend.qt.services import ProjectService, SettingsStore
 class ProjectServiceTests(unittest.TestCase):
     def test_discover_returns_project_info_with_explicit_csv_paths(self):
         with tempfile.TemporaryDirectory() as temporary_directory:
-            root = Path(temporary_directory)
+            root = Path(temporary_directory).resolve()
             config_dir = root / "test" / "demo" / "config"
             config_dir.mkdir(parents=True)
             for filename in (
@@ -38,7 +38,7 @@ class SettingsStoreProjectStateTests(unittest.TestCase):
     def test_project_states_round_trip_independently_from_static_info(self):
         with tempfile.TemporaryDirectory() as temporary_directory:
             settings = QtCore.QSettings(
-                str(Path(temporary_directory) / "settings.ini"),
+                str(Path(temporary_directory).resolve() / "settings.ini"),
                 QtCore.QSettings.IniFormat,
             )
             store = SettingsStore(settings)
@@ -58,7 +58,7 @@ class SettingsStoreProjectStateTests(unittest.TestCase):
     def test_selecting_recent_project_updates_last_opened(self):
         with tempfile.TemporaryDirectory() as temporary_directory:
             settings = QtCore.QSettings(
-                str(Path(temporary_directory) / "settings.ini"),
+                str(Path(temporary_directory).resolve() / "settings.ini"),
                 QtCore.QSettings.IniFormat,
             )
             store = SettingsStore(settings)

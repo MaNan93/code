@@ -486,7 +486,7 @@ class QtFrontendLayoutTests(unittest.TestCase):
 
     def test_project_row_actions_and_nav_signals(self):
         with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
+            root = Path(directory).resolve()
             projects = [
                 ProjectInfo(name=name, config_dir=root / name / "config",
                             controllers_csv=root / name / "config/controllers.csv",
@@ -671,9 +671,9 @@ class QtFrontendLayoutTests(unittest.TestCase):
     def test_artifact_file_selection_and_copy_path(self):
         panel = self.window.config_page.artifacts_panel
         with tempfile.TemporaryDirectory() as directory:
-            generated = Path(directory) / "generated.sv"
+            generated = Path(directory).resolve() / "generated.sv"
             generated.write_text("module generated; endmodule\n", encoding="utf-8")
-            panel.set_files([generated], Path(directory))
+            panel.set_files([generated], Path(directory).resolve())
             self.assertEqual(panel.file_selector.count(), 1)
             self.assertEqual(panel.preview.toPlainText(), generated.read_text())
             panel.copy_path()
@@ -684,12 +684,12 @@ class QtFrontendLayoutTests(unittest.TestCase):
         original = settings.value("tools/editor_path")
         try:
             with tempfile.TemporaryDirectory() as directory:
-                editor = Path(directory) / "custom-editor"
+                editor = Path(directory).resolve() / "custom-editor"
                 editor.write_text("editor", encoding="utf-8")
                 settings.setValue("tools/editor_path", str(editor))
-                generated = Path(directory) / "generated.sv"
+                generated = Path(directory).resolve() / "generated.sv"
                 generated.write_text("module generated; endmodule\n", encoding="utf-8")
-                self.window.config_page.artifacts_panel.set_files([generated], Path(directory))
+                self.window.config_page.artifacts_panel.set_files([generated], Path(directory).resolve())
                 panel = self.window.config_page.artifacts_panel
                 with patch("subprocess.Popen") as popen:
                     panel.open_in_editor()
@@ -786,7 +786,7 @@ class QtFrontendLayoutTests(unittest.TestCase):
 
     def test_docs_menu_loads_real_markdown_sections(self):
         with tempfile.TemporaryDirectory() as directory:
-            docs_dir = Path(directory)
+            docs_dir = Path(directory).resolve()
             (docs_dir / "qt_frontend_guide.md").write_text(
                 "# Frontend Guide\n\n"
                 "| Name | Meaning |\n|---|---|\n| ctrl_id | Controller ID |\n\n"

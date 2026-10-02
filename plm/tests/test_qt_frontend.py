@@ -247,6 +247,13 @@ class QtFrontendLayoutTests(unittest.TestCase):
 
     def test_project_list_is_flat_and_project_click_does_not_expand(self):
         project_list = self.window.nav_panel.project_list
+        self.assertEqual(
+            ProjectList.__module__, "plm.frontend.qt.widgets.project_list"
+        )
+        self.assertEqual(
+            project_list.hover_card.__class__.__module__,
+            "plm.frontend.qt.widgets.hover_card",
+        )
         initial_count = project_list.count()
         self.assertGreater(initial_count, 0)
         for row, widget in enumerate(project_list.project_widgets):

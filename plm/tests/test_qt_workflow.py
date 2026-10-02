@@ -1,0 +1,193 @@
+"""Integration checks for project actions and real workspace generation."""
+
+import os
+import shutil
+import tempfile
+import unittest
+from pathlib import Path
+from unittest.mock import patch
+
+os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
+from PyQt5 import QtCore, QtWidgets
+
+from plm.frontend.qt.controllers import AppController
+from plm.frontend.qt.main_window import MainWindow
+from plm.frontend.qt.services import ProjectService, SettingsStore, WorkspaceService
+from plm.frontend.qt.widgets.common import PROJECT_ROOT
+
+
+class QtWorkflowTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+        cls.app.setStyle("Fusion")
+
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.root = Path(self.temp.name)
+        for name in ("demo", "other"):
+            shutil.copytree(
+                PROJECT_ROOT / "test/bifurcate/config",
+                self.root / "test" / name / "config",
+            )
+        qsettings = QtCore.QSettings(str(self.root / "settings.ini"), QtCore.QSettings.IniFormat)
+        self.store = SettingsStore(qsettings)
+        self.projects = ProjectService(self.root)
+        self.workspaces = WorkspaceService()
+
+    def test_project_rename_archive_pin_delete_are_persistent_and_safe(self):
+        self.store.set_recent_project("demo")
+        controller = AppController(self.projects, self.store, self.workspaces)
+        nav = controller.create_navigation()
+        self.assertEqual(nav.current_project_name, "demo")
+
+        renamed_dir = self.projects.rename("demo", "renamed")
+        self.assertEqual(renamed_dir, self.root / "test/renamed/config")
+        self.assertFalse((self.root / "test/demo").exists())
+        with self.assertRaises(FileExistsError):
+            self.projects.rename("renamed", "other")
+        with self.assertRaises(ValueError):
+            self.projects.delete("renamed")
+        self.assertTrue(renamed_dir.exists())
+
+        state = self.store.get_project_state("renamed")
+        state.is_pinned = True
+        self.store.save_project_state(state)
+        state = self.store.get_project_state("other")
+        state.is_archived = True
+        self.store.save_project_state(state)
+        refreshed = controller.create_navigation()
+        self.assertEqual([w.project_name for w in refreshed.project_list.project_widgets], ["renamed"])
+
+        payload = self.workspaces.load(self.projects._find("renamed"))
+        self.workspaces.save(self.projects._find("renamed"), payload)
+        self.assertTrue((self.root / "test/renamed/.plm-workspace").is_file())
+        self.projects.delete("renamed")
+        self.assertFalse((self.root / "test/renamed").exists())
+        nav.close()
+        refreshed.close()
+
+    def test_edit_save_validate_generate_and_show_real_artifacts(self):
+        controller = AppController(self.projects, self.store, self.workspaces)
+        with patch("plm.frontend.qt.main_window.AppController", return_value=controller):
+            window = MainWindow()
+        window.show()
+        self.app.processEvents()
+        self.addCleanup(window.close)
+        self.assertEqual(controller.current_name, "demo")
+        page = window.config_page
+        self.assertGreater(page.controllers_editor.table.rowCount(), 0)
+        self.assertGreater(page.signals_editor.table.rowCount(), 0)
+
+        item = page.controllers_editor.table.item(0, 1)
+        item.setText("DemoCtrl")
+        self.assertTrue(page.dirty)
+        window.nav_panel.save_btn.click()
+        self.assertFalse(page.dirty)
+        csv_text = (self.root / "test/demo/config/controllers.csv").read_text()
+        self.assertIn("DemoCtrl", csv_text)
+
+        page.controllers_editor.table.item(0, 0).setText("invalid-id")
+        self.assertTrue(page.dirty)
+        with patch.object(QtWidgets.QMessageBox, "warning") as warning:
+            window.nav_panel.save_btn.click()
+        warning.assert_called_once()
+        self.assertTrue(page.dirty)
+        self.assertEqual((self.root / "test/demo/config/controllers.csv").read_text(), csv_text)
+        page.controllers_editor.table.item(0, 0).setText("0")
+
+        page.generation_editor.generate_btn.click()
+        self.assertTrue((self.root / "test/demo/rtl/src/pipe_lane_mapper.sv").is_file())
+        self.assertTrue((self.root / "test/demo/tb/tb_pipe_lane_mapper.sv").is_file())
+        from plm.frontend.qt.views.artifacts_panel import FileDiffCard
+        cards = page.artifacts_panel.findChildren(FileDiffCard)
+        self.assertTrue(any(card.file_path.name == "pipe_lane_mapper.sv" for card in cards))
+        self.assertIn("生成完成", window.log_panel.output.toPlainText())
+
+    def test_project_actions_flow_through_controller_and_keep_selection(self):
+        controller = AppController(self.projects, self.store, self.workspaces)
+        with patch("plm.frontend.qt.main_window.AppController", return_value=controller):
+            window = MainWindow()
+        window.show()
+        self.app.processEvents()
+        self.addCleanup(window.close)
+        nav = window.nav_panel
+
+        other = next(w for w in nav.project_list.project_widgets if w.project_name == "other")
+        nav.project_list.pin_project(other)
+        self.assertTrue(self.store.get_project_state("other").is_pinned)
+        self.assertEqual(nav.project_list.project_widgets[0].project_name, "other")
+        self.assertEqual(controller.current_name, "demo")
+        self.assertEqual(nav.project_list.itemWidget(nav.project_list.currentItem()).project_name, "demo")
+
+        with patch.object(QtWidgets.QMessageBox, "question", return_value=QtWidgets.QMessageBox.Yes):
+            nav.project_list.archive_project(other)
+        self.assertTrue(self.store.get_project_state("other").is_archived)
+        self.assertEqual(nav.current_project_name, "demo")
+        self.assertEqual(nav.project_list.count(), 1)
+
+        demo = nav.project_list.project_widgets[0]
+        with patch.object(QtWidgets.QInputDialog, "getText", return_value=("renamed", True)):
+            nav.project_list.rename_project(demo)
+        self.assertEqual(nav.current_project_name, "renamed")
+        self.assertEqual(self.store.recent_project(), "renamed")
+        self.assertEqual(window.config_page.header.title_label.text(), "renamed")
+        self.assertTrue((self.root / "test/renamed/config/controllers.csv").is_file())
+
+        self.assertTrue(controller.save_current())
+        with patch.object(QtWidgets.QMessageBox, "question", return_value=QtWidgets.QMessageBox.Yes):
+            nav.project_list.delete_project(demo)
+        self.assertEqual(nav.project_list.count(), 0)
+        self.assertEqual(window.config_page.header.title_label.text(), "无项目")
+        self.assertFalse((self.root / "test/renamed").exists())
+
+    def test_switching_projects_preserves_or_discards_unsaved_edits(self):
+        controller = AppController(self.projects, self.store, self.workspaces)
+        with patch("plm.frontend.qt.main_window.AppController", return_value=controller):
+            window = MainWindow()
+        window.show()
+        self.app.processEvents()
+        self.addCleanup(window.close)
+        item = window.config_page.controllers_editor.table.item(0, 1)
+        original = item.text()
+        item.setText("unsaved")
+        other = next(w for w in window.nav_panel.project_list.project_widgets
+                     if w.project_name == "other")
+        with patch.object(QtWidgets.QMessageBox, "question", return_value=QtWidgets.QMessageBox.Cancel):
+            other.header.click()
+        self.assertEqual(controller.current_name, "demo")
+        self.assertEqual(window.nav_panel.current_project_name, "demo")
+        self.assertEqual(item.text(), "unsaved")
+        with patch.object(QtWidgets.QMessageBox, "question", return_value=QtWidgets.QMessageBox.Discard):
+            other.header.click()
+        self.assertEqual(controller.current_name, "other")
+        self.assertEqual(window.config_page.header.title_label.text(), "other")
+        self.assertIn(original, (self.root / "test/demo/config/controllers.csv").read_text())
+
+    def test_archiving_current_project_selects_remaining_and_empty_restart(self):
+        controller = AppController(self.projects, self.store, self.workspaces)
+        with patch("plm.frontend.qt.main_window.AppController", return_value=controller):
+            window = MainWindow()
+        self.addCleanup(window.close)
+        controller.archive_project("demo")
+        self.assertEqual(controller.current_name, "other")
+        self.assertEqual(window.nav_panel.current_project_name, "other")
+        self.assertEqual(self.store.recent_project(), "other")
+        controller.archive_project("other")
+        self.assertIsNone(controller.current_project)
+        self.assertIsNone(window.nav_panel.current_project_name)
+        self.assertEqual(window.config_page.header.title_label.text(), "无项目")
+
+        restarted = AppController(self.projects, self.store, self.workspaces)
+        with patch("plm.frontend.qt.main_window.AppController", return_value=restarted):
+            empty_window = MainWindow()
+        self.addCleanup(empty_window.close)
+        self.assertEqual(empty_window.nav_panel.project_list.count(), 0)
+        self.assertEqual(empty_window.config_page.header.title_label.text(), "无项目")
+        self.assertFalse(restarted.save_current())
+
+
+if __name__ == "__main__":
+    unittest.main()

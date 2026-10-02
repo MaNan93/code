@@ -478,50 +478,58 @@ class QtFrontendLayoutTests(unittest.TestCase):
         self.assertEqual(header.title_label.text(), "新的会话名称")
 
     def test_project_row_actions_and_nav_signals(self):
-        nav = self.window.nav_panel
-        project_list = nav.project_list
-        first_project = project_list.project_widgets[0]
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            projects = [
+                ProjectInfo(name=name, config_dir=root / name / "config",
+                            controllers_csv=root / name / "config/controllers.csv",
+                            lane_mapping_csv=root / name / "config/lane_mapping.csv",
+                            pipe_signals_csv=root / name / "config/pipe_signals.csv")
+                for name in ("first", "second")
+            ]
+            for project in projects:
+                project.config_dir.mkdir(parents=True)
+            nav = NavPanel(projects)
+            nav.show()
+            self.app.processEvents()
+            try:
+                project_list = nav.project_list
+                first = project_list.project_widgets[0]
+                QtWidgets.QApplication.sendEvent(
+                    first.header, QtCore.QEvent(QtCore.QEvent.Enter))
+                self.assertTrue(first.archive_btn.isVisible())
+                self.assertTrue(first.more_btn.isVisible())
+                QtWidgets.QApplication.sendEvent(
+                    first.header, QtCore.QEvent(QtCore.QEvent.Leave))
+                self.assertFalse(first.archive_btn.isVisible())
 
-        QtWidgets.QApplication.sendEvent(
-            first_project.header, QtCore.QEvent(QtCore.QEvent.Enter)
-        )
-        self.assertTrue(first_project.archive_btn.isVisible())
-        self.assertTrue(first_project.more_btn.isVisible())
-        QtWidgets.QApplication.sendEvent(
-            first_project.header, QtCore.QEvent(QtCore.QEvent.Leave)
-        )
-        self.assertFalse(first_project.archive_btn.isVisible())
-        self.assertFalse(first_project.more_btn.isVisible())
+                pin_spy = QtTest.QSignalSpy(nav.project_pinned)
+                project_list.pin_project(project_list.project_widgets[1])
+                self.assertEqual(pin_spy[0][0], "second")
+                self.assertIs(project_list.project_widgets[0], first)
+                nav.apply_pin("second")
+                self.assertEqual(project_list.project_widgets[0].project_name, "second")
 
-        if len(project_list.project_widgets) > 1:
-            second_project = project_list.project_widgets[1]
-            project_list.pin_project(second_project)
-            self.assertIs(project_list.project_widgets[0], second_project)
+                renamed_spy = QtTest.QSignalSpy(nav.project_renamed)
+                with patch.object(QtWidgets.QInputDialog, "getText",
+                                  return_value=("renamed", True)):
+                    project_list.rename_project(first)
+                self.assertEqual(first.project_name, "first")
+                self.assertEqual(renamed_spy[0], ["first", "renamed"])
+                nav.apply_rename("first", "renamed", root / "renamed/config")
+                self.assertEqual(first.project_name, "renamed")
 
-        renamed_spy = QtTest.QSignalSpy(nav.project_renamed)
-        old_name = first_project.project_name
-        with patch.object(
-            QtWidgets.QInputDialog,
-            "getText",
-            return_value=(f"{old_name}-renamed", True),
-        ):
-            project_list.rename_project(first_project)
-        self.assertEqual(first_project.project_name, f"{old_name}-renamed")
-        self.assertEqual(len(renamed_spy), 1)
-
-        archive_target = project_list.project_widgets[-1]
-        archived_name = archive_target.project_name
-        archived_path = archive_target.project_path
-        archived_spy = QtTest.QSignalSpy(nav.project_archived)
-        with patch.object(
-            QtWidgets.QMessageBox,
-            "question",
-            return_value=QtWidgets.QMessageBox.Yes,
-        ):
-            project_list.archive_project(archive_target)
-        self.assertEqual(len(archived_spy), 1)
-        self.assertEqual(archived_spy[0][0], archived_name)
-        self.assertTrue(archived_path.exists())
+                archived_spy = QtTest.QSignalSpy(nav.project_archived)
+                with patch.object(QtWidgets.QMessageBox, "question",
+                                  return_value=QtWidgets.QMessageBox.Yes):
+                    project_list.archive_project(first)
+                self.assertEqual(archived_spy[0][0], "renamed")
+                self.assertEqual(project_list.count(), 2)
+                nav.apply_remove("renamed")
+                self.assertEqual(project_list.count(), 1)
+            finally:
+                nav.close()
+                nav.deleteLater()
 
     def test_project_item_is_independent_and_keeps_its_action_menu(self):
         self.assertEqual(
@@ -654,12 +662,14 @@ class QtFrontendLayoutTests(unittest.TestCase):
 
     def test_artifact_cards_and_copy_path(self):
         panel = self.window.config_page.artifacts_panel
-        cards = panel.findChildren(FileDiffCard)
-        self.assertGreaterEqual(len(cards), 3)
-        cards[0].copy_path()
-        self.assertEqual(
-            QtWidgets.QApplication.clipboard().text(), str(cards[0].file_path)
-        )
+        with tempfile.TemporaryDirectory() as directory:
+            generated = Path(directory) / "generated.sv"
+            generated.write_text("module generated; endmodule\n", encoding="utf-8")
+            panel.set_files([generated], Path(directory))
+            cards = panel.findChildren(FileDiffCard)
+            self.assertEqual(len(cards), 1)
+            cards[0].copy_path()
+            self.assertEqual(QtWidgets.QApplication.clipboard().text(), str(generated))
 
     def test_artifact_open_uses_configured_editor(self):
         settings = QtCore.QSettings("plm", "plmConsultant")
@@ -669,6 +679,9 @@ class QtFrontendLayoutTests(unittest.TestCase):
                 editor = Path(directory) / "custom-editor"
                 editor.write_text("editor", encoding="utf-8")
                 settings.setValue("tools/editor_path", str(editor))
+                generated = Path(directory) / "generated.sv"
+                generated.write_text("module generated; endmodule\n", encoding="utf-8")
+                self.window.config_page.artifacts_panel.set_files([generated], Path(directory))
                 card = self.window.config_page.artifacts_panel.findChildren(
                     FileDiffCard
                 )[0]

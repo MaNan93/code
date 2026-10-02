@@ -1,6 +1,5 @@
 """Flat draggable project list used by the navigation panel."""
 
-import shutil
 from typing import Iterable
 
 from PyQt5 import QtCore, QtWidgets
@@ -16,6 +15,7 @@ class ProjectList(QtWidgets.QListWidget):
     projectArchived = QtCore.pyqtSignal(str)
     projectDeleted = QtCore.pyqtSignal(str)
     projectRenamed = QtCore.pyqtSignal(str, str)
+    projectPinned = QtCore.pyqtSignal(str)
     projectSelected = QtCore.pyqtSignal(str)
 
     def __init__(self, projects: Iterable[ProjectInfo], parent=None):
@@ -90,6 +90,12 @@ class ProjectList(QtWidgets.QListWidget):
         return -1, None
 
     def pin_project(self, widget):
+        self.projectPinned.emit(widget.project_name)
+
+    def apply_pin(self, name):
+        widget = next((w for w in self.project_widgets if w.project_name == name), None)
+        if widget is None:
+            return
         row, item = self._item_for_widget(widget)
         if item is None or row == 0:
             return
@@ -99,7 +105,7 @@ class ProjectList(QtWidgets.QListWidget):
         self.setItemWidget(item, widget)
         self.project_widgets.remove(widget)
         self.project_widgets.insert(0, widget)
-        self.setCurrentItem(item)
+        self.select_project(self.selected_project_name, emit_signal=False)
 
     def rename_project(self, widget):
         old_name = widget.project_name
@@ -112,13 +118,19 @@ class ProjectList(QtWidgets.QListWidget):
         new_name = new_name.strip()
         if not accepted or not new_name or new_name == old_name:
             return
+        self.projectRenamed.emit(old_name, new_name)
+
+    def apply_rename(self, old_name, new_name, config_dir):
+        widget = next((w for w in self.project_widgets if w.project_name == old_name), None)
+        if widget is None:
+            return
         widget.rename(new_name)
+        widget.project_path = config_dir
         if self.selected_project_name == old_name:
             self.selected_project_name = new_name
             self.projectSelected.emit(new_name)
         if self.hover_card.isVisible():
-            self.hover_card.set_project(new_name, widget.project_path)
-        self.projectRenamed.emit(old_name, new_name)
+            self.hover_card.set_project(new_name, config_dir)
 
     def archive_project(self, widget):
         message = (
@@ -135,7 +147,6 @@ class ProjectList(QtWidgets.QListWidget):
         if answer != QtWidgets.QMessageBox.Yes:
             return
         project_name = widget.project_name
-        self._remove_project(widget)
         self.projectArchived.emit(project_name)
 
     def delete_project(self, widget):
@@ -152,19 +163,13 @@ class ProjectList(QtWidgets.QListWidget):
         )
         if answer != QtWidgets.QMessageBox.Yes:
             return
-        try:
-            if widget.project_path.is_dir():
-                shutil.rmtree(str(widget.project_path))
-            elif widget.project_path.exists():
-                widget.project_path.unlink()
-        except OSError as error:
-            QtWidgets.QMessageBox.warning(
-                self, "删除失败", f"无法删除项目源文件：\n{error}"
-            )
-            return
         project_name = widget.project_name
-        self._remove_project(widget)
         self.projectDeleted.emit(project_name)
+
+    def apply_remove(self, name):
+        widget = next((w for w in self.project_widgets if w.project_name == name), None)
+        if widget is not None:
+            self._remove_project(widget)
 
     def _remove_project(self, widget):
         row, item = self._item_for_widget(widget)
@@ -218,4 +223,4 @@ class ProjectList(QtWidgets.QListWidget):
         self.hover_card.raise_()
 
     def _resize_item(self, item, widget):
-        QtCore.QTimer.singleShot(0, lambda: item.setSizeHint(widget.sizeHint()))
+        item.setSizeHint(widget.sizeHint())

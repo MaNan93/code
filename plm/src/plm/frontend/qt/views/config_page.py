@@ -1,5 +1,6 @@
 from PyQt5 import QtCore, QtGui, QtWidgets
 from plm.frontend.qt.widgets.common import apply_drop_shadow, make_icon_button
+from plm.frontend.qt.widgets.config_editor import CsvTableEditor, GenerationEditor
 from plm.frontend.qt.views.artifacts_panel import ArtifactsPanel
 
 class EscapeLineEdit(QtWidgets.QLineEdit):
@@ -92,7 +93,7 @@ class ConfigHeader(QtWidgets.QFrame):
 
 
 class ConfigTabPage(QtWidgets.QWidget):
-    def __init__(self, title, description, parent=None):
+    def __init__(self, title, description, editor, parent=None):
         super().__init__(parent)
         root = QtWidgets.QVBoxLayout(self)
         root.setContentsMargins(20, 16, 20, 16)
@@ -115,22 +116,8 @@ class ConfigTabPage(QtWidgets.QWidget):
         content.setObjectName("ConfigScrollContent")
         content_layout = QtWidgets.QVBoxLayout(content)
         content_layout.setContentsMargins(0, 0, 8, 0)
-        content_layout.setSpacing(16)
-        for label_text in (
-            "基础配置",
-            "参数映射与校验",
-            "生成选项（业务控件将在后续阶段接入）",
-        ):
-            card = QtWidgets.QFrame()
-            card.setObjectName("ConfigPlaceholderCard")
-            apply_drop_shadow(card)
-            card_layout = QtWidgets.QHBoxLayout(card)
-            card_layout.setContentsMargins(20, 16, 20, 16)
-            label = QtWidgets.QLabel(label_text)
-            label.setObjectName("PlaceholderLabel")
-            card_layout.addWidget(label)
-            card_layout.addStretch(1)
-            content_layout.addWidget(card)
+        content_layout.setSpacing(0)
+        content_layout.addWidget(editor)
         content_layout.addStretch(1)
         scroll.setWidget(content)
         root.addWidget(scroll, 1)
@@ -180,6 +167,8 @@ class ConfigPage(QtWidgets.QFrame):
     """Region 2 with an absolute-positioned Region 5 overlay."""
 
     logToggleRequested = QtCore.pyqtSignal()
+    dirtyChanged = QtCore.pyqtSignal(bool)
+    generateRequested = QtCore.pyqtSignal()
 
     def __init__(self, parent=None, editor_path_provider=None):
         super().__init__(parent)
@@ -207,13 +196,23 @@ class ConfigPage(QtWidgets.QFrame):
         self.tabs = QtWidgets.QTabWidget()
         self.tabs.setObjectName("ConfigTabs")
         self.tabs.setUsesScrollButtons(False)
-        for tab_name, title, description in (
-            ("Controller", "Controller Configuration", "配置控制器 ID、名称和最大 Lane 宽度。"),
-            ("LaneMapping", "Lane Mapping Configuration", "配置物理 Lane 与控制器 Lane 的映射关系。"),
-            ("Signals", "PIPE Signals", "配置 PIPE 信号、方向、位宽与安全值。"),
-            ("Generation", "Generation Settings", "检查输出目录和 RTL 生成参数。"),
+        self.controllers_editor = CsvTableEditor(("ctrl_id", "ctrl_name", "max_width"))
+        self.mapping_editor = CsvTableEditor(("mode", "lane0", "lane1", "lane2", "lane3"), mapping=True)
+        self.signals_editor = CsvTableEditor((
+            "signal_name", "signal_type", "direction", "width", "safe_state", "tie_off"
+        ))
+        self.generation_editor = GenerationEditor()
+        for editor in (self.controllers_editor, self.mapping_editor, self.signals_editor,
+                       self.generation_editor):
+            editor.changed.connect(self._mark_dirty)
+        self.generation_editor.generateRequested.connect(self.generateRequested.emit)
+        for tab_name, title, description, editor in (
+            ("Controller", "Controller Configuration", "配置控制器 ID、名称和最大 Lane 宽度。", self.controllers_editor),
+            ("LaneMapping", "Lane Mapping Configuration", "配置物理 Lane 与控制器 Lane 的映射关系。", self.mapping_editor),
+            ("Signals", "PIPE Signals", "配置 PIPE 信号、方向、位宽与安全值。", self.signals_editor),
+            ("Generation", "Generation Settings", "选择生成参数并生成匹配的 RTL 和 Testbench。", self.generation_editor),
         ):
-            self.tabs.addTab(ConfigTabPage(title, description), tab_name)
+            self.tabs.addTab(ConfigTabPage(title, description, editor), tab_name)
         config_layout.addWidget(self.tabs, 1)
         root.addWidget(self.config_area, 1)
 
@@ -232,6 +231,34 @@ class ConfigPage(QtWidgets.QFrame):
     def update_title(self, project_name):
         self.header.title_label.setText(project_name)
 
+    def _mark_dirty(self):
+        if not getattr(self, "dirty", False):
+            self.dirty = True
+            self.dirtyChanged.emit(True)
+
+    def set_content(self, payload):
+        self.controllers_editor.set_rows(payload.get("controllers", []))
+        mapping = payload.get("mapping") or {}
+        lanes = int(mapping.get("lane_count") or 4)
+        self.mapping_editor.set_rows(mapping.get("rows", []), ["mode"] + [
+            f"lane{index}" for index in range(lanes)
+        ])
+        self.signals_editor.set_rows(payload.get("signals", []))
+        self.generation_editor.set_flags(payload.get("gen_flags") or {})
+        self.dirty = False
+        self.dirtyChanged.emit(False)
+
+    def content(self):
+        return {
+            "controllers": self.controllers_editor.rows(),
+            "mapping": {
+                "lane_count": self.mapping_editor.lane_count.value(),
+                "rows": self.mapping_editor.rows(),
+            },
+            "signals": self.signals_editor.rows(),
+            "gen_flags": self.generation_editor.flags(),
+        }
+
     def eventFilter(self, watched, event):
         if watched is self.config_area and event.type() == QtCore.QEvent.Resize:
             self.reposition_artifacts()
@@ -245,6 +272,13 @@ class ConfigPage(QtWidgets.QFrame):
             self.reposition_artifacts()
             self.artifacts_panel.raise_()
             self.drag_handle.raise_()
+        else:
+            self._resize_editors(self.config_area.width() - 48)
+
+    def _resize_editors(self, available_width):
+        for editor in (self.controllers_editor, self.mapping_editor,
+                       self.signals_editor, self.generation_editor):
+            editor.setMaximumWidth(max(280, available_width))
 
     def toggle_artifacts_maximized(self):
         if not self.artifacts_panel.isVisible():
@@ -273,6 +307,7 @@ class ConfigPage(QtWidgets.QFrame):
             else max(minimum, min(self.artifacts_width, total_width))
         )
         panel_x = total_width - panel_width
+        self._resize_editors(panel_x - 48)
         self.artifacts_panel.setGeometry(panel_x, 0, panel_width, total_height)
         handle_x = panel_x - self.drag_handle.width() // 2
         handle_y = (total_height - self.drag_handle.height()) // 2

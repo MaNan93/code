@@ -170,11 +170,27 @@ QLabel#ConfigTitle { color: #1A1A1A; font-size: 15px; font-weight: bold; }
 QLabel#ConfigDescription { color: $text_secondary; font-size: 13px; font-weight: normal; }
 QScrollArea#ConfigScroll { background: #FFFFFF; border: none; }
 QWidget#ConfigScrollContent { background: #FFFFFF; }
-QFrame#ConfigPlaceholderCard {
-    background-color: #FFFFFF; border: 1px solid #EAEAEA; border-radius: 6px;
+QTableWidget#ConfigDataTable {
+    background: #FFFFFF; alternate-background-color: #F9FAFB;
+    color: $text; border: 1px solid #EAEAEA; border-radius: 6px;
+    gridline-color: #EAEAEA; selection-background-color: $primary_light;
+    selection-color: $primary; font-size: 13px;
 }
-QLabel#PlaceholderLabel { color: #1A1A1A; font-size: 14px; font-weight: bold; }
-
+QTableWidget#ConfigDataTable QHeaderView::section {
+    background: #F0F2F5; color: #1A1A1A; border: none;
+    border-bottom: 1px solid #EAEAEA; padding: 8px 12px;
+    font-size: 13px; font-weight: bold;
+}
+QPushButton#ConfigRowButton {
+    background: #FFFFFF; color: $text; border: 1px solid $border;
+    border-radius: 6px; padding: 6px 12px;
+}
+QPushButton#ConfigRowButton:hover { background: #F0F2F5; }
+QPushButton#ConfigGenerateButton {
+    background: $primary; color: #FFFFFF; border: none;
+    border-radius: 6px; padding: 8px 20px;
+}
+QPushButton#ConfigGenerateButton:hover { background: #4096FF; }
 QFrame#LogPanel { background-color: #FFFFFF; border-top: 1px solid $border; }
 QFrame#LogHeader { background-color: #FFFFFF; border: none; }
 QLabel#LogTabTitle { color: $text; font-size: 13px; font-weight: bold; }

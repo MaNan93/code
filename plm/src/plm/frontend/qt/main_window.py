@@ -44,15 +44,6 @@ __all__ = [
 
 
 APP_ICON_PATH = Path(__file__).resolve().parent / "assets" / "app_icon.svg"
-DOCS_DIR = Path(__file__).resolve().parents[2] / "docs"
-
-
-
-
-
-
-
-
 class MainWindow(QtWidgets.QMainWindow):
     """Native QMainWindow containing horizontal and vertical splitters."""
 
@@ -128,7 +119,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def on_save(self):
         self.nav_panel.set_active(None)
-        self.log_panel.append_log("[UI] 当前配置已加入保存队列")
+        self.controller.save_current()
 
     def on_open_settings(self):
         self.nav_panel.set_active("settings")

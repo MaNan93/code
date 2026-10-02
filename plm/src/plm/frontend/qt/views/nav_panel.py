@@ -20,6 +20,7 @@ class NavPanel(QtWidgets.QFrame):
     project_archived = QtCore.pyqtSignal(str)
     project_deleted = QtCore.pyqtSignal(str)
     project_renamed = QtCore.pyqtSignal(str, str)
+    project_pinned = QtCore.pyqtSignal(str)
     project_selected = QtCore.pyqtSignal(str)
 
     def __init__(self, projects=(), recent_project="", parent=None):
@@ -111,6 +112,7 @@ class NavPanel(QtWidgets.QFrame):
         self.project_list.projectArchived.connect(self._project_archived)
         self.project_list.projectDeleted.connect(self._project_deleted)
         self.project_list.projectRenamed.connect(self._project_renamed)
+        self.project_list.projectPinned.connect(self.project_pinned.emit)
         self.project_list.projectSelected.connect(self._project_selected)
         root.addWidget(self.project_list, 1)
 
@@ -120,6 +122,7 @@ class NavPanel(QtWidgets.QFrame):
 
         self.collapsed_projects = QtWidgets.QWidget()
         collapsed_projects_layout = QtWidgets.QVBoxLayout(self.collapsed_projects)
+        self.collapsed_projects_layout = collapsed_projects_layout
         collapsed_projects_layout.setContentsMargins(0, 0, 0, 0)
         collapsed_projects_layout.setSpacing(8)
         collapsed_projects_layout.setAlignment(
@@ -326,19 +329,35 @@ class NavPanel(QtWidgets.QFrame):
         return button
 
     def _project_archived(self, project_name):
-        self._remove_collapsed_project(project_name)
         self.project_archived.emit(project_name)
 
     def _project_deleted(self, project_name):
-        self._remove_collapsed_project(project_name)
         self.project_deleted.emit(project_name)
 
     def _project_renamed(self, old_name, new_name):
+        self.project_renamed.emit(old_name, new_name)
+
+    def apply_rename(self, old_name, new_name, config_dir):
+        self.project_list.apply_rename(old_name, new_name, config_dir)
         for button in self.collapsed_project_buttons:
             if button.toolTip() == old_name:
                 button.setToolTip(new_name)
                 break
-        self.project_renamed.emit(old_name, new_name)
+
+    def apply_remove(self, name):
+        self.project_list.apply_remove(name)
+        self._remove_collapsed_project(name)
+        self.current_project_name = self.project_list.selected_project_name
+
+    def apply_pin(self, name):
+        self.project_list.apply_pin(name)
+        for button in self.collapsed_project_buttons:
+            if button.toolTip() == name:
+                self.collapsed_project_buttons.remove(button)
+                self.collapsed_project_buttons.insert(0, button)
+                self.collapsed_projects_layout.removeWidget(button)
+                self.collapsed_projects_layout.insertWidget(0, button)
+                break
 
     def _project_selected(self, project_name):
         self.current_project_name = project_name

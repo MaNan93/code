@@ -31,6 +31,17 @@ class SettingsStore:
         state.last_opened = datetime.now(timezone.utc)
         self.save_project_state(state)
 
+    def clear_recent_project(self, project_name):
+        if self.recent_project() == project_name:
+            self._settings.remove("navigation/recent_project")
+
+    def remove_project_state(self, name):
+        self._settings.beginGroup("projects/state")
+        self._settings.remove(self._project_group(name))
+        self._settings.endGroup()
+        self.clear_recent_project(name)
+        self._settings.sync()
+
     @staticmethod
     def _project_group(name):
         return quote(name, safe="")

@@ -27,11 +27,14 @@ class DiffLine(QtWidgets.QWidget):
 
 
 class FileDiffCard(QtWidgets.QFrame):
-    def __init__(self, file_path, lines, parent=None, editor_path_provider=None):
+    def __init__(self, file_path, lines, parent=None, editor_path_provider=None,
+                 display_path=None, marker_text="M"):
         super().__init__(parent)
         self.editor_path_provider = editor_path_provider or (lambda: DEFAULT_EDITOR)
         self.file_path = Path(file_path)
         self.setObjectName("FileDiffCard")
+        self.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Fixed)
+        self.setMinimumHeight(52 + len(lines) * 24)
         apply_drop_shadow(self)
         root = QtWidgets.QVBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 8)
@@ -41,12 +44,12 @@ class FileDiffCard(QtWidgets.QFrame):
         header_layout = QtWidgets.QHBoxLayout(header)
         header_layout.setContentsMargins(16, 12, 16, 12)
         header_layout.setSpacing(8)
-        marker = QtWidgets.QLabel("M")
+        marker = QtWidgets.QLabel(marker_text)
         marker.setObjectName("ModifiedMarker")
         marker.setAlignment(QtCore.Qt.AlignCenter)
         marker.setFixedSize(20, 18)
         header_layout.addWidget(marker)
-        path_label = QtWidgets.QLabel(str(file_path))
+        path_label = QtWidgets.QLabel(str(display_path or file_path))
         path_label.setObjectName("FilePathLabel")
         path_label.setTextInteractionFlags(QtCore.Qt.TextSelectableByMouse)
         header_layout.addWidget(path_label, 1)
@@ -84,6 +87,7 @@ class ArtifactsPanel(QtWidgets.QFrame):
     """Region 5: floating generated-file and diff viewer."""
 
     maximizeRequested = QtCore.pyqtSignal()
+    refreshRequested = QtCore.pyqtSignal()
 
     def __init__(self, parent=None, editor_path_provider=None):
         super().__init__(parent)
@@ -121,6 +125,7 @@ class ArtifactsPanel(QtWidgets.QFrame):
             if index == 0:
                 toolbar_layout.addStretch(1)
         self.toolbar_buttons[-1].clicked.connect(self.maximizeRequested.emit)
+        self.toolbar_buttons[1].clicked.connect(self.refreshRequested.emit)
         root.addWidget(toolbar)
 
         scroll = QtWidgets.QScrollArea()
@@ -132,31 +137,32 @@ class ArtifactsPanel(QtWidgets.QFrame):
         content_layout = QtWidgets.QVBoxLayout(content)
         content_layout.setContentsMargins(0, 0, 0, 0)
         content_layout.setSpacing(12)
-        examples = (
-            (
-                "src/plm/frontend/qt/main_window.py",
-                ((81, 81, "class ConfigPage(QFrame):", "ctx"),
-                 (82, None, "    pass", "del"),
-                 (None, 82, "    artifacts_width = 400", "add")),
-            ),
-            (
-                "src/plm/core/generator/rtl.py",
-                ((21, 21, "def generate_rtl(config):", "ctx"),
-                 (22, None, "    legacy_validate(config)", "del"),
-                 (None, 22, "    validate_config(config)", "add"),
-                 (23, 23, "    return render(config)", "ctx")),
-            ),
-            (
-                "test/plm_config.json",
-                ((4, 4, '  "lanes": [', "ctx"),
-                 (5, None, '    {"id": 0}', "del"),
-                 (None, 5, '    {"id": 0, "width": 8}', "add")),
-            ),
-        )
-        for file_path, lines in examples:
-            content_layout.addWidget(FileDiffCard(
-                file_path, lines, editor_path_provider=self.editor_path_provider
-            ))
+        content_layout.setSizeConstraint(QtWidgets.QLayout.SetMinAndMaxSize)
+        self.content_layout = content_layout
+        self.empty_label = QtWidgets.QLabel("尚无生成文件")
+        self.empty_label.setObjectName("ArtifactsEmptyLabel")
+        content_layout.addWidget(self.empty_label)
         content_layout.addStretch(1)
         scroll.setWidget(content)
         root.addWidget(scroll, 1)
+
+    def set_files(self, files, root=None):
+        for card in self.findChildren(FileDiffCard):
+            self.content_layout.removeWidget(card)
+            card.deleteLater()
+        self.empty_label.setVisible(not files)
+        for path in files:
+            path = Path(path)
+            try:
+                display = path.relative_to(root) if root else path.name
+            except ValueError:
+                display = path.name
+            try:
+                preview = path.read_text(encoding="utf-8").splitlines()[:4]
+            except (OSError, UnicodeError):
+                preview = ["无法预览该文件"]
+            lines = [(index, index, line[:100], "ctx")
+                     for index, line in enumerate(preview, start=1)]
+            card = FileDiffCard(path, lines, editor_path_provider=self.editor_path_provider,
+                                display_path=display, marker_text="F")
+            self.content_layout.insertWidget(self.content_layout.count() - 1, card)

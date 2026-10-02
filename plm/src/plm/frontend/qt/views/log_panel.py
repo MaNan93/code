@@ -37,12 +37,6 @@ class LogPanel(QtWidgets.QFrame):
         self.output.setObjectName("LogOutput")
         self.output.setReadOnly(True)
         root.addWidget(self.output, 1)
-        for line in (
-            "[10:24:01] PLM workspace loaded",
-            "[10:24:02] Controller configuration validated",
-            "[10:24:03] Waiting for generation command...",
-        ):
-            self.append_log(line)
 
     def append_log(self, text):
         self.output.appendPlainText(text)

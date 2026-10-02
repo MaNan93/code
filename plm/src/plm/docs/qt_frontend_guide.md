@@ -158,3 +158,4 @@ RTL 与 TB 各自带一份 `manifest.json`；两份文件的 `generation_key` �
   ├─ rtl/src/*.sv
   └─ tb/tb_pipe_lane_mapper.sv
 ```
+

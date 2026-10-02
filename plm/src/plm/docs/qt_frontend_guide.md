@@ -1,181 +1,149 @@
 # PLM Qt 前端使用指南
 
-## 标签页说明
+Qt 前端编辑真实项目配置，并直接调用共享 PLM 核心生成 RTL 和 testbench。
+
+## 启动与项目管理
+
+在仓库的 `plm/` 目录执行：
+
+```bash
+uv sync --extra qt
+uv run python run.py -gui
+```
+
+安装包含 Qt 依赖的发行包后，也可以使用 `plm-gui` 或 `plm -gui`。
+安装包不附带仓库中的示例项目；可从任意位置打开项目或新建项目。
+
+左上方新建入口的菜单提供新建、打开、重新加载。新建时填写项目名并选择父目录；
+打开时可以选择项目根目录或其 `config/` 目录。左侧项目菜单支持重命名、置顶、
+归档、打开所在文件夹和删除。置顶、归档和最近项目保存在本机 QSettings；
+重命名、删除由项目服务修改实际目录。归档与删除后会重新选择可用项目；
+没有可用项目时进入空状态。删除只允许带 `.plm-workspace` 标记的工作区，
+并需要确认。
+
+有未保存修改时，切换、重新加载、归档当前项目、删除当前项目或关闭窗口会提示
+保存、放弃或取消。保存校验失败时保留当前项目和编辑内容。外部程序改动 CSV 或
+`gen_flags.txt` 后，保存和生成会要求先重新加载，避免覆盖磁盘上的改动。
+
+## 配置编辑
+
+三个表格对应当前项目的三个 CSV，不使用示例卡片。使用表格工具栏添加行、
+删除选中行，直接编辑单元格。编辑会实时校验；错误会标出具体单元格，
+保存和生成时会再次执行完整的核心校验。
 
 ### Controllers
 
-定义控制器。
-
 | 列 | 含义 |
 |---|---|
-| `ctrl_id` | 从 0 开始的整数 |
-| `ctrl_name` | 名字（CtrlA, CtrlB 等） |
-| `max_width` | 最多支持多少条 lane |
-
-操作：右键菜单增删行，拖动第一列改行顺序，直接编辑单元格。
+| `ctrl_id` | 从 0 开始的连续整数 |
+| `ctrl_name` | 控制器名称 |
+| `max_width` | 控制器最多支持的 lane 数 |
 
 ### Lane Mapping
 
-定义每个 mode 下的 lane 分配。
-
-| 列 | 含义 |
-|---|---|
-| `mode` | 模式编号（0, 1, 2...） |
-| `lane0`、`lane1`... | 格式 `<ctrl_id>-<ctrl_lane>` |
-
-例：
-```
-mode=0  lane0=0-0  lane1=0-1  lane2=1-0
-        ↓          ↓          ↓
-        CtrlA[0]   CtrlA[1]   CtrlB[0]
-```
-
-操作：右键菜单增删 mode 行（"Insert mode row below" / "Delete this mode row"），
-直接编辑单元格。lane 数用这一页顶部的下拉框改（x2/x4/x8/x16/x32），不是右键菜单。
+`mode` 从 0 开始连续编号；`lane0`、`lane1` 等单元格使用 `<ctrl_id>-<ctrl_lane>`。
+例如 `1-0` 表示 controller 1 的 lane 0。单元格编辑器分别选择控制器与其 lane。
+顶部 lane 数输入框支持 1–64，不限于 2 的幂。删除 mode 或改变 lane 数后应重新
+检查分配关系。
 
 ### Pipe Signals
 
-定义 PIPE 信号。
-
 | 列 | 含义 |
 |---|---|
-| `signal_name` | 信号名 |
-| `signal_type` | `perlane` 或 `shared`；`shared` 只允许用于 `mac2phy`，`phy2mac` 必须使用 `perlane` |
+| `signal_name` | PIPE 信号名称 |
+| `signal_type` | `perlane` 或 `shared`；`shared` 只允许用于 `mac2phy` |
 | `direction` | `mac2phy` 或 `phy2mac` |
-| `width` | 位宽 |
-| `safe_state` | 交接窗口里暂时没有 owner 时的值。两个方向都生效 |
-| `tie_off` | 任何 mode 都分不到 lane 的那条 controller lane 读到的值。只对 `phy2mac` 生效 |
+| `width` | 信号位宽 |
+| `safe_state` | 交接窗口中没有 owner 时的安全值，两个方向都生效 |
+| `tie_off` | 从未分配到 PHY lane 的 controller lane 的固定值，仅对 `phy2mac` 生效 |
 
-两列管的是不同的事，别混：`safe_state` 是"这条 lane 有主，只是正在换手"，
-`tie_off` 是"这条 controller lane 压根没接过 PHY lane"。
+例如 `mac_phy_txelecidle` 的 `safe_state` 通常为 1；
+`phy_mac_messagebus` 的 `safe_state` 与 `tie_off` 可以分别设置为 `0x50`。
+数值编辑支持十进制、十六进制以及核心支持的 Verilog 常量语法。
 
-常见值：
-- `mac_phy_txelecidle`: safe_state=1（交接时必须是电气空闲）
-- `phy_mac_rxelecidle`: safe_state=1
-- `phy_mac_messagebus`: safe_state=0x50, tie_off=0x50
+## 保存与生成
 
-操作：右键菜单增删信号，拖动第一列改行顺序。
+Generation 页提供以下参数：
 
-### Generation
-
-生成参数 + 生成按钮，在同一页。
-
-| 参数 | 可选值 |
+| 参数 | 选择与联动 |
 |---|---|
 | `arch` | `original_pipe` / `serdes` |
-| `pclk-mode` | `pclk_as_phy_output` / `pclk_as_phy_input` |
-| `sel-mode` | `sync` / `comb`（勾了 dpr 会被锁成 `sync`） |
-| `dpr` | 勾选或不勾。两种 PCLK 模式都支持；`pclk_as_phy_input` 会生成外部 `dpr_pclk` 输入和逐 lane `dpr_rx_clk` 输出 |
+| `pclk-mode` | `pclk_as_phy_output` / `pclk_as_phy_input`，分别与上述架构联动 |
+| `sel-mode` | `sync` / `comb` |
+| `dpr` | 两种 PCLK 模式都支持；启用时自动选择并锁定 `sync` |
 
-`arch` 和 `pclk-mode` 互相联动，改一个另一个跟着变。
+启用 DPR 是一次可撤销的编辑。磁盘上已存在的非法参数组合会保留并提示校验错误，
+不会在加载时悄悄改写。PHY input 模式的 DPR 使用外部 `dpr_pclk` 输入和逐 lane
+`dpr_rx_clk` 输出。
 
-这四个值保存时写进 `config/gen_flags.txt`，下次打开这个 workspace 会恢复。
-这个文件只有本前端读写，命令行的 `plm generate` 不看它——前端是在点按钮时
-把它们拼成命令行参数传过去的。
+**保存**只校验并写入 `controllers.csv`、`lane_mapping.csv`、`pipe_signals.csv`
+和 `gen_flags.txt`。**生成**先保存并使用同一组 `GenerationOptions` 调用核心，
+在 staging 中生成并检查整套 RTL/TB，成功后更新输出。失败时保留旧输出；
+具体错误与真实生成记录显示在底部日志面板。
 
-| 按钮 | 功能 |
-|---|---|
-| Generate | 保存当前编辑、完整校验配置，并使用同一组参数生成 RTL 和 testbench；全部成功后一起更新输出 |
+`gen_flags.txt` 只供 Qt 前端记住生成选择；CLI 不读取它，CLI 参数需要显式传入。
+Verible 设置保存在本机，不写入这个项目文件。
 
-表格编辑时会实时标出常见错误；点击 **Generate** 后仍会执行完整校验。
-校验失败时不会写入生成结果，具体原因显示在 LOG 页。输出文件自动写到
-`<config_dir>/../rtl/` 和 `<config_dir>/../tb/`。
+生成状态包括尚未生成、输出已过期、输出已是最新、配置有误、生成中和生成失败。
+状态同时检查配置、生成参数、格式化器身份与参数，以及输出文件内容。
+单独保存不会让旧输出变成最新；撤销到匹配现有输出的配置会恢复最新状态。
+输出被修改、删除或 manifest 损坏后会显示过期；重新生成可修复。
+完整且最新的输出会跳过写盘。
 
-生成按钮左侧和右侧预览底部会显示输出状态：尚未生成、输出已过期、
-输出已是最新、配置有误、生成中或生成失败。修改表格或生成参数后会重新检查；
-撤销回与现有输出匹配的配置时，会恢复“输出已是最新”。单独保存不会把旧输出标为最新。
+输出位于项目根目录的 `rtl/` 与 `tb/`，包括 SystemVerilog、文件列表及
+`manifest.json`。RTL 和 TB manifest 的 `generation_key` 相同，确认它们来自
+同一配置和参数组合。
 
-状态检查还会核对生成文件的完整性：文件被外部修改、删除，或输出记录损坏时，
-会提示“输出已过期”。点击 Generate 会修复输出；完整且最新时会跳过写盘。
-刷新或保存、生成前发现配置文件被外部修改时，会提示“请重新加载配置”，通过项目菜单重新加载后才能保存或生成。
-没有项目或生成过程中，生成按钮不可用；失败后可以重试，具体原因显示在底部输出面板。
+## 文件预览
 
-RTL 与 TB 各自带一份 `manifest.json`；两份文件的 `generation_key` 相同，
-用于确认它们来自同一份配置和同一次参数组合。
+右侧面板列出真实 `rtl/`、`tb/` 文件。选择文件后显示完整只读内容和行号，
+长行可横向滚动。Verilog 文件默认启用语法高亮，`{}` 按钮可切换。
 
-> 侧边栏底部那个 **Settings** 按钮是另一回事：它开的是 verible 格式化器的
-> 设置对话框，跟上面这四个生成参数无关。
+- 搜索按钮打开当前文件内搜索，支持向前、向后及循环查找。
+- 刷新重新读取磁盘，并尽量保持当前项目中选中的文件。
+- 链接按钮复制完整文件路径；更多菜单可复制完整内容。
+- 编辑按钮通过 Settings 中配置的编辑器打开文件；文件夹按钮打开所在目录。
+- 展开按钮放大预览，再次点击还原；拖拽手柄可调整宽度。
 
-## 操作步骤
+切换项目会清除旧预览。文件无法读取时显示原因，不保留旧文件内容。
 
-1. 侧边栏点 **Open** 选 `test/<SET>/config/` 的上一级目录；或点 **New**，填写
-   Project name，并在 Location 中输入/浏览选择任意父目录后新建
-2. Controllers tab：填 controller 信息
-3. Lane Mapping tab：填 mode 和 lane 分配
-4. Pipe Signals tab：用默认值或自己改
-5. Generation tab：选生成参数（不改就用默认），点 **Generate**；程序会自动校验并保存当前编辑，再同时生成 RTL 和 testbench、刷新预览
+## Settings 与 Documentation
 
-只需要保存配置、不生成RTL时，才单独使用侧边栏的 **Save**。
+Settings 有 General、Appearance、Tools、Formatter 四个分页。
+字体、字号、外部编辑器和 Verible 设置均保存在本机，重启后恢复。
+Documentation 内置当前工具说明和本指南，安装包中也可使用。
 
-## 常见操作
+Formatter 可浏览选择 `verible-verilog-format`，也可自动检测；路径留空时使用
+核心的自动查找。参数表可编辑核心支持的对齐、缩进、布尔、整数和字符串参数。
+空白参数不传给工具，使用 Verible 自身默认值。
 
-**改 lane 数**：Lane Mapping tab 顶部的下拉框。列表里只有 2 的幂，
-但工具本身支持任意宽度——从磁盘读进来的其它值会照常显示，只是下拉框不主动提供。
+- “项目默认参数”采用核心内置 `DEFAULT_VERIBLE_FLAGS`。
+- “使用 Verible 默认参数”清空显式参数，传入空字典。
+- 修改后点击“保存设置”才会生效；修改外观不会覆盖未修改的格式化设置。
 
-**改 mode 数**：Lane Mapping tab，右键增删 mode 行。
+保存 Formatter 设置会立即重新检查输出状态，下次生成应用新参数。
+显式指定的工具不可用时保留生成器原始排版，并在日志中说明。
 
-**改 signal 值**：Pipe Signals tab，编辑对应行。
-
-**切换时钟架构**：Generation tab 改 pclk-mode，重新生成。
-
-**打开工作区所在文件夹**：左侧 Recent 列表里那一项的三个点 → Reveal in Explorer。
-
-## 生成文件预览
-
-右侧浮动面板列出当前项目 `rtl/` 和 `tb/` 下的真实文件。顶部选择文件后，
-内容区显示完整只读文本和行号，长行可以横向滚动。`.v`、`.sv`、`.vh`、
-`.svh` 文件默认启用 Verilog 语法高亮；点击工具栏的 `{}` 图标可以关闭或恢复。
-
-- 搜索图标打开当前文件内搜索，支持向前、向后查找，并在文件末尾循环。
-- 刷新会重新读取磁盘内容，并尽量保留同一项目中选中的文件；切换项目会清除旧预览。
-- 链接图标复制当前文件的完整路径，“更多”菜单可以复制完整内容。
-- 编辑图标使用 Settings 中配置的外部编辑器打开当前文件；文件夹图标打开该文件所在目录。
-- 展开图标放大预览，再次点击还原；侧边拖拽手柄仍可调整面板宽度。
-
-预览本身不能修改文件。文件被删除或无法按 UTF-8 读取时会清空内容并显示提示，
-可刷新列表或选择其他文件。
-
-## 快捷键
+## 快捷键与常见错误
 
 | 快捷键 | 功能 |
 |---|---|
-| Ctrl+Z | 撤销 |
+| Ctrl+Z | 撤销配置编辑 |
 | Ctrl+Y / Ctrl+Shift+Z | 重做 |
-| Ctrl+F | 焦点在预览面板内时，打开当前文件搜索 |
-| Enter / F3 | 预览搜索：跳下一个，末尾循环 |
-| Shift+Enter / Shift+F3 | 预览搜索：跳上一个，开头循环 |
-| Esc | 预览搜索：关掉搜索框 |
+| Ctrl+F | 焦点在预览面板内时打开搜索 |
+| Enter / F3 | 下一个匹配，末尾循环 |
+| Shift+Enter / Shift+F3 | 上一个匹配，开头循环 |
+| Esc | 关闭预览搜索 |
 
-打开 / 保存 / 新建没有快捷键，用侧边栏按钮。
+打开、保存、新建通过界面入口操作。
 
-## 错误处理
+| 错误 | 检查项 |
+|---|---|
+| mode 不连续 | 改为 0、1、2 等连续编号 |
+| ctrl_id 越界 | 控制器编号及 `max_width` |
+| 同一 controller lane 被重复驱动 | 当前 mode 下的 lane 分配 |
+| 驱动源跨 group | 同一 controller lane 的所有驱动源应在同一组 |
+| 同一 PHY lane 在不同 mode 换 controller lane 下标 | 同一 owner 的 lane 下标保持一致 |
+| PCLK 候选数大于 1 | 最低编号 owned lane 是否保持一致 |
 
-| 错误 | 原因 | 修复 |
-|---|---|---|
-| mode 不连续 | mode 有跳号 | 改成 0,1,2,3... |
-| ctrl_id 越界 | 引用不存在的 controller | 检查 ctrl_id 和 max_width |
-| 同一条 controller lane 被多条 PHY lane 驱动 | lane 分配冲突 | 改 lane 分配 |
-| 驱动源跨 group | CtrlB[0] 来自不同 lane group | 改分配让同一条 controller lane 的所有驱动源同组 |
-| 一条 PHY lane 跨 mode 换了 controller lane 下标 | 同一个 owner 在不同 mode 下把这条 lane 编到了不同位置 | 改成每个 mode 下都是同一个下标 |
-| pclk 候选数 > 1 | controller 的工作时钟会变 | 确保最低编号 owned lane 不变 |
-
-生成没有输出：检查工作区路径，并在 LOG 页查看校验或生成错误。
-
-## 文件位置
-
-配置文件：
-```
-<config_dir>/
-  ├─ controllers.csv
-  ├─ lane_mapping.csv
-  ├─ pipe_signals.csv
-  └─ gen_flags.txt
-```
-
-生成文件：
-```
-<config_dir>/../
-  ├─ rtl/src/*.sv
-  └─ tb/tb_pipe_lane_mapper.sv
-```
-
+出现错误时先查看单元格提示和底部日志，再修正配置并重新保存或生成。

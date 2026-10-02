@@ -2,6 +2,7 @@
 
 from contextlib import redirect_stdout
 from io import StringIO
+from pathlib import Path
 
 from plm.core.exporter import output_set_matches_plan
 from plm.core.gen_flags import GenerationOptions
@@ -11,6 +12,9 @@ from plm.core.workspace import save_workspace_content, workspace_content
 
 
 class WorkspaceService:
+    def __init__(self, formatter_provider=None):
+        self.formatter_provider = formatter_provider or (lambda: {})
+
     @staticmethod
     def signature(project):
         files = []
@@ -28,18 +32,20 @@ class WorkspaceService:
             raise ValueError(f"工作区应包含 config/ 目录：{project.config_dir}")
         return project.config_dir.parent
 
-    @staticmethod
-    def _options(payload):
+    def _options(self, payload):
         flags = payload.get("gen_flags") or {}
         arch = flags.get("arch") or "original_pipe"
         pclk_mode = flags.get("pclk-mode") or (
             "pclk_as_phy_input" if arch == "serdes" else "pclk_as_phy_output"
         )
+        formatter = self.formatter_provider()
         return GenerationOptions(
             arch=arch,
             pclk_mode=pclk_mode,
             sel_mode=flags.get("sel-mode") or "sync",
             dpr=bool(flags.get("dpr")),
+            verible_path=str(Path(formatter["verible_path"]).expanduser()) if formatter.get("verible_path") else None,
+            verible_flags=formatter.get("verible_flags"),
         )
 
     def load(self, project):
@@ -63,6 +69,8 @@ class WorkspaceService:
         report = StringIO()
         with redirect_stdout(report):
             result = generate(project.config_dir, root / "rtl", self._options(payload), progress)
+        if result.plan.formatter.get("engine") == "unavailable":
+            report.write("配置的 Verible 不可用，已保留生成器原始排版。\n")
         return result, self.output_files(project), report.getvalue()
 
     def output_state(self, project, payload, *, plan=None, use_disk=False):

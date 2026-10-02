@@ -74,7 +74,7 @@ class SecondaryPage(QtWidgets.QFrame):
         layout.setSpacing(8)
         self.menu_buttons = []
         entries = (
-            ("General", "Appearance", "Tools")
+            ("General", "Appearance", "Tools", "Formatter")
             if page == "settings"
             else ("Getting Started", "Configuration", "Generation")
         )
@@ -123,5 +123,3 @@ class SecondaryPage(QtWidgets.QFrame):
             return
         super().keyPressEvent(event)
 
-    def resizeEvent(self, event):
-        super().resizeEvent(event)

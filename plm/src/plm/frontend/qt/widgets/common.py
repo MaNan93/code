@@ -7,9 +7,11 @@ from pathlib import Path
 
 from PyQt5 import QtCore, QtGui, QtSvg, QtWidgets
 
+from plm.core.paths import PLM_ROOT
+
 
 LUCIDE_ICON_DIR = Path(__file__).resolve().parents[1] / "assets" / "icons"
-PROJECT_ROOT = Path(__file__).resolve().parents[5]
+PROJECT_ROOT = PLM_ROOT
 ICON_SIZE = 20
 
 

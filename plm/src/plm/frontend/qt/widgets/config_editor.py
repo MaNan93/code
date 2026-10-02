@@ -4,6 +4,8 @@ import weakref
 
 from PyQt5 import QtCore, QtGui, QtWidgets, sip
 
+from plm.core.gen_flags import ARCH_VALUES, PCLK_MODE_VALUES, SEL_MODE_VALUES
+
 
 class LaneSelector(QtWidgets.QWidget):
     """Choose a controller and one of its lanes without changing CSV syntax."""
@@ -290,11 +292,11 @@ class GenerationEditor(QtWidgets.QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(12)
         self.arch = QtWidgets.QComboBox()
-        self.arch.addItems(("original_pipe", "serdes"))
+        self.arch.addItems(ARCH_VALUES)
         self.pclk_mode = QtWidgets.QComboBox()
-        self.pclk_mode.addItems(("pclk_as_phy_output", "pclk_as_phy_input"))
+        self.pclk_mode.addItems(PCLK_MODE_VALUES)
         self.sel_mode = QtWidgets.QComboBox()
-        self.sel_mode.addItems(("sync", "comb"))
+        self.sel_mode.addItems(SEL_MODE_VALUES)
         self.dpr = QtWidgets.QCheckBox("启用 DPR")
         layout.addRow("PHY 架构", self.arch)
         layout.addRow("PCLK 模式", self.pclk_mode)
@@ -313,7 +315,7 @@ class GenerationEditor(QtWidgets.QWidget):
         self.pclk_mode.currentIndexChanged.connect(self._sync_arch)
         for control in (self.arch, self.pclk_mode, self.sel_mode):
             control.currentIndexChanged.connect(self.changed.emit)
-        self.dpr.toggled.connect(self.changed.emit)
+        self.dpr.toggled.connect(self._sync_dpr)
 
     def set_output_state(self, state, text, detail=""):
         self.status_label.setText(text)
@@ -322,6 +324,15 @@ class GenerationEditor(QtWidgets.QWidget):
         self.status_label.style().unpolish(self.status_label)
         self.status_label.style().polish(self.status_label)
         self.generate_btn.setEnabled(state not in ("no_project", "generating"))
+
+    def _sync_dpr(self, enabled):
+        if enabled:
+            self.sel_mode.blockSignals(True)
+            self.sel_mode.setCurrentText("sync")
+            self.sel_mode.blockSignals(False)
+        self.sel_mode.setEnabled(not enabled)
+        self.sel_mode.setToolTip("DPR 需要 sync 选择方式。" if enabled else "")
+        self.changed.emit()
 
     def _sync_pclk(self, index):
         self.pclk_mode.blockSignals(True)
@@ -345,6 +356,8 @@ class GenerationEditor(QtWidgets.QWidget):
         ))
         self.sel_mode.setCurrentText(flags.get("sel-mode") or "sync")
         self.dpr.setChecked(bool(flags.get("dpr")))
+        self.sel_mode.setEnabled(not self.dpr.isChecked())
+        self.sel_mode.setToolTip("DPR 需要 sync 选择方式。" if self.dpr.isChecked() else "")
         for widget in (self.arch, self.pclk_mode, self.sel_mode, self.dpr):
             widget.blockSignals(False)
 

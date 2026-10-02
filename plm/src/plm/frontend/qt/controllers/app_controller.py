@@ -18,6 +18,7 @@ class AppController:
         self.projects = project_service or ProjectService(PROJECT_ROOT)
         self.settings = settings_store or SettingsStore()
         self.workspaces = workspace_service or WorkspaceService()
+        self.workspaces.formatter_provider = self.settings.formatter_preferences
         self.current_name = None
         self.current_project = None
         self._saved_signature = None
@@ -437,6 +438,7 @@ class AppController:
     def save_preferences(self, preferences):
         self.settings.save_preferences(preferences)
         self.apply_preferences(preferences)
+        self.validate_current()
 
     def apply_preferences(self, preferences):
         from plm.frontend.qt.styles import build_app_stylesheet

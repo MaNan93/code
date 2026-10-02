@@ -864,8 +864,9 @@ class QtFrontendLayoutTests(unittest.TestCase):
             "file",
             "more-horizontal",
             "maximize",
+            "plus",
         )
-        self.assertEqual(len(icon_names), 25)
+        self.assertEqual(len(icon_names), 26)
         self.assertEqual(
             {path.stem for path in LUCIDE_ICON_DIR.glob("*.svg")},
             set(icon_names),

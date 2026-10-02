@@ -1,5 +1,7 @@
 """Persistent application preferences isolated from Qt widgets."""
 
+import json
+
 from datetime import datetime, timezone
 from typing import Dict
 from urllib.parse import quote, unquote
@@ -124,6 +126,21 @@ class SettingsStore:
             "editor_path": self._settings.value(
                 "tools/editor_path", DEFAULT_EDITOR, type=str
             ),
+            **self.formatter_preferences(),
+        }
+
+    def formatter_preferences(self):
+        flags = None
+        if self._settings.contains("tools/verible_flags"):
+            try:
+                value = json.loads(self._settings.value("tools/verible_flags", "", type=str))
+                if isinstance(value, dict):
+                    flags = value
+            except (ValueError, TypeError):
+                pass
+        return {
+            "verible_path": self._settings.value("tools/verible_path", "", type=str),
+            "verible_flags": flags,
         }
 
     def save_preferences(self, preferences):
@@ -138,6 +155,13 @@ class SettingsStore:
         self._settings.setValue(
             "tools/editor_path", preferences.get("editor_path") or DEFAULT_EDITOR
         )
+        if "verible_path" in preferences:
+            self._settings.setValue("tools/verible_path", preferences["verible_path"] or "")
+        if "verible_flags" in preferences:
+            if preferences["verible_flags"] is None:
+                self._settings.remove("tools/verible_flags")
+            else:
+                self._settings.setValue("tools/verible_flags", json.dumps(preferences["verible_flags"], sort_keys=True))
         self._settings.sync()
 
     def editor_path(self):

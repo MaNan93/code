@@ -48,9 +48,6 @@ def main(argv=None):
     font.setStyleStrategy(QtGui.QFont.PreferAntialias)
     font.setHintingPreference(QtGui.QFont.PreferFullHinting)
     app.setFont(font)
-    # Built here rather than imported as a constant: the sheet names the
-    # vendored "72" family, and fonts can only be registered once a
-    # QApplication exists.
     app.setStyleSheet(APP_QSS)
     win = MainWindow()
     win.show()

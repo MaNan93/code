@@ -14,6 +14,7 @@ qt = ["PyQt5>=5.15"]
 
 [project.scripts]
 plm = "plm.cli.main:main"
+plm-gui = "plm.frontend.qt.main:main"
 
 [tool.uv]
 required-environments = [
@@ -27,4 +28,4 @@ where = ["src"]
 [tool.setuptools.package-data]
 "plm" = ["docs/*.md"]
 "plm.core" = ["common/*.sv", "config/*.csv", "tb_makefile.mk"]
-"plm.frontend.qt" = ["assets/*.png", "assets/*.svg", "assets/icons/*.svg", "assets/fonts/*.ttf", "assets/fonts/*.txt", "assets/fonts/*.md", "styles/*.qss"]
+"plm.frontend.qt" = ["assets/*.png", "assets/*.svg", "assets/icons/*.svg", "styles/*.qss"]

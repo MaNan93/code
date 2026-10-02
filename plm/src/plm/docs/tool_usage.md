@@ -7,9 +7,10 @@
 不需要先 `pip install -e .`（它自己会把 `src/` 加进 `sys.path`）：
 
 ```bash
-python run.py generate --config <SET>
-python run.py validate --config <SET>
-python run.py -gui            # Qt 桌面前端，需要先 pip install -e ".[qt]"
+uv run python run.py generate --config <SET>
+uv run python run.py validate --config <SET>
+uv sync --extra qt
+uv run python run.py -gui     # Qt 桌面前端
 ```
 
 本文档下面用的 `plm generate ...`/`plm validate ...` 命令，等价于
@@ -18,11 +19,11 @@ console-script（这样任何目录下都能直接敲 `plm ...`），在仓库�
 （`pyproject.toml` 所在目录）跑一次：
 
 ```bash
-pip install -e .
+uv sync --extra qt
 ```
 
 这是一次性的（装成可编辑安装），装完之后 `plm` 包才能被 `python -m
-plm.cli.main` 或 `plm` console-script 找到。安装后也可以直接运行 `plm -gui`。
+plm.cli.main` 或 `plm` console-script 找到。安装后也可以直接运行 `plm -gui` 或 `plm-gui`。
 
 - `plm generate --config <SET>` —— 使用同一组参数生成 RTL 和 testbench
 - `plm validate --config <SET>` —— 只解析并校验配置，不生成文件
@@ -84,7 +85,7 @@ lane 归属要在运行时随 mode 切换，夹在 controller 和 PHY 中间的�
 | `lane_mapping.csv` | 每个 mode 下，每条 PHY lane 归哪个 controller 的哪条 lane |
 | `pipe_signals.csv` | 要经过 mapper 的 PIPE 信号，以及各自的 `safe_state` / `tie_off` |
 
-生成参数（`--arch` / `--pclk-mode` / `--sel-mode` / `--dpr`）只在命令行上给。
+CLI 的生成参数（`--arch` / `--pclk-mode` / `--sel-mode` / `--dpr`）需要显式传入。Qt 直接使用同样的 GenerationOptions 调用核心。
 同目录下的 `gen_flags.txt` 是 Qt 前端自己的记忆，CLI 不读，见 2.4 节。
 
 输出——`<SET>/rtl/` 和 `<SET>/tb/`：
@@ -316,14 +317,14 @@ controller 一个）展开成一个个 flat 信号端口，方便不想处理 SV
 
 ### 2.4 生成参数不在配置文件里
 
-`--arch` / `--pclk-mode` / `--sel-mode` / `--dpr` 这四个参数**只能在命令行上给**。
+`--arch` / `--pclk-mode` / `--sel-mode` / `--dpr` 这四个参数在 CLI 中**必须显式从命令行传入**；Qt 从界面构造 GenerationOptions。
 CLI 不读任何文件来拿它们。
 
 | 谁来生成 | 参数从哪来 |
 |---|---|
 | 手敲命令行 | 自己写在命令里 |
 | `make <SET>` | 顶层 `Makefile` 里的 `SETFLAGS_<SET>` 变量（见 6.1 节） |
-| Qt 前端 | Generation 页上的三个下拉 + dpr 勾选框，点 Generate 时拼进命令行 |
+| Qt 前端 | Generation 页上的三个下拉 + dpr 勾选框，构造 GenerationOptions 后直接调用核心 |
 
 配置目录下还有个 `gen_flags.txt`，但那是 **Qt 前端自己的记忆**：前端保存时写、
 打开 workspace 时读回来恢复上次的选择。CLI 不看它，`make` 也不看它，

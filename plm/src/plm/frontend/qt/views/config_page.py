@@ -1,4 +1,5 @@
 from PyQt5 import QtCore, QtGui, QtWidgets
+from copy import deepcopy
 from plm.frontend.qt.widgets.common import apply_drop_shadow, make_icon_button
 from plm.frontend.qt.widgets.config_editor import CsvTableEditor, GenerationEditor
 from plm.frontend.qt.views.artifacts_panel import ArtifactsPanel
@@ -169,10 +170,15 @@ class ConfigPage(QtWidgets.QFrame):
     logToggleRequested = QtCore.pyqtSignal()
     dirtyChanged = QtCore.pyqtSignal(bool)
     generateRequested = QtCore.pyqtSignal()
+    historyChanged = QtCore.pyqtSignal()
 
     def __init__(self, parent=None, editor_path_provider=None):
         super().__init__(parent)
         self.setObjectName("ConfigPage")
+        self.dirty = False
+        self._history = []
+        self._history_index = -1
+        self._saved_content = None
         apply_drop_shadow(self)
         self.artifacts_width = 400
         self.restore_artifacts_width = 400
@@ -232,11 +238,60 @@ class ConfigPage(QtWidgets.QFrame):
         self.header.title_label.setText(project_name)
 
     def _mark_dirty(self):
-        if not getattr(self, "dirty", False):
-            self.dirty = True
-            self.dirtyChanged.emit(True)
+        payload = self.content()
+        if self._history and payload == self._history[self._history_index]:
+            return
+        self._history = self._history[:self._history_index + 1]
+        self._history.append(deepcopy(payload))
+        self._history_index += 1
+        self._update_dirty()
+        self.historyChanged.emit()
+
+    def _update_dirty(self):
+        self.dirty = self.content() != self._saved_content
+        self.dirtyChanged.emit(self.dirty)
+
+    def mark_saved(self):
+        self._saved_content = deepcopy(self.content())
+        self._update_dirty()
+
+    def finish_editing(self):
+        focus = QtWidgets.QApplication.focusWidget()
+        for editor in (self.controllers_editor, self.mapping_editor, self.signals_editor):
+            if focus and editor.table.isAncestorOf(focus):
+                editor.table.setFocus()
+                break
+
+    def can_undo(self):
+        return self._history_index > 0
+
+    def can_redo(self):
+        return self._history_index + 1 < len(self._history)
+
+    def undo(self):
+        self.finish_editing()
+        if self.can_undo():
+            self._history_index -= 1
+            self._load_content(self._history[self._history_index])
+            self._update_dirty()
+            self.historyChanged.emit()
+
+    def redo(self):
+        self.finish_editing()
+        if self.can_redo():
+            self._history_index += 1
+            self._load_content(self._history[self._history_index])
+            self._update_dirty()
+            self.historyChanged.emit()
 
     def set_content(self, payload):
+        self._load_content(payload)
+        self._history = [deepcopy(self.content())]
+        self._history_index = 0
+        self.mark_saved()
+        self.historyChanged.emit()
+
+    def _load_content(self, payload):
         self.controllers_editor.set_rows(payload.get("controllers", []))
         mapping = payload.get("mapping") or {}
         lanes = int(mapping.get("lane_count") or 4)
@@ -245,8 +300,6 @@ class ConfigPage(QtWidgets.QFrame):
         ])
         self.signals_editor.set_rows(payload.get("signals", []))
         self.generation_editor.set_flags(payload.get("gen_flags") or {})
-        self.dirty = False
-        self.dirtyChanged.emit(False)
 
     def content(self):
         return {

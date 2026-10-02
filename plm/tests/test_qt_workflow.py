@@ -299,6 +299,135 @@ class QtWorkflowTests(unittest.TestCase):
         self.assertFalse(self.store.get_project_state("custom").is_archived)
         self.assertEqual(controller.current_project.config_dir, config)
 
+    def _editing_window(self):
+        controller = AppController(self.projects, self.store, self.workspaces)
+        with patch("plm.frontend.qt.main_window.AppController", return_value=controller):
+            window = MainWindow()
+        window.show()
+        self.app.processEvents()
+        self.addCleanup(lambda: (window.config_page.mark_saved(), window.close()))
+        return controller, window
+
+    def test_close_cancel_save_failure_save_and_discard(self):
+        controller, window = self._editing_window()
+        table = window.config_page.controllers_editor.table
+        table.item(0, 1).setText("close_edit")
+        with patch.object(QtWidgets.QMessageBox, "question", return_value=QtWidgets.QMessageBox.Cancel):
+            self.assertFalse(window.close())
+        self.assertTrue(window.isVisible())
+        self.assertTrue(window.config_page.dirty)
+        table.item(0, 0).setText("invalid")
+        with patch.object(QtWidgets.QMessageBox, "question", return_value=QtWidgets.QMessageBox.Save), \
+                patch.object(QtWidgets.QMessageBox, "warning"):
+            self.assertFalse(window.close())
+        table.item(0, 0).setText("0")
+        with patch.object(QtWidgets.QMessageBox, "question", return_value=QtWidgets.QMessageBox.Save):
+            self.assertTrue(window.close())
+        self.assertIn("close_edit", controller.current_project.controllers_csv.read_text())
+        window.show()
+        table.item(0, 1).setText("discard_edit")
+        with patch.object(QtWidgets.QMessageBox, "question", return_value=QtWidgets.QMessageBox.Discard):
+            self.assertTrue(window.close())
+        self.assertNotIn("discard_edit", controller.current_project.controllers_csv.read_text())
+
+    def test_external_modification_and_deletion_block_save_and_generate(self):
+        controller, window = self._editing_window()
+        page = window.config_page
+        page.controllers_editor.table.item(0, 1).setText("local_edit")
+        path = controller.current_project.controllers_csv
+        original = path.read_text()
+        path.write_text(original.replace("CtrlX16", "external_edit"))
+        external = path.read_bytes()
+        with patch.object(QtWidgets.QMessageBox, "warning") as warning:
+            self.assertFalse(controller.save_current())
+            controller.generate_current()
+        self.assertEqual(warning.call_count, 2)
+        self.assertEqual(path.read_bytes(), external)
+        self.assertTrue(page.dirty)
+        self.assertFalse((controller.current_project.config_dir.parent / "rtl").exists())
+        with patch.object(QtWidgets.QMessageBox, "question", return_value=QtWidgets.QMessageBox.Discard):
+            self.assertTrue(controller.reload_current())
+        self.assertEqual(page.controllers_editor.table.item(0, 1).text(), "external_edit")
+        self.assertTrue(controller.save_current())
+        flags = controller.current_project.config_dir / "gen_flags.txt"
+        flags.unlink()
+        with patch.object(QtWidgets.QMessageBox, "warning"):
+            self.assertFalse(controller.save_current())
+        self.assertFalse(flags.exists())
+
+    def test_reload_cancel_and_malformed_file_keep_editor_and_history(self):
+        controller, window = self._editing_window()
+        page = window.config_page
+        page.controllers_editor.table.item(0, 1).setText("local_edit")
+        before = page.content()
+        with patch.object(QtWidgets.QMessageBox, "question", return_value=QtWidgets.QMessageBox.Cancel):
+            self.assertFalse(controller.reload_current())
+        self.assertEqual(page.content(), before)
+        controller.current_project.controllers_csv.write_text("broken\nheader\n")
+        with patch.object(QtWidgets.QMessageBox, "question", return_value=QtWidgets.QMessageBox.Discard), \
+                patch.object(QtWidgets.QMessageBox, "warning"):
+            self.assertFalse(controller.reload_current())
+        self.assertEqual(page.content(), before)
+        self.assertTrue(page.dirty)
+        self.assertTrue(page.can_undo())
+
+    def test_undo_redo_rows_lane_count_flags_and_saved_baseline(self):
+        controller, window = self._editing_window()
+        page = window.config_page
+        original = page.content()
+        page.controllers_editor.table.item(0, 1).setText("first_edit")
+        self.assertTrue(controller.save_current())
+        saved = page.content()
+        page.mapping_editor.lane_count.setValue(8)
+        page.signals_editor.add_row()
+        page.generation_editor.sel_mode.setCurrentText("comb")
+        last = page.content()
+        for _ in range(3):
+            window.undo_action.trigger()
+        self.assertEqual(page.content(), saved)
+        self.assertFalse(page.dirty)
+        window.undo_action.trigger()
+        self.assertEqual(page.content(), original)
+        self.assertTrue(page.dirty)
+        for _ in range(4):
+            window.redo_action.trigger()
+        self.assertEqual(page.content(), last)
+        page.undo()
+        page.controllers_editor.table.item(0, 1).setText("new_branch")
+        self.assertFalse(page.can_redo())
+        with patch.object(QtWidgets.QMessageBox, "question", return_value=QtWidgets.QMessageBox.Discard):
+            self.assertTrue(controller.reload_current())
+        self.assertFalse(page.can_undo())
+        self.assertFalse(page.can_redo())
+        self.assertFalse(page.dirty)
+
+    def test_edit_in_progress_is_committed_before_close_and_save(self):
+        from PyQt5 import QtTest
+        controller, window = self._editing_window()
+        table = window.config_page.controllers_editor.table
+        table.setCurrentCell(0, 1)
+        table.editItem(table.item(0, 1))
+        self.app.processEvents()
+        editor = table.findChild(QtWidgets.QLineEdit)
+        self.assertIsNotNone(editor)
+        editor.selectAll()
+        QtTest.QTest.keyClicks(editor, "in_progress")
+        with patch.object(QtWidgets.QMessageBox, "question", return_value=QtWidgets.QMessageBox.Cancel) as question:
+            self.assertFalse(window.close())
+        question.assert_called_once()
+        self.assertEqual(table.item(0, 1).text(), "in_progress")
+        self.assertTrue(controller.save_current())
+        self.assertIn("in_progress", controller.current_project.controllers_csv.read_text())
+
+    def test_generation_failure_after_save_keeps_saved_baseline(self):
+        controller, window = self._editing_window()
+        window.config_page.controllers_editor.table.item(0, 1).setText("saved_before_failure")
+        with patch("plm.frontend.qt.services.workspaces.generate", side_effect=ValueError("failed")), \
+                patch.object(QtWidgets.QMessageBox, "warning"):
+            controller.generate_current()
+        self.assertFalse(window.config_page.dirty)
+        self.assertTrue(controller.save_current())
+
 
 if __name__ == "__main__":
     unittest.main()

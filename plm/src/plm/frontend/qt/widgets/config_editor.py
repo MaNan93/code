@@ -83,17 +83,21 @@ class CsvTableEditor(QtWidgets.QWidget):
         ]
 
     def add_row(self):
+        self.table.blockSignals(True)
         index = self.table.rowCount()
         self.table.insertRow(index)
         for col in range(self.table.columnCount()):
             self.table.setItem(index, col, QtWidgets.QTableWidgetItem(""))
         self.table.setCurrentCell(index, 0)
+        self.table.blockSignals(False)
         self.changed.emit()
 
     def delete_selected_rows(self):
+        self.table.blockSignals(True)
         selected = {index.row() for index in self.table.selectedIndexes()}
         for row in sorted(selected, reverse=True):
             self.table.removeRow(row)
+        self.table.blockSignals(False)
         if selected:
             self.changed.emit()
 

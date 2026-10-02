@@ -91,6 +91,26 @@ class MainWindow(QtWidgets.QMainWindow):
         self.controller.connect_navigation(
             self.nav_panel, self.config_page, self.log_panel, self
         )
+        self.undo_action = QtWidgets.QAction("撤销", self)
+        self.undo_action.setShortcuts([QtGui.QKeySequence("Ctrl+Z")])
+        self.undo_action.triggered.connect(self.config_page.undo)
+        self.redo_action = QtWidgets.QAction("重做", self)
+        self.redo_action.setShortcuts([QtGui.QKeySequence("Ctrl+Y"), QtGui.QKeySequence("Ctrl+Shift+Z")])
+        self.redo_action.triggered.connect(self.config_page.redo)
+        self.addActions([self.undo_action, self.redo_action])
+        self.config_page.historyChanged.connect(self._update_history_actions)
+        self._update_history_actions()
+
+    def _update_history_actions(self):
+        self.undo_action.setEnabled(self.config_page.can_undo())
+        self.redo_action.setEnabled(self.config_page.can_redo())
+
+    def closeEvent(self, event):
+        self.controller.hide_project_menu()
+        if not self.controller._confirm_switch():
+            event.ignore()
+            return
+        super().closeEvent(event)
 
     def _apply_initial_sizes(self):
         main_width = max(261, self.main_splitter.width())
@@ -118,14 +138,17 @@ class MainWindow(QtWidgets.QMainWindow):
         self.controller.show_project_menu()
 
     def on_save(self):
+        self.controller.hide_project_menu()
         self.nav_panel.set_active(None)
         self.controller.save_current()
 
     def on_open_settings(self):
+        self.controller.hide_project_menu()
         self.nav_panel.set_active("settings")
         self._show_placeholder("settings")
 
     def on_open_docs(self):
+        self.controller.hide_project_menu()
         self.nav_panel.set_active("docs")
         self._show_placeholder("docs")
 

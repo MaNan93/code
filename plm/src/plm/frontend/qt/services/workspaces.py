@@ -11,6 +11,17 @@ from plm.core.workspace import save_workspace_content, workspace_content
 
 class WorkspaceService:
     @staticmethod
+    def signature(project):
+        files = []
+        for name in ("controllers.csv", "lane_mapping.csv", "pipe_signals.csv", "gen_flags.txt"):
+            try:
+                content = (project.config_dir / name).read_bytes()
+            except FileNotFoundError:
+                content = None
+            files.append((name, content))
+        return tuple(files)
+
+    @staticmethod
     def _root(project):
         if project.config_dir.name != "config":
             raise ValueError(f"工作区应包含 config/ 目录：{project.config_dir}")
@@ -31,7 +42,10 @@ class WorkspaceService:
         )
 
     def load(self, project):
-        return workspace_content(self._root(project))
+        payload = workspace_content(self._root(project))
+        if payload.get("empty"):
+            raise ValueError(f"配置 CSV 不完整：{project.config_dir}")
+        return payload
 
     def validate(self, payload):
         return load_generation_plan_from_payload(payload, self._options(payload))
@@ -40,8 +54,10 @@ class WorkspaceService:
         self.validate(payload)
         save_workspace_content(self._root(project), payload)
 
-    def generate(self, project, payload, progress=None):
+    def generate(self, project, payload, progress=None, on_saved=None):
         self.save(project, payload)
+        if on_saved:
+            on_saved()
         root = self._root(project)
         report = StringIO()
         with redirect_stdout(report):

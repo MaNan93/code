@@ -20,6 +20,7 @@ class AppController:
         self.workspaces = workspace_service or WorkspaceService()
         self.current_name = None
         self.current_project = None
+        self._saved_signature = None
         for path in self.settings.project_paths():
             try:
                 self.projects.register(path)
@@ -64,14 +65,26 @@ class AppController:
         self._show_empty_project()
 
     def show_project_menu(self):
+        self.hide_project_menu()
         menu = QtWidgets.QMenu(self.window)
         self.project_menu = menu
         menu.addAction("新建项目", self.new_project)
         menu.addAction("打开项目…", self.open_project)
+        menu.addSeparator()
+        reload_action = menu.addAction("重新加载当前项目", self.reload_current)
+        reload_action.setEnabled(self.current_project is not None)
         button = self.nav.new_chat_btn
         menu.popup(button.mapToGlobal(button.rect().bottomLeft()))
 
+    def hide_project_menu(self):
+        menu = getattr(self, "project_menu", None)
+        if menu is not None:
+            menu.close()
+            menu.deleteLater()
+            self.project_menu = None
+
     def _confirm_switch(self):
+        self.config_page.finish_editing()
         if not self.current_project or not self.config_page.dirty:
             return True
         answer = QtWidgets.QMessageBox.question(
@@ -137,22 +150,15 @@ class AppController:
     def select_project(self, name):
         if name == self.current_name:
             return
-        if self.current_name and self.config_page.dirty:
-            answer = QtWidgets.QMessageBox.question(
-                self.window, "未保存的修改", "当前项目有未保存的修改，是否先保存？",
-                QtWidgets.QMessageBox.Save | QtWidgets.QMessageBox.Discard | QtWidgets.QMessageBox.Cancel,
-                QtWidgets.QMessageBox.Save,
-            )
-            if answer == QtWidgets.QMessageBox.Cancel or (
-                answer == QtWidgets.QMessageBox.Save and not self.save_current()
-            ):
-                self.nav.project_list.select_project(self.current_name)
-                return
+        if not self._confirm_switch():
+            self.nav.project_list.select_project(self.current_name)
+            return
         project = self._project(name)
         if project is None:
             return
         try:
             payload = self.workspaces.load(project)
+            signature = self.workspaces.signature(project)
         except (OSError, ValueError) as error:
             QtWidgets.QMessageBox.warning(self.window, "加载项目失败", str(error))
             if self.current_name:
@@ -160,40 +166,84 @@ class AppController:
             return
         self.current_name = name
         self.current_project = project
+        self._saved_signature = signature
         self.config_page.set_content(payload)
         self.config_page.update_title(name)
         self.settings.set_recent_project(name)
         self.refresh_artifacts()
         self.log_panel.append_log(f"已打开项目：{name}")
 
+    def _check_external_changes(self):
+        try:
+            if self.workspaces.signature(self.current_project) == self._saved_signature:
+                return True
+            message = "配置文件已被外部修改。请先重新加载当前项目，再保存或生成。"
+        except OSError as error:
+            message = f"无法检查配置文件：{error}"
+        self.log_panel.append_log(message)
+        QtWidgets.QMessageBox.warning(self.window, "配置文件发生变化", message)
+        return False
+
+    def reload_current(self):
+        if self.current_project is None:
+            return False
+        self.config_page.finish_editing()
+        if self.config_page.dirty:
+            answer = QtWidgets.QMessageBox.question(
+                self.window, "重新加载项目", "重新加载会丢弃未保存的修改，是否继续？",
+                QtWidgets.QMessageBox.Discard | QtWidgets.QMessageBox.Cancel,
+                QtWidgets.QMessageBox.Cancel,
+            )
+            if answer != QtWidgets.QMessageBox.Discard:
+                return False
+        try:
+            payload = self.workspaces.load(self.current_project)
+            signature = self.workspaces.signature(self.current_project)
+        except (OSError, ValueError) as error:
+            QtWidgets.QMessageBox.warning(self.window, "重新加载失败", str(error))
+            return False
+        self.config_page.set_content(payload)
+        self._saved_signature = signature
+        self.refresh_artifacts()
+        self.log_panel.append_log(f"已重新加载项目：{self.current_name}")
+        return True
+
     def save_current(self):
         if self.current_project is None:
             return False
+        self.config_page.finish_editing()
+        if not self._check_external_changes():
+            return False
         try:
             self.workspaces.save(self.current_project, self.config_page.content())
+            self._mark_current_saved()
         except (OSError, ValueError, ValidationError) as error:
             self.log_panel.append_log(f"保存失败：{error}")
             QtWidgets.QMessageBox.warning(self.window, "保存失败", str(error))
             return False
-        self.config_page.dirty = False
-        self.config_page.dirtyChanged.emit(False)
         self.log_panel.append_log(f"已保存配置：{self.current_name}")
         return True
 
+    def _mark_current_saved(self):
+        self._saved_signature = self.workspaces.signature(self.current_project)
+        self.config_page.mark_saved()
+
     def generate_current(self):
         if self.current_project is None:
+            return
+        self.config_page.finish_editing()
+        if not self._check_external_changes():
             return
         try:
             result, files, report = self.workspaces.generate(
                 self.current_project, self.config_page.content(),
                 progress=lambda phase: self.log_panel.append_log(f"生成：{phase}"),
+                on_saved=self._mark_current_saved,
             )
         except (OSError, ValueError, ValidationError) as error:
             self.log_panel.append_log(f"生成失败：{error}")
             QtWidgets.QMessageBox.warning(self.window, "生成失败", str(error))
             return
-        self.config_page.dirty = False
-        self.config_page.dirtyChanged.emit(False)
         self.config_page.artifacts_panel.set_files(files, self.current_project.config_dir.parent)
         if report.strip():
             self.log_panel.append_log(report.strip())
@@ -209,6 +259,7 @@ class AppController:
         self.config_page.artifacts_panel.set_files(files, self.current_project.config_dir.parent)
 
     def archive_project(self, name):
+        self.config_page.finish_editing()
         if self.current_name == name and self.config_page.dirty and not self.save_current():
             return
         state = self.settings.get_project_state(name)

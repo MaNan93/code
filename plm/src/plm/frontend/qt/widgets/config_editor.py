@@ -303,12 +303,25 @@ class GenerationEditor(QtWidgets.QWidget):
         self.generate_btn = QtWidgets.QPushButton("Generate RTL + TB")
         self.generate_btn.setObjectName("ConfigGenerateButton")
         self.generate_btn.clicked.connect(self.generateRequested.emit)
-        layout.addRow("", self.generate_btn)
+        actions = QtWidgets.QHBoxLayout()
+        self.status_label = QtWidgets.QLabel("请选择项目")
+        self.status_label.setObjectName("GenerationStatus")
+        actions.addWidget(self.status_label, 1)
+        actions.addWidget(self.generate_btn)
+        layout.addRow("", actions)
         self.arch.currentIndexChanged.connect(self._sync_pclk)
         self.pclk_mode.currentIndexChanged.connect(self._sync_arch)
         for control in (self.arch, self.pclk_mode, self.sel_mode):
             control.currentIndexChanged.connect(self.changed.emit)
         self.dpr.toggled.connect(self.changed.emit)
+
+    def set_output_state(self, state, text, detail=""):
+        self.status_label.setText(text)
+        self.status_label.setToolTip(detail)
+        self.status_label.setProperty("state", state)
+        self.status_label.style().unpolish(self.status_label)
+        self.status_label.style().polish(self.status_label)
+        self.generate_btn.setEnabled(state not in ("no_project", "generating"))
 
     def _sync_pclk(self, index):
         self.pclk_mode.blockSignals(True)

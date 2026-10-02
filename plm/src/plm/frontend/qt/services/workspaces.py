@@ -3,9 +3,10 @@
 from contextlib import redirect_stdout
 from io import StringIO
 
+from plm.core.exporter import output_set_matches_plan
 from plm.core.gen_flags import GenerationOptions
 from plm.core.service import generate
-from plm.core.validation import load_generation_plan_from_payload
+from plm.core.validation import load_generation_plan, load_generation_plan_from_payload
 from plm.core.workspace import save_workspace_content, workspace_content
 
 
@@ -63,6 +64,18 @@ class WorkspaceService:
         with redirect_stdout(report):
             result = generate(project.config_dir, root / "rtl", self._options(payload), progress)
         return result, self.output_files(project), report.getvalue()
+
+    def output_state(self, project, payload, *, plan=None, use_disk=False):
+        if not self.output_files(project):
+            return "ready"
+        if use_disk:
+            # Preserve the generation identity of untouched CSVs, including CLI outputs
+            # generated from hand-aligned CSV text rather than editor serialization.
+            plan = load_generation_plan(project.config_dir, self._options(payload))
+        elif plan is None:
+            plan = self.validate(payload)
+        current = output_set_matches_plan(plan, self._root(project), verify_files=True)
+        return "up_to_date" if current else "out_of_date"
 
     def output_files(self, project):
         root = self._root(project)

@@ -21,6 +21,7 @@ class AppController:
         self.current_name = None
         self.current_project = None
         self._saved_signature = None
+        self._generation_failure = None
         for path in self.settings.project_paths():
             try:
                 self.projects.register(path)
@@ -53,7 +54,7 @@ class AppController:
         self.validation_timer.setSingleShot(True)
         self.validation_timer.setInterval(150)
         self.validation_timer.timeout.connect(self.validate_current)
-        config_page.historyChanged.connect(self.validation_timer.start)
+        config_page.historyChanged.connect(self._content_changed)
         nav.new_chat_requested.connect(self.show_project_menu)
         nav.new_chat_btn.setToolTip("新建或打开 PLM 项目")
         nav.save_requested.connect(window.on_save)
@@ -69,18 +70,60 @@ class AppController:
         nav.emit_current_project()
         self._show_empty_project()
 
+    def _set_output_state(self, state, detail=""):
+        labels = {
+            "no_project": "请选择项目", "ready": "尚未生成", "invalid": "配置有误",
+            "up_to_date": "输出已是最新", "out_of_date": "输出已过期",
+            "external_changed": "请重新加载配置", "generating": "生成中…", "failed": "生成失败",
+        }
+        self.generation_state = state
+        text = labels[state]
+        self.config_page.generation_editor.set_output_state(state, text, detail)
+        self.config_page.artifacts_panel.set_output_state(state, text, detail)
+
+    def _content_changed(self):
+        self._generation_failure = None
+        if self.current_project is None:
+            self._set_output_state("no_project")
+        else:
+            has_outputs = self.config_page.artifacts_panel.file_selector.count() > 0
+            self._set_output_state("out_of_date" if has_outputs else "ready", "配置已修改，正在检查生成状态。")
+        self.validation_timer.start()
+
     def validate_current(self):
         if self.current_project is None:
             self.config_page.set_validation_issues(())
+            self._set_output_state("no_project")
             return
+        plan = None
         try:
-            self.workspaces.validate(self.config_page.content())
+            plan = self.workspaces.validate(self.config_page.content())
             issues = ()
         except ValidationError as error:
             issues = error.issues
         except (OSError, ValueError) as error:
             issues = (ValidationIssue("format", str(error)),)
         self.config_page.set_validation_issues(issues)
+        try:
+            if self.workspaces.signature(self.current_project) != self._saved_signature:
+                self._set_output_state("external_changed", "配置已被外部修改。请通过项目菜单重新加载，再保存或生成。")
+            elif self._generation_failure:
+                self._set_output_state("failed", self._generation_failure)
+            elif issues:
+                self._set_output_state("invalid", "\n".join(str(issue) for issue in issues))
+            else:
+                state = self.workspaces.output_state(
+                    self.current_project, self.config_page.content(), plan=plan,
+                    use_disk=not self.config_page.dirty,
+                )
+                detail = {
+                    "ready": "点击 Generate 生成当前配置对应的 RTL 和 Testbench。",
+                    "up_to_date": "输出与当前配置、生成参数及生成器版本一致，文件完整且未被修改。",
+                    "out_of_date": "配置或参数已变化，或生成文件缺失、被修改。点击 Generate 更新输出。",
+                }[state]
+                self._set_output_state(state, detail)
+        except (OSError, ValueError) as error:
+            self._set_output_state("failed", f"无法检查生成状态：{error}")
 
     def _show_validation_error(self, error):
         if isinstance(error, ValidationError):
@@ -203,6 +246,7 @@ class AppController:
             message = "配置文件已被外部修改。请先重新加载当前项目，再保存或生成。"
         except OSError as error:
             message = f"无法检查配置文件：{error}"
+        self._set_output_state("external_changed", message)
         self.log_panel.append_log(message)
         QtWidgets.QMessageBox.warning(self.window, "配置文件发生变化", message)
         return False
@@ -242,9 +286,11 @@ class AppController:
             self._mark_current_saved()
         except (OSError, ValueError, ValidationError) as error:
             self._show_validation_error(error)
+            self.validate_current()
             self.log_panel.append_log(f"保存失败：{error}")
             QtWidgets.QMessageBox.warning(self.window, "保存失败", str(error))
             return False
+        self.validate_current()
         self.log_panel.append_log(f"已保存配置：{self.current_name}")
         return True
 
@@ -258,6 +304,10 @@ class AppController:
         self.config_page.finish_editing()
         if not self._check_external_changes():
             return
+        self._generation_failure = None
+        self._set_output_state("generating", "正在校验、保存并生成 RTL 和 Testbench。")
+        self.config_page.generation_editor.status_label.repaint()
+        self.config_page.artifacts_panel.status.repaint()
         try:
             result, files, report = self.workspaces.generate(
                 self.current_project, self.config_page.content(),
@@ -265,11 +315,14 @@ class AppController:
                 on_saved=self._mark_current_saved,
             )
         except (OSError, ValueError, ValidationError) as error:
+            self._generation_failure = str(error)
             self._show_validation_error(error)
+            self.refresh_artifacts()
             self.log_panel.append_log(f"生成失败：{error}")
             QtWidgets.QMessageBox.warning(self.window, "生成失败", str(error))
             return
         self.config_page.artifacts_panel.set_files(files, self.current_project.config_dir.parent)
+        self.validate_current()
         if report.strip():
             self.log_panel.append_log(report.strip())
         self.log_panel.append_log(
@@ -279,9 +332,11 @@ class AppController:
     def refresh_artifacts(self):
         if self.current_project is None:
             self.config_page.artifacts_panel.set_files([])
+            self.validate_current()
             return
         files = self.workspaces.output_files(self.current_project)
         self.config_page.artifacts_panel.set_files(files, self.current_project.config_dir.parent)
+        self.validate_current()
 
     def archive_project(self, name):
         self.config_page.finish_editing()
@@ -366,6 +421,7 @@ class AppController:
             self.config_page.update_title(renamed.name)
         self.nav.apply_rename(old_name, renamed.name, config_dir)
         self._refresh_project_names()
+        self.refresh_artifacts()
 
     def pin_project(self, name):
         state = self.settings.get_project_state(name)

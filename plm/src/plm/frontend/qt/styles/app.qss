@@ -230,6 +230,19 @@ QComboBox#ArtifactFileSelector, QLineEdit#ArtifactSearchInput {
 }
 QLabel#ArtifactStatus { color: $text_muted; font-size: 12px; }
 
+QLabel#GenerationStatus { color: $text_muted; font-size: 12px; }
+QLabel#GenerationStatus[state="up_to_date"], QLabel#ArtifactStatus[state="up_to_date"] {
+    color: #28965A;
+}
+QLabel#GenerationStatus[state="out_of_date"], QLabel#ArtifactStatus[state="out_of_date"],
+QLabel#GenerationStatus[state="external_changed"], QLabel#ArtifactStatus[state="external_changed"] {
+    color: #AD6800;
+}
+QLabel#GenerationStatus[state="failed"], QLabel#ArtifactStatus[state="failed"],
+QLabel#GenerationStatus[state="invalid"], QLabel#ArtifactStatus[state="invalid"] {
+    color: #CF222E;
+}
+
 QScrollBar:vertical { width: 6px; background: transparent; border: none; margin: 0; }
 QScrollBar::handle:vertical {
     background: #DCDCDC; border-radius: 3px; min-height: 30px;

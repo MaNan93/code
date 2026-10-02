@@ -432,6 +432,128 @@ class QtWorkflowTests(unittest.TestCase):
         self.assertFalse(window.config_page.dirty)
         self.assertTrue(controller.save_current())
 
+    def test_output_state_generation_integrity_and_noop(self):
+        controller, window = self._editing_window()
+        panel = window.config_page.artifacts_panel
+        self.assertEqual(controller.generation_state, "ready")
+        controller.generate_current()
+        self.assertEqual(controller.generation_state, "up_to_date")
+        self.assertIn("输出已是最新", panel.status.text())
+        files = self.workspaces.output_files(controller.current_project)
+        stamps = {path: path.stat().st_mtime_ns for path in files}
+        controller.generate_current()
+        self.assertEqual(stamps, {path: path.stat().st_mtime_ns for path in files})
+        self.assertIn("输出已是最新", window.log_panel.output.toPlainText())
+        top = controller.current_project.config_dir.parent / "rtl/src/pipe_lane_mapper.sv"
+        original = top.read_bytes()
+        top.write_bytes(original + b"// modified output\n")
+        controller.refresh_artifacts()
+        self.assertEqual(controller.generation_state, "out_of_date")
+        controller.generate_current()
+        self.assertEqual(controller.generation_state, "up_to_date")
+        self.assertEqual(top.read_bytes(), original)
+        manifest = top.parent.parent / "manifest.json"
+        manifest.write_text("broken json", encoding="utf-8")
+        controller.refresh_artifacts()
+        self.assertEqual(controller.generation_state, "out_of_date")
+        controller.generate_current()
+        self.assertEqual(controller.generation_state, "up_to_date")
+        top.unlink()
+        controller.refresh_artifacts()
+        self.assertEqual(controller.generation_state, "out_of_date")
+        controller.generate_current()
+        self.assertTrue(top.exists())
+        self.assertEqual(controller.generation_state, "up_to_date")
+
+    def test_output_state_edit_undo_save_and_project_switch(self):
+        from PyQt5 import QtTest
+        controller, window = self._editing_window()
+        page = window.config_page
+        controller.generate_current()
+        page.controllers_editor.table.item(0, 1).setText("changed_controller")
+        self.assertEqual(controller.generation_state, "out_of_date")
+        QtTest.QTest.qWait(200)
+        self.assertEqual(controller.generation_state, "out_of_date")
+        page.undo()
+        QtTest.QTest.qWait(200)
+        self.assertEqual(controller.generation_state, "up_to_date")
+        page.redo()
+        self.assertTrue(controller.save_current())
+        self.assertEqual(controller.generation_state, "out_of_date")
+        controller.generate_current()
+        self.assertEqual(controller.generation_state, "up_to_date")
+        page.generation_editor.sel_mode.setCurrentText("comb")
+        QtTest.QTest.qWait(200)
+        self.assertEqual(controller.generation_state, "out_of_date")
+        page.undo()
+        QtTest.QTest.qWait(200)
+        self.assertEqual(controller.generation_state, "up_to_date")
+        original = controller.current_name
+        other = next(p.name for p in self.projects.discover() if p.name != original)
+        controller.select_project(other)
+        self.assertEqual(controller.generation_state, "ready")
+        controller.select_project(original)
+        self.assertEqual(controller.generation_state, "up_to_date")
+        controller.rename_project(original, "renamed_current")
+        self.assertEqual(controller.generation_state, "up_to_date")
+        self.assertTrue(page.artifacts_panel.current_path.is_file())
+        self.assertIn("renamed_current", str(page.artifacts_panel.current_path))
+
+    def test_output_state_failed_invalid_and_external_changes(self):
+        from PyQt5 import QtTest
+        controller, window = self._editing_window()
+        page = window.config_page
+        def fail(*args, **kwargs):
+            self.assertEqual(controller.generation_state, "generating")
+            self.assertFalse(page.generation_editor.generate_btn.isEnabled())
+            raise ValueError("simulated generation failure")
+        with patch("plm.frontend.qt.services.workspaces.generate", side_effect=fail), \
+                patch.object(QtWidgets.QMessageBox, "warning"):
+            controller.generate_current()
+        QtTest.QTest.qWait(200)
+        self.assertEqual(controller.generation_state, "failed")
+        self.assertIn("simulated", page.generation_editor.status_label.toolTip())
+        self.assertTrue(page.generation_editor.generate_btn.isEnabled())
+        controller.generate_current()
+        self.assertEqual(controller.generation_state, "up_to_date")
+        page.controllers_editor.table.item(0, 0).setText("invalid")
+        QtTest.QTest.qWait(200)
+        self.assertEqual(controller.generation_state, "invalid")
+        page.undo()
+        QtTest.QTest.qWait(200)
+        self.assertEqual(controller.generation_state, "up_to_date")
+        path = controller.current_project.controllers_csv
+        path.write_text(path.read_text().replace("CtrlX16", "external_controller"), encoding="utf-8")
+        controller.refresh_artifacts()
+        self.assertEqual(controller.generation_state, "external_changed")
+        self.assertTrue(controller.reload_current())
+        self.assertEqual(controller.generation_state, "out_of_date")
+
+    def test_output_state_recognizes_cli_outputs_from_aligned_csv(self):
+        from contextlib import redirect_stdout
+        from io import StringIO
+        from plm.core.service import generate
+        project = self.projects.discover()[0]
+        project.controllers_csv.write_text(project.controllers_csv.read_text().replace(",", ", "), encoding="utf-8")
+        before = self.workspaces.signature(project)
+        payload = self.workspaces.load(project)
+        with redirect_stdout(StringIO()):
+            generate(project.config_dir, project.config_dir.parent / "rtl", self.workspaces._options(payload))
+        controller, window = self._editing_window()
+        self.assertEqual(controller.current_project.config_dir, project.config_dir)
+        self.assertFalse(window.config_page.dirty)
+        self.assertEqual(controller.generation_state, "up_to_date")
+        self.assertEqual(self.workspaces.signature(project), before)
+
+    def test_output_state_without_project_disables_generation(self):
+        controller, window = self._editing_window()
+        for project in list(self.projects.discover()):
+            controller.archive_project(project.name)
+        self.assertIsNone(controller.current_project)
+        self.assertEqual(controller.generation_state, "no_project")
+        self.assertFalse(window.config_page.generation_editor.generate_btn.isEnabled())
+        self.assertEqual(window.config_page.artifacts_panel.status.text(), "请选择项目")
+
     def test_lane_selector_tracks_controllers_and_commits_active_editor(self):
         from plm.frontend.qt.widgets.config_editor import LaneSelector
         controller, window = self._editing_window()

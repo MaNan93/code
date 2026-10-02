@@ -23,6 +23,10 @@ class ArtifactsPanel(QtWidgets.QFrame):
         self.workspace_root = None
         self.current_path = None
         self._readable = False
+        self._file_status = "尚无生成文件"
+        self._file_error = ""
+        self._output_text = ""
+        self._output_detail = ""
         self.setObjectName("ArtifactsPanel")
         apply_drop_shadow(self, offset=(0, 2), blur_radius=12, alpha=30)
         root = QtWidgets.QVBoxLayout(self)
@@ -130,24 +134,25 @@ class ArtifactsPanel(QtWidgets.QFrame):
         self._readable = False
         self.search_status.clear()
         self.file_selector.setToolTip(str(self.current_path or ""))
-        self.status.setToolTip("")
+        self._file_error = ""
         if self.current_path is None:
             self.preview.setPlaceholderText("尚无生成文件")
-            self.status.setText("尚无生成文件")
+            self._file_status = "尚无生成文件"
         else:
             try:
                 text = self.current_path.read_text(encoding="utf-8")
             except (OSError, UnicodeError) as error:
                 self.preview.setPlaceholderText("无法预览该文件，请刷新或选择其他文件")
-                self.status.setText("无法读取文件")
-                self.status.setToolTip(str(error))
+                self._file_status = "无法读取文件"
+                self._file_error = str(error)
             else:
                 self._readable = True
                 self.preview.setPlaceholderText("文件为空")
                 self.preview.setPlainText(text)
                 self.preview.moveCursor(QtGui.QTextCursor.Start)
                 self.preview.horizontalScrollBar().setValue(0)
-                self.status.setText(f"{self.file_selector.currentIndex() + 1}/{self.file_selector.count()} · {len(text.splitlines())} 行")
+                self._file_status = f"{self.file_selector.currentIndex() + 1}/{self.file_selector.count()} · {len(text.splitlines())} 行"
+        self._update_status()
         self._update_highlighting()
         self.preview.line_numbers.setVisible(self._readable)
         for index in (0, 2, 5, 6):
@@ -156,6 +161,21 @@ class ArtifactsPanel(QtWidgets.QFrame):
         self.copy_content_action.setEnabled(self._readable)
         if self._readable and self.search_input.text():
             self._search_changed()
+
+    def set_output_state(self, state, text, detail=""):
+        self._output_text = text
+        self._output_detail = detail
+        self.status.setProperty("state", state)
+        self.status.style().unpolish(self.status)
+        self.status.style().polish(self.status)
+        self._update_status()
+
+    def _update_status(self):
+        parts = [self._file_status] if self.current_path is not None or not self._output_text else []
+        if self._output_text:
+            parts.append(self._output_text)
+        self.status.setText(" · ".join(parts))
+        self.status.setToolTip("\n".join(part for part in (self._file_error, self._output_detail) if part))
 
     def _update_highlighting(self, *_):
         is_verilog = self.current_path is not None and self.current_path.suffix.lower() in (".v", ".sv", ".vh", ".svh")

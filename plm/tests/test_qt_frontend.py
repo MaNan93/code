@@ -8,6 +8,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PyQt5 import QtCore, QtGui, QtTest, QtWidgets
 
+from plm.frontend.qt.models import ProjectInfo
 from plm.frontend.qt.main_window import (
     APP_QSS,
     ICON_SIZE,
@@ -224,6 +225,27 @@ class QtFrontendLayoutTests(unittest.TestCase):
         self.assertTrue(nav.docs_btn.property("selected"))
         nav.set_active("settings")
         self.assertTrue(nav.settings_btn.property("selected"))
+
+    def test_nav_panel_uses_supplied_projects_without_discovery(self):
+        self.assertEqual(NavPanel.__module__, "plm.frontend.qt.views.nav_panel")
+        missing_config_dir = Path(tempfile.gettempdir()) / "plm-fake-project"
+        project = ProjectInfo(
+            name="demo",
+            config_dir=missing_config_dir,
+            controllers_csv=missing_config_dir / "controllers.csv",
+            lane_mapping_csv=missing_config_dir / "lane_mapping.csv",
+            pipe_signals_csv=missing_config_dir / "pipe_signals.csv",
+        )
+        nav = NavPanel(projects=[project], recent_project="missing")
+        try:
+            self.assertEqual(nav.project_list.count(), 1)
+            self.assertEqual(nav.current_project_name, "demo")
+            selected_spy = QtTest.QSignalSpy(nav.project_selected)
+            nav.project_list.project_widgets[0].header.click()
+            self.assertEqual(selected_spy[0][0], "demo")
+        finally:
+            nav.close()
+            nav.deleteLater()
 
     def test_nav_action_buttons_emit_semantic_signals(self):
         nav = self.window.nav_panel

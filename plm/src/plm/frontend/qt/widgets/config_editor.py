@@ -1,6 +1,168 @@
 """Editable CSV tables and generation controls used by ConfigPage."""
 
-from PyQt5 import QtCore, QtWidgets
+import weakref
+
+from PyQt5 import QtCore, QtGui, QtWidgets, sip
+
+
+class LaneSelector(QtWidgets.QWidget):
+    """Choose a controller and one of its lanes without changing CSV syntax."""
+
+    def __init__(self, controllers, parent=None):
+        super().__init__(parent)
+        self.controllers = controllers
+        layout = QtWidgets.QHBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(4)
+        self.controller = QtWidgets.QComboBox()
+        self.lane = QtWidgets.QComboBox()
+        self.setFocusPolicy(QtCore.Qt.StrongFocus)
+        self.setFocusProxy(self.controller)
+        self.controller.addItem("选择控制器", None)
+        for row in controllers:
+            try:
+                cid, width = int(row["ctrl_id"]), int(row["max_width"])
+            except (KeyError, ValueError):
+                continue
+            if cid >= 0 and 0 < width <= 64:
+                self.controller.addItem(f"{row.get('ctrl_name', '')} ({cid})", (cid, width))
+        layout.addWidget(self.controller)
+        layout.addWidget(self.lane)
+        self.controller.currentIndexChanged.connect(self._controller_changed)
+        self.lane.currentIndexChanged.connect(self._mark_changed)
+        self._changed = False
+        self._original = ""
+
+    def _mark_changed(self):
+        self._changed = True
+
+    def _controller_changed(self):
+        self.lane.clear()
+        choice = self.controller.currentData()
+        if choice:
+            for lane in range(choice[1]):
+                self.lane.addItem(str(lane), lane)
+        self._changed = True
+
+    def set_value(self, value):
+        self._original = value
+        try:
+            cid, lane = map(int, value.split("-"))
+        except ValueError:
+            cid, lane = None, None
+        for index in range(1, self.controller.count()):
+            if self.controller.itemData(index)[0] == cid:
+                self.controller.setCurrentIndex(index)
+                self.lane.setCurrentIndex(self.lane.findData(lane))
+                break
+        self._changed = False
+
+    def value(self):
+        choice = self.controller.currentData()
+        lane = self.lane.currentData()
+        if not self._changed or choice is None or lane is None:
+            return self._original
+        return f"{choice[0]}-{lane}"
+
+
+class ConfigDelegate(QtWidgets.QStyledItemDelegate):
+    def __init__(self, owner):
+        super().__init__(owner.table)
+        self.owner = owner
+        self._lane_editor = None
+
+    def createEditor(self, parent, option, index):
+        key = self.owner.columns()[index.column()]
+        if self.owner.mapping and index.column() > 0:
+            editor = LaneSelector(self.owner.controllers, parent)
+            self._lane_editor = editor
+            editor.controller.installEventFilter(self)
+            editor.lane.installEventFilter(self)
+            return editor
+        enums = {"signal_type": ("perlane", "shared"), "direction": ("mac2phy", "phy2mac")}
+        if key in enums:
+            editor = QtWidgets.QComboBox(parent)
+            choices = enums[key]
+            if key == "signal_type" and index.sibling(index.row(), 2).data() == "phy2mac":
+                choices = ("perlane",)
+            editor.addItems(choices)
+            return editor
+        editor = QtWidgets.QLineEdit(parent)
+        if key in ("ctrl_id", "mode", "max_width", "width"):
+            editor.setValidator(QtGui.QIntValidator(1 if key in ("max_width", "width") else 0, 2147483647, editor))
+        elif key in ("ctrl_name", "signal_name"):
+            editor.setValidator(QtGui.QRegularExpressionValidator(QtCore.QRegularExpression(r"[a-zA-Z_][a-zA-Z0-9_$]*"), editor))
+        elif key in ("safe_state", "tie_off"):
+            pattern = r"(?:0[xX][0-9a-fA-F]+|0[bB][01]+|0[oO][0-7]+|[0-9]+)"
+            if key == "tie_off":
+                pattern = "(?:lane0|" + pattern + ")"
+            editor.setValidator(QtGui.QRegularExpressionValidator(QtCore.QRegularExpression(pattern), editor))
+        return editor
+
+    @property
+    def _lane_editor(self):
+        editor = self._lane_editor_ref() if self._lane_editor_ref else None
+        return editor if editor is not None and not sip.isdeleted(editor) else None
+
+    @_lane_editor.setter
+    def _lane_editor(self, editor):
+        self._lane_editor_ref = weakref.ref(editor) if editor is not None else None
+
+    def finish_editing(self):
+        editor = self._lane_editor
+        if editor is not None:
+            self._lane_editor = None
+            self.commitData.emit(editor)
+            self.closeEditor.emit(editor, QtWidgets.QAbstractItemDelegate.NoHint)
+
+    def _commit_if_unfocused(self):
+        editor = self._lane_editor
+        focus = QtWidgets.QApplication.focusWidget()
+        if editor is not None and QtWidgets.QApplication.activePopupWidget() is None:
+            if focus is not editor and not (focus and editor.isAncestorOf(focus)):
+                self.finish_editing()
+
+    def eventFilter(self, watched, event):
+        editor = self._lane_editor
+        if editor is not None and (watched is editor or editor.isAncestorOf(watched)):
+            if event.type() == QtCore.QEvent.FocusOut:
+                QtCore.QTimer.singleShot(0, self._commit_if_unfocused)
+            elif event.type() == QtCore.QEvent.KeyPress:
+                if event.key() == QtCore.Qt.Key_Escape:
+                    self._lane_editor = None
+                    self.closeEditor.emit(editor, QtWidgets.QAbstractItemDelegate.RevertModelCache)
+                    return True
+                if event.key() in (QtCore.Qt.Key_Return, QtCore.Qt.Key_Enter):
+                    self.finish_editing()
+                    return True
+            return False
+        return super().eventFilter(watched, event)
+
+    def updateEditorGeometry(self, editor, option, index):
+        if isinstance(editor, LaneSelector):
+            rect = QtCore.QRect(option.rect)
+            rect.setWidth(min(300, self.owner.table.viewport().width()))
+            rect.moveLeft(min(rect.left(), self.owner.table.viewport().width() - rect.width()))
+            editor.setGeometry(rect)
+        else:
+            super().updateEditorGeometry(editor, option, index)
+
+    def setEditorData(self, editor, index):
+        value = index.data(QtCore.Qt.EditRole) or ""
+        if isinstance(editor, LaneSelector):
+            editor.set_value(value)
+        elif isinstance(editor, QtWidgets.QComboBox):
+            if editor.findText(value) < 0:
+                editor.addItem(value)
+            editor.setCurrentText(value)
+        else:
+            editor.setText(value)
+
+    def setModelData(self, editor, model, index):
+        value = editor.value() if isinstance(editor, LaneSelector) else (
+            editor.currentText() if isinstance(editor, QtWidgets.QComboBox) else editor.text()
+        )
+        model.setData(index, value, QtCore.Qt.EditRole)
 
 
 class CsvTableEditor(QtWidgets.QWidget):
@@ -9,6 +171,7 @@ class CsvTableEditor(QtWidgets.QWidget):
     def __init__(self, columns, mapping=False, parent=None):
         super().__init__(parent)
         self.mapping = mapping
+        self.controllers = []
         layout = QtWidgets.QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(12)
@@ -42,6 +205,7 @@ class CsvTableEditor(QtWidgets.QWidget):
         self.table.setAlternatingRowColors(True)
         self.table.setSelectionBehavior(QtWidgets.QAbstractItemView.SelectRows)
         self.table.itemChanged.connect(self.changed.emit)
+        self.table.setItemDelegate(ConfigDelegate(self))
         layout.addWidget(self.table, 1)
 
     def _change_lane_count(self, count):
@@ -73,6 +237,20 @@ class CsvTableEditor(QtWidgets.QWidget):
     def columns(self):
         return [self.table.horizontalHeaderItem(i).text()
                 for i in range(self.table.columnCount())]
+
+    def set_cell_errors(self, errors):
+        self.table.blockSignals(True)
+        for row in range(self.table.rowCount()):
+            for col in range(self.table.columnCount()):
+                item = self.table.item(row, col)
+                if item is None:
+                    item = QtWidgets.QTableWidgetItem("")
+                    self.table.setItem(row, col, item)
+                message = errors.get((row, col), "")
+                item.setToolTip(message)
+                item.setData(QtCore.Qt.UserRole, message)
+                item.setBackground(QtGui.QBrush(QtGui.QColor("#FFF1F0")) if message else QtGui.QBrush())
+        self.table.blockSignals(False)
 
     def rows(self):
         keys = self.columns()

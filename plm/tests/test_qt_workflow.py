@@ -428,6 +428,121 @@ class QtWorkflowTests(unittest.TestCase):
         self.assertFalse(window.config_page.dirty)
         self.assertTrue(controller.save_current())
 
+    def test_lane_selector_tracks_controllers_and_commits_active_editor(self):
+        from plm.frontend.qt.widgets.config_editor import LaneSelector
+        controller, window = self._editing_window()
+        page = window.config_page
+        table = page.mapping_editor.table
+        page.tabs.setCurrentIndex(1)
+        table.setCurrentCell(0, 1)
+        table.editItem(table.item(0, 1))
+        self.app.processEvents()
+        selector = table.findChild(LaneSelector)
+        self.assertIsNotNone(selector)
+        self.assertEqual(selector.controller.count(), 5)
+        selector.controller.setCurrentIndex(2)
+        self.assertEqual(selector.lane.count(), 8)
+        selector.lane.setCurrentIndex(3)
+        page.finish_editing()
+        self.app.processEvents()
+        self.assertEqual(table.item(0, 1).text(), "1-3")
+        self.assertTrue(page.dirty)
+        page.undo()
+        self.assertEqual(table.item(0, 1).text(), "0-0")
+        page.controllers_editor.table.item(1, 2).setText("2")
+        delegate = table.itemDelegate()
+        index = table.model().index(0, 1)
+        chooser = delegate.createEditor(table, QtWidgets.QStyleOptionViewItem(), index)
+        delegate.setEditorData(chooser, index)
+        chooser.controller.setCurrentIndex(2)
+        self.assertEqual(chooser.lane.count(), 2)
+        chooser.deleteLater()
+
+    def test_lane_editor_internal_focus_commit_and_cancel(self):
+        from PyQt5 import QtTest
+        from plm.frontend.qt.widgets.config_editor import LaneSelector
+        controller, window = self._editing_window()
+        page = window.config_page
+        table = page.mapping_editor.table
+        page.tabs.setCurrentIndex(1)
+        table.editItem(table.item(0, 1))
+        self.app.processEvents()
+        selector = table.findChild(LaneSelector)
+        selector.controller.setCurrentIndex(2)
+        selector.lane.setFocus()
+        self.app.processEvents()
+        self.assertEqual(table.item(0, 1).text(), "0-0")
+        selector.lane.setCurrentIndex(3)
+        table.setFocus()
+        self.app.processEvents()
+        self.assertEqual(table.item(0, 1).text(), "1-3")
+        table.editItem(table.item(0, 2))
+        self.app.processEvents()
+        selector = table.itemDelegate()._lane_editor
+        selector.controller.setCurrentIndex(2)
+        selector.lane.setCurrentIndex(4)
+        QtTest.QTest.keyClick(selector.lane, QtCore.Qt.Key_Escape)
+        self.app.processEvents()
+        self.assertEqual(table.item(0, 2).text(), "0-1")
+
+    def test_field_delegates_constrain_input_without_rewriting_loaded_values(self):
+        from PyQt5 import QtGui
+        controller, window = self._editing_window()
+        page = window.config_page
+        option = QtWidgets.QStyleOptionViewItem()
+        table = page.controllers_editor.table
+        numeric = table.itemDelegate().createEditor(table, option, table.model().index(0, 2))
+        self.assertEqual(numeric.validator().validate("abc", 0)[0], QtGui.QValidator.Invalid)
+        self.assertEqual(numeric.validator().validate("16", 0)[0], QtGui.QValidator.Acceptable)
+        numeric.deleteLater()
+        signals = page.signals_editor.table
+        index = signals.model().index(0, 1)
+        combo = signals.itemDelegate().createEditor(signals, option, index)
+        self.assertEqual([combo.itemText(i) for i in range(combo.count())], ["perlane", "shared"])
+        signals.item(0, 1).setText("unknown")
+        signals.itemDelegate().setEditorData(combo, index)
+        signals.itemDelegate().setModelData(combo, signals.model(), index)
+        self.assertEqual(signals.item(0, 1).text(), "unknown")
+        combo.deleteLater()
+        index = signals.model().index(0, 5)
+        literal = signals.itemDelegate().createEditor(signals, option, index)
+        for value in ("lane0", "0x50", "0b101"):
+            self.assertEqual(literal.validator().validate(value, 0)[0], QtGui.QValidator.Acceptable)
+        literal.deleteLater()
+
+    def test_live_errors_and_focus_use_core_coordinates_without_dirtying_data(self):
+        controller, window = self._editing_window()
+        page = window.config_page
+        self.assertFalse(page.dirty)
+        controller.validate_current()
+        self.assertFalse(page.dirty)
+        page.mapping_editor.table.item(0, 1).setText("99-0")
+        controller.validate_current()
+        item = page.mapping_editor.table.item(0, 1)
+        self.assertIn("undefined", item.toolTip())
+        self.assertTrue(item.data(QtCore.Qt.UserRole))
+        with patch.object(QtWidgets.QMessageBox, "warning"):
+            self.assertFalse(controller.save_current())
+        self.assertEqual(page.tabs.currentIndex(), 1)
+        self.assertEqual(page.mapping_editor.table.currentColumn(), 1)
+        page.undo()
+        controller.validate_current()
+        self.assertFalse(page.mapping_editor.table.item(0, 1).toolTip())
+        self.assertFalse(page.dirty)
+
+    def test_live_validation_timer_and_duplicate_ids_mark_both_rows(self):
+        from PyQt5 import QtTest
+        controller, window = self._editing_window()
+        page = window.config_page
+        page.controllers_editor.table.item(1, 0).setText("0")
+        QtTest.QTest.qWait(200)
+        for row in (0, 1):
+            self.assertIn("Duplicate", page.controllers_editor.table.item(row, 0).toolTip())
+        page.undo()
+        QtTest.QTest.qWait(200)
+        self.assertFalse(page.controllers_editor.table.item(0, 0).toolTip())
+        self.assertFalse(page.controllers_editor.table.item(1, 0).toolTip())
+
 
 if __name__ == "__main__":
     unittest.main()

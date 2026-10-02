@@ -1,10 +1,10 @@
 """Compose views, filesystem discovery, and user preferences."""
 
-from PyQt5 import QtGui, QtWidgets
+from PyQt5 import QtCore, QtGui, QtWidgets
 
 from plm.frontend.qt.models.preferences import DEFAULT_FONT_FAMILY, DEFAULT_FONT_SIZE
 from plm.frontend.qt.services import ProjectService, SettingsStore, WorkspaceService
-from plm.core.validation import ValidationError
+from plm.core.validation import ValidationError, ValidationIssue
 from plm.frontend.qt.views.documentation_page import DocumentationPage
 from plm.frontend.qt.views.nav_panel import NavPanel
 from plm.frontend.qt.views.settings_page import SettingsPage
@@ -49,6 +49,11 @@ class AppController:
         self.config_page = config_page
         self.log_panel = log_panel
         self.window = window
+        self.validation_timer = QtCore.QTimer(window)
+        self.validation_timer.setSingleShot(True)
+        self.validation_timer.setInterval(150)
+        self.validation_timer.timeout.connect(self.validate_current)
+        config_page.historyChanged.connect(self.validation_timer.start)
         nav.new_chat_requested.connect(self.show_project_menu)
         nav.new_chat_btn.setToolTip("新建或打开 PLM 项目")
         nav.save_requested.connect(window.on_save)
@@ -63,6 +68,24 @@ class AppController:
         config_page.artifacts_panel.refreshRequested.connect(self.refresh_artifacts)
         nav.emit_current_project()
         self._show_empty_project()
+
+    def validate_current(self):
+        if self.current_project is None:
+            self.config_page.set_validation_issues(())
+            return
+        try:
+            self.workspaces.validate(self.config_page.content())
+            issues = ()
+        except ValidationError as error:
+            issues = error.issues
+        except (OSError, ValueError) as error:
+            issues = (ValidationIssue("format", str(error)),)
+        self.config_page.set_validation_issues(issues)
+
+    def _show_validation_error(self, error):
+        if isinstance(error, ValidationError):
+            self.config_page.set_validation_issues(error.issues)
+            self.config_page.focus_first_error()
 
     def show_project_menu(self):
         self.hide_project_menu()
@@ -218,6 +241,7 @@ class AppController:
             self.workspaces.save(self.current_project, self.config_page.content())
             self._mark_current_saved()
         except (OSError, ValueError, ValidationError) as error:
+            self._show_validation_error(error)
             self.log_panel.append_log(f"保存失败：{error}")
             QtWidgets.QMessageBox.warning(self.window, "保存失败", str(error))
             return False
@@ -241,6 +265,7 @@ class AppController:
                 on_saved=self._mark_current_saved,
             )
         except (OSError, ValueError, ValidationError) as error:
+            self._show_validation_error(error)
             self.log_panel.append_log(f"生成失败：{error}")
             QtWidgets.QMessageBox.warning(self.window, "生成失败", str(error))
             return

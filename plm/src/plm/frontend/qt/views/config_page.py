@@ -238,6 +238,7 @@ class ConfigPage(QtWidgets.QFrame):
         self.header.title_label.setText(project_name)
 
     def _mark_dirty(self):
+        self.mapping_editor.controllers = self.controllers_editor.rows()
         payload = self.content()
         if self._history and payload == self._history[self._history_index]:
             return
@@ -258,6 +259,7 @@ class ConfigPage(QtWidgets.QFrame):
     def finish_editing(self):
         focus = QtWidgets.QApplication.focusWidget()
         for editor in (self.controllers_editor, self.mapping_editor, self.signals_editor):
+            editor.table.itemDelegate().finish_editing()
             if focus and editor.table.isAncestorOf(focus):
                 editor.table.setFocus()
                 break
@@ -293,6 +295,7 @@ class ConfigPage(QtWidgets.QFrame):
 
     def _load_content(self, payload):
         self.controllers_editor.set_rows(payload.get("controllers", []))
+        self.mapping_editor.controllers = self.controllers_editor.rows()
         mapping = payload.get("mapping") or {}
         lanes = int(mapping.get("lane_count") or 4)
         self.mapping_editor.set_rows(mapping.get("rows", []), ["mode"] + [
@@ -300,6 +303,41 @@ class ConfigPage(QtWidgets.QFrame):
         ])
         self.signals_editor.set_rows(payload.get("signals", []))
         self.generation_editor.set_flags(payload.get("gen_flags") or {})
+
+    def set_validation_issues(self, issues):
+        self.validation_issues = tuple(issues)
+        self._first_error = None
+        first_issue_index = len(issues)
+        for tab, name, editor in ((0, "controllers", self.controllers_editor),
+                                  (1, "mapping", self.mapping_editor),
+                                  (2, "signals", self.signals_editor)):
+            errors = {}
+            columns = editor.columns()
+            for issue_index, issue in enumerate(issues):
+                if issue.table != name or issue.row is None or issue.column is None:
+                    continue
+                col = columns.index(issue.column) if issue.column in columns else issue.column
+                row = issue.row
+                if name == "controllers" and issue.layer == "topology":
+                    row = next((i for i, value in enumerate(editor.rows()) if value["ctrl_id"] == str(issue.row)), row)
+                if isinstance(col, int) and 0 <= col < len(columns) and 0 <= row < editor.table.rowCount():
+                    errors[(row, col)] = str(issue)
+                    if issue_index < first_issue_index:
+                        first_issue_index = issue_index
+                        self._first_error = (tab, editor.table, row, col)
+            editor.set_cell_errors(errors)
+        self.header.setToolTip("\n".join(str(issue) for issue in issues))
+        self.generation_editor.setToolTip("\n".join(str(issue) for issue in issues if issue.layer == "generation"))
+
+    def focus_first_error(self):
+        if self._first_error:
+            tab, table, row, col = self._first_error
+            self.tabs.setCurrentIndex(tab)
+            table.setCurrentCell(row, col)
+            table.scrollToItem(table.item(row, col))
+            table.setFocus()
+        elif any(issue.layer == "generation" for issue in self.validation_issues):
+            self.tabs.setCurrentIndex(3)
 
     def content(self):
         return {

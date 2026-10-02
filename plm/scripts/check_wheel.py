@@ -35,7 +35,7 @@ assert not (PLM_ROOT / 'frontend/qt/widgets/lanegrid.py').exists()
 app = QtWidgets.QApplication([])
 app.setStyle('Fusion')
 with tempfile.TemporaryDirectory(prefix='plm wheel smoke ') as temporary:
-    root = Path(temporary)
+    root = Path(temporary).resolve()
     config = root / 'project with spaces'
     scaffold_default_content(config)
     store = SettingsStore(QtCore.QSettings(str(root/'settings.ini'), QtCore.QSettings.IniFormat))

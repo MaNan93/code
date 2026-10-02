@@ -783,7 +783,7 @@ class QtFrontendLayoutTests(unittest.TestCase):
                 "Generation command content.\n",
                 encoding="utf-8",
             )
-            with patch("plm.frontend.qt.main_window.DOCS_DIR", docs_dir):
+            with patch("plm.frontend.qt.views.documentation_page.DOCS_DIR", docs_dir):
                 self.window.nav_panel.docs_btn.click()
                 self.app.processEvents()
                 overlay = self.window.placeholder_overlay

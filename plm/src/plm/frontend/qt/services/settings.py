@@ -1,6 +1,5 @@
 """Persistent application preferences isolated from Qt widgets."""
 
-import sys
 from datetime import datetime, timezone
 from typing import Dict
 from urllib.parse import quote, unquote
@@ -8,11 +7,9 @@ from urllib.parse import quote, unquote
 from PyQt5 import QtCore
 
 from plm.frontend.qt.models import ProjectState
-
-
-DEFAULT_FONT_FAMILY = "Microsoft YaHei UI"
-DEFAULT_FONT_SIZE = 13
-DEFAULT_EDITOR = "notepad++" if sys.platform == "win32" else "gvim"
+from plm.frontend.qt.models.preferences import (
+    DEFAULT_EDITOR, DEFAULT_FONT_FAMILY, DEFAULT_FONT_SIZE,
+)
 
 
 class SettingsStore:

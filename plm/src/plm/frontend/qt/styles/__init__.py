@@ -2,9 +2,19 @@
 
 from pathlib import Path
 
+from .tokens import COLORS
+
 
 _STYLE_PATH = Path(__file__).with_name("app.qss")
-APP_QSS = _STYLE_PATH.read_text(encoding="utf-8")
+def _load_qss():
+    qss = _STYLE_PATH.read_text(encoding="utf-8")
+    # Replace only named design tokens; longer names must precede prefixes.
+    for name in sorted(COLORS, key=len, reverse=True):
+        qss = qss.replace(f"${name}", COLORS[name])
+    return qss
+
+
+APP_QSS = _load_qss()
 
 
 def build_app_stylesheet(font_family, font_size):

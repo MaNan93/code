@@ -1,0 +1,111 @@
+"""Persistent application preferences isolated from Qt widgets."""
+
+from datetime import datetime, timezone
+from typing import Dict
+from urllib.parse import quote, unquote
+
+from PyQt5 import QtCore
+
+from plm.frontend.qt.models import ProjectState
+from plm.frontend.qt.models.preferences import (
+    DEFAULT_EDITOR, DEFAULT_FONT_FAMILY, DEFAULT_FONT_SIZE,
+)
+
+
+class SettingsStore:
+    """Typed access to the settings keys used by the desktop frontend."""
+
+    def __init__(self, settings=None):
+        self._settings = (
+            settings
+            if settings is not None
+            else QtCore.QSettings("plm", "plmConsultant")
+        )
+
+    def recent_project(self):
+        return self._settings.value("navigation/recent_project", "", type=str)
+
+    def set_recent_project(self, project_name):
+        self._settings.setValue("navigation/recent_project", project_name)
+        state = self.get_project_state(project_name)
+        state.last_opened = datetime.now(timezone.utc)
+        self.save_project_state(state)
+
+    @staticmethod
+    def _project_group(name):
+        return quote(name, safe="")
+
+    def get_project_state(self, name: str) -> ProjectState:
+        self._settings.beginGroup("projects/state")
+        self._settings.beginGroup(self._project_group(name))
+        archived = self._settings.value("is_archived", False, type=bool)
+        pinned = self._settings.value("is_pinned", False, type=bool)
+        last_opened_value = self._settings.value("last_opened", "", type=str)
+        self._settings.endGroup()
+        self._settings.endGroup()
+        try:
+            last_opened = (
+                datetime.fromisoformat(last_opened_value)
+                if last_opened_value
+                else None
+            )
+        except ValueError:
+            last_opened = None
+        return ProjectState(
+            name=name,
+            is_archived=archived,
+            is_pinned=pinned,
+            last_opened=last_opened,
+        )
+
+    def get_project_states(self) -> Dict[str, ProjectState]:
+        self._settings.beginGroup("projects/state")
+        encoded_names = self._settings.childGroups()
+        self._settings.endGroup()
+        names = (unquote(encoded_name) for encoded_name in encoded_names)
+        return {name: self.get_project_state(name) for name in names}
+
+    def save_project_state(self, state: ProjectState):
+        self._settings.beginGroup("projects/state")
+        self._settings.beginGroup(self._project_group(state.name))
+        self._settings.setValue("is_archived", state.is_archived)
+        self._settings.setValue("is_pinned", state.is_pinned)
+        self._settings.setValue(
+            "last_opened",
+            state.last_opened.isoformat() if state.last_opened else "",
+        )
+        self._settings.endGroup()
+        self._settings.endGroup()
+        self._settings.sync()
+
+    def preferences(self):
+        return {
+            "font_family": self._settings.value(
+                "appearance/font_family", DEFAULT_FONT_FAMILY, type=str
+            ),
+            "font_size": self._settings.value(
+                "appearance/font_size", DEFAULT_FONT_SIZE, type=int
+            ),
+            "editor_path": self._settings.value(
+                "tools/editor_path", DEFAULT_EDITOR, type=str
+            ),
+        }
+
+    def save_preferences(self, preferences):
+        self._settings.setValue(
+            "appearance/font_family",
+            preferences.get("font_family") or DEFAULT_FONT_FAMILY,
+        )
+        self._settings.setValue(
+            "appearance/font_size",
+            int(preferences.get("font_size") or DEFAULT_FONT_SIZE),
+        )
+        self._settings.setValue(
+            "tools/editor_path", preferences.get("editor_path") or DEFAULT_EDITOR
+        )
+        self._settings.sync()
+
+    def editor_path(self):
+        return self._settings.value(
+            "tools/editor_path", DEFAULT_EDITOR, type=str
+        )

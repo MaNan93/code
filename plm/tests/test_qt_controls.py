@@ -63,10 +63,14 @@ class QtControlLogicTests(unittest.TestCase):
         ]
 
     @staticmethod
-    def _choose_menu_action(label):
-        def choose(menu, _pos):
-            return next(action for action in menu.actions() if action.text() == label)
-        return choose
+    def _menu_class_selecting(label):
+        base_menu = QtWidgets.QMenu
+
+        class SelectingMenu(base_menu):
+            def exec_(self, _pos):
+                return next(action for action in self.actions() if action.text() == label)
+
+        return SelectingMenu
 
     def test_header_log_and_artifacts_buttons_toggle_panels(self):
         page = self.window.config_page
@@ -217,19 +221,17 @@ class QtControlLogicTests(unittest.TestCase):
         page = self.window.config_page
         editor = page.controllers_editor.editor
         before = editor.table.rowCount()
-        with patch.object(
-            QtWidgets.QMenu,
-            "exec_",
-            side_effect=self._choose_menu_action("Insert row below"),
+        with patch(
+            "plm.frontend.qt.widgets.tables.QtWidgets.QMenu",
+            self._menu_class_selecting("Insert row below"),
         ):
             editor._show_row_context_menu(0, QtCore.QPoint())
         self.assertEqual(editor.table.rowCount(), before + 1)
         self.assertTrue(page.dirty)
 
-        with patch.object(
-            QtWidgets.QMenu,
-            "exec_",
-            side_effect=self._choose_menu_action("Delete current row"),
+        with patch(
+            "plm.frontend.qt.widgets.tables.QtWidgets.QMenu",
+            self._menu_class_selecting("Delete current row"),
         ):
             editor._show_row_context_menu(1, QtCore.QPoint())
         self.assertEqual(editor.table.rowCount(), before)
@@ -238,19 +240,17 @@ class QtControlLogicTests(unittest.TestCase):
         page = self.window.config_page
         grid = page.mapping_editor.editor
         before = grid.table.rowCount()
-        with patch.object(
-            QtWidgets.QMenu,
-            "exec_",
-            side_effect=self._choose_menu_action("Insert row below"),
+        with patch(
+            "plm.frontend.qt.widgets.lanegrid.QtWidgets.QMenu",
+            self._menu_class_selecting("Insert row below"),
         ):
             grid._on_row_context_menu(0, QtCore.QPoint())
         self.assertEqual(grid.table.rowCount(), before + 1)
         self.assertTrue(page.dirty)
 
-        with patch.object(
-            QtWidgets.QMenu,
-            "exec_",
-            side_effect=self._choose_menu_action("Delete current row"),
+        with patch(
+            "plm.frontend.qt.widgets.lanegrid.QtWidgets.QMenu",
+            self._menu_class_selecting("Delete current row"),
         ):
             grid._on_row_context_menu(1, QtCore.QPoint())
         self.assertEqual(grid.table.rowCount(), before)

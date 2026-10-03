@@ -3,7 +3,6 @@ import os
 import tempfile
 from pathlib import Path
 from unittest.mock import patch
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 from PyQt5 import QtCore, QtGui, QtWidgets
 from plm.core.workspace import scaffold_default_content
 from plm.frontend.qt.controllers import AppController
@@ -34,6 +33,7 @@ with tempfile.TemporaryDirectory(prefix="plm ui ") as td:
         controller.open_project()
     app.processEvents()
     assert w.config_page.controllers_editor.table.rowCount() > 0, "controllers did not load"
+    assert w.config_page.controllers_editor.table.item(0, 1).text() == "CtrlA", "controller text did not load"
     assert w.config_page.mapping_editor.table.rowCount() > 0, "lane mapping did not load"
     assert w.config_page.signals_editor.table.rowCount() > 0, "signals did not load"
     # Make the business state concrete before visual review: choose a valid

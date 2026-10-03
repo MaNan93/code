@@ -1,4 +1,5 @@
 name: PLM functional smoke
+# Manual trigger commit for the BeautifulUI r1 visual redesign verification.
 
 on:
   push:

@@ -200,6 +200,7 @@ class CsvTableEditor(QtWidgets.QWidget):
         self.table = QtWidgets.QTableWidget(0, len(columns))
         self.table.setObjectName("ConfigDataTable")
         self.table.setHorizontalHeaderLabels(columns)
+        self.table.verticalHeader().hide()
         self.table.horizontalHeader().setSectionResizeMode(
             QtWidgets.QHeaderView.ResizeToContents
         )

@@ -1,4 +1,4 @@
-"""One-shot patch for deterministic Qt frontend test teardown on Windows."""
+"""One-shot patch for deterministic Qt frontend tests on Windows."""
 from pathlib import Path
 
 path = Path("tests/test_qt_frontend.py")
@@ -20,6 +20,18 @@ old = '''        header = ConfigHeader()\n        self.addCleanup(header.deleteL
 new = '''        header = ConfigHeader()\n        header.title_label.setText("原始名称")\n'''
 if text.count(old) != 1:
     raise SystemExit(f"ConfigHeader cleanup anchor mismatch: {text.count(old)}")
+text = text.replace(old, new, 1)
+
+old = '''        nav.collapse_btn.click()\n        self.assertTrue(nav.is_animating)\n        nav.collapse_btn.click()\n        self.assertTrue(nav._target_collapsed)\n        QtTest.QTest.qWait(100)\n        self.assertGreater(nav.width(), 56)\n        self.assertLess(nav.width(), 260)\n        self.assertEqual(\n            self.window.content_splitter.geometry().left()\n            - (nav.geometry().right() + 1),\n            4,\n        )\n        QtTest.QTest.qWait(250)\n        self.assertFalse(nav.is_animating)\n'''
+new = '''        collapse_finished = QtTest.QSignalSpy(nav.animation_group.finished)\n        nav.collapse_btn.click()\n        self.assertTrue(nav.is_animating)\n        nav.collapse_btn.click()\n        self.assertTrue(nav._target_collapsed)\n        self.assertTrue(collapse_finished.wait(1000))\n        self.assertFalse(nav.is_animating)\n'''
+if text.count(old) != 1:
+    raise SystemExit(f"collapse animation anchor mismatch: {text.count(old)}")
+text = text.replace(old, new, 1)
+
+old = '''        nav.collapse_btn.click()\n        self.assertTrue(nav.project_list.isVisible())\n        QtTest.QTest.qWait(350)\n        self.assertFalse(nav.is_collapsed)\n'''
+new = '''        expand_finished = QtTest.QSignalSpy(nav.animation_group.finished)\n        nav.collapse_btn.click()\n        self.assertTrue(nav.project_list.isVisible())\n        self.assertTrue(expand_finished.wait(1000))\n        self.assertFalse(nav.is_collapsed)\n'''
+if text.count(old) != 1:
+    raise SystemExit(f"expand animation anchor mismatch: {text.count(old)}")
 text = text.replace(old, new, 1)
 
 path.write_text(text, encoding="utf-8")

@@ -7,12 +7,10 @@ on:
   workflow_dispatch:
 jobs:
   capture:
-    runs-on: windows-latest
+    runs-on: ubuntu-latest
     defaults:
       run:
         working-directory: plm
-    env:
-      QT_QPA_PLATFORM: offscreen
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v10.2.0
@@ -20,7 +18,7 @@ jobs:
           python-version: "3.12"
           working-directory: plm
       - run: uv sync --extra qt --locked
-      - run: uv run python scripts/capture_ui.py
+      - run: xvfb-run -a -s "-screen 0 1600x1000x24" uv run python scripts/capture_ui.py
       - uses: actions/upload-artifact@v4
         with:
           name: plm-ui-screenshots

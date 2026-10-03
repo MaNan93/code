@@ -9,20 +9,15 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 from PyQt5 import QtCore, QtGui, QtTest, QtWidgets
 
 from plm.frontend.qt.models import ProjectInfo
-from plm.frontend.qt.main_window import (
-    APP_QSS,
-    ICON_SIZE,
-    LUCIDE_ICON_DIR,
-    ArtifactsPanel,
-    ConfigHeader,
-    DragHandle,
-    LogPanel,
-    MainWindow,
-    NavPanel,
-    ProjectItemWidget,
-    ProjectList,
-    load_lucide_icon,
-)
+from plm.frontend.qt.main_window import MainWindow
+from plm.frontend.qt.styles import APP_QSS
+from plm.frontend.qt.views.artifacts_panel import ArtifactsPanel
+from plm.frontend.qt.views.config_page import ConfigHeader, DragHandle
+from plm.frontend.qt.views.log_panel import LogPanel
+from plm.frontend.qt.views.nav_panel import NavPanel
+from plm.frontend.qt.widgets.common import ICON_SIZE, LUCIDE_ICON_DIR, load_lucide_icon
+from plm.frontend.qt.widgets.project_item import ProjectItemWidget
+from plm.frontend.qt.widgets.project_list import ProjectList
 
 
 class QtFrontendLayoutTests(unittest.TestCase):

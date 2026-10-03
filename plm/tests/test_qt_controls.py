@@ -193,7 +193,7 @@ class QtControlLogicTests(unittest.TestCase):
             self.controller.current_project.config_dir,
             self.root / "test/renamed/config",
         )
-        self.assertTrue((self.root / "test/renamed/.plm-workspace").is_file())
+        self.assertTrue((self.root / "test/renamed/config/controllers.csv").is_file())
         self.assertFalse((self.root / "test/demo").exists())
 
     def test_clear_project_can_be_explicitly_reopened(self):

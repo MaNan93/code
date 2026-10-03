@@ -67,8 +67,8 @@ Generation 页提供以下参数：
 
 | 参数 | 选择与联动 |
 |---|---|
-| `arch` | `original_pipe` / `serdes` |
-| `pclk-mode` | `pclk_as_phy_output` / `pclk_as_phy_input`，分别与上述架构联动 |
+| `arch` | 用户选择 `original_pipe` / `serdes` |
+| `pclk-mode` | 只读显示，由 `arch` 自动决定：`original_pipe` → `pclk_as_phy_output`，`serdes` → `pclk_as_phy_input` |
 | `sel-mode` | `sync` / `comb` |
 | `dpr` | 两种 PCLK 模式都支持；启用时自动选择并锁定 `sync` |
 

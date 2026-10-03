@@ -227,5 +227,11 @@ t = replace_once(
     '        self.assertIn((0, 1), page.mapping_editor.editor._cell_errors)\n',
     "lane grid error marker",
 )
+t = replace_once(
+    t,
+    '        self.assertFalse(page.mapping_editor.table.item(0, 1).toolTip())\n',
+    '        self.assertNotIn((0, 1), page.mapping_editor.editor._cell_errors)\n        self.assertNotIn("undefined", page.mapping_editor.table.item(0, 1).toolTip().lower())\n',
+    "lane grid cleared error",
+)
 
 tests.write_text(t, encoding="utf-8")

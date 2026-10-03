@@ -96,7 +96,9 @@ def open_in_file_manager(path):
 
 
 class StyledMenu(QtWidgets.QMenu):
-    """QMenu with the shared popup elevation (QSS cannot draw shadows)."""
+    """Shared rounded popup menu without native black corner artifacts."""
+
+    RADIUS = 8.0
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -106,4 +108,24 @@ class StyledMenu(QtWidgets.QMenu):
             | QtCore.Qt.FramelessWindowHint
             | QtCore.Qt.NoDropShadowWindowHint
         )
-        apply_drop_shadow(self, offset=(0, 4), blur_radius=12, alpha=40)
+        # A transparent outer QSS margin renders black on X11/Xvfb without a
+        # compositor.  Keep the popup itself flush and clip the native window
+        # to the same 8 px rounded shape instead.
+        self.setStyleSheet("QMenu { margin: 0px; }")
+
+    def _apply_round_mask(self):
+        if self.width() <= 0 or self.height() <= 0:
+            return
+        rect = QtCore.QRectF(self.rect()).adjusted(0.0, 0.0, -1.0, -1.0)
+        path = QtGui.QPainterPath()
+        path.addRoundedRect(rect, self.RADIUS, self.RADIUS)
+        polygon = path.toFillPolygon().toPolygon()
+        self.setMask(QtGui.QRegion(polygon))
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self._apply_round_mask()
+
+    def showEvent(self, event):
+        self._apply_round_mask()
+        super().showEvent(event)

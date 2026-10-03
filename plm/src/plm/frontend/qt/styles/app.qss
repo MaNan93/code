@@ -395,7 +395,7 @@ QSpinBox#SettingsFontSize, QLineEdit#SettingsEditorPath { min-height: 36px; max-
 QDialog { background-color: $bg_main; color: $text_main; }
 QLabel#NewProjectDialogTitle {
     color: $text_main;
-    font-size: $font_size_xl;
+    font-size: $font_size_lg;
     font-weight: bold;
 }
 QLabel#NewProjectDialogSubtitle {

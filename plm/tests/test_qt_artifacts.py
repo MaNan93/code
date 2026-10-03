@@ -167,6 +167,27 @@ class ArtifactPreviewTests(unittest.TestCase):
         self.panel.search_input.setText(":99")
         self.assertEqual(self.panel.search_status.text(), "行号超出范围")
 
+    def test_diff_switches_between_unified_diff_and_current_file(self):
+        path = self.file(
+            "rtl/one.sv",
+            "module one;\nassign value = 1'b0;\nendmodule\n",
+        )
+        self.panel.set_files([path], self.root)
+        current = "module one;\nassign value = 1'b1;\nendmodule\n"
+        path.write_text(current, encoding="utf-8")
+        self.panel.set_files(
+            [path], self.root, statuses={"rtl/one.sv": "Modified"}
+        )
+        self.assertTrue(self.panel.diff_button.isEnabled())
+        self.panel.diff_button.click()
+        diff = self.panel.preview.toPlainText()
+        self.assertIn("--- previous/rtl/one.sv", diff)
+        self.assertIn("+++ current/rtl/one.sv", diff)
+        self.assertIn("-assign value = 1'b0;", diff)
+        self.assertIn("+assign value = 1'b1;", diff)
+        self.panel.diff_button.click()
+        self.assertEqual(self.panel.preview.toPlainText(), current)
+
     def test_toolbar_compacts_without_losing_more_actions(self):
         self.panel._apply_toolbar_density(320)
         self.assertFalse(self.panel.toolbar_buttons[2].isVisible())
@@ -234,7 +255,6 @@ class ArtifactPreviewTests(unittest.TestCase):
             self.panel.open_in_editor()
             warning.assert_called_once()
             popen.assert_not_called()
-
 
     def test_file_tree_blank_click_closes_overlay(self):
         path = self.file("rtl/one.sv", "module one;\nendmodule\n")

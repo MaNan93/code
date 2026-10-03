@@ -23,7 +23,5 @@ jobs:
           enable-cache: true
           cache-dependency-glob: uv.lock
       - run: uv sync --extra qt --locked
-      - name: Frontend class alone
-        run: uv run python -u -m unittest -v tests.test_qt_frontend.QtFrontendLayoutTests
       - name: Artifacts then frontend
         run: uv run python -u -m unittest -v tests.test_qt_artifacts tests.test_qt_frontend

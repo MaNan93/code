@@ -13,7 +13,7 @@ jobs:
         working-directory: plm
     steps:
       - uses: actions/checkout@v4
-      # Install CJK fonts so Linux visual review exercises the fallback stack.
+      # Install CJK fonts so Linux screenshot verification exercises fallback rendering.
       - run: sudo apt-get update && sudo apt-get install -y libxcb-xinerama0 libxkbcommon-x11-0 libxcb-cursor0 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-randr0 libxcb-render-util0 libxcb-shape0 libxcb-xfixes0 libegl1 libgl1 libfontconfig1 libdbus-1-3 fonts-noto-cjk
       - uses: astral-sh/setup-uv@v10.2.0
         with:

@@ -1,0 +1,31 @@
+name: PLM Windows Qt debug
+
+on:
+  push:
+    paths:
+      - ".github/workflows/plm-win-qt-debug.yml"
+  workflow_dispatch:
+
+jobs:
+  debug:
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: plm
+    env:
+      QT_QPA_PLATFORM: offscreen
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v10.2.0
+        with:
+          python-version: "3.12"
+          working-directory: plm
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+      - run: uv sync --extra qt --locked
+      - name: Native test alone
+        run: uv run python -u -m unittest -v tests.test_qt_frontend.QtFrontendLayoutTests.test_native_window_and_nested_splitters
+      - name: Log then native
+        run: uv run python -u -m unittest -v tests.test_qt_frontend.QtFrontendLayoutTests.test_log_auto_scroll_clear_and_splitter_toggle tests.test_qt_frontend.QtFrontendLayoutTests.test_native_window_and_nested_splitters
+      - name: Frontend class
+        run: uv run python -u -m unittest -v tests.test_qt_frontend.QtFrontendLayoutTests

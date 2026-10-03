@@ -56,55 +56,46 @@ VERIBLE_INT_PARAMS = (
     "column_limit", "indentation_spaces", "line_break_penalty",
     "over_column_limit_penalty", "max_search_states",
 )
-VERIBLE_STR_PARAMS = ("lines", "line_terminator", "stdin_name")  # free-form -- "lines" e.g. "3-5,10-12"
+# Only user-facing formatting controls belong in the Settings table.
+# ``lines`` (partial formatting) and ``stdin_name`` (diagnostics only) are
+# invocation details and are intentionally not exposed by PLM.
+VERIBLE_STR_PARAMS = ("line_terminator",)
 
-# Built-in defaults reported by current verible-verilog-format --helpfull.
-# These are intentionally distinct from DEFAULT_VERIBLE_FLAGS below, which
-# is PLM's own formatting preset.  An empty UI value means "do not pass this
-# flag", so Verible uses the corresponding value from this mapping.
-VERIBLE_BUILTIN_DEFAULTS = {
-    **{name: "infer" for name in VERIBLE_ALIGN_PARAMS},
-    **{name: "wrap" for name in VERIBLE_INDENT_PARAMS},
-    "compact_indexing_and_selections": "true",
-    "expand_coverpoints": "false",
-    "port_declarations_right_align_packed_dimensions": "false",
-    "port_declarations_right_align_unpacked_dimensions": "false",
-    "try_wrap_long_lines": "false",
-    "wrap_end_else_clauses": "false",
-    "verify": "false",
-    "verify_convergence": "true",
-    "failsafe_success": "true",
-    "column_limit": "100",
-    "indentation_spaces": "2",
-    "line_break_penalty": "2",
-    "over_column_limit_penalty": "100",
-    "max_search_states": "100000",
-    "lines": "",
-    "line_terminator": "auto",
-    "stdin_name": "<stdin>",
-}
-
-# This project's own long-standing defaults (not verible's own out-of-the-box
-# defaults) -- unlisted params are simply never passed, so verible's own
-# built-in default applies. --inplace/stdin plumbing stays hardcoded below,
-# not exposed here (changing it would break the stdin-pipe invocation itself).
+# PLM's formatter preset.  Every parameter exposed by the UI has one explicit
+# value here; ``(default)`` in Settings always means this PLM preset, never a
+# second Verible-internal default system.  Values that were previously omitted
+# use Verible's effective defaults so existing generated formatting is stable.
 DEFAULT_VERIBLE_FLAGS = {
     "assignment_statement_alignment": "align",
     "case_items_alignment": "align",
+    "class_member_variable_alignment": "infer",
     "distribution_items_alignment": "align",
+    "enum_assignment_statement_alignment": "infer",
     "formal_parameters_alignment": "align",
-    "formal_parameters_indentation": "indent",
+    "module_net_variable_alignment": "infer",
     "named_parameter_alignment": "align",
-    "named_parameter_indentation": "indent",
     "named_port_alignment": "align",
-    "named_port_indentation": "indent",
     "port_declarations_alignment": "align",
-    "port_declarations_indentation": "indent",
-    "port_declarations_right_align_packed_dimensions": "true",
     "struct_union_members_alignment": "align",
+    "formal_parameters_indentation": "indent",
+    "named_parameter_indentation": "indent",
+    "named_port_indentation": "indent",
+    "port_declarations_indentation": "indent",
+    "compact_indexing_and_selections": "true",
+    "expand_coverpoints": "false",
+    "port_declarations_right_align_packed_dimensions": "true",
+    "port_declarations_right_align_unpacked_dimensions": "false",
+    "try_wrap_long_lines": "false",
     "wrap_end_else_clauses": "true",
-    "indentation_spaces": "4",
+    "verify": "false",
+    "verify_convergence": "true",
+    "failsafe_success": "true",
     "column_limit": "120",
+    "indentation_spaces": "4",
+    "line_break_penalty": "2",
+    "over_column_limit_penalty": "100",
+    "max_search_states": "100000",
+    "line_terminator": "auto",
 }
 
 

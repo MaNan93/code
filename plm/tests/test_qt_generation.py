@@ -12,6 +12,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 from PyQt5 import QtCore, QtTest, QtWidgets
 
 from plm.core.validation import ValidationError
+from plm.core.verible import DEFAULT_VERIBLE_FLAGS
 from plm.core.workspace import scaffold_default_content
 from plm.frontend.qt.controllers import AppController
 from plm.frontend.qt.main_window import MainWindow
@@ -49,11 +50,14 @@ class GenerationIntegrationTests(unittest.TestCase):
             page = SettingsPage(preferences=reloaded.preferences())
             self.addCleanup(page.close)
             page.font_size_spin.setValue(15)
-            self.assertEqual(page._preferences()["verible_flags"], flags)
+            expected = dict(DEFAULT_VERIBLE_FLAGS)
+            if flags:
+                expected.update(flags)
+            self.assertEqual(page._preferences()["verible_flags"], expected)
             page._fill_flags({})
-            self.assertEqual(page._preferences()["verible_flags"], {})
+            self.assertEqual(page._preferences()["verible_flags"], DEFAULT_VERIBLE_FLAGS)
             page._fill_flags(None)
-            self.assertIsNone(page._preferences()["verible_flags"])
+            self.assertEqual(page._preferences()["verible_flags"], DEFAULT_VERIBLE_FLAGS)
 
     def test_formatter_parameter_validation_and_detection(self):
         page = SettingsPage(preferences=self.store.preferences())

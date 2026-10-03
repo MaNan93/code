@@ -1,8 +1,7 @@
 from PyQt5 import QtCore, QtGui, QtWidgets
 from plm.core.verible import (
     DEFAULT_VERIBLE_FLAGS, VERIBLE_ALIGN_PARAMS, VERIBLE_INDENT_PARAMS,
-    VERIBLE_BOOL_PARAMS, VERIBLE_BUILTIN_DEFAULTS, VERIBLE_INT_PARAMS,
-    VERIBLE_STR_PARAMS, find_verible,
+    VERIBLE_BOOL_PARAMS, VERIBLE_INT_PARAMS, VERIBLE_STR_PARAMS, find_verible,
 )
 from plm.frontend.qt.models.preferences import DEFAULT_EDITOR, DEFAULT_FONT_FAMILY, DEFAULT_FONT_SIZE
 from plm.frontend.qt.widgets.common import LUCIDE_ICON_DIR
@@ -216,7 +215,7 @@ class SettingsPage(SecondaryPage):
         layout.addLayout(path_row)
         self.flag_table = QtWidgets.QTableWidget(0, 2)
         self.flag_table.setObjectName("ConfigDataTable")
-        self.flag_table.setHorizontalHeaderLabels(("参数", "值（空白使用 Verible 默认值）"))
+        self.flag_table.setHorizontalHeaderLabels(("参数", "值"))
         self.flag_table.verticalHeader().hide()
         self.flag_table.horizontalHeader().setSectionResizeMode(0, QtWidgets.QHeaderView.Stretch)
         self.flag_table.horizontalHeader().setSectionResizeMode(1, QtWidgets.QHeaderView.ResizeToContents)
@@ -229,7 +228,8 @@ class SettingsPage(SecondaryPage):
         groups = ((VERIBLE_ALIGN_PARAMS, ("align", "flush-left", "preserve", "infer")),
                   (VERIBLE_INDENT_PARAMS, ("indent", "wrap")),
                   (VERIBLE_BOOL_PARAMS, ("true", "false")),
-                  (VERIBLE_INT_PARAMS, None), (VERIBLE_STR_PARAMS, None))
+                  (VERIBLE_INT_PARAMS, None),
+                  (VERIBLE_STR_PARAMS, ("auto", "LF", "CR", "CRLF")))
         for params, choices in groups:
             for name in params:
                 row = self.flag_table.rowCount()
@@ -237,18 +237,18 @@ class SettingsPage(SecondaryPage):
                 item = QtWidgets.QTableWidgetItem(name)
                 item.setFlags(item.flags() & ~QtCore.Qt.ItemIsEditable)
                 self.flag_table.setItem(row, 0, item)
-                default_value = VERIBLE_BUILTIN_DEFAULTS.get(name, "")
+                default_value = DEFAULT_VERIBLE_FLAGS[name]
                 if choices:
                     control = QtWidgets.QComboBox()
-                    control.addItem(f"{default_value} (default)", "")
+                    control.addItem(f"{default_value} (default)", default_value)
                     for choice in choices:
                         if choice != default_value:
                             control.addItem(choice, choice)
+                    control.setToolTip(f"PLM 默认值：{default_value}")
                     control.currentIndexChanged.connect(self._flags_changed)
                 else:
                     control = QtWidgets.QLineEdit()
-                    if default_value:
-                        control.setPlaceholderText(f"{default_value} (default)")
+                    control.setToolTip(f"PLM 默认值：{default_value}")
                     if name in VERIBLE_INT_PARAMS:
                         control.setValidator(QtGui.QIntValidator(0, 2147483647, control))
                     control.textChanged.connect(self._flags_changed)
@@ -256,11 +256,12 @@ class SettingsPage(SecondaryPage):
                 self._flag_controls[name] = control
         layout.addWidget(self.flag_table, 1)
         buttons = QtWidgets.QHBoxLayout()
-        for label, flags in (("项目默认参数", None), ("使用 Verible 默认参数", {})):
-            button = QtWidgets.QPushButton(label)
-            button.setObjectName("SettingsSecondaryButton")
-            button.clicked.connect(lambda _checked=False, value=flags: self._fill_flags(value))
-            buttons.addWidget(button)
+        self.reset_formatter_btn = QtWidgets.QPushButton("恢复默认参数")
+        self.reset_formatter_btn.setObjectName("SettingsSecondaryButton")
+        self.reset_formatter_btn.clicked.connect(
+            lambda: self._fill_flags(DEFAULT_VERIBLE_FLAGS)
+        )
+        buttons.addWidget(self.reset_formatter_btn)
         buttons.addStretch(1)
         layout.addLayout(buttons)
         self._fill_flags(preferences["verible_flags"])
@@ -270,21 +271,18 @@ class SettingsPage(SecondaryPage):
         self._flags_dirty = True
 
     def _fill_flags(self, flags):
-        self._original_flags = flags
-        values = DEFAULT_VERIBLE_FLAGS if flags is None else flags
-        self._extra_flags = {key: value for key, value in values.items() if key not in self._flag_controls}
+        values = dict(DEFAULT_VERIBLE_FLAGS)
+        if flags:
+            values.update({key: str(value) for key, value in flags.items() if key in values})
+        self._original_flags = dict(values)
         for name, control in self._flag_controls.items():
             control.blockSignals(True)
-            value = "" if values.get(name) is None else str(values.get(name))
+            value = values[name]
             if isinstance(control, QtWidgets.QComboBox):
-                default_value = VERIBLE_BUILTIN_DEFAULTS.get(name, "")
-                if not value or value == default_value:
-                    index = 0
-                else:
-                    index = control.findData(value)
-                    if index < 0:
-                        control.addItem(value, value)
-                        index = control.count() - 1
+                index = control.findData(value)
+                if index < 0:
+                    control.addItem(value, value)
+                    index = control.count() - 1
                 control.setCurrentIndex(index)
             else:
                 control.setText(value)
@@ -293,12 +291,11 @@ class SettingsPage(SecondaryPage):
 
     def _formatter_flags(self):
         if not self._flags_dirty:
-            return self._original_flags
-        flags = dict(self._extra_flags)
+            return dict(self._original_flags)
+        flags = {}
         for name, control in self._flag_controls.items():
             value = control.currentData() if isinstance(control, QtWidgets.QComboBox) else control.text().strip()
-            if value:
-                flags[name] = value
+            flags[name] = str(value)
         return flags
 
     def _browse_verible(self):
@@ -352,5 +349,5 @@ class SettingsPage(SecondaryPage):
         self.font_size_spin.setValue(DEFAULT_FONT_SIZE)
         self.editor_path_edit.setText(DEFAULT_EDITOR)
         self.verible_path_edit.clear()
-        self._fill_flags(None)
+        self._fill_flags(DEFAULT_VERIBLE_FLAGS)
         self._save_settings()

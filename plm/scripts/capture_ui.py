@@ -149,13 +149,19 @@ with tempfile.TemporaryDirectory(prefix="plm-ui-") as td:
             assert page.settings_content_layout.stretch(page._formatter_layout_index) == 1
             assert page.settings_content_layout.stretch(page._bottom_stretch_index) == 0
             align_control=page._flag_controls["assignment_statement_alignment"]
-            assert align_control.itemText(0) == "infer (default)"
-            assert align_control.itemData(0) == ""
+            assert align_control.itemText(0) == "align (default)"
+            assert align_control.itemData(0) == "align"
             assert [align_control.itemText(i) for i in range(1, align_control.count())] == [
-                "align", "flush-left", "preserve"
+                "flush-left", "preserve", "infer"
             ]
             indent_control=page._flag_controls["formal_parameters_indentation"]
-            assert indent_control.itemText(0) == "wrap (default)"
+            assert indent_control.itemText(0) == "indent (default)"
+            assert page._flag_controls["column_limit"].text() == "120"
+            assert page.flag_table.horizontalHeaderItem(1).text() == "值"
+            button_texts=[button.text() for button in page.formatter_panel.findChildren(QtWidgets.QPushButton)]
+            assert "恢复默认参数" in button_texts
+            assert "项目默认参数" not in button_texts
+            assert "使用 Verible 默认参数" not in button_texts
             assert page.flag_table.verticalScrollMode() == QtWidgets.QAbstractItemView.ScrollPerPixel
         if name == "general":
             assert page.setting_rows["editor"].isVisible()

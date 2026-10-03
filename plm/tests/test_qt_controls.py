@@ -223,7 +223,7 @@ class QtControlLogicTests(unittest.TestCase):
         before = editor.table.rowCount()
         with patch(
             "plm.frontend.qt.widgets.tables.QtWidgets.QMenu",
-            self._menu_class_selecting("Insert row below"),
+            self._menu_class_selecting("在下方插入行"),
         ):
             editor._show_row_context_menu(0, QtCore.QPoint())
         self.assertEqual(editor.table.rowCount(), before + 1)
@@ -231,7 +231,7 @@ class QtControlLogicTests(unittest.TestCase):
 
         with patch(
             "plm.frontend.qt.widgets.tables.QtWidgets.QMenu",
-            self._menu_class_selecting("Delete current row"),
+            self._menu_class_selecting("删除当前行"),
         ):
             editor._show_row_context_menu(1, QtCore.QPoint())
         self.assertEqual(editor.table.rowCount(), before)

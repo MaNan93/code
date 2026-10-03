@@ -426,13 +426,13 @@ class EditableTable(QtWidgets.QWidget):
             self.table.selectRow(row)
         menu = QtWidgets.QMenu(self.table)
         if row >= 0:
-            insert_above = menu.addAction("Insert row above")
-            insert_below = menu.addAction("Insert row below")
+            insert_above = menu.addAction("在上方插入行")
+            insert_below = menu.addAction("在下方插入行")
             menu.addSeparator()
-            delete_current = menu.addAction("Delete current row")
+            delete_current = menu.addAction("删除当前行")
         else:
             insert_above = None
-            insert_below = menu.addAction("Insert row")
+            insert_below = menu.addAction("插入行")
             delete_current = None
         chosen = menu.exec_(global_pos)
         if insert_above is not None and chosen == insert_above:

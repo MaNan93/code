@@ -1,6 +1,7 @@
 """Compose views, filesystem discovery, and user preferences."""
 
 import hashlib
+import os
 from pathlib import Path
 
 from PyQt5 import QtCore, QtGui, QtWidgets
@@ -207,7 +208,7 @@ class AppController:
         self._activate_path(config_dir)
 
     def new_project(self):
-        default = Path.home() / "plm-projects"
+        default = os.path.expanduser("~/plm-projects")
         dialog = NewProjectDialog(default, self.window)
         if dialog.exec_() != QtWidgets.QDialog.Accepted:
             return

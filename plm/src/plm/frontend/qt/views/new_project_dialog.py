@@ -1,5 +1,6 @@
 """Collect a project name and a user-selected parent directory."""
 
+import os
 from pathlib import Path
 
 from PyQt5 import QtCore, QtWidgets
@@ -22,10 +23,15 @@ class NewProjectDialog(QtWidgets.QDialog):
         form.setContentsMargins(20, 20, 20, 20)
         form.setSpacing(12)
         self.name = QtWidgets.QLineEdit()
-        default_location = Path(location or Path.home()).expanduser()
-        if default_location == Path.home():
-            default_location = Path.home() / "plm-projects"
-        self.location = QtWidgets.QLineEdit(str(default_location))
+        home_location = os.path.expanduser("~")
+        default_location = (
+            os.path.expanduser(str(location))
+            if location
+            else os.path.expanduser("~/plm-projects")
+        )
+        if os.path.normpath(default_location) == os.path.normpath(home_location):
+            default_location = os.path.expanduser("~/plm-projects")
+        self.location = QtWidgets.QLineEdit(default_location)
         row = QtWidgets.QHBoxLayout()
         row.addWidget(self.location)
         browse = QtWidgets.QPushButton("浏览…")
@@ -51,7 +57,7 @@ class NewProjectDialog(QtWidgets.QDialog):
 
     def browse(self):
         path = QtWidgets.QFileDialog.getExistingDirectory(
-            self, "选择保存位置", self.location.text() or str(Path.home())
+            self, "选择保存位置", self.location.text() or os.path.expanduser("~")
         )
         if path:
             self.location.setText(path)

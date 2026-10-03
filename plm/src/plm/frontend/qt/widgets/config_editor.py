@@ -208,13 +208,13 @@ class CsvTableEditor(QtWidgets.QWidget):
                 insert_below = lambda: self.editor.insert_row_below(row)
                 delete_row = lambda: self.editor.delete_row(row)
                 count = self.table.rowCount()
-            menu.addAction("Insert row above", insert_above)
-            menu.addAction("Insert row below", insert_below)
+            menu.addAction("在上方插入行", insert_above)
+            menu.addAction("在下方插入行", insert_below)
             menu.addSeparator()
-            action = menu.addAction("Delete current row", delete_row)
+            action = menu.addAction("删除当前行", delete_row)
             action.setEnabled(count > 1)
         else:
-            menu.addAction("Insert row", self.add_row)
+            menu.addAction("插入行", self.add_row)
         return menu
 
 

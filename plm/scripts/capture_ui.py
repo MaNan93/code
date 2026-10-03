@@ -70,7 +70,7 @@ with tempfile.TemporaryDirectory(prefix="plm-ui-") as td:
     controller_editor=w.config_page.controllers_editor
     row_menu=controller_editor._build_row_context_menu(0)
     assert [action.text() for action in row_menu.actions() if not action.isSeparator()] == [
-        "Insert row above", "Insert row below", "Delete current row"
+        "在上方插入行", "在下方插入行", "删除当前行"
     ]
     first_item=controller_editor.table.item(0,0)
     menu_pos=controller_editor.table.visualItemRect(first_item).center()
@@ -124,12 +124,12 @@ with tempfile.TemporaryDirectory(prefix="plm-ui-") as td:
 
     # New projects without an active workspace use a stable user directory,
     # not the temporary screenshot workspace.
-    dlg=NewProjectDialog(Path.home(),w)
+    dlg=NewProjectDialog(None,w)
     dlg.name.setText("new-project")
     button_box=dlg.findChild(QtWidgets.QDialogButtonBox)
     create_button=button_box.button(QtWidgets.QDialogButtonBox.Ok)
     cancel_button=button_box.button(QtWidgets.QDialogButtonBox.Cancel)
-    assert dlg.location.text() == str(Path.home()/"plm-projects")
+    assert dlg.location.text() == os.path.expanduser("~/plm-projects")
     assert create_button.text() == "创建项目" and cancel_button.text() == "取消"
     assert create_button.iconSize() == QtCore.QSize(20,20)
     assert cancel_button.iconSize() == QtCore.QSize(20,20)
@@ -139,15 +139,25 @@ with tempfile.TemporaryDirectory(prefix="plm-ui-") as td:
     w.on_open_settings(); app.processEvents()
     required_fonts=(
         "Microsoft YaHei UI", "PingFang SC", "Noto Sans CJK SC",
-        "SimHei", "SimSun", "Source Han Sans SC",
+        "SimHei", "SimSun", "Source Han Sans SC", "DejaVu Sans",
     )
     for idx,name in enumerate(("general","appearance","tools","formatter")):
         w.placeholder_overlay.menu_buttons[idx].click()
+        page=w.placeholder_overlay
+        if name == "general":
+            assert page.setting_rows["editor"].isVisible()
+            assert not page.setting_rows["font"].isVisible()
+            assert not page.setting_rows["size"].isVisible()
+        elif name == "appearance":
+            assert page.setting_rows["font"].isVisible()
+            assert page.setting_rows["size"].isVisible()
+            assert not page.setting_rows["editor"].isVisible()
         shot(w,f"04-settings-{name}")
         if name == "appearance":
             font_combo=w.findChild(QtWidgets.QComboBox,"SettingsFontFamily")
             assert font_combo is not None
-            assert all(font_combo.findText(font) >= 0 for font in required_fonts)
+            expected_fonts=list(required_fonts)+["更多字体..."]
+            assert [font_combo.itemText(i) for i in range(font_combo.count())] == expected_fonts
             selected=font_combo.currentIndex()
             font_combo.setCurrentIndex(0)
             font_combo.showPopup()
@@ -161,7 +171,14 @@ with tempfile.TemporaryDirectory(prefix="plm-ui-") as td:
         w.placeholder_overlay.menu_buttons[idx].click(); shot(w,f"05-docs-{name}")
     w._close_placeholder()
 
-    artifacts.show_search(); shot(w,"06-artifacts-search")
+    artifacts.show_search()
+    search_layout=artifacts.search_bar.layout()
+    assert search_layout.spacing() == 8
+    assert search_layout.getContentsMargins() == (0,0,12,0)
+    search_buttons=artifacts.search_bar.findChildren(QtWidgets.QPushButton)
+    assert len(search_buttons) == 3
+    assert all(button.size() == QtCore.QSize(24,24) for button in search_buttons)
+    shot(w,"06-artifacts-search")
     w.config_page.toggle_artifacts_maximized(); shot(w,"07-artifacts-maximized")
 
     # Force one preview-only content change to prove unified diff rendering.

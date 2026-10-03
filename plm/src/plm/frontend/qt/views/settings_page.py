@@ -8,14 +8,16 @@ from plm.frontend.qt.widgets.common import LUCIDE_ICON_DIR
 from .secondary_page import SecondaryPage
 
 
-CJK_FONT_CHOICES = (
+RECOMMENDED_FONT_CHOICES = (
     "Microsoft YaHei UI",
     "PingFang SC",
     "Noto Sans CJK SC",
     "SimHei",
     "SimSun",
     "Source Han Sans SC",
+    "DejaVu Sans",
 )
+MORE_FONTS_LABEL = "更多字体..."
 
 
 class SettingsPage(SecondaryPage):
@@ -55,21 +57,17 @@ class SettingsPage(SecondaryPage):
         self.font_family_combo = QtWidgets.QComboBox()
         self.font_family_combo.setObjectName("SettingsFontFamily")
         current_family = preferences["font_family"]
-        installed_families = QtGui.QFontDatabase().families()
-        families = []
-        for family in (*CJK_FONT_CHOICES, *installed_families):
-            if family not in families:
-                families.append(family)
-        if current_family not in families:
-            families.insert(0, current_family)
-        for family in families:
+        for family in RECOMMENDED_FONT_CHOICES:
             self.font_family_combo.addItem(family)
             self.font_family_combo.setItemData(
                 self.font_family_combo.count() - 1,
                 QtGui.QFont(family),
                 QtCore.Qt.FontRole,
             )
-        self.font_family_combo.setCurrentText(current_family)
+        self.font_family_combo.addItem(MORE_FONTS_LABEL)
+        self._last_font_family = DEFAULT_FONT_FAMILY
+        self._select_font_family(current_family)
+        self.font_family_combo.activated.connect(self._font_choice_activated)
         self.font_family_combo.setFixedSize(280, 36)
         chevron_path = (LUCIDE_ICON_DIR / "chevron-down.svg").as_posix()
         self.font_family_combo.setStyleSheet(
@@ -149,12 +147,36 @@ class SettingsPage(SecondaryPage):
             "设置从预览面板打开文件时使用的编辑器。",
             "Verible 设置用于 RTL 和 Testbench 格式化，保存后会重新检查输出状态。",
         )
-        visible_rows = ({"font", "size", "editor"}, {"font", "size"}, {"editor"}, set())[index]
+        visible_rows = ({"editor"}, {"font", "size"}, {"editor"}, set())[index]
         self.heading_label.setText(titles[index])
         self.description_label.setText(descriptions[index])
         for name, row in self.setting_rows.items():
             row.setVisible(name in visible_rows)
         self.formatter_panel.setVisible(index == 3)
+
+    def _select_font_family(self, family):
+        family = str(family or DEFAULT_FONT_FAMILY)
+        index = self.font_family_combo.findText(family)
+        if index < 0:
+            more_index = self.font_family_combo.findText(MORE_FONTS_LABEL)
+            index = more_index if more_index >= 0 else self.font_family_combo.count()
+            self.font_family_combo.insertItem(index, family)
+            self.font_family_combo.setItemData(index, QtGui.QFont(family), QtCore.Qt.FontRole)
+        self.font_family_combo.setCurrentIndex(index)
+        self._last_font_family = family
+
+    def _font_choice_activated(self, index):
+        selected = self.font_family_combo.itemText(index)
+        if selected != MORE_FONTS_LABEL:
+            self._last_font_family = selected
+            return
+        font, accepted = QtWidgets.QFontDialog.getFont(
+            QtGui.QFont(self._last_font_family), self, "选择界面字体"
+        )
+        if accepted:
+            self._select_font_family(font.family())
+        else:
+            self._select_font_family(self._last_font_family)
 
     def _build_formatter(self, preferences):
         panel = QtWidgets.QWidget()
@@ -271,8 +293,11 @@ class SettingsPage(SecondaryPage):
             self.editor_path_edit.setText(path)
 
     def _preferences(self):
+        font_family = self.font_family_combo.currentText()
+        if font_family == MORE_FONTS_LABEL:
+            font_family = self._last_font_family
         return {
-            "font_family": self.font_family_combo.currentText(),
+            "font_family": font_family,
             "font_size": self.font_size_spin.value(),
             "editor_path": self.editor_path_edit.text().strip() or DEFAULT_EDITOR,
             "verible_path": self.verible_path_edit.text().strip(),
@@ -290,7 +315,7 @@ class SettingsPage(SecondaryPage):
         self.settings_status.setText("设置已保存")
 
     def _reset_settings(self):
-        self.font_family_combo.setCurrentText(DEFAULT_FONT_FAMILY)
+        self._select_font_family(DEFAULT_FONT_FAMILY)
         self.font_size_spin.setValue(DEFAULT_FONT_SIZE)
         self.editor_path_edit.setText(DEFAULT_EDITOR)
         self.verible_path_edit.clear()

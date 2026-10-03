@@ -96,8 +96,8 @@ class ArtifactsPanel(QtWidgets.QFrame):
 
         self.search_bar = QtWidgets.QWidget()
         search_layout = QtWidgets.QHBoxLayout(self.search_bar)
-        search_layout.setContentsMargins(0, 0, 0, 0)
-        search_layout.setSpacing(4)
+        search_layout.setContentsMargins(0, 0, 12, 0)
+        search_layout.setSpacing(8)
         self.search_input = QtWidgets.QLineEdit()
         self.search_input.setObjectName("ArtifactSearchInput")
         self.search_input.setPlaceholderText("搜索当前文件")

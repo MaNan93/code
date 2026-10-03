@@ -212,8 +212,10 @@ class SettingsPage(SecondaryPage):
         self.flag_table.setHorizontalHeaderLabels(("参数", "值"))
         self.flag_table.verticalHeader().hide()
         self.flag_table.verticalHeader().setDefaultSectionSize(40)
-        self.flag_table.horizontalHeader().setSectionResizeMode(0, QtWidgets.QHeaderView.Stretch)
-        self.flag_table.horizontalHeader().setSectionResizeMode(1, QtWidgets.QHeaderView.ResizeToContents)
+        formatter_header = self.flag_table.horizontalHeader()
+        formatter_header.setSectionResizeMode(0, QtWidgets.QHeaderView.Stretch)
+        formatter_header.setSectionResizeMode(1, QtWidgets.QHeaderView.Fixed)
+        formatter_header.resizeSection(1, 180)
         self.flag_table.setAlternatingRowColors(True)
         self.flag_table.setVerticalScrollMode(QtWidgets.QAbstractItemView.ScrollPerPixel)
         self.flag_table.setHorizontalScrollMode(QtWidgets.QAbstractItemView.ScrollPerPixel)
@@ -236,6 +238,7 @@ class SettingsPage(SecondaryPage):
                 if choices:
                     control = QtWidgets.QComboBox()
                     control.setFixedHeight(36)
+                    control.setMinimumWidth(168)
                     control.addItem(f"{default_value} (default)", default_value)
                     for choice in choices:
                         if choice != default_value:
@@ -245,6 +248,7 @@ class SettingsPage(SecondaryPage):
                 else:
                     control = QtWidgets.QLineEdit()
                     control.setFixedHeight(36)
+                    control.setMinimumWidth(168)
                     control.setToolTip(f"PLM 默认值：{default_value}")
                     if name in VERIBLE_INT_PARAMS:
                         control.setValidator(QtGui.QIntValidator(0, 2147483647, control))

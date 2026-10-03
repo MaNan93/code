@@ -33,6 +33,16 @@ with tempfile.TemporaryDirectory(prefix="plm ui ") as td:
     with patch.object(QtWidgets.QFileDialog,"getExistingDirectory",return_value=str(project)):
         controller.open_project()
     app.processEvents()
+    assert w.config_page.controllers_editor.table.rowCount() > 0, "controllers did not load"
+    assert w.config_page.mapping_editor.table.rowCount() > 0, "lane mapping did not load"
+    assert w.config_page.signals_editor.table.rowCount() > 0, "signals did not load"
+    # Make the business state concrete before visual review: choose a valid
+    # generation configuration and generate real RTL/TB artifacts.
+    w.config_page.generation_editor.arch.setCurrentText("original_pipe")
+    w.config_page.generation_editor.sel_mode.setCurrentText("sync")
+    controller.generate_current()
+    assert controller.generation_state == "up_to_date", controller.generation_state
+    assert w.config_page.artifacts_panel.file_selector.count() > 0, "artifacts did not load"
     for idx,name in enumerate(("controller","lane-mapping","signals","generation")):
         w.config_page.tabs.setCurrentIndex(idx); shot(w,f"01-{name}")
     w.toggle_log(); shot(w,"02-main-with-log")

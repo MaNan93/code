@@ -5,6 +5,7 @@ on:
       - ".github/workflows/plm-ui-screenshots.yml"
       - "plm/scripts/capture_ui.py"
   workflow_dispatch:
+# Manual capture trigger for the current plm-ui-refactor functional-review snapshot.
 jobs:
   capture:
     runs-on: ubuntu-latest

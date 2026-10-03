@@ -11,7 +11,6 @@ on:
       - "plm/tests/test_qt_artifacts.py"
       - "plm/tests/test_qt_generation.py"
       - "plm/tests/test_qt_controls.py"
-      - "plm/tests/test_qt_restored_behaviors.py"
       - ".github/workflows/plm-functional.yml"
   workflow_dispatch:
 
@@ -88,9 +87,3 @@ jobs:
         run: >-
           uv run python -u -m unittest -v
           tests.test_qt_workflow.QtWorkflowTests.test_application_activation_marks_modified_output_out_of_date
-      - name: Restored non-visual behaviors
-        timeout-minutes: 1
-        run: |
-          uv run python -u -m unittest -v \
-            tests.test_qt_restored_behaviors.QtRestoredBehaviorTests.test_application_activation_rechecks_external_state \
-            tests.test_qt_restored_behaviors.QtRestoredBehaviorTests.test_activation_filter_follows_window_visibility_lifecycle

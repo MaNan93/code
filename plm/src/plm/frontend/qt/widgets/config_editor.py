@@ -1,345 +1,216 @@
-"""Editable CSV tables and generation controls used by ConfigPage."""
+"""Configuration editors used by the refactored ConfigPage.
 
-import weakref
+The table and lane-mapping interactions intentionally reuse the original
+main-branch EditableTable and LaneGrid behavior: row drag/reorder, row context
+menus, controller swatches and paint-drag lane assignment.  This module keeps
+the small API expected by the refactored view/controller layer.
+"""
 
-from PyQt5 import QtCore, QtGui, QtWidgets, sip
+from PyQt5 import QtCore, QtWidgets
 
 from plm.core.gen_flags import ARCH_VALUES, PCLK_MODE_VALUES, SEL_MODE_VALUES
+from plm.frontend.qt.widgets.lanegrid import LaneGrid
+from plm.frontend.qt.widgets.tables import EditableTable
 
 
-class LaneSelector(QtWidgets.QWidget):
-    """Choose a controller and one of its lanes without changing CSV syntax."""
+LANE_COUNTS = (2, 4, 8, 16, 32)
 
-    def __init__(self, controllers, parent=None):
-        super().__init__(parent)
-        self.controllers = controllers
-        layout = QtWidgets.QHBoxLayout(self)
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(4)
-        self.controller = QtWidgets.QComboBox()
-        self.lane = QtWidgets.QComboBox()
-        self.setFocusPolicy(QtCore.Qt.StrongFocus)
-        self.setFocusProxy(self.controller)
-        self.controller.addItem("选择控制器", None)
-        for row in controllers:
-            try:
-                cid, width = int(row["ctrl_id"]), int(row["max_width"])
-            except (KeyError, ValueError):
-                continue
-            if cid >= 0 and 0 < width <= 64:
-                self.controller.addItem(f"{row.get('ctrl_name', '')} ({cid})", (cid, width))
-        layout.addWidget(self.controller)
-        layout.addWidget(self.lane)
-        self.controller.currentIndexChanged.connect(self._controller_changed)
-        self.lane.currentIndexChanged.connect(self._mark_changed)
-        self._changed = False
-        self._original = ""
 
-    def _mark_changed(self):
-        self._changed = True
-
-    def _controller_changed(self):
-        self.lane.clear()
-        choice = self.controller.currentData()
-        if choice:
-            for lane in range(choice[1]):
-                self.lane.addItem(str(lane), lane)
-        self._changed = True
-
-    def set_value(self, value):
-        self._original = value
-        try:
-            cid, lane = map(int, value.split("-"))
-        except ValueError:
-            cid, lane = None, None
-        for index in range(1, self.controller.count()):
-            if self.controller.itemData(index)[0] == cid:
-                self.controller.setCurrentIndex(index)
-                self.lane.setCurrentIndex(self.lane.findData(lane))
-                break
-        self._changed = False
+class LaneCountCombo(QtWidgets.QComboBox):
+    """Product-mode lane picker with QSpinBox-compatible value helpers."""
 
     def value(self):
-        choice = self.controller.currentData()
-        lane = self.lane.currentData()
-        if not self._changed or choice is None or lane is None:
-            return self._original
-        return f"{choice[0]}-{lane}"
+        try:
+            return max(1, int(self.currentText().lstrip("xX")))
+        except ValueError:
+            return 1
 
-
-class ConfigDelegate(QtWidgets.QStyledItemDelegate):
-    def __init__(self, owner):
-        super().__init__(owner.table)
-        self.owner = owner
-        self._lane_editor = None
-
-    def createEditor(self, parent, option, index):
-        key = self.owner.columns()[index.column()]
-        if self.owner.mapping and index.column() > 0:
-            editor = LaneSelector(self.owner.controllers, parent)
-            self._lane_editor = editor
-            editor.controller.installEventFilter(self)
-            editor.lane.installEventFilter(self)
-            return editor
-        enums = {"signal_type": ("perlane", "shared"), "direction": ("mac2phy", "phy2mac")}
-        if key in enums:
-            editor = QtWidgets.QComboBox(parent)
-            choices = enums[key]
-            if key == "signal_type" and index.sibling(index.row(), 2).data() == "phy2mac":
-                choices = ("perlane",)
-            editor.addItems(choices)
-            return editor
-        editor = QtWidgets.QLineEdit(parent)
-        if key in ("ctrl_id", "mode", "max_width", "width"):
-            editor.setValidator(QtGui.QIntValidator(1 if key in ("max_width", "width") else 0, 2147483647, editor))
-        elif key in ("ctrl_name", "signal_name"):
-            editor.setValidator(QtGui.QRegularExpressionValidator(QtCore.QRegularExpression(r"[a-zA-Z_][a-zA-Z0-9_$]*"), editor))
-        elif key in ("safe_state", "tie_off"):
-            pattern = r"(?:0[xX][0-9a-fA-F]+|0[bB][01]+|0[oO][0-7]+|[0-9]+)"
-            if key == "tie_off":
-                pattern = "(?:lane0|" + pattern + ")"
-            editor.setValidator(QtGui.QRegularExpressionValidator(QtCore.QRegularExpression(pattern), editor))
-        return editor
-
-    @property
-    def _lane_editor(self):
-        editor = self._lane_editor_ref() if self._lane_editor_ref else None
-        return editor if editor is not None and not sip.isdeleted(editor) else None
-
-    @_lane_editor.setter
-    def _lane_editor(self, editor):
-        self._lane_editor_ref = weakref.ref(editor) if editor is not None else None
-
-    def finish_editing(self):
-        editor = self._lane_editor
-        if editor is not None:
-            self._lane_editor = None
-            self.commitData.emit(editor)
-            self.closeEditor.emit(editor, QtWidgets.QAbstractItemDelegate.NoHint)
-
-    def _commit_if_unfocused(self):
-        editor = self._lane_editor
-        focus = QtWidgets.QApplication.focusWidget()
-        if editor is not None and QtWidgets.QApplication.activePopupWidget() is None:
-            if focus is not editor and not (focus and editor.isAncestorOf(focus)):
-                self.finish_editing()
-
-    def eventFilter(self, watched, event):
-        editor = self._lane_editor
-        if editor is not None and (watched is editor or editor.isAncestorOf(watched)):
-            if event.type() == QtCore.QEvent.FocusOut:
-                QtCore.QTimer.singleShot(0, self._commit_if_unfocused)
-            elif event.type() == QtCore.QEvent.KeyPress:
-                if event.key() == QtCore.Qt.Key_Escape:
-                    self._lane_editor = None
-                    self.closeEditor.emit(editor, QtWidgets.QAbstractItemDelegate.RevertModelCache)
-                    return True
-                if event.key() in (QtCore.Qt.Key_Return, QtCore.Qt.Key_Enter):
-                    self.finish_editing()
-                    return True
-            return False
-        return super().eventFilter(watched, event)
-
-    def updateEditorGeometry(self, editor, option, index):
-        if isinstance(editor, LaneSelector):
-            rect = QtCore.QRect(option.rect)
-            rect.setWidth(min(300, self.owner.table.viewport().width()))
-            rect.moveLeft(min(rect.left(), self.owner.table.viewport().width() - rect.width()))
-            editor.setGeometry(rect)
-        else:
-            super().updateEditorGeometry(editor, option, index)
-
-    def setEditorData(self, editor, index):
-        value = index.data(QtCore.Qt.EditRole) or ""
-        if isinstance(editor, LaneSelector):
-            editor.set_value(value)
-        elif isinstance(editor, QtWidgets.QComboBox):
-            if editor.findText(value) < 0:
-                editor.addItem(value)
-            editor.setCurrentText(value)
-        else:
-            editor.setText(value)
-
-    def setModelData(self, editor, model, index):
-        value = editor.value() if isinstance(editor, LaneSelector) else (
-            editor.currentText() if isinstance(editor, QtWidgets.QComboBox) else editor.text()
-        )
-        model.setData(index, value, QtCore.Qt.EditRole)
+    def setValue(self, value):
+        value = max(1, int(value))
+        label = f"x{value}"
+        if self.findText(label) < 0:
+            self.addItem(label)
+        self.setCurrentText(label)
 
 
 class CsvTableEditor(QtWidgets.QWidget):
+    """Compatibility facade over the original EditableTable/LaneGrid widgets."""
+
     changed = QtCore.pyqtSignal()
 
     def __init__(self, columns, mapping=False, parent=None):
         super().__init__(parent)
         self.mapping = mapping
-        self.controllers = []
+        self._keys = tuple(columns)
+        self._controllers = []
         self._context_menu = None
+
         layout = QtWidgets.QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(12)
+        layout.setSpacing(10)
+
         if mapping:
-            toolbar = QtWidgets.QHBoxLayout()
-            toolbar.addWidget(QtWidgets.QLabel("Lane 数"))
-            self.lane_count = QtWidgets.QSpinBox()
+            controls = QtWidgets.QHBoxLayout()
+            controls.addWidget(QtWidgets.QLabel("Num of Lanes"))
+            self.lane_count = LaneCountCombo()
             self.lane_count.setObjectName("LaneCount")
-            self.lane_count.setRange(1, 64)
-            self.lane_count.setValue(max(1, len(columns) - 1))
-            self.lane_count.valueChanged.connect(self._change_lane_count)
-            toolbar.addWidget(self.lane_count)
-            toolbar.addStretch(1)
-            layout.addLayout(toolbar)
+            self.lane_count.addItems([f"x{value}" for value in LANE_COUNTS])
+            self.lane_count.setCurrentText(f"x{max(1, len(columns) - 1)}")
+            self.lane_count.currentTextChanged.connect(self._change_lane_count)
+            controls.addWidget(self.lane_count)
+            controls.addStretch(1)
+            layout.addLayout(controls)
 
-        self.table = QtWidgets.QTableWidget(0, len(columns))
-        self.table.setObjectName("ConfigDataTable")
-        self.table.setHorizontalHeaderLabels(columns)
-        self.table.verticalHeader().hide()
-        self.table.horizontalHeader().setSectionResizeMode(
-            QtWidgets.QHeaderView.ResizeToContents
+            self.editor = LaneGrid()
+            self.table = self.editor.table
+            self.editor.set_columns(self.lane_count.value())
+            self.editor.changed.connect(self.changed.emit)
+            # ConfigPage.finish_editing historically asks every table delegate
+            # to finish editing. LaneGrid commits native item edits itself, so
+            # a no-op keeps that API without altering the original behavior.
+            delegate = self.table.itemDelegate()
+            if not hasattr(delegate, "finish_editing"):
+                delegate.finish_editing = lambda: None
+            layout.addWidget(self.editor, 1)
+            return
+
+        specs = []
+        for key in self._keys:
+            spec = {"key": key, "heading": key}
+            if key == "signal_type":
+                spec.update(options=["perlane", "shared"], width=108)
+            elif key == "direction":
+                spec.update(options=["mac2phy", "phy2mac"], width=128)
+            elif key == "width":
+                spec["width"] = 66
+            elif key == "safe_state":
+                spec["width"] = 84
+            elif key == "tie_off":
+                spec["width"] = 66
+            specs.append(spec)
+
+        self.editor = EditableTable(
+            specs,
+            id_column="ctrl_id" if "ctrl_id" in self._keys else None,
         )
-        self.table.horizontalHeader().setStretchLastSection(True)
-        self.table.setAlternatingRowColors(True)
-        self.table.setSelectionBehavior(QtWidgets.QAbstractItemView.SelectRows)
-        self.table.setSelectionMode(QtWidgets.QAbstractItemView.SingleSelection)
-        self.table.setContextMenuPolicy(QtCore.Qt.CustomContextMenu)
-        self.table.customContextMenuRequested.connect(self._show_row_context_menu)
-        self.table.itemChanged.connect(self.changed.emit)
-        self.table.setItemDelegate(ConfigDelegate(self))
-        layout.addWidget(self.table, 1)
+        self.table = self.editor.table
+        self.editor.changed.connect(self.changed.emit)
+        delegate = self.table.itemDelegate()
+        if not hasattr(delegate, "finish_editing"):
+            delegate.finish_editing = lambda: None
+        layout.addWidget(self.editor, 1)
 
-    def _change_lane_count(self, count):
-        columns = ["mode"] + [f"lane{index}" for index in range(count)]
-        self.table.blockSignals(True)
-        self.table.setColumnCount(len(columns))
-        self.table.setHorizontalHeaderLabels(columns)
-        self.table.blockSignals(False)
-        self.changed.emit()
+    @property
+    def controllers(self):
+        return list(self._controllers)
 
-    def set_rows(self, rows, columns=None):
-        self.table.blockSignals(True)
-        if columns is not None:
-            if self.mapping:
-                self.lane_count.blockSignals(True)
-                self.lane_count.setValue(len(columns) - 1)
-                self.lane_count.blockSignals(False)
-            self.table.setColumnCount(len(columns))
-            self.table.setHorizontalHeaderLabels(columns)
-        self.table.setRowCount(len(rows))
-        keys = self.columns()
-        for row_index, row in enumerate(rows):
-            for col_index, key in enumerate(keys):
-                self.table.setItem(row_index, col_index, QtWidgets.QTableWidgetItem(
-                    str(row.get(key, ""))
-                ))
-        self.table.blockSignals(False)
+    @controllers.setter
+    def controllers(self, rows):
+        self._controllers = [dict(row) for row in (rows or [])]
+        if self.mapping:
+            self.editor.set_controllers(self._controllers)
 
     def columns(self):
-        return [self.table.horizontalHeaderItem(i).text()
-                for i in range(self.table.columnCount())]
-
-    def set_cell_errors(self, errors):
-        self.table.blockSignals(True)
-        for row in range(self.table.rowCount()):
-            for col in range(self.table.columnCount()):
-                item = self.table.item(row, col)
-                if item is None:
-                    item = QtWidgets.QTableWidgetItem("")
-                    self.table.setItem(row, col, item)
-                message = errors.get((row, col), "")
-                item.setToolTip(message)
-                item.setData(QtCore.Qt.UserRole, message)
-                item.setBackground(QtGui.QBrush(QtGui.QColor("#FFF1F0")) if message else QtGui.QBrush())
-        self.table.blockSignals(False)
+        if self.mapping:
+            return ["mode"] + [
+                f"lane{index}" for index in range(self.editor.lane_count)
+            ]
+        return list(self._keys)
 
     def rows(self):
-        keys = self.columns()
-        return [
-            {key: (self.table.item(row, col).text() if self.table.item(row, col) else "").strip()
-             for col, key in enumerate(keys)}
-            for row in range(self.table.rowCount())
-        ]
+        return self.editor.get_rows()
 
-    def _new_row(self):
-        row = {key: "" for key in self.columns()}
-        if "ctrl_id" in row:
-            used = {
-                int(value)
-                for value in (existing.get("ctrl_id", "") for existing in self.rows())
-                if str(value).isdigit()
-            }
-            ctrl_id = 0
-            while ctrl_id in used:
-                ctrl_id += 1
-            row["ctrl_id"] = str(ctrl_id)
-        return row
-
-    def _insert_row_at(self, index):
-        values = self._new_row()
-        self.table.blockSignals(True)
-        self.table.insertRow(index)
-        for col, key in enumerate(self.columns()):
-            self.table.setItem(index, col, QtWidgets.QTableWidgetItem(values[key]))
-        self.table.setCurrentCell(index, 0)
-        self.table.selectRow(index)
-        self.table.blockSignals(False)
-        self.changed.emit()
-
-    def insert_row_above(self, row):
-        self._insert_row_at(max(0, row))
-
-    def insert_row_below(self, row):
-        self._insert_row_at(min(self.table.rowCount(), row + 1))
-
-    def add_row(self):
-        self._insert_row_at(self.table.rowCount())
-
-    def delete_row(self, row):
-        if row < 0 or self.table.rowCount() <= 1:
+    def set_rows(self, rows, columns=None):
+        if not self.mapping:
+            self.editor.set_rows(rows)
             return
-        self.table.blockSignals(True)
-        self.table.removeRow(row)
-        self.table.blockSignals(False)
+
+        count = len(columns) - 1 if columns is not None else self.lane_count.value()
+        self.lane_count.blockSignals(True)
+        self.lane_count.clear()
+        labels = [f"x{value}" for value in LANE_COUNTS]
+        label = f"x{count}"
+        if label not in labels:
+            labels.append(label)
+        self.lane_count.addItems(labels)
+        self.lane_count.setCurrentText(label)
+        self.lane_count.blockSignals(False)
+        self.editor.set_columns(count)
+        normalized = []
+        for source in rows or []:
+            row = {"mode": str(source.get("mode", ""))}
+            for lane in range(count):
+                row[f"lane{lane}"] = str(source.get(f"lane{lane}", ""))
+            normalized.append(row)
+        self.editor.set_rows(normalized)
+        self.editor.set_controllers(self._controllers)
+
+    def _change_lane_count(self, text):
+        if not self.mapping:
+            return
+        try:
+            count = int(text.lstrip("xX"))
+        except ValueError:
+            return
+        if count < 1:
+            return
+        rows = []
+        for source in self.editor.get_rows():
+            row = {"mode": source.get("mode", "")}
+            for lane in range(count):
+                row[f"lane{lane}"] = source.get(f"lane{lane}", "0-0")
+            rows.append(row)
+        self.editor.set_columns(count)
+        self.editor.set_rows(rows)
         self.changed.emit()
+
+    def set_cell_errors(self, errors):
+        if self.mapping:
+            self.editor.set_cell_errors(errors)
+            return
+        translated = {}
+        for (row, column), message in (errors or {}).items():
+            key = self._keys[column] if isinstance(column, int) else column
+            translated[(row, key)] = message
+        self.editor.set_cell_errors(translated)
+
+    # Compatibility helpers retained for tests and keyboard/menu callers.
+    def add_row(self):
+        if self.mapping:
+            self.editor._insert_row_below(len(self.editor.data) - 1)
+        else:
+            self.editor.insert_row_below(self.table.rowCount() - 1)
 
     def delete_selected_rows(self):
-        self.delete_row(self.table.currentRow())
-
-    def _context_row(self, pos):
-        row = self.table.indexAt(pos).row()
+        row = self.table.currentRow()
         if row < 0:
-            row = self.table.currentRow()
-            if row < 0 and self.table.rowCount():
-                row = self.table.rowCount() - 1
-        return row
+            return
+        if self.mapping:
+            self.editor._delete_row(row)
+        else:
+            self.editor.delete_row(row)
 
     def _build_row_context_menu(self, row):
         menu = QtWidgets.QMenu(self.table)
         if row >= 0:
-            menu.addAction("Insert row above", lambda: self.insert_row_above(row))
-            menu.addAction("Insert row below", lambda: self.insert_row_below(row))
+            if self.mapping:
+                insert_above = lambda: self.editor._insert_row_above(row)
+                insert_below = lambda: self.editor._insert_row_below(row)
+                delete_row = lambda: self.editor._delete_row(row)
+                count = len(self.editor.data)
+            else:
+                insert_above = lambda: self.editor.insert_row_above(row)
+                insert_below = lambda: self.editor.insert_row_below(row)
+                delete_row = lambda: self.editor.delete_row(row)
+                count = self.table.rowCount()
+            menu.addAction("Insert row above", insert_above)
+            menu.addAction("Insert row below", insert_below)
             menu.addSeparator()
-            delete_action = menu.addAction("Delete current row", lambda: self.delete_row(row))
-            delete_action.setEnabled(self.table.rowCount() > 1)
+            action = menu.addAction("Delete current row", delete_row)
+            action.setEnabled(count > 1)
         else:
             menu.addAction("Insert row", self.add_row)
         return menu
-
-    def _show_row_context_menu(self, pos):
-        row = self._context_row(pos)
-        if row >= 0:
-            self.table.selectRow(row)
-        if self._context_menu is not None:
-            self._context_menu.close()
-            self._context_menu.deleteLater()
-        self._context_menu = self._build_row_context_menu(row)
-        self._context_menu.aboutToHide.connect(self._clear_context_menu)
-        self._context_menu.popup(self.table.viewport().mapToGlobal(pos))
-
-    def _clear_context_menu(self):
-        menu = self._context_menu
-        self._context_menu = None
-        if menu is not None:
-            menu.deleteLater()
 
 
 class GenerationEditor(QtWidgets.QWidget):
@@ -356,8 +227,7 @@ class GenerationEditor(QtWidgets.QWidget):
         self.pclk_mode = QtWidgets.QComboBox()
         self.pclk_mode.addItems(PCLK_MODE_VALUES)
         # PCLK direction is a property of the selected PHY architecture, not
-        # an independent generation choice. Keep the value visible so the
-        # relationship is explicit, but do not present an invalid combination.
+        # an independent generation choice.
         self.pclk_mode.setEnabled(False)
         self.pclk_mode.setToolTip("PCLK 模式由 PHY 架构自动决定。")
         self.sel_mode = QtWidgets.QComboBox()

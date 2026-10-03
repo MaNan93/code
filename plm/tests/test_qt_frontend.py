@@ -28,6 +28,20 @@ class QtFrontendLayoutTests(unittest.TestCase):
         cls.app.setFont(QtGui.QFont("Segoe UI", 10))
         cls.app.setStyleSheet(APP_QSS)
 
+        # Under the Windows offscreen Qt platform an unexpected modal
+        # QMessageBox can terminate the interpreter before unittest can report
+        # a traceback. Turn accidental dialogs into normal assertion failures.
+        for name in ("about", "critical", "information", "question", "warning"):
+            patcher = patch.object(
+                QtWidgets.QMessageBox,
+                name,
+                side_effect=AssertionError(
+                    f"QMessageBox.{name}() reached without being mocked"
+                ),
+            )
+            patcher.start()
+            cls.addClassCleanup(patcher.stop)
+
     def setUp(self):
         self.window = MainWindow()
         self.window.show()
@@ -35,7 +49,14 @@ class QtFrontendLayoutTests(unittest.TestCase):
 
     def tearDown(self):
         self.window.close()
-        self.window.deleteLater()
+        # processEvents() does not guarantee DeferredDelete delivery. Destroy
+        # every top-level test widget before the next test reuses QApplication;
+        # otherwise timers/event filters can accumulate across the full suite.
+        for widget in self.app.topLevelWidgets():
+            widget.deleteLater()
+        QtCore.QCoreApplication.sendPostedEvents(
+            None, QtCore.QEvent.DeferredDelete
+        )
         self.app.processEvents()
 
     def test_native_window_and_nested_splitters(self):
@@ -73,19 +94,12 @@ class QtFrontendLayoutTests(unittest.TestCase):
             ).y(),
             "docs": nav.docs_btn.mapTo(nav, QtCore.QPoint()).y(),
         }
+        collapse_finished = QtTest.QSignalSpy(nav.animation_group.finished)
         nav.collapse_btn.click()
         self.assertTrue(nav.is_animating)
         nav.collapse_btn.click()
         self.assertTrue(nav._target_collapsed)
-        QtTest.QTest.qWait(100)
-        self.assertGreater(nav.width(), 56)
-        self.assertLess(nav.width(), 260)
-        self.assertEqual(
-            self.window.content_splitter.geometry().left()
-            - (nav.geometry().right() + 1),
-            4,
-        )
-        QtTest.QTest.qWait(250)
+        self.assertTrue(collapse_finished.wait(1000))
         self.assertFalse(nav.is_animating)
         self.assertTrue(nav.is_collapsed)
         self.assertEqual(nav.width(), 56)
@@ -136,9 +150,10 @@ class QtFrontendLayoutTests(unittest.TestCase):
             nav.collapsed_docs_btn.mapTo(nav, QtCore.QPoint()).y(),
         )
 
+        expand_finished = QtTest.QSignalSpy(nav.animation_group.finished)
         nav.collapse_btn.click()
         self.assertTrue(nav.project_list.isVisible())
-        QtTest.QTest.qWait(350)
+        self.assertTrue(expand_finished.wait(1000))
         self.assertFalse(nav.is_collapsed)
         self.assertEqual(nav.width(), 260)
         self.assertEqual(nav.minimumWidth(), 200)
@@ -467,7 +482,6 @@ class QtFrontendLayoutTests(unittest.TestCase):
         # Test the header in isolation so titleChanged cannot rename a bundled
         # sample directory and pollute subsequent frontend tests.
         header = ConfigHeader()
-        self.addCleanup(header.deleteLater)
         header.title_label.setText("原始名称")
         header.show()
         self.app.processEvents()

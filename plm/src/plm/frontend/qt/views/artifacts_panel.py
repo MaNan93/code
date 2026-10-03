@@ -45,9 +45,11 @@ class ArtifactsPanel(QtWidgets.QFrame):
         root.setContentsMargins(12, 0, 12, 12)
         root.setSpacing(12)
         toolbar = QtWidgets.QWidget()
+        self.toolbar = toolbar
         toolbar.setObjectName("ArtifactsToolbar")
         toolbar.setFixedHeight(40)
         toolbar_layout = QtWidgets.QHBoxLayout(toolbar)
+        self.toolbar_layout = toolbar_layout
         toolbar_layout.setContentsMargins(16, 0, 16, 0)
         toolbar_layout.setSpacing(8)
         self.toolbar_buttons = []
@@ -81,13 +83,16 @@ class ArtifactsPanel(QtWidgets.QFrame):
         self.file_selector.hide()
         self.file_selector.currentIndexChanged.connect(self._load_selected)
 
-        self.file_tree = QtWidgets.QTreeWidget()
+        # The file tree is a floating overlay, matching the pre-refactor
+        # behavior: opening it must not resize or push the source preview.
+        self.file_tree = QtWidgets.QTreeWidget(self)
         self.file_tree.setObjectName("ArtifactFileTree")
         self.file_tree.setHeaderHidden(True)
         self.file_tree.setIndentation(16)
         self.file_tree.setMaximumHeight(190)
         self.file_tree.itemClicked.connect(self._tree_item_clicked)
-        root.addWidget(self.file_tree)
+        apply_drop_shadow(self.file_tree, offset=(0, 2), blur_radius=10, alpha=24)
+        self.file_tree.hide()
 
         self.search_bar = QtWidgets.QWidget()
         search_layout = QtWidgets.QHBoxLayout(self.search_bar)
@@ -128,8 +133,8 @@ class ArtifactsPanel(QtWidgets.QFrame):
         self.highlight_button.toggled.connect(self._update_highlighting)
         self.tree_button = self.toolbar_buttons[6]
         self.tree_button.setCheckable(True)
-        self.tree_button.setChecked(True)
-        self.tree_button.toggled.connect(self.file_tree.setVisible)
+        self.tree_button.setChecked(False)
+        self.tree_button.toggled.connect(self._set_tree_visible)
         self.diff_button.setCheckable(True)
         self.diff_button.toggled.connect(self._load_selected)
 
@@ -144,6 +149,15 @@ class ArtifactsPanel(QtWidgets.QFrame):
             self.toolbar_buttons[index].clicked.connect(callback)
 
         self.more_menu = QtWidgets.QMenu(self)
+        self.more_menu.addAction("打开输出文件夹", self.open_folder)
+        self.more_menu.addAction("刷新文件", self.refreshRequested.emit)
+        self.more_menu.addAction("在编辑器中打开", self.open_in_editor)
+        self.more_menu.addAction("搜索当前文件", self.show_search)
+        self.more_menu.addAction("复制文件路径", self.copy_path)
+        self.more_menu.addAction("显示/隐藏文件树", self.tree_button.toggle)
+        self.more_menu.addAction("切换 Verilog 高亮", self.highlight_button.toggle)
+        self.more_menu.addAction("显示/隐藏差异", self.diff_button.toggle)
+        self.more_menu.addSeparator()
         self.copy_content_action = self.more_menu.addAction("复制文件内容", self.copy_contents)
         self.toolbar_buttons[7].setMenu(self.more_menu)
         for key, callback in (
@@ -156,7 +170,9 @@ class ArtifactsPanel(QtWidgets.QFrame):
             shortcut = QtWidgets.QShortcut(QtGui.QKeySequence(key), self)
             shortcut.setContext(QtCore.Qt.WidgetWithChildrenShortcut)
             shortcut.activated.connect(callback)
+        self.preview.viewport().installEventFilter(self)
         self.set_files([])
+        self._apply_toolbar_density(self.width())
 
     def _read_contents(self, files):
         contents = {}
@@ -240,6 +256,7 @@ class ArtifactsPanel(QtWidgets.QFrame):
         index = self.file_selector.findData(value)
         if index >= 0:
             self.file_selector.setCurrentIndex(index)
+            self.tree_button.setChecked(False)
 
     def _diff_available(self):
         if self.current_path is None:
@@ -356,11 +373,13 @@ class ArtifactsPanel(QtWidgets.QFrame):
     def show_search(self):
         if self._readable:
             self.search_bar.show()
+            self._position_file_tree()
             self.search_input.setFocus()
             self.search_input.selectAll()
 
     def hide_search(self):
         self.search_bar.hide()
+        self._position_file_tree()
         self.preview.setFocus()
 
     def _search_changed(self, *_):
@@ -372,6 +391,20 @@ class ArtifactsPanel(QtWidgets.QFrame):
         if not query or not self._readable:
             self.search_status.clear()
             return False
+        if query.startswith(":"):
+            value = query[1:].strip()
+            if not value.isdigit() or int(value) < 1:
+                self.search_status.setText("无效行号")
+                return False
+            line = int(value)
+            block = self.preview.document().findBlockByNumber(line - 1)
+            if not block.isValid():
+                self.search_status.setText("行号超出范围")
+                return False
+            self.preview.setTextCursor(QtGui.QTextCursor(block))
+            self.preview.centerCursor()
+            self.search_status.setText(f"第 {line} 行")
+            return True
         flags = QtGui.QTextDocument.FindBackward if backwards else QtGui.QTextDocument.FindFlags()
         found = self.preview.find(query, flags)
         if not found:
@@ -379,6 +412,52 @@ class ArtifactsPanel(QtWidgets.QFrame):
             found = self.preview.find(query, flags)
         self.search_status.setText("" if found else "未找到")
         return found
+
+    def _set_tree_visible(self, visible):
+        if visible:
+            self._position_file_tree()
+            self.file_tree.show()
+            self.file_tree.raise_()
+        else:
+            self.file_tree.hide()
+
+    def _position_file_tree(self):
+        if not hasattr(self, "file_tree"):
+            return
+        top_widget = self.search_bar if self.search_bar.isVisible() else self.toolbar
+        top = top_widget.geometry().bottom() + 4
+        left = self.preview.geometry().left()
+        width = max(120, self.preview.width())
+        available = max(80, self.status.geometry().top() - top - 8)
+        self.file_tree.setGeometry(left, top, width, min(190, available))
+
+    def _apply_toolbar_density(self, width):
+        # Keep file tree, More and maximize always reachable. Less critical
+        # controls collapse into More before they can overlap at narrow widths.
+        width = int(width)
+        self.toolbar_buttons[0].setVisible(width >= 280)
+        self.toolbar_buttons[1].setVisible(width >= 320)
+        self.highlight_button.setVisible(width >= 360)
+        self.toolbar_buttons[2].setVisible(width >= 420)
+        self.toolbar_buttons[4].setVisible(width >= 420)
+        self.toolbar_buttons[5].setVisible(width >= 470)
+        self.diff_button.setVisible(width >= 520)
+        for index in (6, 7, 8):
+            self.toolbar_buttons[index].show()
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self._apply_toolbar_density(event.size().width())
+        self._position_file_tree()
+
+    def eventFilter(self, watched, event):
+        if (
+            watched is self.preview.viewport()
+            and event.type() == QtCore.QEvent.MouseButtonPress
+            and self.file_tree.isVisible()
+        ):
+            self.tree_button.setChecked(False)
+        return super().eventFilter(watched, event)
 
     def copy_path(self):
         if self.current_path is not None:

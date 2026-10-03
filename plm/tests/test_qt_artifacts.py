@@ -128,6 +128,61 @@ class ArtifactPreviewTests(unittest.TestCase):
         QtTest.QTest.keyClick(self.panel.search_input, QtCore.Qt.Key_Return, QtCore.Qt.ShiftModifier)
         self.assertEqual(self.panel.preview.textCursor().selectionStart(), first)
 
+    def test_file_tree_is_overlay_and_closes_after_selection(self):
+        one = self.file("rtl/one.sv", "module one;\nendmodule\n")
+        two = self.file("tb/two.sv", "module two;\nendmodule\n")
+        self.panel.set_files([one, two], self.root)
+        self.panel.resize(420, 630)
+        self.panel.show()
+        self.app.processEvents()
+        preview_geometry = QtCore.QRect(self.panel.preview.geometry())
+
+        self.panel.tree_button.click()
+        self.app.processEvents()
+        self.assertTrue(self.panel.file_tree.isVisible())
+        self.assertIs(self.panel.file_tree.parent(), self.panel)
+        self.assertEqual(self.panel.preview.geometry(), preview_geometry)
+        self.assertTrue(self.panel.file_tree.geometry().intersects(preview_geometry))
+
+        iterator = QtWidgets.QTreeWidgetItemIterator(self.panel.file_tree)
+        target = None
+        while iterator.value() is not None:
+            item = iterator.value()
+            if item.data(0, QtCore.Qt.UserRole) == str(two):
+                target = item
+                break
+            iterator += 1
+        self.assertIsNotNone(target)
+        self.panel._tree_item_clicked(target, 0)
+        self.assertEqual(self.panel.current_path, two)
+        self.assertFalse(self.panel.file_tree.isVisible())
+
+    def test_search_supports_line_jump(self):
+        path = self.file("jump.sv", "line1\nline2\nline3\nline4\n")
+        self.panel.set_files([path], self.root)
+        self.panel.show_search()
+        self.panel.search_input.setText(":3")
+        self.assertEqual(self.panel.preview.textCursor().blockNumber(), 2)
+        self.assertEqual(self.panel.search_status.text(), "第 3 行")
+        self.panel.search_input.setText(":99")
+        self.assertEqual(self.panel.search_status.text(), "行号超出范围")
+
+    def test_toolbar_compacts_without_losing_more_actions(self):
+        self.panel._apply_toolbar_density(320)
+        self.assertFalse(self.panel.toolbar_buttons[2].isVisible())
+        self.assertFalse(self.panel.toolbar_buttons[4].isVisible())
+        self.assertTrue(self.panel.toolbar_buttons[6].isVisible())
+        self.assertTrue(self.panel.toolbar_buttons[7].isVisible())
+        self.assertTrue(self.panel.toolbar_buttons[8].isVisible())
+        labels = [action.text() for action in self.panel.more_menu.actions()]
+        self.assertIn("在编辑器中打开", labels)
+        self.assertIn("搜索当前文件", labels)
+        self.assertIn("显示/隐藏文件树", labels)
+        self.panel._apply_toolbar_density(700)
+        self.assertTrue(self.panel.toolbar_buttons[2].isVisible())
+        self.assertTrue(self.panel.toolbar_buttons[4].isVisible())
+        self.assertTrue(self.panel.diff_button.isVisible())
+
     def test_verilog_highlight_multiline_comments_strings_and_toggle(self):
         editor = CodePreview()
         self.addCleanup(self._dispose_widget, editor)

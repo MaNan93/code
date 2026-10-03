@@ -267,6 +267,14 @@ class NavPanel(QtWidgets.QFrame):
                     0, 0, QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Minimum
                 )
         self.brand_layout.invalidate()
+        # invalidate() only schedules a relayout. On Windows/offscreen the
+        # animation can finish before that pass runs, leaving the collapse
+        # button at its expanded x-position for a frame. Apply the geometry
+        # synchronously so every collapsed icon shares the same center.
+        self.brand_layout.activate()
+        layout = self.layout()
+        if layout is not None:
+            layout.activate()
 
         self.new_chat_btn.setText("新对话" if visible else "")
         self.save_btn.setText("保存" if visible else "")

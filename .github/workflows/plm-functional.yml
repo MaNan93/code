@@ -51,6 +51,7 @@ jobs:
             tests.test_qt_workflow.QtWorkflowTests.test_undo_redo_rows_lane_count_flags_and_saved_baseline \
             tests.test_qt_workflow.QtWorkflowTests.test_edit_save_validate_generate_and_show_real_artifacts \
             tests.test_qt_workflow.QtWorkflowTests.test_output_state_generation_integrity_and_noop \
+            tests.test_qt_workflow.QtWorkflowTests.test_application_activation_marks_modified_output_out_of_date \
             tests.test_qt_workflow.QtWorkflowTests.test_lane_grid_tracks_controllers_and_paints_ranges \
             tests.test_qt_workflow.QtWorkflowTests.test_lane_grid_manual_edit_is_preserved_and_undoable \
             tests.test_qt_workflow.QtWorkflowTests.test_table_editors_preserve_invalid_values_for_core_validation \

@@ -174,11 +174,12 @@ class CsvTableEditor(QtWidgets.QWidget):
         super().__init__(parent)
         self.mapping = mapping
         self.controllers = []
+        self._context_menu = None
         layout = QtWidgets.QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(12)
-        toolbar = QtWidgets.QHBoxLayout()
         if mapping:
+            toolbar = QtWidgets.QHBoxLayout()
             toolbar.addWidget(QtWidgets.QLabel("Lane 数"))
             self.lane_count = QtWidgets.QSpinBox()
             self.lane_count.setObjectName("LaneCount")
@@ -186,29 +187,22 @@ class CsvTableEditor(QtWidgets.QWidget):
             self.lane_count.setValue(max(1, len(columns) - 1))
             self.lane_count.valueChanged.connect(self._change_lane_count)
             toolbar.addWidget(self.lane_count)
-        add_button = QtWidgets.QPushButton("添加行")
-        add_button.setObjectName("ConfigRowButton")
-        add_button.clicked.connect(self.add_row)
-        delete_button = QtWidgets.QPushButton("删除选中行")
-        delete_button.setObjectName("ConfigRowButton")
-        delete_button.clicked.connect(self.delete_selected_rows)
-        toolbar.addWidget(add_button)
-        toolbar.addWidget(delete_button)
-        toolbar.addStretch(1)
-        layout.addLayout(toolbar)
+            toolbar.addStretch(1)
+            layout.addLayout(toolbar)
 
         self.table = QtWidgets.QTableWidget(0, len(columns))
         self.table.setObjectName("ConfigDataTable")
         self.table.setHorizontalHeaderLabels(columns)
-        self.table.verticalHeader().setVisible(
-            tuple(columns) != ("ctrl_id", "ctrl_name", "max_width")
-        )
+        self.table.verticalHeader().hide()
         self.table.horizontalHeader().setSectionResizeMode(
             QtWidgets.QHeaderView.ResizeToContents
         )
         self.table.horizontalHeader().setStretchLastSection(True)
         self.table.setAlternatingRowColors(True)
         self.table.setSelectionBehavior(QtWidgets.QAbstractItemView.SelectRows)
+        self.table.setSelectionMode(QtWidgets.QAbstractItemView.SingleSelection)
+        self.table.setContextMenuPolicy(QtCore.Qt.CustomContextMenu)
+        self.table.customContextMenuRequested.connect(self._show_row_context_menu)
         self.table.itemChanged.connect(self.changed.emit)
         self.table.setItemDelegate(ConfigDelegate(self))
         layout.addWidget(self.table, 1)
@@ -265,24 +259,87 @@ class CsvTableEditor(QtWidgets.QWidget):
             for row in range(self.table.rowCount())
         ]
 
-    def add_row(self):
+    def _new_row(self):
+        row = {key: "" for key in self.columns()}
+        if "ctrl_id" in row:
+            used = {
+                int(value)
+                for value in (existing.get("ctrl_id", "") for existing in self.rows())
+                if str(value).isdigit()
+            }
+            ctrl_id = 0
+            while ctrl_id in used:
+                ctrl_id += 1
+            row["ctrl_id"] = str(ctrl_id)
+        return row
+
+    def _insert_row_at(self, index):
+        values = self._new_row()
         self.table.blockSignals(True)
-        index = self.table.rowCount()
         self.table.insertRow(index)
-        for col in range(self.table.columnCount()):
-            self.table.setItem(index, col, QtWidgets.QTableWidgetItem(""))
+        for col, key in enumerate(self.columns()):
+            self.table.setItem(index, col, QtWidgets.QTableWidgetItem(values[key]))
         self.table.setCurrentCell(index, 0)
+        self.table.selectRow(index)
+        self.table.blockSignals(False)
+        self.changed.emit()
+
+    def insert_row_above(self, row):
+        self._insert_row_at(max(0, row))
+
+    def insert_row_below(self, row):
+        self._insert_row_at(min(self.table.rowCount(), row + 1))
+
+    def add_row(self):
+        self._insert_row_at(self.table.rowCount())
+
+    def delete_row(self, row):
+        if row < 0 or self.table.rowCount() <= 1:
+            return
+        self.table.blockSignals(True)
+        self.table.removeRow(row)
         self.table.blockSignals(False)
         self.changed.emit()
 
     def delete_selected_rows(self):
-        self.table.blockSignals(True)
-        selected = {index.row() for index in self.table.selectedIndexes()}
-        for row in sorted(selected, reverse=True):
-            self.table.removeRow(row)
-        self.table.blockSignals(False)
-        if selected:
-            self.changed.emit()
+        self.delete_row(self.table.currentRow())
+
+    def _context_row(self, pos):
+        row = self.table.indexAt(pos).row()
+        if row < 0:
+            row = self.table.currentRow()
+            if row < 0 and self.table.rowCount():
+                row = self.table.rowCount() - 1
+        return row
+
+    def _build_row_context_menu(self, row):
+        menu = QtWidgets.QMenu(self.table)
+        if row >= 0:
+            menu.addAction("Insert row above", lambda: self.insert_row_above(row))
+            menu.addAction("Insert row below", lambda: self.insert_row_below(row))
+            menu.addSeparator()
+            delete_action = menu.addAction("Delete current row", lambda: self.delete_row(row))
+            delete_action.setEnabled(self.table.rowCount() > 1)
+        else:
+            menu.addAction("Insert row", self.add_row)
+        return menu
+
+    def _show_row_context_menu(self, pos):
+        row = self._context_row(pos)
+        if row >= 0:
+            self.table.selectRow(row)
+        if self._context_menu is not None:
+            self._context_menu.close()
+            self._context_menu.deleteLater()
+        self._context_menu = self._build_row_context_menu(row)
+        self._context_menu.aboutToHide.connect(self._clear_context_menu)
+        self._context_menu.popup(self.table.viewport().mapToGlobal(pos))
+
+    def _clear_context_menu(self):
+        menu = self._context_menu
+        self._context_menu = None
+        if menu is not None:
+            menu.deleteLater()
 
 
 class GenerationEditor(QtWidgets.QWidget):

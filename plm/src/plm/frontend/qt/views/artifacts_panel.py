@@ -51,17 +51,20 @@ class ArtifactsPanel(QtWidgets.QFrame):
         toolbar_layout.setContentsMargins(16, 0, 16, 0)
         toolbar_layout.setSpacing(8)
         self.toolbar_buttons = []
+        # Preserve the original 0..8 toolbar action indexes.  Existing UI
+        # code and tests address these controls by position; Diff is an added
+        # action and therefore lives at index 9 instead of shifting them.
         for index, (icon, tooltip) in enumerate((
             ("folder", "打开输出文件夹"),
             ("refresh-cw", "刷新文件"),
             ("square-pen", "在编辑器中打开"),
             ("braces", "Verilog 语法高亮"),
-            ("git-compare", "显示与上一次预览的差异"),
             ("search", "搜索文件内容 (Ctrl+F)"),
             ("link", "复制文件路径"),
             ("file", "显示/隐藏文件树"),
             ("more-horizontal", "更多"),
             ("maximize", "展开"),
+            ("git-compare", "显示与上一次预览的差异"),
         )):
             button = make_icon_button(icon, tooltip, "ArtifactsToolButton", 24, ICON_SIZE)
             toolbar_layout.addWidget(button)
@@ -121,27 +124,27 @@ class ArtifactsPanel(QtWidgets.QFrame):
         self.highlight_button.setCheckable(True)
         self.highlight_button.setChecked(True)
         self.highlight_button.toggled.connect(self._update_highlighting)
-        self.diff_button = self.toolbar_buttons[4]
-        self.diff_button.setCheckable(True)
-        self.diff_button.toggled.connect(self._load_selected)
-        self.tree_button = self.toolbar_buttons[7]
+        self.tree_button = self.toolbar_buttons[6]
         self.tree_button.setCheckable(True)
         self.tree_button.setChecked(True)
         self.tree_button.toggled.connect(self.file_tree.setVisible)
+        self.diff_button = self.toolbar_buttons[9]
+        self.diff_button.setCheckable(True)
+        self.diff_button.toggled.connect(self._load_selected)
 
         for index, callback in (
             (0, self.open_folder),
             (1, self.refreshRequested.emit),
             (2, self.open_in_editor),
-            (5, self.show_search),
-            (6, self.copy_path),
-            (9, self.maximizeRequested.emit),
+            (4, self.show_search),
+            (5, self.copy_path),
+            (8, self.maximizeRequested.emit),
         ):
             self.toolbar_buttons[index].clicked.connect(callback)
 
         self.more_menu = QtWidgets.QMenu(self)
         self.copy_content_action = self.more_menu.addAction("复制文件内容", self.copy_contents)
-        self.toolbar_buttons[8].setMenu(self.more_menu)
+        self.toolbar_buttons[7].setMenu(self.more_menu)
         for key, callback in (
             ("Ctrl+F", self.show_search),
             ("F3", self.find_text),
@@ -306,9 +309,9 @@ class ArtifactsPanel(QtWidgets.QFrame):
         self._update_status()
         self._update_highlighting()
         self.preview.line_numbers.setVisible(self._readable)
-        for index in (0, 2, 6):
+        for index in (0, 2, 5):
             self.toolbar_buttons[index].setEnabled(self.current_path is not None)
-        self.toolbar_buttons[5].setEnabled(self._readable)
+        self.toolbar_buttons[4].setEnabled(self._readable)
         self.copy_content_action.setEnabled(self._readable)
         if self._readable and self.search_input.text():
             self._search_changed()

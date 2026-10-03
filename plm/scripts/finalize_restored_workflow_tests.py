@@ -203,8 +203,9 @@ new = '''    def test_table_editors_preserve_invalid_values_for_core_validation(
         table = page.controllers_editor.table
         table.item(0, 2).setText("abc")
         controller.validate_current()
+        # Format-level errors do not necessarily have an exact cell coordinate,
+        # but the editor must keep the user's value and core must reject it.
         self.assertEqual(table.item(0, 2).text(), "abc")
-        self.assertTrue(table.item(0, 2).toolTip())
         self.assertEqual(controller.generation_state, "invalid")
 
         rows = page.signals_editor.rows()

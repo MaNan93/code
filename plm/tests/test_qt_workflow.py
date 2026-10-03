@@ -465,6 +465,22 @@ class QtWorkflowTests(unittest.TestCase):
         self.assertTrue(top.exists())
         self.assertEqual(controller.generation_state, "up_to_date")
 
+    def test_application_activation_marks_modified_output_out_of_date(self):
+        controller, window = self._editing_window()
+        controller.generate_current()
+        self.assertEqual(controller.generation_state, "up_to_date")
+        top = controller.current_project.config_dir.parent / "rtl/src/pipe_lane_mapper.sv"
+        top.write_text(
+            top.read_text(encoding="utf-8") + "// externally modified\n",
+            encoding="utf-8",
+        )
+
+        window.eventFilter(
+            self.app, QtCore.QEvent(QtCore.QEvent.ApplicationActivate)
+        )
+        self.app.processEvents()
+        self.assertEqual(controller.generation_state, "out_of_date")
+
     def test_output_state_edit_undo_save_and_project_switch(self):
         from PyQt5 import QtTest
         controller, window = self._editing_window()

@@ -1,5 +1,6 @@
 """Flat draggable project list used by the navigation panel."""
 
+from pathlib import Path
 from typing import Iterable
 
 from PyQt5 import QtCore, QtWidgets
@@ -44,7 +45,7 @@ class ProjectList(QtWidgets.QListWidget):
         for project in projects:
             item = QtWidgets.QListWidgetItem()
             widget = ProjectItemWidget(
-                project.name, project_path=project.config_dir
+                project.name, project_path=project.config_dir.parent
             )
             widget.hoverEntered.connect(self._schedule_hover_card)
             widget.hoverLeft.connect(self._project_hover_left)
@@ -115,7 +116,7 @@ class ProjectList(QtWidgets.QListWidget):
             self,
             "重命名项目",
             "请输入新的项目名称：",
-            text=widget.project_path.parent.name if widget.project_path.name == "config" else widget.project_path.name,
+            text=widget.project_path.name,
         )
         new_name = new_name.strip()
         if not accepted or not new_name or new_name == old_name:
@@ -127,12 +128,12 @@ class ProjectList(QtWidgets.QListWidget):
         if widget is None:
             return
         widget.rename(new_name)
-        widget.project_path = config_dir
+        widget.project_path = Path(config_dir).resolve().parent
         if self.selected_project_name == old_name:
             self.selected_project_name = new_name
             self.projectSelected.emit(new_name)
         if self.hover_card.isVisible():
-            self.hover_card.set_project(new_name, config_dir)
+            self.hover_card.set_project(new_name, widget.project_path)
 
     def clear_project(self, widget):
         self.projectCleared.emit(widget.project_name)

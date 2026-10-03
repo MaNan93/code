@@ -6,6 +6,7 @@ on:
       - ".github/workflows/plm-win-qt-debug.yml"
       - "plm/scripts/fix_qt_frontend_lifecycle.py"
       - "plm/scripts/restore_preview_features.py"
+      - "plm/scripts/fix_nav_collapse_layout.py"
   workflow_dispatch:
 
 permissions:
@@ -32,14 +33,15 @@ jobs:
         run: uv run python scripts/fix_qt_frontend_lifecycle.py
       - name: Restore preview behaviors
         run: uv run python scripts/restore_preview_features.py
+      - name: Fix collapsed nav relayout
+        run: uv run python scripts/fix_nav_collapse_layout.py
       - name: Verify restored Qt behaviors
         run: uv run python -u -m unittest -v tests.test_qt_artifacts tests.test_qt_frontend
-      - name: Persist verified restoration and remove scaffolding
+      - name: Persist verified code
         shell: pwsh
         run: |
           git -C .. config user.name "github-actions[bot]"
           git -C .. config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git -C .. add plm/src/plm/frontend/qt/views/artifacts_panel.py plm/tests/test_qt_artifacts.py plm/tests/test_qt_frontend.py
-          git -C .. rm plm/scripts/fix_qt_frontend_lifecycle.py plm/scripts/restore_preview_features.py .github/workflows/plm-win-qt-debug.yml
-          git -C .. commit -m "qt: restore preview interaction behaviors"
+          git -C .. add plm/src/plm/frontend/qt/views/artifacts_panel.py plm/src/plm/frontend/qt/views/nav_panel.py plm/tests/test_qt_artifacts.py plm/tests/test_qt_frontend.py
+          git -C .. commit -m "qt: restore preview and navigation behaviors"
           git -C .. push origin HEAD:plm-ui-refactor

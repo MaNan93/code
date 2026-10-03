@@ -24,5 +24,6 @@ class ProjectState:
 
     name: str
     is_archived: bool = False
+    is_cleared: bool = False
     is_pinned: bool = False
     last_opened: datetime | None = None

@@ -183,6 +183,36 @@ class QtControlLogicTests(unittest.TestCase):
         menu.close()
         menu.deleteLater()
 
+    def test_header_inline_rename_updates_real_project(self):
+        header = self.window.config_page.header
+        header.enter_edit_mode()
+        header.title_edit.setText("renamed")
+        header.save_title()
+        self.assertEqual(self.controller.current_name, "renamed")
+        self.assertEqual(
+            self.controller.current_project.config_dir,
+            self.root / "test/renamed/config",
+        )
+        self.assertTrue((self.root / "test/renamed/.plm-workspace").is_file())
+        self.assertFalse((self.root / "test/demo").exists())
+
+    def test_clear_project_can_be_explicitly_reopened(self):
+        project_root = self.root / "test/demo"
+        self.controller.clear_project("demo")
+        self.assertIsNone(self.controller.current_project)
+        self.assertEqual(self.window.nav_panel.project_list.count(), 0)
+        self.assertTrue(project_root.is_dir())
+
+        with patch.object(
+            QtWidgets.QFileDialog,
+            "getExistingDirectory",
+            return_value=str(project_root),
+        ):
+            self.controller.open_project()
+        self.assertEqual(self.controller.current_name, "demo")
+        self.assertEqual(self.window.nav_panel.project_list.count(), 1)
+        self.assertFalse(self.store.get_project_state("demo").is_cleared)
+
     def test_table_context_menu_inserts_and_deletes_rows(self):
         page = self.window.config_page
         editor = page.controllers_editor.editor
@@ -224,6 +254,30 @@ class QtControlLogicTests(unittest.TestCase):
         ):
             grid._on_row_context_menu(1, QtCore.QPoint())
         self.assertEqual(grid.table.rowCount(), before)
+
+    def test_controller_and_lane_rows_reorder_and_undo(self):
+        page = self.window.config_page
+        controller_editor = page.controllers_editor.editor
+        controller_before = page.controllers_editor.rows()
+        self.assertGreaterEqual(len(controller_before), 2)
+        controller_editor._on_row_drop(0, 1)
+        controller_after = page.controllers_editor.rows()
+        self.assertEqual(controller_after[0], controller_before[1])
+        self.assertEqual(controller_after[1], controller_before[0])
+        self.assertTrue(page.dirty)
+        page.undo()
+        self.assertEqual(page.controllers_editor.rows(), controller_before)
+
+        grid = page.mapping_editor.editor
+        mapping_before = page.mapping_editor.rows()
+        self.assertGreaterEqual(len(mapping_before), 2)
+        grid._on_row_drop(0, 1)
+        mapping_after = page.mapping_editor.rows()
+        self.assertEqual(mapping_after[0], mapping_before[1])
+        self.assertEqual(mapping_after[1], mapping_before[0])
+        self.assertTrue(page.dirty)
+        page.undo()
+        self.assertEqual(page.mapping_editor.rows(), mapping_before)
 
 
 if __name__ == "__main__":

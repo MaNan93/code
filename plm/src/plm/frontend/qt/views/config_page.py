@@ -94,7 +94,7 @@ class ConfigHeader(QtWidgets.QFrame):
 
 
 class ConfigTabPage(QtWidgets.QWidget):
-    def __init__(self, title, description, editor, parent=None):
+    def __init__(self, title, description, editor, fill_editor=False, parent=None):
         super().__init__(parent)
         root = QtWidgets.QVBoxLayout(self)
         root.setContentsMargins(20, 16, 20, 16)
@@ -118,8 +118,9 @@ class ConfigTabPage(QtWidgets.QWidget):
         content_layout = QtWidgets.QVBoxLayout(content)
         content_layout.setContentsMargins(0, 0, 8, 0)
         content_layout.setSpacing(0)
-        content_layout.addWidget(editor)
-        content_layout.addStretch(1)
+        content_layout.addWidget(editor, 1 if fill_editor else 0)
+        if not fill_editor:
+            content_layout.addStretch(1)
         scroll.setWidget(content)
         root.addWidget(scroll, 1)
 
@@ -212,13 +213,15 @@ class ConfigPage(QtWidgets.QFrame):
                        self.generation_editor):
             editor.changed.connect(self._mark_dirty)
         self.generation_editor.generateRequested.connect(self.generateRequested.emit)
-        for tab_name, title, description, editor in (
-            ("Controller", "Controller Configuration", "配置控制器 ID、名称和最大 Lane 宽度。", self.controllers_editor),
-            ("LaneMapping", "Lane Mapping Configuration", "配置物理 Lane 与控制器 Lane 的映射关系。", self.mapping_editor),
-            ("Signals", "PIPE Signals", "配置 PIPE 信号、方向、位宽与安全值。", self.signals_editor),
-            ("Generation", "Generation Settings", "选择生成参数并生成匹配的 RTL 和 Testbench。", self.generation_editor),
+        for tab_name, title, description, editor, fill_editor in (
+            ("Controller", "Controller Configuration", "配置控制器 ID、名称和最大 Lane 宽度。", self.controllers_editor, False),
+            ("LaneMapping", "Lane Mapping Configuration", "配置物理 Lane 与控制器 Lane 的映射关系。", self.mapping_editor, False),
+            ("Signals", "PIPE Signals", "配置 PIPE 信号、方向、位宽与安全值。", self.signals_editor, True),
+            ("Generation", "Generation Settings", "选择生成参数并生成匹配的 RTL 和 Testbench。", self.generation_editor, False),
         ):
-            self.tabs.addTab(ConfigTabPage(title, description, editor), tab_name)
+            self.tabs.addTab(
+                ConfigTabPage(title, description, editor, fill_editor=fill_editor), tab_name
+            )
         config_layout.addWidget(self.tabs, 1)
         root.addWidget(self.config_area, 1)
 

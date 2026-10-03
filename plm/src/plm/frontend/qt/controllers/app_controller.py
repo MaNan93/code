@@ -13,7 +13,7 @@ from plm.frontend.qt.views.documentation_page import DocumentationPage
 from plm.frontend.qt.views.nav_panel import NavPanel
 from plm.frontend.qt.views.new_project_dialog import NewProjectDialog
 from plm.frontend.qt.views.settings_page import SettingsPage
-from plm.frontend.qt.widgets.common import PROJECT_ROOT
+from plm.frontend.qt.widgets.common import PROJECT_ROOT, StyledMenu
 
 
 class AppController:
@@ -72,7 +72,6 @@ class AppController:
         nav.project_deleted.connect(self.delete_project)
         nav.project_renamed.connect(self.rename_project)
         nav.project_pinned.connect(self.pin_project)
-        nav.project_list.projectCleared.connect(self.clear_project)
         config_page.generateRequested.connect(self.generate_current)
         config_page.artifacts_panel.refreshRequested.connect(self.refresh_artifacts)
         nav.emit_current_project()
@@ -147,7 +146,7 @@ class AppController:
 
     def show_project_menu(self):
         self.hide_project_menu()
-        menu = QtWidgets.QMenu(self.window)
+        menu = StyledMenu(self.window)
         self.project_menu = menu
         menu.addAction("新建项目", self.new_project)
         menu.addAction("打开项目…", self.open_project)
@@ -386,21 +385,6 @@ class AppController:
         files = self.workspaces.output_files(self.current_project)
         self.config_page.artifacts_panel.set_files(files, self.current_project.config_dir.parent)
         self.validate_current()
-
-    def clear_project(self, name):
-        self.config_page.finish_editing()
-        if self.current_name == name and self.config_page.dirty and not self.save_current():
-            return
-        state = self.settings.get_project_state(name)
-        state.is_cleared = True
-        self.settings.save_project_state(state)
-        self.settings.clear_recent_project(name)
-        if self.current_name == name:
-            self.current_name = None
-            self.current_project = None
-        self.nav.apply_remove(name)
-        self._show_empty_project()
-        self._update_window_title()
 
     def archive_project(self, name):
         self.config_page.finish_editing()

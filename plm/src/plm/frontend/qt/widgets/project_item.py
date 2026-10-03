@@ -21,7 +21,6 @@ class ProjectItemWidget(QtWidgets.QWidget):
     hoverLeft = QtCore.pyqtSignal(object)
     pinRequested = QtCore.pyqtSignal(object)
     renameRequested = QtCore.pyqtSignal(object)
-    clearRequested = QtCore.pyqtSignal(object)
     archiveRequested = QtCore.pyqtSignal(object)
     deleteRequested = QtCore.pyqtSignal(object)
     projectSelected = QtCore.pyqtSignal(str)
@@ -130,7 +129,6 @@ class ProjectItemWidget(QtWidgets.QWidget):
             load_lucide_icon("folder-open", "#666666", 16),
             "在资源管理器中打开",
         )
-        clear_action = menu.addAction("清除")
         menu.addSeparator()
         archive_action = menu.addAction(
             load_lucide_icon("archive", "#666666", 16), "归档"
@@ -148,7 +146,6 @@ class ProjectItemWidget(QtWidgets.QWidget):
         pin_action.triggered.connect(lambda: self.pinRequested.emit(self))
         rename_action.triggered.connect(lambda: self.renameRequested.emit(self))
         open_action.triggered.connect(lambda: open_in_file_manager(self.project_path))
-        clear_action.triggered.connect(lambda: self.clearRequested.emit(self))
         archive_action.triggered.connect(lambda: self.archiveRequested.emit(self))
 
         def request_delete():

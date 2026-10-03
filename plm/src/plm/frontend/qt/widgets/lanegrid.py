@@ -11,6 +11,7 @@ import math
 
 from PyQt5 import QtCore, QtGui, QtWidgets
 
+from plm.frontend.qt.widgets.common import StyledMenu
 from plm.frontend.qt.widgets.tables import RowDragTable
 from plm.frontend.qt.widgets.theme import BORDER, BORDER_STRONG, TEXT, add_shadow
 
@@ -715,7 +716,7 @@ class LaneGrid(QtWidgets.QWidget):
         logical = header.logicalIndexAt(pos)
         if logical < 0:
             return
-        menu = QtWidgets.QMenu(self)
+        menu = StyledMenu(self)
         insert_action = menu.addAction("Insert mode row below")
         delete_action = menu.addAction("Delete this mode row")
         chosen = menu.exec_(header.mapToGlobal(pos))
@@ -731,7 +732,7 @@ class LaneGrid(QtWidgets.QWidget):
                 row = self.table.rowCount() - 1
         if row >= 0:
             self.table.selectRow(row)
-        menu = QtWidgets.QMenu(self.table)
+        menu = StyledMenu(self.table)
         if row >= 0:
             insert_above = menu.addAction("Insert row above")
             insert_below = menu.addAction("Insert row below")

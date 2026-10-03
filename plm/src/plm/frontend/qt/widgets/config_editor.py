@@ -14,6 +14,7 @@ from plm.core.gen_flags import (
     PCLK_MODE_VALUES,
     SEL_MODE_VALUES,
 )
+from plm.frontend.qt.widgets.common import StyledMenu
 from plm.frontend.qt.widgets.lanegrid import LaneGrid
 from plm.frontend.qt.widgets.tables import EditableTable
 
@@ -196,7 +197,7 @@ class CsvTableEditor(QtWidgets.QWidget):
             self.editor.delete_row(row)
 
     def _build_row_context_menu(self, row):
-        menu = QtWidgets.QMenu(self.table)
+        menu = StyledMenu(self.table)
         if row >= 0:
             if self.mapping:
                 insert_above = lambda: self.editor._insert_row_above(row)

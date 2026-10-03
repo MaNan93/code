@@ -61,7 +61,7 @@ with tempfile.TemporaryDirectory(prefix="plm-ui-") as td:
     assert w.config_page.controllers_editor.table.item(0, 1).text() == "CtrlA", "controller text did not load"
     assert not w.config_page.controllers_editor.table.verticalHeader().isVisible(), "Controller row header is visible"
     assert w.config_page.mapping_editor.table.rowCount() > 0, "lane mapping did not load"
-    assert w.config_page.signals_editor.table.rowCount() > 0, "signals did not load"
+    assert w.config_page.signals_editor.table.rowCount() >= 30, "default signal data is incomplete"
 
     # Main-branch table behavior: row drag/reorder and context menus.
     assert hasattr(w.config_page.controllers_editor.table, "rowMoveRequested")
@@ -84,13 +84,14 @@ with tempfile.TemporaryDirectory(prefix="plm-ui-") as td:
     assert [mapping.lane_count.itemText(i) for i in range(5)] == ["x2","x4","x8","x16","x32"]
     assert mapping.editor.controllers and mapping.editor.active_ctrl_id is not None
 
-    # Project rows keep the three-dot menu but also restore right-click and
-    # double-click rename entry points; Clear is distinct from Archive/Delete.
+    # Project rows keep the three-dot menu and right-click entry point;
+    # the redundant Clear action is intentionally removed (Archive already hides
+    # a project without deleting its files).
     project_widget=w.nav_panel.project_list.project_widgets[0]
     assert project_widget.header.contextMenuPolicy() == QtCore.Qt.CustomContextMenu
     project_menu=project_widget.build_more_menu()
     project_actions=[action.text() for action in project_menu.actions() if not action.isSeparator()]
-    assert "清除" in project_actions and "归档" in project_actions and "删除" in project_actions
+    assert project_actions == ["置顶", "重命名", "在资源管理器中打开", "归档", "删除"]
     project_menu.popup(project_widget.header.mapToGlobal(QtCore.QPoint(12,project_widget.header.height())))
     screen_shot("00-project-context-menu")
     project_menu.close(); project_menu.deleteLater()
@@ -119,7 +120,10 @@ with tempfile.TemporaryDirectory(prefix="plm-ui-") as td:
     assert "生成完成：" not in w.log_panel.output.toPlainText()
 
     for idx,name in enumerate(("controller","lane-mapping","signals","generation")):
-        w.config_page.tabs.setCurrentIndex(idx); shot(w,f"01-{name}")
+        w.config_page.tabs.setCurrentIndex(idx); app.processEvents()
+        if name == "signals":
+            assert w.config_page.signals_editor.table.height() > 300, "Signals table did not fill available height"
+        shot(w,f"01-{name}")
     w.toggle_log(); shot(w,"02-main-with-log")
 
     # New projects without an active workspace use a stable user directory,

@@ -8,6 +8,7 @@ Controller IDs remain editable and retain their values after reordering.
 from PyQt5 import QtCore, QtGui, QtWidgets
 
 from plm.frontend.qt.widgets import sap_icons
+from plm.frontend.qt.widgets.common import StyledMenu
 from plm.frontend.qt.widgets.theme import ACCENT, RoundedComboBox
 
 
@@ -424,7 +425,7 @@ class EditableTable(QtWidgets.QWidget):
     def _show_row_context_menu(self, row, global_pos):
         if row >= 0:
             self.table.selectRow(row)
-        menu = QtWidgets.QMenu(self.table)
+        menu = StyledMenu(self.table)
         if row >= 0:
             insert_above = menu.addAction("在上方插入行")
             insert_below = menu.addAction("在下方插入行")

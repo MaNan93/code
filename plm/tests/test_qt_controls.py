@@ -167,23 +167,19 @@ class QtControlLogicTests(unittest.TestCase):
         self.assertFalse(reload_action.isEnabled())
         self.controller.hide_project_menu()
 
-    def test_project_context_menu_routes_pin_and_clear_signals(self):
+    def test_project_context_menu_has_no_redundant_clear_action(self):
         widget = self.window.nav_panel.project_list.project_widgets[0]
         pin = QtTest.QSignalSpy(widget.pinRequested)
-        clear = QtTest.QSignalSpy(widget.clearRequested)
 
         menu = widget.build_more_menu()
         actions = [action for action in menu.actions() if not action.isSeparator()]
         self.assertEqual(
             [action.text() for action in actions],
-            ["置顶", "重命名", "在资源管理器中打开", "清除", "归档", "删除"],
+            ["置顶", "重命名", "在资源管理器中打开", "归档", "删除"],
         )
         next(action for action in actions if action.text() == "置顶").trigger()
-        next(action for action in actions if action.text() == "清除").trigger()
         self.assertEqual(len(pin), 1)
-        self.assertEqual(len(clear), 1)
         self.assertIs(pin[0][0], widget)
-        self.assertIs(clear[0][0], widget)
         menu.close()
         menu.deleteLater()
 
@@ -200,29 +196,12 @@ class QtControlLogicTests(unittest.TestCase):
         self.assertTrue((self.root / "test/renamed/config/controllers.csv").is_file())
         self.assertFalse((self.root / "test/demo").exists())
 
-    def test_clear_project_can_be_explicitly_reopened(self):
-        project_root = self.root / "test/demo"
-        self.controller.clear_project("demo")
-        self.assertIsNone(self.controller.current_project)
-        self.assertEqual(self.window.nav_panel.project_list.count(), 0)
-        self.assertTrue(project_root.is_dir())
-
-        with patch.object(
-            QtWidgets.QFileDialog,
-            "getExistingDirectory",
-            return_value=str(project_root),
-        ):
-            self.controller.open_project()
-        self.assertEqual(self.controller.current_name, "demo")
-        self.assertEqual(self.window.nav_panel.project_list.count(), 1)
-        self.assertFalse(self.store.get_project_state("demo").is_cleared)
-
     def test_table_context_menu_inserts_and_deletes_rows(self):
         page = self.window.config_page
         editor = page.controllers_editor.editor
         before = editor.table.rowCount()
         with patch(
-            "plm.frontend.qt.widgets.tables.QtWidgets.QMenu",
+            "plm.frontend.qt.widgets.tables.StyledMenu",
             self._menu_class_selecting("在下方插入行"),
         ):
             editor._show_row_context_menu(0, QtCore.QPoint())
@@ -230,7 +209,7 @@ class QtControlLogicTests(unittest.TestCase):
         self.assertTrue(page.dirty)
 
         with patch(
-            "plm.frontend.qt.widgets.tables.QtWidgets.QMenu",
+            "plm.frontend.qt.widgets.tables.StyledMenu",
             self._menu_class_selecting("删除当前行"),
         ):
             editor._show_row_context_menu(1, QtCore.QPoint())
@@ -241,7 +220,7 @@ class QtControlLogicTests(unittest.TestCase):
         grid = page.mapping_editor.editor
         before = grid.table.rowCount()
         with patch(
-            "plm.frontend.qt.widgets.lanegrid.QtWidgets.QMenu",
+            "plm.frontend.qt.widgets.lanegrid.StyledMenu",
             self._menu_class_selecting("Insert row below"),
         ):
             grid._on_row_context_menu(0, QtCore.QPoint())
@@ -249,7 +228,7 @@ class QtControlLogicTests(unittest.TestCase):
         self.assertTrue(page.dirty)
 
         with patch(
-            "plm.frontend.qt.widgets.lanegrid.QtWidgets.QMenu",
+            "plm.frontend.qt.widgets.lanegrid.StyledMenu",
             self._menu_class_selecting("Delete current row"),
         ):
             grid._on_row_context_menu(1, QtCore.QPoint())

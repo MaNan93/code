@@ -100,4 +100,10 @@ class StyledMenu(QtWidgets.QMenu):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        self.setAttribute(QtCore.Qt.WA_TranslucentBackground)
+        self.setWindowFlags(
+            self.windowFlags()
+            | QtCore.Qt.FramelessWindowHint
+            | QtCore.Qt.NoDropShadowWindowHint
+        )
         apply_drop_shadow(self, offset=(0, 4), blur_radius=12, alpha=40)

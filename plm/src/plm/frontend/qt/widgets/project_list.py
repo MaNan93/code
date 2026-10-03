@@ -14,7 +14,6 @@ class ProjectList(QtWidgets.QListWidget):
     """Draggable flat project list populated from static project information."""
 
     projectArchived = QtCore.pyqtSignal(str)
-    projectCleared = QtCore.pyqtSignal(str)
     projectDeleted = QtCore.pyqtSignal(str)
     projectRenamed = QtCore.pyqtSignal(str, str)
     projectPinned = QtCore.pyqtSignal(str)
@@ -51,7 +50,6 @@ class ProjectList(QtWidgets.QListWidget):
             widget.hoverLeft.connect(self._project_hover_left)
             widget.pinRequested.connect(self.pin_project)
             widget.renameRequested.connect(self.rename_project)
-            widget.clearRequested.connect(self.clear_project)
             widget.archiveRequested.connect(self.archive_project)
             widget.deleteRequested.connect(self.delete_project)
             widget.projectSelected.connect(self.select_project)
@@ -134,9 +132,6 @@ class ProjectList(QtWidgets.QListWidget):
             self.projectSelected.emit(new_name)
         if self.hover_card.isVisible():
             self.hover_card.set_project(new_name, widget.project_path)
-
-    def clear_project(self, widget):
-        self.projectCleared.emit(widget.project_name)
 
     def archive_project(self, widget):
         message = (

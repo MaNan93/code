@@ -1,7 +1,10 @@
 """Collect a project name and a user-selected parent directory."""
 
 from pathlib import Path
-from PyQt5 import QtWidgets
+
+from PyQt5 import QtCore, QtWidgets
+
+from plm.frontend.qt.widgets.common import load_lucide_icon
 
 
 class NewProjectDialog(QtWidgets.QDialog):
@@ -19,7 +22,10 @@ class NewProjectDialog(QtWidgets.QDialog):
         form.setContentsMargins(20, 20, 20, 20)
         form.setSpacing(12)
         self.name = QtWidgets.QLineEdit()
-        self.location = QtWidgets.QLineEdit(str(location))
+        default_location = Path(location or Path.home()).expanduser()
+        if default_location == Path.home():
+            default_location = Path.home() / "plm-projects"
+        self.location = QtWidgets.QLineEdit(str(default_location))
         row = QtWidgets.QHBoxLayout()
         row.addWidget(self.location)
         browse = QtWidgets.QPushButton("浏览…")
@@ -32,9 +38,15 @@ class NewProjectDialog(QtWidgets.QDialog):
         )
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)
-        buttons.button(QtWidgets.QDialogButtonBox.Ok).setText("创建项目")
-        buttons.button(QtWidgets.QDialogButtonBox.Ok).setObjectName("CreateProjectButton")
-        buttons.button(QtWidgets.QDialogButtonBox.Cancel).setText("取消")
+        create_button = buttons.button(QtWidgets.QDialogButtonBox.Ok)
+        create_button.setText("创建项目")
+        create_button.setObjectName("CreateProjectButton")
+        create_button.setIcon(load_lucide_icon("rocket", "#FFFFFF", 20))
+        create_button.setIconSize(QtCore.QSize(20, 20))
+        cancel_button = buttons.button(QtWidgets.QDialogButtonBox.Cancel)
+        cancel_button.setText("取消")
+        cancel_button.setIcon(load_lucide_icon("x", "#333333", 20))
+        cancel_button.setIconSize(QtCore.QSize(20, 20))
         form.addRow(buttons)
 
     def browse(self):

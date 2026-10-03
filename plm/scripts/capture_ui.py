@@ -46,13 +46,13 @@ with tempfile.TemporaryDirectory(prefix="plm-ui-") as td:
         w=MainWindow()
     w.resize(1400,900); w.show(); app.processEvents()
 
-    # Exercise the reported failure mode: keep DejaVu Sans as the user's
-    # preferred Latin font and rely on the stylesheet's CJK fallback stack.
+    # Visual review uses the BeautifulUI r1 font baseline while retaining the
+    # explicit CJK fallback stack for mixed English/Chinese labels.
     preferences=controller.settings.preferences()
-    preferences["font_family"]="DejaVu Sans"
+    preferences["font_family"]="Inter"
     controller.save_preferences(preferences)
     stylesheet=app.styleSheet()
-    assert 'font-family: "DejaVu Sans", "Microsoft YaHei UI", "PingFang SC", "Noto Sans CJK SC", "SimHei", "SimSun", sans-serif;' in stylesheet
+    assert 'font-family: "Inter", "Microsoft YaHei UI", "PingFang SC", "Noto Sans CJK SC", "SimHei", "SimSun", sans-serif;' in stylesheet
 
     with patch.object(QtWidgets.QFileDialog,"getExistingDirectory",return_value=str(project)):
         controller.open_project()
@@ -135,14 +135,14 @@ with tempfile.TemporaryDirectory(prefix="plm-ui-") as td:
     cancel_button=button_box.button(QtWidgets.QDialogButtonBox.Cancel)
     assert dlg.location.text() == os.path.expanduser("~/plm-projects")
     assert create_button.text() == "创建项目" and cancel_button.text() == "取消"
-    assert create_button.iconSize() == QtCore.QSize(20,20)
-    assert cancel_button.iconSize() == QtCore.QSize(20,20)
+    assert create_button.iconSize() == QtCore.QSize(18,18)
+    assert cancel_button.iconSize() == QtCore.QSize(18,18)
     assert not create_button.icon().isNull() and not cancel_button.icon().isNull()
     dlg.show(); shot(dlg,"03-new-project"); dlg.close()
 
     w.on_open_settings(); app.processEvents()
     required_fonts=(
-        "Microsoft YaHei UI", "PingFang SC", "Noto Sans CJK SC",
+        "Inter", "Microsoft YaHei UI", "PingFang SC", "Noto Sans CJK SC",
         "SimHei", "SimSun", "Source Han Sans SC", "DejaVu Sans",
     )
     for idx,name in enumerate(("general","appearance","tools","formatter")):

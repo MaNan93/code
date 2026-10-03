@@ -449,22 +449,28 @@ class AppController:
 
     def _refresh_project_names(self):
         projects = self._available_projects()
-        by_path = {p.config_dir: p for p in projects}
+        # Project rows intentionally store the workspace root because Reveal
+        # opens the whole project. Match rows by that root, while controller
+        # state continues to use config_dir as its stable identity.
+        by_root = {p.config_dir.parent.resolve(): p for p in projects}
+        by_config = {p.config_dir.resolve(): p for p in projects}
         self.nav.blockSignals(True)
         try:
             for widget in self.nav.project_list.project_widgets:
-                project = by_path.get(widget.project_path)
+                project = by_root.get(Path(widget.project_path).resolve())
                 if project and widget.project_name != project.name:
                     self.nav.apply_rename(widget.project_name, project.name, project.config_dir)
         finally:
             self.nav.blockSignals(False)
-        if self.current_project and self.current_project.config_dir in by_path:
-            self.current_project = by_path[self.current_project.config_dir]
-            self.current_name = self.current_project.name
-            self.nav.current_project_name = self.current_name
-            self.config_page.update_title(self.current_name)
-            self.settings.set_recent_project(self.current_name)
-            self._update_window_title()
+        if self.current_project:
+            current = by_config.get(self.current_project.config_dir.resolve())
+            if current is not None:
+                self.current_project = current
+                self.current_name = current.name
+                self.nav.current_project_name = self.current_name
+                self.config_page.update_title(self.current_name)
+                self.settings.set_recent_project(self.current_name)
+                self._update_window_title()
 
     def rename_current_from_header(self, new_name):
         if not self.current_name:

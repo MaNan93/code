@@ -11,8 +11,6 @@ text = text.replace(
     "text = re.sub(r'        chevron_path = .*?\\n        self\\.font_family_combo\\.setStyleSheet\\(\\n(?:.*\\n){5}        \\)\\n', '', text, count=1)",
     "text = re.sub(r'        chevron_path = .*?\\n        self\\.font_family_combo\\.setStyleSheet\\(\\n.*?        \\)\\n', '', text, count=1, flags=re.S)",
 )
-# Cursor SVG source differs slightly across historical r1 snapshots; those
-# replacements are cosmetic and should not abort the whole redesign.
 for needle in (
     "replace(\"widgets/lanegrid.py\", 'fill=\"#f7f7f7\" stroke=\"#202124\"', 'fill=\"{BG_MAIN}\" stroke=\"{TEXT_MAIN}\"')",
     "replace(\"widgets/lanegrid.py\", 'fill=\"#c7c9cc\" \\\'\\n        \\\'stroke=\"#202124\"', 'fill=\"{TEXT_MUTED}\" \\\'\\n        \\\'stroke=\"{TEXT_MAIN}\"')",
@@ -25,4 +23,5 @@ text = text.replace(
     '    raise RuntimeError("legacy colors remain:\\n" + "\\n".join(violations))',
     '    print("legacy colors remain:\\n" + "\\n".join(violations))',
 )
+text += '''\n# Final validation-state colors also come from the shared token set.\nreplace("widgets/tables.py", "from plm.frontend.qt.styles.tokens import TEXT_SUB\\n", "from plm.frontend.qt.styles.tokens import DANGER, TEXT_SUB\\n")\nreplace("widgets/tables.py", 'item.setBackground(QtGui.QColor("#fff0f0"))', 'error_bg = QtGui.QColor(DANGER)\\n                            error_bg.setAlpha(20)\\n                            item.setBackground(error_bg)')\nreplace("widgets/tables.py", 'item.setForeground(QtGui.QColor("#bb0000"))', 'item.setForeground(QtGui.QColor(DANGER))')\n'''
 path.write_text(text, encoding="utf-8")

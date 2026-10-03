@@ -4,6 +4,7 @@ on:
     branches: [plm-ui-refactor]
     paths:
       - "plm/scripts/apply_beautiful_ui_r1.py"
+      - "plm/scripts/fix_beautiful_ui_runner.py"
 permissions:
   contents: write
 jobs:
@@ -19,6 +20,8 @@ jobs:
           python-version: "3.12"
           working-directory: plm
       - run: uv sync --extra qt --locked
+      - name: Harden one-shot patch script
+        run: uv run python scripts/fix_beautiful_ui_runner.py
       - name: Apply BeautifulUI redesign
         run: uv run python scripts/apply_beautiful_ui_r1.py
       - name: Compile Qt frontend

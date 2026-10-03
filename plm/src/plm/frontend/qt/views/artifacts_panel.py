@@ -34,6 +34,7 @@ class ArtifactsPanel(QtWidgets.QFrame):
         self._readable = False
         self._file_status = "尚无生成文件"
         self._file_error = ""
+        self._output_state = "no_project"
         self._output_text = ""
         self._output_detail = ""
         self._file_statuses = {}
@@ -124,7 +125,7 @@ class ArtifactsPanel(QtWidgets.QFrame):
         empty_layout = QtWidgets.QVBoxLayout(self.empty_state)
         empty_layout.setContentsMargins(0, 0, 0, 0)
         empty_layout.setSpacing(8)
-        empty_layout.addStretch(1)
+        empty_layout.addSpacing(52)
         empty_icon = QtWidgets.QLabel()
         empty_icon.setAlignment(QtCore.Qt.AlignCenter)
         empty_icon.setPixmap(load_lucide_icon("file-x", TEXT_MUTED, 48).pixmap(48, 48))
@@ -368,6 +369,7 @@ class ArtifactsPanel(QtWidgets.QFrame):
             iterator += 1
 
     def set_output_state(self, state, text, detail=""):
+        self._output_state = state
         self._output_text = text
         self._output_detail = detail
         self.status.setProperty("state", state)
@@ -377,7 +379,13 @@ class ArtifactsPanel(QtWidgets.QFrame):
 
     def _update_status(self):
         parts = [self._file_status] if self.current_path is not None or not self._output_text else []
-        if self._output_text:
+        # "Up to date" already has a dedicated green status beside Generate.
+        # Keep the preview footer focused on file position/line count and only
+        # repeat generation state here when it needs attention.
+        show_output_state = self._output_text and not (
+            self._output_state == "up_to_date" and self.current_path is not None
+        )
+        if show_output_state:
             parts.append(self._output_text)
         self.status.setText(" · ".join(parts))
         self.status.setToolTip("\n".join(part for part in (self._file_error, self._output_detail) if part))

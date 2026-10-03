@@ -9,6 +9,7 @@ from plm.frontend.qt.controllers import AppController
 from plm.frontend.qt.main_window import MainWindow
 from plm.frontend.qt.services import SettingsStore
 from plm.frontend.qt.views.new_project_dialog import NewProjectDialog
+from plm.frontend.qt.widgets.lanegrid import LaneGrid
 
 OUT=Path(os.environ.get("PLM_SCREENSHOT_DIR","ui-screenshots")).resolve()
 OUT.mkdir(parents=True,exist_ok=True)
@@ -24,6 +25,15 @@ def shot(widget,name):
 def screen_shot(name):
     app.processEvents()
     app.primaryScreen().grabWindow(0).save(str(OUT/f"{name}.png"))
+
+
+def tree_texts(tree):
+    values=[]
+    iterator=QtWidgets.QTreeWidgetItemIterator(tree)
+    while iterator.value() is not None:
+        values.append(iterator.value().text(0))
+        iterator += 1
+    return values
 
 
 with tempfile.TemporaryDirectory(prefix="plm-ui-") as td:
@@ -53,8 +63,9 @@ with tempfile.TemporaryDirectory(prefix="plm-ui-") as td:
     assert w.config_page.mapping_editor.table.rowCount() > 0, "lane mapping did not load"
     assert w.config_page.signals_editor.table.rowCount() > 0, "signals did not load"
 
-    # The original UI used row context menus rather than persistent row
-    # add/delete buttons. Keep that interaction in the refactored editor.
+    # Main-branch table behavior: row drag/reorder and context menus.
+    assert hasattr(w.config_page.controllers_editor.table, "rowMoveRequested")
+    assert hasattr(w.config_page.signals_editor.table, "rowMoveRequested")
     assert not w.config_page.findChildren(QtWidgets.QPushButton, "ConfigRowButton")
     controller_editor=w.config_page.controllers_editor
     row_menu=controller_editor._build_row_context_menu(0)
@@ -67,13 +78,42 @@ with tempfile.TemporaryDirectory(prefix="plm-ui-") as td:
     screen_shot("01-controller-context-menu")
     row_menu.close(); row_menu.deleteLater()
 
+    # Main-branch LaneGrid behavior and product-mode lane picker.
+    mapping=w.config_page.mapping_editor
+    assert isinstance(mapping.editor, LaneGrid)
+    assert [mapping.lane_count.itemText(i) for i in range(5)] == ["x2","x4","x8","x16","x32"]
+    assert mapping.editor.controllers and mapping.editor.active_ctrl_id is not None
+
+    # Project rows keep the three-dot menu but also restore right-click and
+    # double-click rename entry points; Clear is distinct from Archive/Delete.
+    project_widget=w.nav_panel.project_list.project_widgets[0]
+    assert project_widget.header.contextMenuPolicy() == QtCore.Qt.CustomContextMenu
+    project_menu=project_widget.build_more_menu()
+    project_actions=[action.text() for action in project_menu.actions() if not action.isSeparator()]
+    assert "清除" in project_actions and "归档" in project_actions and "删除" in project_actions
+    project_menu.popup(project_widget.header.mapToGlobal(QtCore.QPoint(12,project_widget.header.height())))
+    screen_shot("00-project-context-menu")
+    project_menu.close(); project_menu.deleteLater()
+
+    # Dirty state is visible in the native window title, then undo restores it.
+    name_item=w.config_page.controllers_editor.table.item(0,1)
+    original_name=name_item.text()
+    name_item.setText(original_name+"Tmp")
+    app.processEvents()
+    assert w.windowTitle().endswith("*")
+    w.config_page.undo(); app.processEvents()
+    assert not w.windowTitle().endswith("*")
+
     # Make the business state concrete before visual review: choose a valid
     # generation configuration and generate real RTL/TB artifacts.
     w.config_page.generation_editor.arch.setCurrentText("original_pipe")
     w.config_page.generation_editor.sel_mode.setCurrentText("sync")
     controller.generate_current()
     assert controller.generation_state == "up_to_date", controller.generation_state
-    assert w.config_page.artifacts_panel.file_selector.count() > 0, "artifacts did not load"
+    artifacts=w.config_page.artifacts_panel
+    assert artifacts.file_selector.count() > 0, "artifacts did not load"
+    assert artifacts.file_tree.topLevelItemCount() > 0, "artifact tree did not load"
+    assert any(text.endswith(("New","Modified","Unchanged")) for text in tree_texts(artifacts.file_tree))
     assert w.log_panel.status_bar.isVisible(), "generation status bar is hidden"
     assert w.log_panel.status_label.text().startswith(("生成完成：", "输出已是最新："))
     assert "生成完成：" not in w.log_panel.output.toPlainText()
@@ -120,6 +160,19 @@ with tempfile.TemporaryDirectory(prefix="plm-ui-") as td:
     for idx,name in enumerate(("getting-started","configuration","generation")):
         w.placeholder_overlay.menu_buttons[idx].click(); shot(w,f"05-docs-{name}")
     w._close_placeholder()
-    w.config_page.artifacts_panel.show_search(); shot(w,"06-artifacts-search")
+
+    artifacts.show_search(); shot(w,"06-artifacts-search")
     w.config_page.toggle_artifacts_maximized(); shot(w,"07-artifacts-maximized")
+
+    # Force one preview-only content change to prove unified diff rendering.
+    selected_path=Path(artifacts.file_selector.currentData())
+    selected_path.write_text(selected_path.read_text(encoding="utf-8")+"\n// visual diff check\n",encoding="utf-8")
+    files=[Path(artifacts.file_selector.itemData(i)) for i in range(artifacts.file_selector.count())]
+    relative=selected_path.relative_to(project).as_posix()
+    artifacts.set_files(files,project,statuses={relative:"Modified"})
+    artifacts.diff_button.setChecked(True)
+    app.processEvents()
+    assert artifacts.diff_button.isEnabled()
+    assert artifacts.preview.toPlainText().startswith("--- previous/")
+    shot(w,"08-artifacts-diff")
     w.close()

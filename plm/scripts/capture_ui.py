@@ -49,9 +49,11 @@ with tempfile.TemporaryDirectory(prefix="plm-ui-") as td:
     app.processEvents()
     assert w.config_page.controllers_editor.table.rowCount() > 0, "controllers did not load"
     assert w.config_page.controllers_editor.table.item(0, 1).text() == "CtrlA", "controller text did not load"
-    assert not w.config_page.controllers_editor.table.verticalHeader().isVisible(), "empty row header is visible"
+    assert not w.config_page.controllers_editor.table.verticalHeader().isVisible(), "Controller row header is visible"
     assert w.config_page.mapping_editor.table.rowCount() > 0, "lane mapping did not load"
+    assert w.config_page.mapping_editor.table.verticalHeader().isVisible(), "LaneMapping row header changed unexpectedly"
     assert w.config_page.signals_editor.table.rowCount() > 0, "signals did not load"
+    assert w.config_page.signals_editor.table.verticalHeader().isVisible(), "Signals row header changed unexpectedly"
 
     # Make the business state concrete before visual review: choose a valid
     # generation configuration and generate real RTL/TB artifacts.

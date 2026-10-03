@@ -40,6 +40,7 @@ jobs:
       - name: Compile Python
         run: uv run python -m compileall -q src run.py
       - name: Core UI workflow logic
+        timeout-minutes: 2
         run: |
           uv run python -u -m unittest -v \
             tests.test_qt_workflow.QtWorkflowTests.test_project_actions_flow_through_controller_and_keep_selection \
@@ -51,15 +52,16 @@ jobs:
             tests.test_qt_workflow.QtWorkflowTests.test_undo_redo_rows_lane_count_flags_and_saved_baseline \
             tests.test_qt_workflow.QtWorkflowTests.test_edit_save_validate_generate_and_show_real_artifacts \
             tests.test_qt_workflow.QtWorkflowTests.test_output_state_generation_integrity_and_noop \
-            tests.test_qt_workflow.QtWorkflowTests.test_application_activation_marks_modified_output_out_of_date \
             tests.test_qt_workflow.QtWorkflowTests.test_lane_grid_tracks_controllers_and_paints_ranges \
             tests.test_qt_workflow.QtWorkflowTests.test_lane_grid_manual_edit_is_preserved_and_undoable \
             tests.test_qt_workflow.QtWorkflowTests.test_table_editors_preserve_invalid_values_for_core_validation \
             tests.test_qt_workflow.QtWorkflowTests.test_live_errors_and_focus_use_core_coordinates_without_dirtying_data \
             tests.test_qt_workflow.QtWorkflowTests.test_new_project_uses_standard_projects_directory
       - name: Button and menu wiring
+        timeout-minutes: 2
         run: uv run python -u -m unittest -v tests.test_qt_controls
       - name: Artifacts functional controls
+        timeout-minutes: 1
         run: |
           uv run python -u -m unittest -v \
             tests.test_qt_artifacts.ArtifactPreviewTests.test_file_tree_is_overlay_and_closes_after_selection \
@@ -68,12 +70,19 @@ jobs:
             tests.test_qt_artifacts.ArtifactPreviewTests.test_diff_switches_between_unified_diff_and_current_file \
             tests.test_qt_artifacts.ArtifactPreviewTests.test_toolbar_routes_to_selected_output_and_signals
       - name: Generation business linkage
+        timeout-minutes: 1
         run: |
           uv run python -u -m unittest -v \
             tests.test_qt_generation.GenerationIntegrationTests.test_formatter_parameter_validation_and_detection \
             tests.test_qt_generation.GenerationIntegrationTests.test_dpr_sync_linkage_is_one_undoable_edit_and_loaded_errors_survive \
             tests.test_qt_generation.GenerationIntegrationTests.test_both_pclk_modes_generate_with_and_without_dpr
+      - name: External output activation check
+        timeout-minutes: 1
+        run: >-
+          uv run python -u -m unittest -v
+          tests.test_qt_workflow.QtWorkflowTests.test_application_activation_marks_modified_output_out_of_date
       - name: Restored non-visual behaviors
+        timeout-minutes: 1
         run: |
           uv run python -u -m unittest -v \
             tests.test_qt_restored_behaviors.QtRestoredBehaviorTests.test_application_activation_rechecks_external_state \

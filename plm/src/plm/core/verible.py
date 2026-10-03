@@ -58,6 +58,32 @@ VERIBLE_INT_PARAMS = (
 )
 VERIBLE_STR_PARAMS = ("lines", "line_terminator", "stdin_name")  # free-form -- "lines" e.g. "3-5,10-12"
 
+# Built-in defaults reported by current verible-verilog-format --helpfull.
+# These are intentionally distinct from DEFAULT_VERIBLE_FLAGS below, which
+# is PLM's own formatting preset.  An empty UI value means "do not pass this
+# flag", so Verible uses the corresponding value from this mapping.
+VERIBLE_BUILTIN_DEFAULTS = {
+    **{name: "infer" for name in VERIBLE_ALIGN_PARAMS},
+    **{name: "wrap" for name in VERIBLE_INDENT_PARAMS},
+    "compact_indexing_and_selections": "true",
+    "expand_coverpoints": "false",
+    "port_declarations_right_align_packed_dimensions": "false",
+    "port_declarations_right_align_unpacked_dimensions": "false",
+    "try_wrap_long_lines": "false",
+    "wrap_end_else_clauses": "false",
+    "verify": "false",
+    "verify_convergence": "true",
+    "failsafe_success": "true",
+    "column_limit": "100",
+    "indentation_spaces": "2",
+    "line_break_penalty": "2",
+    "over_column_limit_penalty": "100",
+    "max_search_states": "100000",
+    "lines": "",
+    "line_terminator": "auto",
+    "stdin_name": "<stdin>",
+}
+
 # This project's own long-standing defaults (not verible's own out-of-the-box
 # defaults) -- unlisted params are simply never passed, so verible's own
 # built-in default applies. --inplace/stdin plumbing stays hardcoded below,

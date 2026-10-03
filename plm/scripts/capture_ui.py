@@ -144,6 +144,19 @@ with tempfile.TemporaryDirectory(prefix="plm-ui-") as td:
     for idx,name in enumerate(("general","appearance","tools","formatter")):
         w.placeholder_overlay.menu_buttons[idx].click()
         page=w.placeholder_overlay
+        if name == "formatter":
+            assert page.settings_content_layout.getContentsMargins() == (32,24,32,24)
+            assert page.settings_content_layout.stretch(page._formatter_layout_index) == 1
+            assert page.settings_content_layout.stretch(page._bottom_stretch_index) == 0
+            align_control=page._flag_controls["assignment_statement_alignment"]
+            assert align_control.itemText(0) == "infer (default)"
+            assert align_control.itemData(0) == ""
+            assert [align_control.itemText(i) for i in range(1, align_control.count())] == [
+                "align", "flush-left", "preserve"
+            ]
+            indent_control=page._flag_controls["formal_parameters_indentation"]
+            assert indent_control.itemText(0) == "wrap (default)"
+            assert page.flag_table.verticalScrollMode() == QtWidgets.QAbstractItemView.ScrollPerPixel
         if name == "general":
             assert page.setting_rows["editor"].isVisible()
             assert not page.setting_rows["font"].isVisible()
@@ -153,6 +166,11 @@ with tempfile.TemporaryDirectory(prefix="plm-ui-") as td:
             assert page.setting_rows["size"].isVisible()
             assert not page.setting_rows["editor"].isVisible()
         shot(w,f"04-settings-{name}")
+        if name == "formatter":
+            align_control=page._flag_controls["assignment_statement_alignment"]
+            align_control.showPopup()
+            screen_shot("04-settings-formatter-defaults")
+            align_control.hidePopup()
         if name == "appearance":
             font_combo=w.findChild(QtWidgets.QComboBox,"SettingsFontFamily")
             assert font_combo is not None

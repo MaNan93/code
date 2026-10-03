@@ -1,7 +1,8 @@
 from PyQt5 import QtCore, QtGui, QtWidgets
 from plm.core.verible import (
     DEFAULT_VERIBLE_FLAGS, VERIBLE_ALIGN_PARAMS, VERIBLE_INDENT_PARAMS,
-    VERIBLE_BOOL_PARAMS, VERIBLE_INT_PARAMS, VERIBLE_STR_PARAMS, find_verible,
+    VERIBLE_BOOL_PARAMS, VERIBLE_BUILTIN_DEFAULTS, VERIBLE_INT_PARAMS,
+    VERIBLE_STR_PARAMS, find_verible,
 )
 from plm.frontend.qt.models.preferences import DEFAULT_EDITOR, DEFAULT_FONT_FAMILY, DEFAULT_FONT_SIZE
 from plm.frontend.qt.widgets.common import LUCIDE_ICON_DIR
@@ -52,6 +53,7 @@ class SettingsPage(SecondaryPage):
         content, layout = self._content_shell(
             "General", "配置会保存在本机，并在下次启动时自动恢复。"
         )
+        self.settings_content_layout = layout
         preferences = self.initial_preferences
 
         self.font_family_combo = QtWidgets.QComboBox()
@@ -117,6 +119,7 @@ class SettingsPage(SecondaryPage):
         layout.addLayout(rows_layout)
         layout.addSpacing(24)
         self.formatter_panel = self._build_formatter(preferences)
+        self._formatter_layout_index = layout.count()
         layout.addWidget(self.formatter_panel, 1)
 
         actions = QtWidgets.QHBoxLayout()
@@ -136,6 +139,7 @@ class SettingsPage(SecondaryPage):
         actions.addWidget(reset_btn)
         actions.addWidget(self.save_settings_btn)
         layout.addLayout(actions)
+        self._bottom_stretch_index = layout.count()
         layout.addStretch(1)
         return content
 
@@ -152,7 +156,24 @@ class SettingsPage(SecondaryPage):
         self.description_label.setText(descriptions[index])
         for name, row in self.setting_rows.items():
             row.setVisible(name in visible_rows)
-        self.formatter_panel.setVisible(index == 3)
+        is_formatter = index == 3
+        self.formatter_panel.setVisible(is_formatter)
+        # Formatter uses the whole content column: top aligned, 32 px side
+        # padding / 24 px vertical padding, with its table taking all spare
+        # height and the global actions pinned to the bottom.  Other Settings
+        # tabs retain their existing margins and stretch behavior.
+        self.settings_content_layout.setContentsMargins(
+            32 if is_formatter else 0,
+            24 if is_formatter else 0,
+            32 if is_formatter else 0,
+            24 if is_formatter else 0,
+        )
+        self.settings_content_layout.setStretch(
+            self._formatter_layout_index, 1 if is_formatter else 0
+        )
+        self.settings_content_layout.setStretch(
+            self._bottom_stretch_index, 0 if is_formatter else 1
+        )
 
     def _select_font_family(self, family):
         family = str(family or DEFAULT_FONT_FAMILY)
@@ -181,7 +202,7 @@ class SettingsPage(SecondaryPage):
     def _build_formatter(self, preferences):
         panel = QtWidgets.QWidget()
         layout = QtWidgets.QVBoxLayout(panel)
-        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setContentsMargins(0, 0, 0, 16)
         layout.setSpacing(12)
         path_row = QtWidgets.QHBoxLayout()
         self.verible_path_edit = QtWidgets.QLineEdit(preferences["verible_path"])
@@ -200,8 +221,12 @@ class SettingsPage(SecondaryPage):
         self.flag_table.horizontalHeader().setSectionResizeMode(0, QtWidgets.QHeaderView.Stretch)
         self.flag_table.horizontalHeader().setSectionResizeMode(1, QtWidgets.QHeaderView.ResizeToContents)
         self.flag_table.setAlternatingRowColors(True)
+        self.flag_table.setVerticalScrollMode(QtWidgets.QAbstractItemView.ScrollPerPixel)
+        self.flag_table.setHorizontalScrollMode(QtWidgets.QAbstractItemView.ScrollPerPixel)
+        self.flag_table.setSizeAdjustPolicy(QtWidgets.QAbstractScrollArea.AdjustIgnored)
+        self.flag_table.setMinimumHeight(240)
         self._flag_controls = {}
-        groups = ((VERIBLE_ALIGN_PARAMS, ("align", "flush-left")),
+        groups = ((VERIBLE_ALIGN_PARAMS, ("align", "flush-left", "preserve", "infer")),
                   (VERIBLE_INDENT_PARAMS, ("indent", "wrap")),
                   (VERIBLE_BOOL_PARAMS, ("true", "false")),
                   (VERIBLE_INT_PARAMS, None), (VERIBLE_STR_PARAMS, None))
@@ -212,14 +237,18 @@ class SettingsPage(SecondaryPage):
                 item = QtWidgets.QTableWidgetItem(name)
                 item.setFlags(item.flags() & ~QtCore.Qt.ItemIsEditable)
                 self.flag_table.setItem(row, 0, item)
+                default_value = VERIBLE_BUILTIN_DEFAULTS.get(name, "")
                 if choices:
                     control = QtWidgets.QComboBox()
-                    control.addItem("工具默认值", "")
+                    control.addItem(f"{default_value} (default)", "")
                     for choice in choices:
-                        control.addItem(choice, choice)
+                        if choice != default_value:
+                            control.addItem(choice, choice)
                     control.currentIndexChanged.connect(self._flags_changed)
                 else:
                     control = QtWidgets.QLineEdit()
+                    if default_value:
+                        control.setPlaceholderText(f"{default_value} (default)")
                     if name in VERIBLE_INT_PARAMS:
                         control.setValidator(QtGui.QIntValidator(0, 2147483647, control))
                     control.textChanged.connect(self._flags_changed)
@@ -248,10 +277,14 @@ class SettingsPage(SecondaryPage):
             control.blockSignals(True)
             value = "" if values.get(name) is None else str(values.get(name))
             if isinstance(control, QtWidgets.QComboBox):
-                index = control.findData(value)
-                if index < 0:
-                    control.addItem(value, value)
-                    index = control.count() - 1
+                default_value = VERIBLE_BUILTIN_DEFAULTS.get(name, "")
+                if not value or value == default_value:
+                    index = 0
+                else:
+                    index = control.findData(value)
+                    if index < 0:
+                        control.addItem(value, value)
+                        index = control.count() - 1
                 control.setCurrentIndex(index)
             else:
                 control.setText(value)

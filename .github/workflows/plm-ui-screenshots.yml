@@ -5,7 +5,7 @@ on:
       - ".github/workflows/plm-ui-screenshots.yml"
       - "plm/scripts/capture_ui.py"
   workflow_dispatch:
-# Manual capture trigger for the project-menu rounding and Signals layout review.
+# Manual capture trigger for the clipped rounded-popup verification snapshot.
 # This comment has no effect on the application or screenshot content.
 jobs:
   capture:

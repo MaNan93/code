@@ -649,5 +649,21 @@ class QtWorkflowTests(unittest.TestCase):
         self.assertFalse(page.controllers_editor.table.item(1, 0).toolTip())
 
 
+    def test_new_project_uses_standard_projects_directory(self):
+        controller, window = self._editing_window()
+        captured = {}
+
+        class FakeDialog:
+            def __init__(self, location, parent=None):
+                captured["location"] = Path(location)
+
+            def exec_(self):
+                return QtWidgets.QDialog.Rejected
+
+        with patch("plm.frontend.qt.controllers.app_controller.NewProjectDialog", FakeDialog):
+            controller.new_project()
+        self.assertEqual(captured["location"], Path.home() / "plm-projects")
+
+
 if __name__ == "__main__":
     unittest.main()

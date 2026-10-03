@@ -236,5 +236,28 @@ class ArtifactPreviewTests(unittest.TestCase):
             popen.assert_not_called()
 
 
+    def test_file_tree_blank_click_closes_overlay(self):
+        path = self.file("rtl/one.sv", "module one;\nendmodule\n")
+        self.panel.set_files([path], self.root)
+        self.panel.tree_button.click()
+        self.app.processEvents()
+        self.assertTrue(self.panel.file_tree.isVisible())
+
+        viewport = self.panel.file_tree.viewport()
+        point = QtCore.QPoint(max(1, viewport.width() - 2), max(1, viewport.height() - 2))
+        if self.panel.file_tree.itemAt(point) is not None:
+            point = QtCore.QPoint(max(1, viewport.width() - 2), 1)
+        event = QtGui.QMouseEvent(
+            QtCore.QEvent.MouseButtonPress,
+            point,
+            QtCore.Qt.LeftButton,
+            QtCore.Qt.LeftButton,
+            QtCore.Qt.NoModifier,
+        )
+        self.panel.eventFilter(viewport, event)
+        self.assertFalse(self.panel.tree_button.isChecked())
+        self.assertFalse(self.panel.file_tree.isVisible())
+
+
 if __name__ == "__main__":
     unittest.main()

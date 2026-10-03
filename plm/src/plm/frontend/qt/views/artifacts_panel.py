@@ -171,6 +171,7 @@ class ArtifactsPanel(QtWidgets.QFrame):
             shortcut.setContext(QtCore.Qt.WidgetWithChildrenShortcut)
             shortcut.activated.connect(callback)
         self.preview.viewport().installEventFilter(self)
+        self.file_tree.viewport().installEventFilter(self)
         self.set_files([])
         self._apply_toolbar_density(self.width())
 
@@ -451,12 +452,11 @@ class ArtifactsPanel(QtWidgets.QFrame):
         self._position_file_tree()
 
     def eventFilter(self, watched, event):
-        if (
-            watched is self.preview.viewport()
-            and event.type() == QtCore.QEvent.MouseButtonPress
-            and self.file_tree.isVisible()
-        ):
-            self.tree_button.setChecked(False)
+        if event.type() == QtCore.QEvent.MouseButtonPress and self.file_tree.isVisible():
+            if watched is self.preview.viewport():
+                self.tree_button.setChecked(False)
+            elif watched is self.file_tree.viewport() and self.file_tree.itemAt(event.pos()) is None:
+                self.tree_button.setChecked(False)
         return super().eventFilter(watched, event)
 
     def copy_path(self):

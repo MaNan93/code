@@ -207,7 +207,7 @@ class AppController:
         self._activate_path(config_dir)
 
     def new_project(self):
-        default = self.current_project.config_dir.parent.parent if self.current_project else Path.home()
+        default = Path.home() / "plm-projects"
         dialog = NewProjectDialog(default, self.window)
         if dialog.exec_() != QtWidgets.QDialog.Accepted:
             return

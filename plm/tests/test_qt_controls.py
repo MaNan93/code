@@ -62,6 +62,12 @@ class QtControlLogicTests(unittest.TestCase):
             if not action.isSeparator()
         ]
 
+    @staticmethod
+    def _choose_menu_action(label):
+        def choose(menu, _pos):
+            return next(action for action in menu.actions() if action.text() == label)
+        return choose
+
     def test_header_log_and_artifacts_buttons_toggle_panels(self):
         page = self.window.config_page
         self.assertTrue(page.artifacts_panel.isVisible())
@@ -176,6 +182,48 @@ class QtControlLogicTests(unittest.TestCase):
         self.assertIs(clear[0][0], widget)
         menu.close()
         menu.deleteLater()
+
+    def test_table_context_menu_inserts_and_deletes_rows(self):
+        page = self.window.config_page
+        editor = page.controllers_editor.editor
+        before = editor.table.rowCount()
+        with patch.object(
+            QtWidgets.QMenu,
+            "exec_",
+            side_effect=self._choose_menu_action("Insert row below"),
+        ):
+            editor._show_row_context_menu(0, QtCore.QPoint())
+        self.assertEqual(editor.table.rowCount(), before + 1)
+        self.assertTrue(page.dirty)
+
+        with patch.object(
+            QtWidgets.QMenu,
+            "exec_",
+            side_effect=self._choose_menu_action("Delete current row"),
+        ):
+            editor._show_row_context_menu(1, QtCore.QPoint())
+        self.assertEqual(editor.table.rowCount(), before)
+
+    def test_lane_grid_context_menu_inserts_and_deletes_modes(self):
+        page = self.window.config_page
+        grid = page.mapping_editor.editor
+        before = grid.table.rowCount()
+        with patch.object(
+            QtWidgets.QMenu,
+            "exec_",
+            side_effect=self._choose_menu_action("Insert row below"),
+        ):
+            grid._on_row_context_menu(0, QtCore.QPoint())
+        self.assertEqual(grid.table.rowCount(), before + 1)
+        self.assertTrue(page.dirty)
+
+        with patch.object(
+            QtWidgets.QMenu,
+            "exec_",
+            side_effect=self._choose_menu_action("Delete current row"),
+        ):
+            grid._on_row_context_menu(1, QtCore.QPoint())
+        self.assertEqual(grid.table.rowCount(), before)
 
 
 if __name__ == "__main__":

@@ -3,7 +3,7 @@ import os
 import tempfile
 from pathlib import Path
 from unittest.mock import patch
-from PyQt5 import QtCore, QtGui, QtWidgets
+from PyQt5 import QtCore, QtWidgets
 from plm.core.workspace import scaffold_default_content
 from plm.frontend.qt.controllers import AppController
 from plm.frontend.qt.main_window import MainWindow
@@ -14,7 +14,6 @@ OUT=Path(os.environ.get("PLM_SCREENSHOT_DIR","ui-screenshots")).resolve()
 OUT.mkdir(parents=True,exist_ok=True)
 app=QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
 app.setStyle("Fusion")
-font=QtGui.QFont("Microsoft YaHei UI"); app.setFont(font)
 
 def shot(widget,name):
     app.processEvents()
@@ -29,6 +28,15 @@ with tempfile.TemporaryDirectory(prefix="plm ui ") as td:
     with patch("plm.frontend.qt.main_window.AppController",return_value=controller):
         w=MainWindow()
     w.resize(1400,900); w.show(); app.processEvents()
+
+    # Exercise the reported failure mode: keep DejaVu Sans as the user's
+    # preferred Latin font and rely on the stylesheet's CJK fallback stack.
+    preferences=controller.settings.preferences()
+    preferences["font_family"]="DejaVu Sans"
+    controller.save_preferences(preferences)
+    stylesheet=app.styleSheet()
+    assert 'font-family: "DejaVu Sans", "Microsoft YaHei UI", "PingFang SC", "Noto Sans CJK SC", "SimHei", "SimSun", sans-serif;' in stylesheet
+
     with patch.object(QtWidgets.QFileDialog,"getExistingDirectory",return_value=str(project)):
         controller.open_project()
     app.processEvents()

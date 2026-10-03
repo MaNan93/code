@@ -365,6 +365,13 @@ QPushButton#PlaceholderMenuButton[selected="true"] {
 }
 QLabel#PlaceholderHeading { color: $text_main; font-size: $font_size_lg; font-weight: bold; }
 QLabel#PlaceholderDescription { color: $text_sub; font-size: $font_size_body; }
+QTextBrowser#DocumentationBrowser {
+    background-color: $bg_surface;
+    color: $text_main;
+    border: 1px solid $border;
+    border-radius: $radius_card;
+    padding: $spacing_xs;
+}
 QFrame#PlaceholderSettingRow {
     background-color: transparent;
     border: none;

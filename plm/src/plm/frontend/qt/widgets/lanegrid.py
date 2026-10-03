@@ -15,7 +15,9 @@ from plm.frontend.qt.widgets.common import StyledMenu
 from plm.frontend.qt.widgets.tables import RowDragTable
 from plm.frontend.qt.widgets.theme import BORDER, BORDER_STRONG, TEXT, add_shadow
 from plm.frontend.qt.styles.tokens import (
-    BG_MAIN, BG_SUBTLE, BG_SURFACE, DANGER, PRIMARY, SUCCESS, TEXT_MAIN, TEXT_MUTED, TEXT_SUB,
+    BG_MAIN, BG_SUBTLE, BG_SURFACE, DANGER, FONT_SIZE_SM, PRIMARY, PRIMARY_HOVER,
+    RADIUS_CHIP, SHADOW_SM, SPACING_LG, SPACING_MD, SPACING_XS, SUCCESS,
+    TEXT_MAIN, TEXT_MUTED, TEXT_SUB,
 )
 
 LANE_GRID_PALETTE = [
@@ -429,9 +431,7 @@ class LaneGrid(QtWidgets.QWidget):
                 else f"Use {c.get('ctrl_name') or cid} as the brush"
             )
             text_color = _contrast_text_color(color)
-            # Pill shape: fully rounded ends, border, active gets inner ring.
-            # Scale padding/radius/font from the 13 px baseline.
-            border_color = TEXT if is_active else BORDER
+            border_color = PRIMARY_HOVER if is_active else BORDER
             outline = (
                 f"border: {int(2 * scale)}px solid {border_color};" if is_active
                 else f"border: {int(1 * scale)}px solid {border_color};"
@@ -440,13 +440,10 @@ class LaneGrid(QtWidgets.QWidget):
                 f"QPushButton#lgSwatch {{"
                 f"  background-color: {color};"
                 f"  color: {text_color};"
-                f"  font-size: {12.5 * scale:.1f}px;"
+                f"  font-size: {FONT_SIZE_SM * scale:.1f}px;"
                 f"  font-weight: 600;"
-                f"  border-radius: {int(14 * scale)}px;"
-                # Horizontal padding must be >= the border-radius, otherwise
-                # the pill's rounded ends bite into the top/bottom of the
-                # first/last character before the flat padding band starts.
-                f"  padding: {int(5 * scale)}px {int(15 * scale)}px;"
+                f"  border-radius: {int(RADIUS_CHIP * scale)}px;"
+                f"  padding: {int(SPACING_XS * scale)}px {int(SPACING_MD * scale)}px;"
                 f"  {outline}"
                 f"}}"
                 f"QPushButton#lgSwatch:hover {{"
@@ -454,8 +451,13 @@ class LaneGrid(QtWidgets.QWidget):
                 f"}}"
             )
             btn.setCursor(QtCore.Qt.PointingHandCursor)
-            btn.setMinimumHeight(int(30 * scale))
-            add_shadow(btn, blur=int(8 * scale), offset=(0, int(1 * scale)), alpha=45)
+            btn.setMinimumHeight(int((SPACING_LG * 2) * scale))
+            add_shadow(
+                btn,
+                blur=int(SHADOW_SM["blur_radius"] * scale),
+                offset=(0, int(SHADOW_SM["offset"][1] * scale)),
+                alpha=SHADOW_SM["rgba"][3],
+            )
             btn.clicked.connect(lambda _checked=False, cid=cid: self._set_active_controller(cid))
             self._palette_flow.addWidget(btn)
         self._palette_flow.invalidate()

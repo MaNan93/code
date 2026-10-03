@@ -33,7 +33,7 @@ class VerilogHighlighter(QtGui.QSyntaxHighlighter):
         super().__init__(document)
         self.enabled = True
         self.formats = {}
-        for name, color in (("comment", TEXT_MUTED), ("keyword", PRIMARY),
+        for name, color in (("comment", TEXT_SUB), ("keyword", PRIMARY),
                             ("string", TEXT_SUB), ("number", PRIMARY_HOVER),
                             ("directive", TEXT_SUB)):
             fmt = QtGui.QTextCharFormat()

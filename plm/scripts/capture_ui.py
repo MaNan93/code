@@ -94,7 +94,13 @@ with tempfile.TemporaryDirectory(prefix="plm-ui-") as td:
             font_combo=w.findChild(QtWidgets.QComboBox,"SettingsFontFamily")
             assert font_combo is not None
             assert all(font_combo.findText(font) >= 0 for font in required_fonts)
-            font_combo.showPopup(); screen_shot("04-settings-appearance-fonts"); font_combo.hidePopup()
+            selected=font_combo.currentIndex()
+            font_combo.setCurrentIndex(0)
+            font_combo.showPopup()
+            font_combo.view().scrollToTop()
+            screen_shot("04-settings-appearance-fonts")
+            font_combo.hidePopup()
+            font_combo.setCurrentIndex(selected)
     w._close_placeholder()
     w.on_open_docs(); app.processEvents()
     for idx,name in enumerate(("getting-started","configuration","generation")):

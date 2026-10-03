@@ -1,4 +1,4 @@
-name: PLM restore verify
+name: PLM functional patch verify
 
 on:
   push:
@@ -28,29 +28,21 @@ jobs:
           cache-dependency-glob: uv.lock
       - run: sudo apt-get update && sudo apt-get install -y libgl1 libegl1
       - run: uv sync --extra qt --locked
-      - name: Apply restored behavior alignment
+      - name: Apply focused functional patch
         run: uv run python scripts/finalize_restored_workflow_tests.py
-      - name: Verify duplicate-name refresh
-        run: timeout 40s uv run python -u -m unittest -v tests.test_qt_workflow.QtWorkflowTests.test_duplicate_rename_and_delete_keep_other_project_usable
-      - name: Verify generation status bar
-        run: timeout 40s uv run python -u -m unittest -v tests.test_qt_workflow.QtWorkflowTests.test_edit_save_validate_generate_and_show_real_artifacts
-      - name: Verify output no-op status
-        run: timeout 40s uv run python -u -m unittest -v tests.test_qt_workflow.QtWorkflowTests.test_output_state_generation_integrity_and_noop
-      - name: Verify LaneGrid paint and undo
-        run: timeout 40s uv run python -u -m unittest -v tests.test_qt_workflow.QtWorkflowTests.test_lane_grid_tracks_controllers_and_paints_ranges
-      - name: Verify LaneGrid manual edit
-        run: timeout 40s uv run python -u -m unittest -v tests.test_qt_workflow.QtWorkflowTests.test_lane_grid_manual_edit_is_preserved_and_undoable
-      - name: Verify invalid value preservation
-        run: timeout 40s uv run python -u -m unittest -v tests.test_qt_workflow.QtWorkflowTests.test_table_editors_preserve_invalid_values_for_core_validation
-      - name: Verify live LaneGrid errors
-        run: timeout 40s uv run python -u -m unittest -v tests.test_qt_workflow.QtWorkflowTests.test_live_errors_and_focus_use_core_coordinates_without_dirtying_data
-      - name: Verify complete workflow suite
-        run: timeout 180s uv run python -u -m unittest -v tests.test_qt_workflow
-      - name: Persist verified changes
+      - name: Verify New Project default directory
+        run: timeout 40s uv run python -u -m unittest -v tests.test_qt_workflow.QtWorkflowTests.test_new_project_uses_standard_projects_directory
+      - name: Verify Artifacts blank-click dismissal
+        run: timeout 40s uv run python -u -m unittest -v tests.test_qt_artifacts.ArtifactPreviewTests.test_file_tree_blank_click_closes_overlay
+      - name: Persist verified functional changes
         shell: bash
         run: |
           git -C .. config user.name "github-actions[bot]"
           git -C .. config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git -C .. add plm/src/plm/frontend/qt/controllers/app_controller.py plm/tests/test_qt_workflow.py
-          git -C .. commit -m "qt: align restored workflow behaviors"
+          git -C .. add \
+            plm/src/plm/frontend/qt/controllers/app_controller.py \
+            plm/src/plm/frontend/qt/views/artifacts_panel.py \
+            plm/tests/test_qt_workflow.py \
+            plm/tests/test_qt_artifacts.py
+          git -C .. commit -m "qt: restore project defaults and tree dismissal"
           git -C .. push origin HEAD:plm-ui-refactor

@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Finish tokenization after the one-shot BeautifulUI patch and audit literals."""
+# Trigger the final r1 visual cleanup pass after workflow validation was tightened.
 from pathlib import Path
 import re
 
@@ -83,14 +84,11 @@ def lane(text):
     text = text.replace('self._bg_color = "#ffffff"', 'self._bg_color = BG_SURFACE')
     text = text.replace('QtGui.QColor("#333333")', 'QtGui.QColor(TEXT_MAIN)')
     text = text.replace('QtGui.QColor("#bb0000")', 'QtGui.QColor(DANGER)')
-    # Selection uses the SUCCESS token with low alpha rather than a literal RGB triplet.
     text = text.replace('QtGui.QColor(16, 163, 127, 24)', 'QtGui.QColor(SUCCESS + "18")')
-    # Remaining cursor SVG literals are visual-only and map to design tokens.
     text = text.replace('fill="#f7f7f7" stroke="#202124"', 'fill="{BG_MAIN}" stroke="{TEXT_MAIN}"')
     text = text.replace('fill="#c7c9cc" ', 'fill="{TEXT_MUTED}" ')
     text = text.replace('stroke="#202124"', 'stroke="{TEXT_MAIN}"')
     text = text.replace('stroke="#ffffff"', 'stroke="{BG_SURFACE}"')
-    # Ensure SVG string fragments containing token placeholders interpolate them.
     text = text.replace("        'fill=\"{BG_MAIN}\" stroke=\"{TEXT_MAIN}\"", "        f'fill=\"{BG_MAIN}\" stroke=\"{TEXT_MAIN}\"")
     text = text.replace("        'stroke=\"{TEXT_MAIN}\"", "        f'stroke=\"{TEXT_MAIN}\"")
     text = text.replace("        'stroke=\"{BG_SURFACE}\"", "        f'stroke=\"{BG_SURFACE}\"")
@@ -103,7 +101,6 @@ update("widgets/hover_card.py", hover)
 update("widgets/sap_icons.py", sap)
 update("widgets/lanegrid.py", lane)
 
-# No literal six-digit colors may remain outside the token definition itself.
 hex_re = re.compile(r"#[0-9A-Fa-f]{6}\b")
 violations = []
 for path in ROOT.rglob("*"):

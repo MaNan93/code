@@ -1,6 +1,7 @@
 from PyQt5 import QtCore, QtWidgets
 from plm.frontend.qt.widgets.common import ICON_SIZE, make_icon_button
 
+
 class LogPanel(QtWidgets.QFrame):
     """Region 4: output tab, clear action, and auto-scrolling log."""
 
@@ -38,10 +39,37 @@ class LogPanel(QtWidgets.QFrame):
         self.output.setReadOnly(True)
         root.addWidget(self.output, 1)
 
+        self.status_bar = QtWidgets.QFrame()
+        self.status_bar.setObjectName("LogStatusBar")
+        self.status_bar.setFixedHeight(24)
+        self.status_bar.setStyleSheet(
+            "QFrame#LogStatusBar {"
+            " background: #FAFAFB;"
+            " border-top: 1px solid #EAEAEA;"
+            "}"
+        )
+        status_layout = QtWidgets.QHBoxLayout(self.status_bar)
+        status_layout.setContentsMargins(16, 0, 12, 0)
+        status_layout.setSpacing(0)
+        self.status_label = QtWidgets.QLabel("")
+        self.status_label.setObjectName("LogStatusText")
+        status_layout.addWidget(self.status_label)
+        status_layout.addStretch(1)
+        self.status_bar.hide()
+        root.addWidget(self.status_bar)
+
     def append_log(self, text):
+        if text.startswith(("生成完成：", "输出已是最新：")):
+            self.set_status(text)
+            return
         self.output.appendPlainText(text)
         bar = self.output.verticalScrollBar()
         bar.setValue(bar.maximum())
 
+    def set_status(self, text):
+        self.status_label.setText(text)
+        self.status_bar.setVisible(bool(text))
+
     def clear(self):
         self.output.clear()
+        self.set_status("")

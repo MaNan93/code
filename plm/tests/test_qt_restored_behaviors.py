@@ -21,6 +21,7 @@ class QtRestoredBehaviorTests(unittest.TestCase):
         self.app.processEvents()
 
     def tearDown(self):
+        self.window.config_page.mark_saved()
         self.window.close()
         for widget in self.app.topLevelWidgets():
             widget.deleteLater()
@@ -56,6 +57,29 @@ class QtRestoredBehaviorTests(unittest.TestCase):
             QtCore.QCoreApplication.sendEvent(self.app, event)
             self.app.processEvents()
 
+        validate.assert_called_once_with()
+
+    def test_activation_filter_follows_window_visibility_lifecycle(self):
+        self.assertTrue(self.window._app_event_filter_installed)
+        self.window.config_page.mark_saved()
+        self.assertTrue(self.window.close())
+        self.assertFalse(self.window._app_event_filter_installed)
+
+        with patch.object(self.window.controller, "validate_current") as validate:
+            QtCore.QCoreApplication.sendEvent(
+                self.app, QtCore.QEvent(QtCore.QEvent.ApplicationActivate)
+            )
+            self.app.processEvents()
+        validate.assert_not_called()
+
+        self.window.show()
+        self.app.processEvents()
+        self.assertTrue(self.window._app_event_filter_installed)
+        with patch.object(self.window.controller, "validate_current") as validate:
+            QtCore.QCoreApplication.sendEvent(
+                self.app, QtCore.QEvent(QtCore.QEvent.ApplicationActivate)
+            )
+            self.app.processEvents()
         validate.assert_called_once_with()
 
 

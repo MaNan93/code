@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# One-shot visual polish for the BeautifulUI r1 screenshot review.
 from pathlib import Path
 
 ROOT = Path("src/plm/frontend/qt")

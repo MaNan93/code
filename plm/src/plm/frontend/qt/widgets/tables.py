@@ -208,6 +208,7 @@ class EditableTable(QtWidgets.QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
 
         self.table = RowDragTable()
+        self.table.setObjectName("ConfigDataTable")
         self.table.setItemDelegate(_PaddedItemDelegate(self.table))
         self.table.setColumnCount(len(columns))
         self.table.setHorizontalHeaderLabels([c.get("heading", c["key"]) for c in columns])
@@ -262,7 +263,7 @@ class EditableTable(QtWidgets.QWidget):
                 else metrics.width(heading)
             )
             design_width = int(column.get("width", 0) * scale)
-            minimum = max(design_width, text_width + int(28 * scale))
+            minimum = max(design_width, text_width + int(32 * scale))
             if column.get("options"):
                 # QComboBox.sizeHint() includes its text padding and drop-down
                 # button. The table delegate then insets the cell widget on

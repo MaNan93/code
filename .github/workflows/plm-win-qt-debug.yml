@@ -23,5 +23,6 @@ jobs:
           enable-cache: true
           cache-dependency-glob: uv.lock
       - run: uv sync --extra qt --locked
+      # Reproduce the full-suite ordering that used to terminate on Windows.
       - name: Artifacts then frontend
         run: uv run python -u -m unittest -v tests.test_qt_artifacts tests.test_qt_frontend

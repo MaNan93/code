@@ -9,7 +9,7 @@ from unittest.mock import patch
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from PyQt5 import QtCore, QtWidgets
+from PyQt5 import QtCore, QtTest, QtWidgets
 
 from plm.frontend.qt.controllers import AppController
 from plm.frontend.qt.main_window import MainWindow
@@ -53,6 +53,14 @@ class QtControlLogicTests(unittest.TestCase):
         self.window.deleteLater()
         QtCore.QCoreApplication.sendPostedEvents(None, QtCore.QEvent.DeferredDelete)
         self.app.processEvents()
+
+    def _project_menu_actions(self):
+        self.window.nav_panel.new_chat_btn.click()
+        self.app.processEvents()
+        return [
+            action for action in self.controller.project_menu.actions()
+            if not action.isSeparator()
+        ]
 
     def test_header_log_and_artifacts_buttons_toggle_panels(self):
         page = self.window.config_page
@@ -118,16 +126,56 @@ class QtControlLogicTests(unittest.TestCase):
         )
 
     def test_project_menu_button_exposes_new_open_and_reload(self):
-        self.window.nav_panel.new_chat_btn.click()
-        self.app.processEvents()
-        menu = self.controller.project_menu
-        actions = [a for a in menu.actions() if not a.isSeparator()]
+        actions = self._project_menu_actions()
         self.assertEqual(
             [a.text() for a in actions],
             ["新建项目", "打开项目…", "重新加载当前项目"],
         )
         self.assertTrue(actions[-1].isEnabled())
         self.controller.hide_project_menu()
+
+    def test_project_menu_open_action_opens_selected_workspace(self):
+        external = self.root / "external/opened"
+        shutil.copytree(PROJECT_ROOT / "test/bifurcate/config", external / "config")
+        actions = self._project_menu_actions()
+        open_action = next(action for action in actions if action.text() == "打开项目…")
+        with patch.object(
+            QtWidgets.QFileDialog, "getExistingDirectory", return_value=str(external)
+        ):
+            open_action.trigger()
+        self.assertEqual(self.controller.current_project.config_dir, external / "config")
+        self.assertEqual(self.window.config_page.header.title_label.text(), "opened")
+        self.assertIn(external / "config", self.controller.projects.external_dirs)
+
+    def test_project_menu_disables_reload_without_active_project(self):
+        self.controller.archive_project("demo")
+        self.assertIsNone(self.controller.current_project)
+        actions = self._project_menu_actions()
+        reload_action = next(
+            action for action in actions if action.text() == "重新加载当前项目"
+        )
+        self.assertFalse(reload_action.isEnabled())
+        self.controller.hide_project_menu()
+
+    def test_project_context_menu_routes_pin_and_clear_signals(self):
+        widget = self.window.nav_panel.project_list.project_widgets[0]
+        pin = QtTest.QSignalSpy(widget.pinRequested)
+        clear = QtTest.QSignalSpy(widget.clearRequested)
+
+        menu = widget.build_more_menu()
+        actions = [action for action in menu.actions() if not action.isSeparator()]
+        self.assertEqual(
+            [action.text() for action in actions],
+            ["置顶", "重命名", "在资源管理器中打开", "清除", "归档", "删除"],
+        )
+        next(action for action in actions if action.text() == "置顶").trigger()
+        next(action for action in actions if action.text() == "清除").trigger()
+        self.assertEqual(len(pin), 1)
+        self.assertEqual(len(clear), 1)
+        self.assertIs(pin[0][0], widget)
+        self.assertIs(clear[0][0], widget)
+        menu.close()
+        menu.deleteLater()
 
 
 if __name__ == "__main__":

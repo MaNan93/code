@@ -5,7 +5,7 @@ on:
       - ".github/workflows/plm-ui-screenshots.yml"
       - "plm/scripts/capture_ui.py"
   workflow_dispatch:
-# Manual capture trigger for the current Formatter-tab review snapshot.
+# Manual capture trigger for the simplified Formatter preset review snapshot.
 # This comment has no effect on the application or screenshot content.
 jobs:
   capture:

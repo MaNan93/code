@@ -8,7 +8,12 @@ the small API expected by the refactored view/controller layer.
 
 from PyQt5 import QtCore, QtWidgets
 
-from plm.core.gen_flags import ARCH_VALUES, PCLK_MODE_VALUES, SEL_MODE_VALUES
+from plm.core.gen_flags import (
+    ARCH_PCLK_MODE,
+    ARCH_VALUES,
+    PCLK_MODE_VALUES,
+    SEL_MODE_VALUES,
+)
 from plm.frontend.qt.widgets.lanegrid import LaneGrid
 from plm.frontend.qt.widgets.tables import EditableTable
 
@@ -216,6 +221,7 @@ class CsvTableEditor(QtWidgets.QWidget):
 class GenerationEditor(QtWidgets.QWidget):
     changed = QtCore.pyqtSignal()
     generateRequested = QtCore.pyqtSignal()
+    _UNKNOWN_VALUE_ROLE = QtCore.Qt.UserRole + 17
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -237,7 +243,7 @@ class GenerationEditor(QtWidgets.QWidget):
         layout.addRow("PCLK 模式", self.pclk_mode)
         layout.addRow("选择方式", self.sel_mode)
         layout.addRow("DPR", self.dpr)
-        self.generate_btn = QtWidgets.QPushButton("Generate RTL + TB")
+        self.generate_btn = QtWidgets.QPushButton("Generate")
         self.generate_btn.setObjectName("ConfigGenerateButton")
         self.generate_btn.clicked.connect(self.generateRequested.emit)
         actions = QtWidgets.QHBoxLayout()
@@ -251,6 +257,25 @@ class GenerationEditor(QtWidgets.QWidget):
             control.currentIndexChanged.connect(self.changed.emit)
         self.dpr.toggled.connect(self._sync_dpr)
 
+    @classmethod
+    def _set_combo_value(cls, combo, value):
+        """Show an unknown loaded value instead of silently replacing it.
+
+        Unknown items are transient: once a known value is loaded or chosen,
+        stale unknown choices are removed from the combo again.
+        """
+        value = "" if value is None else str(value)
+        for index in range(combo.count() - 1, -1, -1):
+            if combo.itemData(index, cls._UNKNOWN_VALUE_ROLE):
+                combo.removeItem(index)
+        index = combo.findText(value)
+        if index < 0 and value:
+            combo.addItem(value)
+            index = combo.count() - 1
+            combo.setItemData(index, True, cls._UNKNOWN_VALUE_ROLE)
+        if index >= 0:
+            combo.setCurrentIndex(index)
+
     def set_output_state(self, state, text, detail=""):
         self.status_label.setText(text)
         self.status_label.setToolTip(detail)
@@ -262,15 +287,18 @@ class GenerationEditor(QtWidgets.QWidget):
     def _sync_dpr(self, enabled):
         if enabled:
             self.sel_mode.blockSignals(True)
-            self.sel_mode.setCurrentText("sync")
+            self._set_combo_value(self.sel_mode, "sync")
             self.sel_mode.blockSignals(False)
         self.sel_mode.setEnabled(not enabled)
         self.sel_mode.setToolTip("DPR 需要 sync 选择方式。" if enabled else "")
         self.changed.emit()
 
-    def _sync_pclk(self, index):
+    def _sync_pclk(self, _index):
+        target = ARCH_PCLK_MODE.get(self.arch.currentText())
+        if target is None:
+            return
         self.pclk_mode.blockSignals(True)
-        self.pclk_mode.setCurrentIndex(index)
+        self._set_combo_value(self.pclk_mode, target)
         self.pclk_mode.blockSignals(False)
 
     def set_flags(self, flags):
@@ -279,11 +307,11 @@ class GenerationEditor(QtWidgets.QWidget):
         arch = flags.get("arch") or (
             "serdes" if flags.get("pclk-mode") == "pclk_as_phy_input" else "original_pipe"
         )
-        self.arch.setCurrentText(arch)
-        self.pclk_mode.setCurrentText(flags.get("pclk-mode") or (
-            "pclk_as_phy_input" if arch == "serdes" else "pclk_as_phy_output"
-        ))
-        self.sel_mode.setCurrentText(flags.get("sel-mode") or "sync")
+        self._set_combo_value(self.arch, arch)
+        pclk_mode = flags.get("pclk-mode") or ARCH_PCLK_MODE.get(arch)
+        if pclk_mode:
+            self._set_combo_value(self.pclk_mode, pclk_mode)
+        self._set_combo_value(self.sel_mode, flags.get("sel-mode") or "sync")
         self.dpr.setChecked(bool(flags.get("dpr")))
         self.sel_mode.setEnabled(not self.dpr.isChecked())
         self.sel_mode.setToolTip("DPR 需要 sync 选择方式。" if self.dpr.isChecked() else "")

@@ -24,7 +24,15 @@ class ArtifactPreviewTests(unittest.TestCase):
         self.panel = ArtifactsPanel()
         self.panel.resize(400, 630)
         self.panel.show()
-        self.addCleanup(self.panel.close)
+
+    def tearDown(self):
+        self._dispose_widget(self.panel)
+
+    def _dispose_widget(self, widget):
+        widget.close()
+        widget.deleteLater()
+        self.app.sendPostedEvents(None, QtCore.QEvent.DeferredDelete)
+        self.app.processEvents()
 
     def file(self, name, text):
         path = self.root / name
@@ -122,7 +130,7 @@ class ArtifactPreviewTests(unittest.TestCase):
 
     def test_verilog_highlight_multiline_comments_strings_and_toggle(self):
         editor = CodePreview()
-        self.addCleanup(editor.close)
+        self.addCleanup(self._dispose_widget, editor)
         editor.setPlainText('/* module\nendmodule */ module x; // endmodule\n"// /*" assign x = 8\'hFF;')
         highlighter = editor.highlighter
         highlighter.rehighlight()

@@ -133,26 +133,15 @@ class ProjectItemWidget(QtWidgets.QWidget):
         archive_action = menu.addAction(
             load_lucide_icon("archive", "#666666", 16), "归档"
         )
-        delete_action = QtWidgets.QWidgetAction(menu)
-        delete_action.setText("删除")
-        delete_button = QtWidgets.QPushButton("删除")
-        delete_button.setObjectName("ProjectDeleteMenuButton")
-        delete_button.setIcon(load_lucide_icon("x", "#CF222E", 16))
-        delete_button.setIconSize(QtCore.QSize(16, 16))
-        delete_button.setCursor(QtCore.Qt.PointingHandCursor)
-        delete_action.setDefaultWidget(delete_button)
-        menu.addAction(delete_action)
+        delete_action = menu.addAction(
+            load_lucide_icon("trash-2", "#CF222E", 16), "删除"
+        )
 
         pin_action.triggered.connect(lambda: self.pinRequested.emit(self))
         rename_action.triggered.connect(lambda: self.renameRequested.emit(self))
         open_action.triggered.connect(lambda: open_in_file_manager(self.project_path))
         archive_action.triggered.connect(lambda: self.archiveRequested.emit(self))
-
-        def request_delete():
-            menu.close()
-            self.deleteRequested.emit(self)
-
-        delete_button.clicked.connect(request_delete)
+        delete_action.triggered.connect(lambda: self.deleteRequested.emit(self))
         return menu
 
     def rename(self, new_name):

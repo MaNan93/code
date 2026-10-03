@@ -1,0 +1,64 @@
+name: PLM functional smoke
+
+on:
+  push:
+    branches:
+      - plm-ui-refactor
+    paths:
+      - "plm/src/plm/frontend/qt/**"
+      - "plm/src/plm/core/**"
+      - "plm/tests/test_qt_workflow.py"
+      - "plm/tests/test_qt_artifacts.py"
+      - "plm/tests/test_qt_generation.py"
+      - ".github/workflows/plm-functional.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: plm-functional-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  functional:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: plm
+    env:
+      QT_QPA_PLATFORM: offscreen
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v10.2.0
+        with:
+          python-version: "3.12"
+          working-directory: plm
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+      - run: sudo apt-get update && sudo apt-get install -y libgl1 libegl1
+      - run: uv sync --extra qt --locked
+      - name: Compile Python
+        run: uv run python -m compileall -q src run.py
+      - name: Core UI workflow logic
+        run: |
+          uv run python -u -m unittest -v \
+            tests.test_qt_workflow.QtWorkflowTests.test_project_rename_archive_pin_delete_are_persistent_and_safe \
+            tests.test_qt_workflow.QtWorkflowTests.test_duplicate_rename_and_delete_keep_other_project_usable \
+            tests.test_qt_workflow.QtWorkflowTests.test_edit_save_validate_generate_and_show_real_artifacts \
+            tests.test_qt_workflow.QtWorkflowTests.test_output_state_generation_integrity_and_noop \
+            tests.test_qt_workflow.QtWorkflowTests.test_lane_grid_tracks_controllers_and_paints_ranges \
+            tests.test_qt_workflow.QtWorkflowTests.test_lane_grid_manual_edit_is_preserved_and_undoable \
+            tests.test_qt_workflow.QtWorkflowTests.test_table_editors_preserve_invalid_values_for_core_validation \
+            tests.test_qt_workflow.QtWorkflowTests.test_live_errors_and_focus_use_core_coordinates_without_dirtying_data \
+            tests.test_qt_workflow.QtWorkflowTests.test_new_project_uses_standard_projects_directory
+      - name: Artifacts functional controls
+        run: |
+          uv run python -u -m unittest -v \
+            tests.test_qt_artifacts.ArtifactPreviewTests.test_file_tree_is_overlay_and_closes_after_selection \
+            tests.test_qt_artifacts.ArtifactPreviewTests.test_file_tree_blank_click_closes_overlay \
+            tests.test_qt_artifacts.ArtifactPreviewTests.test_search_supports_line_jump \
+            tests.test_qt_artifacts.ArtifactPreviewTests.test_toolbar_routes_to_selected_output_and_signals
+      - name: Generation business linkage
+        run: |
+          uv run python -u -m unittest -v \
+            tests.test_qt_generation.GenerationIntegrationTests.test_formatter_parameter_validation_and_detection \
+            tests.test_qt_generation.GenerationIntegrationTests.test_dpr_sync_linkage_is_one_undoable_edit_and_loaded_errors_survive \
+            tests.test_qt_generation.GenerationIntegrationTests.test_both_pclk_modes_generate_with_and_without_dpr

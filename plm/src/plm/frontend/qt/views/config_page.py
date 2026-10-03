@@ -131,27 +131,40 @@ class ConfigTabPage(QtWidgets.QWidget):
 
 
 class DragHandle(QtWidgets.QWidget):
-    """White capsule handle for resizing the floating Artifacts panel."""
+    """Low-emphasis resize affordance for the floating Artifacts panel."""
 
     def __init__(self, on_drag, on_release, parent=None):
         super().__init__(parent)
         self.on_drag = on_drag
         self.on_release = on_release
         self.drag_start_x = None
-        self.setFixedSize(14, 36)
+        self.setFixedSize(8, 30)
         self.setCursor(QtCore.Qt.SplitHCursor)
+        self.setAttribute(QtCore.Qt.WA_Hover, True)
 
     def paintEvent(self, event):
         painter = QtGui.QPainter(self)
         painter.setRenderHint(QtGui.QPainter.Antialiasing, True)
-        capsule = QtCore.QRectF(0.5, 0.5, 13, 35)
-        painter.setPen(QtGui.QPen(QtGui.QColor(BORDER_HOVER), 1))
-        painter.setBrush(QtGui.QColor(BG_SURFACE))
-        painter.drawRoundedRect(capsule, 7, 7)
+        hovered = self.underMouse() or self.drag_start_x is not None
+        if hovered:
+            capsule = QtCore.QRectF(0.5, 0.5, 7, 29)
+            painter.setPen(QtGui.QPen(QtGui.QColor(BORDER_HOVER), 1))
+            painter.setBrush(QtGui.QColor(BG_SURFACE))
+            painter.drawRoundedRect(capsule, 4, 4)
+        guide = QtGui.QColor(TEXT_MUTED)
+        guide.setAlpha(190 if hovered else 95)
         painter.setPen(QtCore.Qt.NoPen)
-        painter.setBrush(QtGui.QColor(TEXT_MUTED))
-        painter.drawRect(QtCore.QRectF(4, 14, 1.5, 8))
-        painter.drawRect(QtCore.QRectF(8.5, 14, 1.5, 8))
+        painter.setBrush(guide)
+        painter.drawRoundedRect(QtCore.QRectF(2.0, 10, 1.25, 10), 0.6, 0.6)
+        painter.drawRoundedRect(QtCore.QRectF(4.75, 10, 1.25, 10), 0.6, 0.6)
+
+    def enterEvent(self, event):
+        self.update()
+        super().enterEvent(event)
+
+    def leaveEvent(self, event):
+        self.update()
+        super().leaveEvent(event)
 
     def mousePressEvent(self, event):
         if event.button() == QtCore.Qt.LeftButton:
@@ -374,9 +387,19 @@ class ConfigPage(QtWidgets.QFrame):
             self._resize_editors(self.config_area.width() - 48)
 
     def _resize_editors(self, available_width):
+        editor_width = max(280, available_width)
         for editor in (self.controllers_editor, self.mapping_editor,
                        self.signals_editor, self.generation_editor):
-            editor.setMaximumWidth(max(280, available_width))
+            editor.setMaximumWidth(editor_width)
+
+        # The Artifacts panel is intentionally an absolute overlay, but the
+        # configuration card should not continue underneath it. Constraining
+        # the tab widget keeps headings/descriptions readable instead of
+        # letting the overlay visually crop their final words.
+        if self.artifacts_panel.isVisible() and not self.artifacts_maximized:
+            self.tabs.setMaximumWidth(max(360, editor_width + 48))
+        else:
+            self.tabs.setMaximumWidth(16777215)
 
     def toggle_artifacts_maximized(self):
         if not self.artifacts_panel.isVisible():
@@ -409,7 +432,9 @@ class ConfigPage(QtWidgets.QFrame):
         self.artifacts_panel.setGeometry(panel_x, 0, panel_width, total_height)
         handle_x = panel_x - self.drag_handle.width() // 2
         handle_y = (total_height - self.drag_handle.height()) // 2
-        self.drag_handle.setGeometry(handle_x, handle_y, 14, 36)
+        self.drag_handle.setGeometry(
+            handle_x, handle_y, self.drag_handle.width(), self.drag_handle.height()
+        )
         self.artifacts_panel.raise_()
         self.drag_handle.raise_()
 

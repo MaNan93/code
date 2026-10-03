@@ -270,7 +270,12 @@ QWidget#ConfigArea, QScrollArea#ConfigScroll, QWidget#ConfigScrollContent { back
 QTabWidget#ConfigTabs::pane { border: none; background: transparent; top: -1px; }
 QLabel#ConfigTitle { color: $text_main; font-size: $font_size_lg; font-weight: bold; }
 QLabel#ConfigDescription { color: $text_sub; font-size: $font_size_body; }
-QTableWidget#ConfigDataTable { background-color: $bg_surface; }
+QTableWidget#ConfigDataTable {
+    background-color: transparent;
+    alternate-background-color: transparent;
+}
+QTableWidget#ConfigDataTable::item { background-color: $bg_surface; }
+QTableWidget#laneGrid { background-color: transparent; }
 
 QFrame#ArtifactsPanel {
     background-color: $bg_surface;
@@ -287,6 +292,11 @@ QPlainTextEdit#ArtifactCodePreview {
     selection-color: $text_main;
     font-family: $font_mono;
     font-size: $font_size_sm;
+}
+QPlainTextEdit#ArtifactCodePreview QScrollBar:horizontal { height: 4px; }
+QPlainTextEdit#ArtifactCodePreview QScrollBar::handle:horizontal {
+    min-width: 24px;
+    border-radius: 2px;
 }
 QTreeWidget#ArtifactFileTree {
     background-color: $bg_surface;
@@ -383,6 +393,15 @@ QFontComboBox#SettingsFontFamily, QComboBox#SettingsFontFamily,
 QSpinBox#SettingsFontSize, QLineEdit#SettingsEditorPath { min-height: 36px; max-height: 36px; }
 
 QDialog { background-color: $bg_main; color: $text_main; }
+QLabel#NewProjectDialogTitle {
+    color: $text_main;
+    font-size: $font_size_xl;
+    font-weight: bold;
+}
+QLabel#NewProjectDialogSubtitle {
+    color: $text_sub;
+    font-size: $font_size_body;
+}
 QDialogButtonBox { background: transparent; }
 QToolTip {
     background-color: $text_main;

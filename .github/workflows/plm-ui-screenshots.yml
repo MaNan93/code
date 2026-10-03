@@ -6,6 +6,7 @@ on:
       - "plm/scripts/capture_ui.py"
   workflow_dispatch:
 # Manual capture trigger for the current plm-ui-refactor functional-review snapshot.
+# This comment has no effect on the application or screenshot content.
 jobs:
   capture:
     runs-on: ubuntu-latest

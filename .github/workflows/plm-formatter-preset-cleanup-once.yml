@@ -1,0 +1,100 @@
+name: Apply PLM Formatter preset cleanup
+
+on:
+  push:
+    branches:
+      - plm-ui-refactor
+    paths:
+      - ".github/workflows/plm-formatter-preset-cleanup-once.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    env:
+      QT_QPA_PLATFORM: offscreen
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v10.2.0
+        with:
+          python-version: "3.12"
+          working-directory: plm
+          enable-cache: true
+          cache-dependency-glob: plm/uv.lock
+      - run: sudo apt-get update && sudo apt-get install -y libgl1 libegl1
+      - working-directory: plm
+        run: uv sync --extra qt --locked
+      - name: Apply cleanup
+        working-directory: plm
+        run: uv run python scripts/apply_formatter_preset_cleanup.py
+      - name: Compile
+        working-directory: plm
+        run: uv run python -m compileall -q src scripts/capture_ui.py tests/test_qt_generation.py
+      - name: Focused Formatter preset smoke
+        working-directory: plm
+        run: |
+          uv run python - <<'PY'
+          from PyQt5 import QtWidgets
+          from plm.core.verible import DEFAULT_VERIBLE_FLAGS, VERIBLE_STR_PARAMS
+          from plm.frontend.qt.views.settings_page import SettingsPage
+
+          app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+          page = SettingsPage(preferences={"verible_flags": {}})
+          page.show(); app.processEvents(); page._show_section(3); app.processEvents()
+
+          assert VERIBLE_STR_PARAMS == ("line_terminator",)
+          assert page.flag_table.horizontalHeaderItem(1).text() == "值"
+          assert set(page._flag_controls) == set(DEFAULT_VERIBLE_FLAGS)
+
+          align = page._flag_controls["assignment_statement_alignment"]
+          assert align.itemText(0) == "align (default)"
+          assert align.itemData(0) == "align"
+          assert align.currentData() == "align"
+          assert [align.itemText(i) for i in range(1, align.count())] == [
+              "flush-left", "preserve", "infer"
+          ]
+          assert align.toolTip() == "PLM 默认值：align"
+
+          column = page._flag_controls["column_limit"]
+          assert column.text() == "120"
+          assert column.toolTip() == "PLM 默认值：120"
+          assert page._flag_controls["line_terminator"].itemText(0) == "auto (default)"
+          assert page._preferences()["verible_flags"] == DEFAULT_VERIBLE_FLAGS
+
+          align.setCurrentText("flush-left")
+          column.setText("96")
+          flags = page._preferences()["verible_flags"]
+          assert flags["assignment_statement_alignment"] == "flush-left"
+          assert flags["column_limit"] == "96"
+
+          page.reset_formatter_btn.click()
+          assert align.currentText() == "align (default)"
+          assert column.text() == "120"
+          assert page._preferences()["verible_flags"] == DEFAULT_VERIBLE_FLAGS
+
+          texts = [b.text() for b in page.formatter_panel.findChildren(QtWidgets.QPushButton)]
+          assert "恢复默认参数" in texts
+          assert "项目默认参数" not in texts
+          assert "使用 Verible 默认参数" not in texts
+          print("Formatter single-preset smoke passed")
+          PY
+      - name: Formatter integration tests
+        working-directory: plm
+        run: |
+          uv run python -u -m unittest -v \
+            tests.test_qt_generation.GenerationIntegrationTests.test_formatter_flags_none_empty_and_custom_round_trip \
+            tests.test_qt_generation.GenerationIntegrationTests.test_formatter_parameter_validation_and_detection
+      - run: git diff --check
+      - name: Commit cleanup
+        run: |
+          git config user.name "MaNan"
+          git config user.email "50885527+MaNan93@users.noreply.github.com"
+          git add \
+            plm/src/plm/core/verible.py \
+            plm/src/plm/frontend/qt/views/settings_page.py \
+            plm/tests/test_qt_generation.py \
+            plm/scripts/capture_ui.py
+          git commit -m "fix(qt): simplify Formatter defaults"
+          git push origin HEAD:plm-ui-refactor

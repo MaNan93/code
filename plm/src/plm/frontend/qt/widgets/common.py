@@ -11,6 +11,7 @@ from plm.core.paths import PLM_ROOT
 
 
 LUCIDE_ICON_DIR = Path(__file__).resolve().parents[1] / "assets" / "icons"
+APP_ICON_PATH = Path(__file__).resolve().parents[1] / "assets" / "app_icon.svg"
 PROJECT_ROOT = PLM_ROOT
 ICON_SIZE = 20
 

@@ -84,15 +84,15 @@ class CsvTableEditor(QtWidgets.QWidget):
         for key in self._keys:
             spec = {"key": key, "heading": key}
             if key == "signal_type":
-                spec.update(options=["perlane", "shared"], width=108)
+                spec.update(options=["perlane", "shared"], width=104)
             elif key == "direction":
-                spec.update(options=["mac2phy", "phy2mac"], width=128)
+                spec.update(options=["mac2phy", "phy2mac"], width=112)
             elif key == "width":
-                spec["width"] = 66
+                spec["width"] = 64
             elif key == "safe_state":
-                spec["width"] = 84
+                spec["width"] = 96
             elif key == "tie_off":
-                spec["width"] = 66
+                spec["width"] = 72
             specs.append(spec)
 
         self.editor = EditableTable(

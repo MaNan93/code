@@ -31,7 +31,7 @@ class SettingsStore:
             old = "projects/state/" + quote(name, safe="")
             new = "projects/state/" + quote(path, safe="")
             if self._settings.contains(old + "/is_archived") and not self._settings.contains(new + "/is_archived"):
-                for key in ("is_archived", "is_pinned", "last_opened"):
+                for key in ("is_archived", "is_cleared", "is_pinned", "last_opened"):
                     self._settings.setValue(new + "/" + key, self._settings.value(old + "/" + key))
                 self._settings.remove(old)
         self._settings.sync()
@@ -76,6 +76,7 @@ class SettingsStore:
         self._settings.beginGroup("projects/state")
         self._settings.beginGroup(self._project_group(name))
         archived = self._settings.value("is_archived", False, type=bool)
+        cleared = self._settings.value("is_cleared", False, type=bool)
         pinned = self._settings.value("is_pinned", False, type=bool)
         last_opened_value = self._settings.value("last_opened", "", type=str)
         self._settings.endGroup()
@@ -91,6 +92,7 @@ class SettingsStore:
         return ProjectState(
             name=name,
             is_archived=archived,
+            is_cleared=cleared,
             is_pinned=pinned,
             last_opened=last_opened,
         )
@@ -106,6 +108,7 @@ class SettingsStore:
         self._settings.beginGroup("projects/state")
         self._settings.beginGroup(self._project_group(state.name))
         self._settings.setValue("is_archived", state.is_archived)
+        self._settings.setValue("is_cleared", state.is_cleared)
         self._settings.setValue("is_pinned", state.is_pinned)
         self._settings.setValue(
             "last_opened",

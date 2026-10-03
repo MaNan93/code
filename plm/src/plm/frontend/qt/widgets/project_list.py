@@ -13,6 +13,7 @@ class ProjectList(QtWidgets.QListWidget):
     """Draggable flat project list populated from static project information."""
 
     projectArchived = QtCore.pyqtSignal(str)
+    projectCleared = QtCore.pyqtSignal(str)
     projectDeleted = QtCore.pyqtSignal(str)
     projectRenamed = QtCore.pyqtSignal(str, str)
     projectPinned = QtCore.pyqtSignal(str)
@@ -49,6 +50,7 @@ class ProjectList(QtWidgets.QListWidget):
             widget.hoverLeft.connect(self._project_hover_left)
             widget.pinRequested.connect(self.pin_project)
             widget.renameRequested.connect(self.rename_project)
+            widget.clearRequested.connect(self.clear_project)
             widget.archiveRequested.connect(self.archive_project)
             widget.deleteRequested.connect(self.delete_project)
             widget.projectSelected.connect(self.select_project)
@@ -132,6 +134,9 @@ class ProjectList(QtWidgets.QListWidget):
         if self.hover_card.isVisible():
             self.hover_card.set_project(new_name, config_dir)
 
+    def clear_project(self, widget):
+        self.projectCleared.emit(widget.project_name)
+
     def archive_project(self, widget):
         message = (
             f"确定要归档项目「{widget.project_name}」吗？\n\n"
@@ -146,8 +151,7 @@ class ProjectList(QtWidgets.QListWidget):
         )
         if answer != QtWidgets.QMessageBox.Yes:
             return
-        project_name = widget.project_name
-        self.projectArchived.emit(project_name)
+        self.projectArchived.emit(widget.project_name)
 
     def delete_project(self, widget):
         message = (
@@ -163,8 +167,7 @@ class ProjectList(QtWidgets.QListWidget):
         )
         if answer != QtWidgets.QMessageBox.Yes:
             return
-        project_name = widget.project_name
-        self.projectDeleted.emit(project_name)
+        self.projectDeleted.emit(widget.project_name)
 
     def apply_remove(self, name):
         widget = next((w for w in self.project_widgets if w.project_name == name), None)

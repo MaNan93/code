@@ -141,8 +141,13 @@ class GenerationIntegrationTests(unittest.TestCase):
                     self.assertEqual("output logic dpr_pclk," in top, arch == "original_pipe" and dpr)
                     self.assertNotIn("dft_mode", top)
                     self.assertEqual(editor.pclk_mode.currentText(), "pclk_as_phy_input" if arch == "serdes" else "pclk_as_phy_output")
-        editor.pclk_mode.setCurrentText("pclk_as_phy_output")
-        self.assertEqual(editor.arch.currentText(), "original_pipe")
+        self.assertFalse(editor.pclk_mode.isEnabled())
+        self.assertEqual(
+            editor.pclk_mode.toolTip(),
+            "PCLK 模式由 PHY 架构自动决定。",
+        )
+        editor.arch.setCurrentText("original_pipe")
+        self.assertEqual(editor.pclk_mode.currentText(), "pclk_as_phy_output")
 
 
 if __name__ == "__main__":

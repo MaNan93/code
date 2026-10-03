@@ -7,7 +7,6 @@ context menu.
 """
 
 import copy
-import math
 
 from PyQt5 import QtCore, QtGui, QtWidgets
 
@@ -27,13 +26,10 @@ LANE_GRID_PALETTE = [
 ]
 LANE_GRID_UNASSIGNED_BG = BG_SUBTLE
 
-# Lane column widths step up geometrically as the lane count drops: x32 is
-# the reference (fills the available width) and each halving of the lane
-# count makes every lane column LANE_W_RATIO times wider -- x16 = 1.68x
-# x32's width, x8 = 1.68x x16's, and so on -- recomputed on every resize
-# and every lane-count change so the grid stays proportional at any window
-# size instead of just using whatever QTableWidget's own auto-sizing picks.
-LANE_W_RATIO = 1.68
+# Keep the mode column compact and let the active lane columns consume the
+# remaining viewport width evenly. This avoids the large dead area that used
+# to appear in x2/x4/x8 configurations while still fitting x32 without a
+# horizontal scrollbar.
 LANE_MODE_W = 64
 
 
@@ -520,18 +516,18 @@ class LaneGrid(QtWidgets.QWidget):
             return
         scale = _ui_scale()
         mode_w = int(LANE_MODE_W * scale)
-        # Every column must fit in the viewport. At x32 the cells become
-        # compact colour swatches rather than forcing a horizontal scrollbar.
+        # Every lane shares the complete remaining viewport. Small lane-count
+        # modes therefore read like a deliberate grid rather than a narrow
+        # strip stranded on the left side of the card.
         usable = max(1, self.table.viewport().width() - 1)
         avail = max(1, usable - mode_w)
         n = max(1, self.lane_count)
-        w32 = avail / 32 if avail > 0 else 0
-        preferred = w32 * (LANE_W_RATIO ** math.log2(32 / n))
-        lane_total = min(avail, max(n, int(preferred * n)))
-        lane_w, remainder = divmod(lane_total, n)
+        lane_w, remainder = divmod(avail, n)
         self.table.setColumnWidth(0, mode_w)
         for lane_idx in range(self.lane_count):
-            self.table.setColumnWidth(lane_idx + 1, lane_w + (1 if lane_idx < remainder else 0))
+            self.table.setColumnWidth(
+                lane_idx + 1, lane_w + (1 if lane_idx < remainder else 0)
+            )
 
         # On very narrow x32 grids, printing every two-digit lane number
         # produces an unreadable solid string. Keep spatial orientation with

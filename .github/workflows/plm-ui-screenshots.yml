@@ -3,6 +3,7 @@ on:
   push:
     paths:
       - ".github/workflows/plm-ui-screenshots.yml"
+      - "plm/scripts/capture_ui.py"
   workflow_dispatch:
 jobs:
   capture:

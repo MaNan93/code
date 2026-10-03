@@ -634,7 +634,7 @@ class QtFrontendLayoutTests(unittest.TestCase):
         self.assertIsInstance(handle, DragHandle)
         self.assertIs(panel.parent(), page.config_area)
         self.assertIs(handle.parent(), page.config_area)
-        self.assertEqual(handle.size(), QtCore.QSize(14, 36))
+        self.assertEqual(handle.size(), QtCore.QSize(8, 30))
         self.assertEqual(panel.geometry().right(), page.config_area.rect().right())
         self.assertEqual(
             handle.geometry().left() + handle.width() // 2,

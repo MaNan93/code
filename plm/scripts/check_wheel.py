@@ -21,9 +21,9 @@ import plm
 from PyQt5 import QtCore, QtWidgets
 from plm.core.paths import DOCS_DIR, PLM_ROOT
 from plm.core.workspace import scaffold_default_content
-from plm.frontend.qt.widgets.common import PROJECT_ROOT
+from plm.frontend.qt.widgets.common import APP_ICON_PATH, PROJECT_ROOT
 from plm.frontend.qt.controllers import AppController
-from plm.frontend.qt.main_window import APP_ICON_PATH, MainWindow
+from plm.frontend.qt.main_window import MainWindow
 from plm.frontend.qt.services import SettingsStore
 
 assert Path(plm.__file__).resolve().is_relative_to(Path(sys.argv[1]).resolve())

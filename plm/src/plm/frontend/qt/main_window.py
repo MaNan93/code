@@ -1,47 +1,16 @@
 """Codex-style PyQt5 views for plmConsultant using the native title bar."""
 
 import sys
-from pathlib import Path
-
 from PyQt5 import QtCore, QtGui, QtWidgets
 
 from plm.frontend.qt.controllers import AppController
 from plm.frontend.qt.styles import APP_QSS
 from plm.frontend.qt.views.nav_panel import NavPanel
-from plm.frontend.qt.views.artifacts_panel import ArtifactsPanel
-from plm.frontend.qt.views.config_page import ConfigHeader, ConfigPage, DragHandle
+from plm.frontend.qt.views.config_page import ConfigPage
 from plm.frontend.qt.views.log_panel import LogPanel
-from plm.frontend.qt.widgets.common import (
-    ICON_SIZE,
-    LUCIDE_ICON_DIR,
-    apply_drop_shadow,
-    load_lucide_icon,
-    make_icon_button,
-)
-from plm.frontend.qt.widgets.hover_card import HoverCard, HoverIconButton
-from plm.frontend.qt.widgets.project_item import ProjectItemWidget
-from plm.frontend.qt.widgets.project_list import ProjectList
+from plm.frontend.qt.widgets.common import load_lucide_icon
 
-__all__ = [
-    "HoverCard",
-    "HoverIconButton",
-    "ProjectItemWidget",
-    "ProjectList",
-    "NavPanel",
-    "ArtifactsPanel",
-    "ConfigHeader",
-    "ConfigPage",
-    "DragHandle",
-    "LogPanel",
-    "ICON_SIZE",
-    "LUCIDE_ICON_DIR",
-    "make_icon_button",
-    "apply_drop_shadow",
-    "MainWindow",
-]
-
-
-APP_ICON_PATH = Path(__file__).resolve().parent / "assets" / "app_icon.svg"
+__all__ = ["MainWindow"]
 class MainWindow(QtWidgets.QMainWindow):
     """Native QMainWindow containing horizontal and vertical splitters."""
 

@@ -295,6 +295,11 @@ class GenerationEditor(QtWidgets.QWidget):
         self.arch.addItems(ARCH_VALUES)
         self.pclk_mode = QtWidgets.QComboBox()
         self.pclk_mode.addItems(PCLK_MODE_VALUES)
+        # PCLK direction is a property of the selected PHY architecture, not
+        # an independent generation choice. Keep the value visible so the
+        # relationship is explicit, but do not present an invalid combination.
+        self.pclk_mode.setEnabled(False)
+        self.pclk_mode.setToolTip("PCLK 模式由 PHY 架构自动决定。")
         self.sel_mode = QtWidgets.QComboBox()
         self.sel_mode.addItems(SEL_MODE_VALUES)
         self.dpr = QtWidgets.QCheckBox("启用 DPR")
@@ -312,7 +317,6 @@ class GenerationEditor(QtWidgets.QWidget):
         actions.addWidget(self.generate_btn)
         layout.addRow("", actions)
         self.arch.currentIndexChanged.connect(self._sync_pclk)
-        self.pclk_mode.currentIndexChanged.connect(self._sync_arch)
         for control in (self.arch, self.pclk_mode, self.sel_mode):
             control.currentIndexChanged.connect(self.changed.emit)
         self.dpr.toggled.connect(self._sync_dpr)
@@ -338,11 +342,6 @@ class GenerationEditor(QtWidgets.QWidget):
         self.pclk_mode.blockSignals(True)
         self.pclk_mode.setCurrentIndex(index)
         self.pclk_mode.blockSignals(False)
-
-    def _sync_arch(self, index):
-        self.arch.blockSignals(True)
-        self.arch.setCurrentIndex(index)
-        self.arch.blockSignals(False)
 
     def set_flags(self, flags):
         for widget in (self.arch, self.pclk_mode, self.sel_mode, self.dpr):

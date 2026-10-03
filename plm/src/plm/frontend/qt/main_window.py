@@ -27,6 +27,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.setWindowIcon(load_lucide_icon("layout-dashboard", "#1677FF"))
         self._log_sizes = [700, 200]
         self.placeholder_overlay = None
+        self._app_event_filter_installed = False
 
         self.main_splitter = QtWidgets.QSplitter(QtCore.Qt.Horizontal)
         self.main_splitter.setObjectName("MainSplitter")
@@ -72,9 +73,25 @@ class MainWindow(QtWidgets.QMainWindow):
         self.config_page.historyChanged.connect(self._update_history_actions)
         self._update_history_actions()
 
+    def _install_app_event_filter(self):
+        if self._app_event_filter_installed:
+            return
         app = QtWidgets.QApplication.instance()
         if app is not None:
             app.installEventFilter(self)
+            self._app_event_filter_installed = True
+
+    def _remove_app_event_filter(self):
+        if not self._app_event_filter_installed:
+            return
+        app = QtWidgets.QApplication.instance()
+        if app is not None:
+            app.removeEventFilter(self)
+        self._app_event_filter_installed = False
+
+    def showEvent(self, event):
+        self._install_app_event_filter()
+        super().showEvent(event)
 
     def _update_history_actions(self):
         self.undo_action.setEnabled(self.config_page.can_undo())
@@ -85,15 +102,21 @@ class MainWindow(QtWidgets.QMainWindow):
         if not self.controller._confirm_switch():
             event.ignore()
             return
+        self._remove_app_event_filter()
         super().closeEvent(event)
 
     def eventFilter(self, watched, event):
         app = QtWidgets.QApplication.instance()
         if watched is app and event.type() == QtCore.QEvent.ApplicationActivate:
             # Re-check both source CSV signatures and generated-output hashes
-            # when the user returns from an external editor.
-            QtCore.QTimer.singleShot(0, self.controller.validate_current)
+            # when the user returns from an external editor. Defer until the
+            # event is delivered, then confirm this window is still live.
+            QtCore.QTimer.singleShot(0, self._refresh_after_activation)
         return super().eventFilter(watched, event)
+
+    def _refresh_after_activation(self):
+        if self.isVisible():
+            self.controller.validate_current()
 
     def _apply_initial_sizes(self):
         main_width = max(261, self.main_splitter.width())

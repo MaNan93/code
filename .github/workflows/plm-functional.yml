@@ -16,7 +16,9 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: plm-functional-${{ github.ref }}
+  # v2 intentionally leaves the pre-timeout smoke run behind; the old run
+  # cannot block functional validation for the current phase.
+  group: plm-functional-v2-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:

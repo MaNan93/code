@@ -26,6 +26,11 @@ jobs:
           echo "$plugin"
           ldd "$plugin" || true
       - run: xvfb-run -a -s "-screen 0 1600x1000x24" uv run python scripts/capture_ui.py
+      - name: Diagnose unittest stall
+        continue-on-error: true
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: timeout 120s uv run python -u -m unittest discover -s tests -v
       - uses: actions/upload-artifact@v4
         with:
           name: plm-ui-screenshots

@@ -4,6 +4,7 @@ from pathlib import Path
 
 from PyQt5 import QtCore, QtWidgets
 
+from plm.frontend.qt.styles.tokens import DANGER, TEXT_SUB
 from plm.frontend.qt.widgets.common import (
     ICON_SIZE,
     PROJECT_ROOT,
@@ -49,7 +50,7 @@ class ProjectItemWidget(QtWidgets.QWidget):
         self.folder_icon.setAlignment(QtCore.Qt.AlignCenter)
         self.folder_icon.setPixmap(
             load_lucide_icon(
-                "folder", "#666666", align_visible_left=True
+                "folder", TEXT_SUB, align_visible_left=True
             ).pixmap(ICON_SIZE, ICON_SIZE)
         )
         self.folder_icon.setAttribute(QtCore.Qt.WA_TransparentForMouseEvents)
@@ -119,22 +120,22 @@ class ProjectItemWidget(QtWidgets.QWidget):
         menu = StyledMenu(self)
         menu.setFixedWidth(180)
         pin_action = menu.addAction(
-            load_lucide_icon("pin", "#666666", 16), "置顶"
+            load_lucide_icon("pin", TEXT_SUB, 18), "置顶"
         )
         rename_action = menu.addAction(
-            load_lucide_icon("pencil", "#666666", 16), "重命名"
+            load_lucide_icon("pencil", TEXT_SUB, 18), "重命名"
         )
         menu.addSeparator()
         open_action = menu.addAction(
-            load_lucide_icon("folder-open", "#666666", 16),
+            load_lucide_icon("folder-open", TEXT_SUB, 18),
             "在资源管理器中打开",
         )
         menu.addSeparator()
         archive_action = menu.addAction(
-            load_lucide_icon("archive", "#666666", 16), "归档"
+            load_lucide_icon("archive", TEXT_SUB, 18), "归档"
         )
         delete_action = menu.addAction(
-            load_lucide_icon("trash-2", "#CF222E", 16), "删除"
+            load_lucide_icon("trash-2", DANGER, 18), "删除"
         )
 
         pin_action.triggered.connect(lambda: self.pinRequested.emit(self))

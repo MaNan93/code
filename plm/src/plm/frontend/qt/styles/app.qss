@@ -1,333 +1,387 @@
 QWidget {
-    color: $text;
-    font-family: "Microsoft YaHei UI", "Segoe UI", "PingFang SC", sans-serif;
-    font-size: 13px;
+    background-color: $bg_main;
+    color: $text_main;
+    font-family: $font_family;
+    font-size: $font_size_body;
     font-weight: normal;
 }
-QWidget:disabled { color: #B0B5C0; }
-QMainWindow, QWidget#AppRoot { background-color: $nav_background; }
+QWidget:disabled { color: $text_muted; }
 QLabel { background: transparent; }
-QSplitter::handle { background-color: transparent; }
-QSplitter#MainSplitter { background-color: #FFFFFF; }
-QSplitter::handle:horizontal {
-    background-color: transparent;
-    width: 4px;
-}
-QSplitter::handle:horizontal:hover { background-color: #D0D0D0; }
-QSplitter::handle:vertical { height: 1px; }
+QMainWindow, QWidget#AppRoot { background-color: $bg_main; }
 
-QFrame#NavPanel {
-    background-color: $nav_background; border-right: 1px solid $border;
+QPushButton {
+    background-color: $bg_surface;
+    border: 1px solid $border;
+    border-radius: $radius_control;
+    padding: $spacing_sm $spacing_lg;
+    color: $text_main;
+    font-size: $font_size_body;
 }
-QFrame#NavPanel[collapsed="true"] {
-    background-color: #F6F6FA; border-right: none;
+QPushButton:hover {
+    background-color: $bg_subtle;
+    border-color: $border_hover;
 }
-QWidget#NavBrandRow { background: transparent; }
-QLabel#NavAppName { color: #1A1A1A; font-size: 14px; font-weight: bold; }
-QLabel#NavLogo,
-QLabel#ProjectFolderIcon,
-QPushButton#NavCollapseButton,
-QPushButton#NavIconBtn,
-QPushButton#NavActionButton,
-QPushButton#ProjectButton,
-QPushButton#ProjectArchiveBtn,
-QPushButton#ProjectMoreBtn,
-QPushButton#NavFooterButton {
-    margin: 0; padding: 0;
+QPushButton:pressed { background-color: $border; }
+QPushButton:disabled {
+    background-color: $bg_subtle;
+    color: $text_muted;
+    border-color: $border;
 }
-QPushButton#NavCollapseButton {
-    background: transparent; border: none; border-radius: 6px; padding: 0;
+QPushButton#PrimaryBtn, QPushButton#SettingsPrimaryButton,
+QPushButton#ConfigGenerateButton, QPushButton#CreateProjectButton {
+    background-color: $primary;
+    border: none;
+    color: $bg_surface;
 }
-QPushButton#NavCollapseButton:hover { background-color: #E2E2EC; }
-QPushButton#NavCollapseButton:pressed { background-color: #D5D5E0; }
-QPushButton#NavIconBtn {
-    min-width: 32px; max-width: 32px; min-height: 32px; max-height: 32px;
-    background: transparent; border: none; border-radius: 6px;
-    padding: 0; text-align: center;
+QPushButton#PrimaryBtn:hover, QPushButton#SettingsPrimaryButton:hover,
+QPushButton#ConfigGenerateButton:hover, QPushButton#CreateProjectButton:hover {
+    background-color: $primary_hover;
 }
-QPushButton#NavIconBtn:hover { background-color: #E2E2EC; }
-QPushButton#NavIconBtn:pressed { background-color: #D5D5E0; }
-QFrame#NavPanel[collapsed="true"] QPushButton#NavActionButton {
-    min-width: 32px; max-width: 32px; min-height: 32px; max-height: 32px;
-    padding: 0; text-align: center;
-}
-QPushButton#FloatingNavButton {
-    background-color: #FFFFFF; border: 1px solid $border;
-    border-radius: 6px; padding: 0;
-}
-QPushButton#FloatingNavButton:hover { background-color: #F0F2F5; }
-QPushButton#FloatingNavButton:pressed { background-color: #E2E2EC; }
-QPushButton#NavActionButton {
-    min-height: 32px; max-height: 32px; background: transparent; border: none;
-    border-radius: 6px; color: $text; text-align: left; padding: 0;
-}
-QPushButton#NavActionButton:hover {
-    background-color: #E2E2EC; color: #1A1A1A;
-}
-QPushButton#NavActionButton:pressed { background-color: #D5D5E0; }
-QLabel#ProjectSectionTitle {
-    color: $text_muted; font-size: 12px; font-weight: bold; padding: 4px 8px;
-}
-QListWidget#ProjectList {
-    background: transparent; border: none; outline: none; padding: 0;
-}
-QListWidget#ProjectList::item { background: transparent; border: none; padding: 0; }
-QPushButton#ProjectButton {
-    min-height: 32px; max-height: 32px; background: transparent; border: none;
-    border-radius: 6px; padding: 0;
-}
-QPushButton#ProjectButton[selected="true"] {
-    background-color: $primary_light;
-}
-QPushButton#ProjectArchiveBtn, QPushButton#ProjectMoreBtn {
-    min-width: 24px; max-width: 24px; min-height: 24px; max-height: 24px;
-    background: transparent; border: none; border-radius: 4px; padding: 0;
-}
-QPushButton#ProjectArchiveBtn:hover, QPushButton#ProjectMoreBtn:hover {
-    background-color: #E2E2EC;
-}
-QLabel#ProjectName {
-    color: #1A1A1A; font-size: 14px; font-weight: bold;
-}
-QLabel#ProjectName[selected="true"] {
-    color: $primary; font-weight: bold;
-}
-QFrame#ProjectHoverCard {
-    background-color: #FFFFFF; border: 1px solid #EAEAEA; border-radius: 8px;
-}
-QLabel#HoverProjectName {
-    color: #1A1A1A; font-size: 14px; font-weight: bold;
-}
-QLabel#HoverProjectPath {
-    color: $text_secondary; font-size: 13px; font-weight: normal;
-}
-QFrame#HoverCardDivider {
-    background-color: #EAEAEA; border: none;
-}
-QPushButton#HoverPinButton, QPushButton#HoverOpenButton {
-    background: transparent; border: none; border-radius: 4px; padding: 0;
-}
-QPushButton#HoverPinButton:hover, QPushButton#HoverOpenButton:hover {
-    background-color: #F0F2F5;
-}
-QPushButton#ProjectButton:hover {
-    background-color: #E2E2EC; color: #1A1A1A;
-}
-QPushButton#ProjectButton:pressed {
-    background-color: #D5D5E0;
-}
-QPushButton#NavFooterButton {
-    min-height: 32px; max-height: 32px; background: transparent; border: none;
-    border-radius: 6px; color: $text_secondary; padding: 0; text-align: left;
-}
-QPushButton#NavFooterButton:hover { background-color: #E2E2EC; color: #1A1A1A; }
-QPushButton#NavFooterButton:pressed { background-color: #D5D5E0; }
-QPushButton#NavFooterButton[selected="true"] {
-    background-color: $primary_light; color: $primary; font-weight: bold;
-}
-
-QPushButton#ProjectDeleteMenuButton {
-    min-height: 32px; max-height: 32px; background: transparent; border: none;
-    border-radius: 4px; padding: 4px 12px; text-align: left;
-    color: #CF222E; font-size: 13px;
-}
-QPushButton#ProjectDeleteMenuButton:hover { background-color: #F0F2F5; }
-
-QFrame#ConfigPage {
-    background-color: #FFFFFF; border-top-left-radius: 8px;
-}
-QFrame#ConfigHeader {
-    background-color: #FFFFFF; border-bottom: 1px solid #EAEAEA;
-    border-top-left-radius: 8px;
-}
-QLabel#ConfigSessionTitle {
-    color: #1A1A1A; font-size: 15px; font-weight: bold;
-}
-QLineEdit#ConfigSessionEditor {
-    background: #FFFFFF; border: 1px solid $primary; border-radius: 8px;
-    color: #1A1A1A; padding: 4px 8px; selection-background-color: $primary_light;
-}
-QPushButton#HeaderButton {
-    background: transparent; border: none; border-radius: 6px; padding: 0;
-}
-QPushButton#HeaderButton:hover { background-color: #F0F2F5; }
-QPushButton#HeaderButton:pressed { background-color: #D5D5E0; }
-QWidget#ConfigArea { background-color: #FFFFFF; }
-QTabWidget#ConfigTabs::pane { border: none; background: #FFFFFF; top: -1px; }
-QTabWidget#ConfigTabs QTabBar { background: #FFFFFF; }
-QTabWidget#ConfigTabs QTabBar::tab {
-    background: transparent; color: #4A5060; padding: 8px 20px 10px 20px;
-    margin-right: 4px; border: none; border-bottom: 2px solid transparent;
-    font-size: 13px; min-width: 80px;
-}
-QTabWidget#ConfigTabs QTabBar::tab:hover:!selected {
-    color: #1A1A1A;
-}
-QTabWidget#ConfigTabs QTabBar::tab:selected {
-    color: $primary; border-bottom: 2px solid $primary;
-}
-QLabel#ConfigTitle { color: #1A1A1A; font-size: 15px; font-weight: bold; }
-QLabel#ConfigDescription { color: $text_secondary; font-size: 13px; font-weight: normal; }
-QScrollArea#ConfigScroll { background: #FFFFFF; border: none; }
-QWidget#ConfigScrollContent { background: #FFFFFF; }
-QTableWidget#ConfigDataTable {
-    background: #FFFFFF; alternate-background-color: #F9FAFB;
-    color: $text; border: 1px solid #EAEAEA; border-radius: 6px;
-    gridline-color: #EAEAEA; selection-background-color: $primary_light;
-    selection-color: $primary; font-size: 13px;
-}
-QTableWidget#ConfigDataTable QHeaderView::section {
-    background: #F0F2F5; color: #1A1A1A; border: none;
-    border-bottom: 1px solid #EAEAEA; padding: 8px 12px;
-    font-size: 13px; font-weight: bold;
-}
+QPushButton#SettingsSecondaryButton, QPushButton#SettingsBrowseButton,
 QPushButton#ConfigRowButton {
-    background: #FFFFFF; color: $text; border: 1px solid $border;
-    border-radius: 6px; padding: 6px 12px;
-}
-QPushButton#ConfigRowButton:hover { background: #F0F2F5; }
-QPushButton#ConfigGenerateButton {
-    background: $primary; color: #FFFFFF; border: none;
-    border-radius: 6px; padding: 8px 20px;
-}
-QPushButton#ConfigGenerateButton:hover { background: #4096FF; }
-QFrame#LogPanel { background-color: #FFFFFF; border-top: 1px solid $border; }
-QFrame#LogHeader { background-color: #FFFFFF; border: none; }
-QLabel#LogTabTitle { color: $text; font-size: 13px; font-weight: bold; }
-QPushButton#LogClearButton, QPushButton#LogCloseBtn {
-    background: transparent; border: none; border-radius: 6px; padding: 0;
-}
-QPushButton#LogClearButton:hover, QPushButton#LogCloseBtn:hover {
-    background-color: #E2E2EC; border-radius: 4px;
-}
-QPushButton#LogClearButton:pressed, QPushButton#LogCloseBtn:pressed {
-    background-color: #D5D5E0;
-}
-QPlainTextEdit#LogOutput {
-    background-color: #FFFFFF; color: $text; border: none; padding: 8px 16px;
-    font-family: Consolas, "Courier New", monospace; font-size: 12px;
+    background-color: $bg_surface;
+    border: 1px solid $border;
+    border-radius: $radius_control;
 }
 
-QFrame#ArtifactsPanel {
-    background-color: #FAFAFB; border: 1px solid $border; border-radius: 8px;
+QLineEdit, QComboBox, QSpinBox {
+    background-color: $bg_surface;
+    border: 1px solid $border;
+    border-radius: $radius_control;
+    padding: $spacing_sm $spacing_md;
+    color: $text_main;
+    font-size: $font_size_body;
+    selection-background-color: $primary_light;
+    selection-color: $text_main;
 }
-QWidget#ArtifactsToolbar { background: transparent; }
-QPushButton#ArtifactsToolButton {
-    background: transparent; border: none; border-radius: 6px; padding: 0;
-}
-QPushButton#ArtifactsToolButton:hover { background-color: #F0F2F5; }
-QPushButton#ArtifactsToolButton:pressed, QPushButton#ArtifactsToolButton:checked {
-    background-color: #E6F0FF;
-}
-QPlainTextEdit#ArtifactCodePreview {
-    background-color: #FFFFFF; color: #24292E; border: 1px solid #EAEAEA;
-    border-radius: 4px; selection-background-color: #CDE1FF;
-    font-family: Consolas, "Courier New", monospace; font-size: 12px;
-}
-QComboBox#ArtifactFileSelector, QLineEdit#ArtifactSearchInput {
-    background-color: #FFFFFF; border: 1px solid #EAEAEA; border-radius: 4px;
-    padding: 5px 8px; color: #24292E;
-}
-QLabel#ArtifactStatus { color: $text_muted; font-size: 12px; }
-
-QLabel#GenerationStatus { color: $text_muted; font-size: 12px; }
-QLabel#GenerationStatus[state="up_to_date"], QLabel#ArtifactStatus[state="up_to_date"] {
-    color: #28965A;
-}
-QLabel#GenerationStatus[state="out_of_date"], QLabel#ArtifactStatus[state="out_of_date"],
-QLabel#GenerationStatus[state="external_changed"], QLabel#ArtifactStatus[state="external_changed"] {
-    color: #AD6800;
-}
-QLabel#GenerationStatus[state="failed"], QLabel#ArtifactStatus[state="failed"],
-QLabel#GenerationStatus[state="invalid"], QLabel#ArtifactStatus[state="invalid"] {
-    color: #CF222E;
+QLineEdit:hover, QComboBox:hover, QSpinBox:hover { border-color: $border_hover; }
+QLineEdit:focus, QComboBox:focus, QSpinBox:focus { border: 1px solid $border_focus; }
+QComboBox::drop-down { border: none; width: 32px; }
+QComboBox QAbstractItemView {
+    background-color: $bg_surface;
+    border: 1px solid $border;
+    border-radius: $radius_control;
+    selection-background-color: $primary_light;
+    selection-color: $text_main;
+    outline: none;
+    padding: $spacing_xs;
 }
 
-QScrollBar:vertical { width: 6px; background: transparent; border: none; margin: 0; }
-QScrollBar::handle:vertical {
-    background: #DCDCDC; border-radius: 3px; min-height: 30px;
+QFrame#Card, QWidget#Card, QFrame#ProjectHoverCard {
+    background-color: $bg_surface;
+    border: 1px solid $border;
+    border-radius: $radius_card;
 }
-QScrollBar::handle:vertical:hover { background: #B0B5C0; }
-QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0; }
-QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical { background: transparent; }
+
+QTableWidget {
+    background-color: $bg_surface;
+    alternate-background-color: $bg_surface;
+    border: none;
+    gridline-color: $bg_subtle;
+    color: $text_main;
+    font-size: $font_size_body;
+    outline: none;
+}
+QTableWidget::item {
+    padding: $spacing_sm $spacing_md;
+    border: none;
+    border-bottom: 1px solid $bg_subtle;
+}
+QTableWidget::item:selected {
+    background-color: $primary_light;
+    color: $text_main;
+}
+QHeaderView::section {
+    background-color: $bg_subtle;
+    border: none;
+    border-bottom: 1px solid $border;
+    padding: $spacing_sm $spacing_md;
+    font-weight: bold;
+    color: $text_main;
+}
+QTableCornerButton::section { background-color: $bg_subtle; border: none; }
+
 QMenu {
-    min-width: 180px; background-color: #FFFFFF; border: 1px solid #EAEAEA;
-    border-radius: 8px; padding: 6px; margin: 4px;
+    min-width: 180px;
+    background-color: $bg_surface;
+    border: 1px solid $border;
+    border-radius: $radius_card;
+    padding: 6px;
 }
 QMenu::item {
-    height: 32px; padding: 4px 12px; border-radius: 4px;
-    color: $text; font-size: 13px;
+    min-height: 28px;
+    padding: $spacing_sm $spacing_lg;
+    border-radius: $radius_chip;
+    color: $text_main;
 }
-QMenu::item:selected { background-color: #F0F2F5; color: #1A1A1A; }
-QMenu::item:disabled { color: #B0B5C0; }
-QMenu::separator { height: 1px; background: #EAEAEA; margin: 4px 8px; }
+QMenu::item:selected {
+    background-color: $primary_light;
+    color: $primary;
+}
+QMenu::item:disabled { color: $text_muted; }
+QMenu::separator {
+    height: 1px;
+    background-color: $border;
+    margin: $spacing_xs $spacing_sm;
+}
 
-QFrame#PlaceholderOverlay { background-color: #FFFFFF; }
-QFrame#PlaceholderDialogHeader {
-    background-color: #FFFFFF; border: none; border-bottom: 1px solid #EAEAEA;
+QTabWidget::pane { border: none; background: transparent; }
+QTabBar { background: transparent; }
+QTabBar::tab {
+    background: transparent;
+    color: $text_sub;
+    padding: $spacing_sm $spacing_lg;
+    border: none;
+    border-bottom: 2px solid transparent;
+    font-size: $font_size_body;
 }
-QLabel#PlaceholderDialogTitle {
-    color: #1A1A1A; font-size: 18px; font-weight: bold;
-}
-QPushButton#PlaceholderBackButton {
-    background: transparent; border: none; border-radius: 6px; padding: 0;
-}
-QPushButton#PlaceholderBackButton:hover {
-    background-color: #F0F2F5;
-}
-QWidget#PlaceholderPageArea, QWidget#PlaceholderPagePanel,
-QWidget#PlaceholderContent, QWidget#PlaceholderTabs { background-color: #FFFFFF; }
-QFrame#PlaceholderTabDivider { background-color: #EAEAEA; border: none; }
-QPushButton#PlaceholderMenuButton {
-    min-height: 36px; max-height: 36px; background: transparent;
-    border: none; border-bottom: 2px solid transparent; border-radius: 0;
-    color: $text_secondary; font-size: 13px; padding: 0 12px;
-}
-QPushButton#PlaceholderMenuButton:hover { color: #1A1A1A; }
-QPushButton#PlaceholderMenuButton[selected="true"] {
-    background: transparent; color: $primary; font-size: 13px; font-weight: bold;
+QTabBar::tab:selected {
+    color: $primary;
     border-bottom: 2px solid $primary;
-}
-QLabel#PlaceholderHeading { color: #1A1A1A; font-size: 18px; font-weight: bold; }
-QLabel#PlaceholderDescription { color: $text_secondary; font-size: 13px; }
-QFrame#PlaceholderSettingRow {
-    background-color: #FFFFFF; border: none; border-bottom: 1px solid #EAEAEA;
-    border-radius: 0;
-}
-QLabel#PlaceholderRowLabel { color: $text; font-size: 13px; font-weight: normal; }
-QFontComboBox#SettingsFontFamily, QSpinBox#SettingsFontSize,
-QLineEdit#SettingsEditorPath {
-    min-height: 34px; max-height: 34px; background-color: #FFFFFF;
-    border: 1px solid $border; border-radius: 6px; padding: 0 12px; color: $text;
-}
-QFontComboBox#SettingsFontFamily:focus, QSpinBox#SettingsFontSize:focus,
-QLineEdit#SettingsEditorPath:focus { border-color: $primary; }
-QWidget#SettingsEditorControl { background: transparent; }
-QPushButton#SettingsBrowseButton {
-    min-height: 34px; max-height: 34px; border: 1px solid $border;
-    border-radius: 6px; padding: 0 10px; background-color: #FFFFFF; color: $text;
-}
-QPushButton#SettingsSecondaryButton, QPushButton#SettingsPrimaryButton {
-    min-height: 34px; max-height: 34px; border: 1px solid $border; border-radius: 6px;
-    padding: 0 20px; background-color: #FFFFFF; color: $text;
-}
-QPushButton#SettingsBrowseButton:hover, QPushButton#SettingsSecondaryButton:hover {
-    background-color: #F0F2F5;
-}
-QPushButton#SettingsPrimaryButton {
-    background-color: $primary; border-color: $primary; color: #FFFFFF;
     font-weight: bold;
 }
-QPushButton#SettingsPrimaryButton:hover {
-    background-color: #4096FF; border-color: #4096FF;
-}
-QLabel#SettingsStatus { color: #28965A; font-size: 12px; }
-QTextBrowser#DocumentationBrowser {
-    background-color: #FFFFFF; border: none; padding: 0;
-    color: $text; selection-background-color: #CDE1FF;
-}
+QTabBar::tab:hover:!selected { color: $text_main; }
 
+QScrollBar:vertical {
+    background: transparent;
+    width: 6px;
+    margin: 0;
+}
+QScrollBar::handle:vertical {
+    background: $border_hover;
+    border-radius: 3px;
+    min-height: 30px;
+}
+QScrollBar::handle:vertical:hover { background: $text_muted; }
+QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0; }
+QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical { background: transparent; }
+QScrollBar:horizontal {
+    background: transparent;
+    height: 6px;
+    margin: 0;
+}
+QScrollBar::handle:horizontal {
+    background: $border_hover;
+    border-radius: 3px;
+    min-width: 30px;
+}
+QScrollBar::handle:horizontal:hover { background: $text_muted; }
+QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal { width: 0; }
+
+QSplitter::handle { background-color: transparent; }
+QSplitter::handle:horizontal { width: 4px; }
+QSplitter::handle:horizontal:hover { background-color: $border_hover; }
+QSplitter::handle:vertical { height: 1px; }
+QSplitter#MainSplitter { background-color: $bg_main; }
+
+QFrame#NavPanel {
+    background-color: $bg_main;
+    border-right: 1px solid $border;
+}
+QFrame#NavPanel[collapsed="true"] {
+    background-color: $bg_main;
+    border-right: 1px solid $border;
+}
+QWidget#NavBrandRow { background: transparent; }
+QLabel#NavAppName {
+    color: $text_main;
+    font-size: $font_size_lg;
+    font-weight: bold;
+}
+QLabel#ProjectSectionTitle {
+    color: $text_muted;
+    font-size: $font_size_sm;
+    font-weight: bold;
+    padding: $spacing_xs $spacing_md;
+}
+QListWidget#ProjectList {
+    background: transparent;
+    border: none;
+    outline: none;
+    padding: 0;
+}
+QListWidget#ProjectList::item { background: transparent; border: none; padding: 0; }
+QPushButton#NavActionButton, QPushButton#NavFooterButton,
+QPushButton#ProjectButton {
+    min-height: 36px;
+    max-height: 36px;
+    background: transparent;
+    border: none;
+    border-radius: $radius_control;
+    padding: 0 $spacing_md;
+    color: $text_main;
+    text-align: left;
+}
+QPushButton#NavActionButton:hover, QPushButton#NavFooterButton:hover,
+QPushButton#ProjectButton:hover, QPushButton#NavIconBtn:hover,
+QPushButton#NavCollapseButton:hover, QPushButton#ProjectArchiveBtn:hover,
+QPushButton#ProjectMoreBtn:hover {
+    background-color: $bg_subtle;
+    border: none;
+}
+QPushButton#ProjectButton[selected="true"], QPushButton#NavFooterButton[selected="true"] {
+    background-color: $primary_light;
+    color: $primary;
+    font-weight: bold;
+}
+QLabel#ProjectName { color: $text_main; font-size: $font_size_body; }
+QLabel#ProjectName[selected="true"] { color: $primary; font-weight: bold; }
+QPushButton#NavIconBtn, QPushButton#NavCollapseButton {
+    min-width: 36px; max-width: 36px; min-height: 36px; max-height: 36px;
+    background: transparent; border: none; border-radius: $radius_control; padding: 0;
+}
+QPushButton#ProjectArchiveBtn, QPushButton#ProjectMoreBtn {
+    min-width: 28px; max-width: 28px; min-height: 28px; max-height: 28px;
+    background: transparent; border: none; border-radius: $radius_chip; padding: 0;
+}
+QLabel#HoverProjectName { color: $text_main; font-size: $font_size_body; font-weight: bold; }
+QLabel#HoverProjectPath { color: $text_sub; font-size: $font_size_sm; }
+QFrame#HoverCardDivider { background-color: $border; border: none; }
+QPushButton#HoverPinButton, QPushButton#HoverOpenButton {
+    background: transparent; border: none; border-radius: $radius_chip; padding: 0;
+}
+QPushButton#HoverPinButton:hover, QPushButton#HoverOpenButton:hover { background: $bg_subtle; }
+
+QFrame#ConfigPage { background-color: $bg_main; border: none; }
+QFrame#ConfigHeader {
+    background-color: $bg_surface;
+    border: none;
+    border-bottom: 1px solid $border;
+}
+QLabel#ConfigSessionTitle {
+    color: $text_main;
+    font-size: $font_size_lg;
+    font-weight: bold;
+}
+QLineEdit#ConfigSessionEditor { min-height: 32px; }
+QPushButton#HeaderButton, QPushButton#ArtifactsToolButton,
+QPushButton#LogClearButton, QPushButton#LogCloseBtn,
+QPushButton#PlaceholderBackButton {
+    background: transparent;
+    border: none;
+    border-radius: $radius_control;
+    padding: 0;
+}
+QPushButton#HeaderButton:hover, QPushButton#ArtifactsToolButton:hover,
+QPushButton#LogClearButton:hover, QPushButton#LogCloseBtn:hover,
+QPushButton#PlaceholderBackButton:hover { background-color: $bg_subtle; }
+QPushButton#ArtifactsToolButton:checked { background-color: $primary_light; }
+QWidget#ConfigArea, QScrollArea#ConfigScroll, QWidget#ConfigScrollContent { background: $bg_main; border: none; }
+QTabWidget#ConfigTabs::pane { border: none; background: transparent; top: -1px; }
+QLabel#ConfigTitle { color: $text_main; font-size: $font_size_lg; font-weight: bold; }
+QLabel#ConfigDescription { color: $text_sub; font-size: $font_size_body; }
+QTableWidget#ConfigDataTable { background-color: $bg_surface; }
+
+QFrame#ArtifactsPanel {
+    background-color: $bg_surface;
+    border: 1px solid $border;
+    border-radius: $radius_card;
+}
+QWidget#ArtifactsToolbar, QWidget#ArtifactSearchBar { background: transparent; }
+QPlainTextEdit#ArtifactCodePreview {
+    background-color: $bg_surface;
+    color: $text_main;
+    border: none;
+    border-radius: $radius_control;
+    selection-background-color: $primary_light;
+    selection-color: $text_main;
+    font-family: $font_mono;
+    font-size: $font_size_sm;
+}
+QTreeWidget#ArtifactFileTree {
+    background-color: $bg_surface;
+    color: $text_main;
+    border: 1px solid $border;
+    border-radius: $radius_control;
+    outline: none;
+    padding: $spacing_xs;
+}
+QTreeWidget#ArtifactFileTree::item { min-height: 28px; border-radius: $radius_chip; }
+QTreeWidget#ArtifactFileTree::item:selected { background: $primary_light; color: $primary; }
+QLabel#ArtifactEmptyText, QLabel#ArtifactStatus {
+    color: $text_muted;
+    font-size: $font_size_body;
+}
+QLabel#ArtifactStatus { font-size: $font_size_sm; }
+
+QFrame#LogPanel {
+    background-color: $bg_surface;
+    border: none;
+    border-top: 1px solid $border;
+}
+QFrame#LogHeader { background-color: $bg_surface; border: none; }
+QLabel#LogTabTitle { color: $text_main; font-size: $font_size_body; font-weight: bold; }
+QPlainTextEdit#LogOutput {
+    background-color: $bg_surface;
+    color: $text_main;
+    border: none;
+    padding: $spacing_sm $spacing_lg;
+    font-family: $font_mono;
+    font-size: $font_size_sm;
+}
+QFrame#LogStatusBar {
+    background: $bg_subtle;
+    border: none;
+    border-top: 1px solid $border;
+}
+QLabel#LogStatusText { color: $text_sub; font-size: $font_size_sm; }
+
+QLabel#GenerationStatus, QLabel#ArtifactStatus { color: $text_muted; }
+QLabel#GenerationStatus[state="up_to_date"], QLabel#ArtifactStatus[state="up_to_date"] { color: $success; }
+QLabel#GenerationStatus[state="out_of_date"], QLabel#ArtifactStatus[state="out_of_date"],
+QLabel#GenerationStatus[state="external_changed"], QLabel#ArtifactStatus[state="external_changed"] { color: $text_sub; }
+QLabel#GenerationStatus[state="failed"], QLabel#ArtifactStatus[state="failed"],
+QLabel#GenerationStatus[state="invalid"], QLabel#ArtifactStatus[state="invalid"] { color: $danger; }
+
+QFrame#PlaceholderOverlay, QWidget#PlaceholderPageArea { background-color: $bg_main; }
+QFrame#PlaceholderDialogHeader {
+    background-color: $bg_surface;
+    border: none;
+    border-bottom: 1px solid $border;
+}
+QLabel#PlaceholderDialogTitle {
+    color: $text_main;
+    font-size: $font_size_lg;
+    font-weight: bold;
+}
+QWidget#PlaceholderPagePanel, QWidget#PlaceholderContent, QWidget#PlaceholderTabs { background: transparent; }
+QFrame#PlaceholderTabDivider { background-color: $border; border: none; }
+QPushButton#PlaceholderMenuButton {
+    min-height: 36px; max-height: 36px;
+    background: transparent;
+    border: none;
+    border-bottom: 2px solid transparent;
+    border-radius: 0;
+    color: $text_sub;
+    font-size: $font_size_body;
+    padding: 0 $spacing_md;
+}
+QPushButton#PlaceholderMenuButton:hover { background: transparent; color: $text_main; }
+QPushButton#PlaceholderMenuButton[selected="true"] {
+    background: transparent;
+    color: $primary;
+    border-bottom: 2px solid $primary;
+    font-weight: bold;
+}
+QLabel#PlaceholderHeading { color: $text_main; font-size: $font_size_lg; font-weight: bold; }
+QLabel#PlaceholderDescription { color: $text_sub; font-size: $font_size_body; }
+QFrame#PlaceholderSettingRow {
+    background-color: transparent;
+    border: none;
+    border-bottom: 1px solid $border;
+}
+QLabel#PlaceholderRowLabel { color: $text_main; font-size: $font_size_body; }
+QLabel#SettingsStatus { color: $text_sub; font-size: $font_size_sm; }
+QFontComboBox#SettingsFontFamily, QComboBox#SettingsFontFamily,
+QSpinBox#SettingsFontSize, QLineEdit#SettingsEditorPath { min-height: 36px; max-height: 36px; }
+
+QDialog { background-color: $bg_main; color: $text_main; }
+QDialogButtonBox { background: transparent; }
 QToolTip {
-    background: $text; color: #FFFFFF; border: none; border-radius: 6px;
-    padding: 5px 7px;
+    background-color: $text_main;
+    color: $bg_surface;
+    border: none;
+    border-radius: $radius_chip;
+    padding: $spacing_xs $spacing_sm;
+    font-size: $font_size_sm;
 }

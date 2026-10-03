@@ -14,13 +14,16 @@ from PyQt5 import QtCore, QtGui, QtWidgets
 from plm.frontend.qt.widgets.common import StyledMenu
 from plm.frontend.qt.widgets.tables import RowDragTable
 from plm.frontend.qt.widgets.theme import BORDER, BORDER_STRONG, TEXT, add_shadow
+from plm.frontend.qt.styles.tokens import (
+    BG_MAIN, BG_SUBTLE, BG_SURFACE, DANGER, PRIMARY, SUCCESS, TEXT_MAIN, TEXT_MUTED, TEXT_SUB,
+)
 
 LANE_GRID_PALETTE = [
-    "#4C78A8", "#F58518", "#54A24B", "#E45756", "#72B7B2",
-    "#EECA3B", "#B279A2", "#FF9DA6", "#9D755D", "#17BECF",
-    "#B5B02B", "#7B6FD1",
+    PRIMARY, TEXT_SUB, SUCCESS, DANGER, TEXT_MUTED,
+    PRIMARY, TEXT_SUB, SUCCESS, DANGER, TEXT_MUTED,
+    PRIMARY, TEXT_SUB,
 ]
-LANE_GRID_UNASSIGNED_BG = "#e6e6e6"
+LANE_GRID_UNASSIGNED_BG = BG_SUBTLE
 
 # Lane column widths step up geometrically as the lane count drops: x32 is
 # the reference (fills the available width) and each halving of the lane
@@ -46,7 +49,7 @@ def _contrast_text_color(hex_color):
     hex_color = hex_color.lstrip("#")
     r, g, b = (int(hex_color[i:i + 2], 16) for i in (0, 2, 4))
     luminance = 0.299 * r + 0.587 * g + 0.114 * b
-    return "#000000" if luminance > 140 else "#ffffff"
+    return TEXT_MAIN if luminance > 140 else BG_SURFACE
 
 
 def _darken_color(hex_color, factor=0.82):
@@ -65,14 +68,14 @@ def _make_pen_cursor(color):
     svg = (
         '<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32">'
         '<path d="M15.2 20.2L25.8 9.6c1.8-1.8 1.8-4.6 0-6.4s-4.6-1.8-6.4 0L8.8 13.8z" '
-        'fill="#f7f7f7" stroke="#202124" stroke-width="1.5" stroke-linejoin="round"/>'
-        '<path d="M11.4 12.1l8.5 8.5-3.2 3.2-8.5-8.5z" fill="#c7c9cc" '
-        'stroke="#202124" stroke-width="1.3" stroke-linejoin="round"/>'
+        f'fill="{BG_MAIN}" stroke="{TEXT_MAIN}" stroke-width="1.5" stroke-linejoin="round"/>'
+        '<path d="M11.4 12.1l8.5 8.5-3.2 3.2-8.5-8.5z" fill="{TEXT_MUTED}" '
+        f'stroke="{TEXT_MAIN}" stroke-width="1.3" stroke-linejoin="round"/>'
         f'<path d="M8.5 15.2c-2.7 2.5-3.4 5.2-3.7 8.2-.2 1.9-1 3.7-2.5 5.4 '
-        f'4.3-.1 7.8-1.4 10.2-4.9z" fill="{color}" stroke="#202124" stroke-width="1.5" '
+        f'4.3-.1 7.8-1.4 10.2-4.9z" fill="{color}" stroke="{TEXT_MAIN}" stroke-width="1.5" '
         'stroke-linejoin="round"/>'
-        '<path d="M4.2 27.3c1.8-.2 3.2-.7 4.3-1.5" fill="none" stroke="#ffffff" '
-        'stroke-opacity=".8" stroke-width="1.2" stroke-linecap="round"/>'
+        '<path d="M4.2 27.3c1.8-.2 3.2-.7 4.3-1.5" fill="none" stroke="{BG_SURFACE}" '
+        f'stroke-opacity=".8" stroke-width="1.2" stroke-linecap="round"/>'
         '</svg>'
     )
     # Load from the SVG source via QImage's SVG support
@@ -113,7 +116,7 @@ class _LaneCellDelegate(QtWidgets.QStyledItemDelegate):
                 option.fontMetrics.elidedText(text, styled.textElideMode, text_rect.width()),
             )
             if (r, c) in grid._cell_errors:
-                painter.setPen(QtGui.QPen(QtGui.QColor("#bb0000"), 2))
+                painter.setPen(QtGui.QPen(QtGui.QColor(DANGER), 2))
                 painter.drawRect(option.rect.adjusted(1, 1, -2, -2))
             painter.restore()
             return
@@ -140,7 +143,7 @@ class _LaneCellDelegate(QtWidgets.QStyledItemDelegate):
         else:
             painter.fillRect(rect, QtGui.QColor(LANE_GRID_UNASSIGNED_BG))
         if option.state & QtWidgets.QStyle.State_Selected:
-            painter.fillRect(rect, QtGui.QColor(16, 163, 127, 24))
+            painter.fillRect(rect, QtGui.QColor(SUCCESS + "18"))
 
         # Adjacent cells assigned to the same controller join into one
         # continuous marker band. Only the two outer ends retain rounded caps.
@@ -171,11 +174,11 @@ class _LaneCellDelegate(QtWidgets.QStyledItemDelegate):
             font.setBold(True)
             painter.setFont(font)
         else:
-            painter.setPen(QtGui.QColor("#333333"))
+            painter.setPen(QtGui.QColor(TEXT_MAIN))
 
         painter.drawText(rect, QtCore.Qt.AlignCenter, port)
         if (r, c) in grid._cell_errors:
-            painter.setPen(QtGui.QPen(QtGui.QColor("#bb0000"), 2))
+            painter.setPen(QtGui.QPen(QtGui.QColor(DANGER), 2))
             painter.drawRect(rect.adjusted(1, 1, -2, -2))
 
         painter.restore()
@@ -306,7 +309,7 @@ class LaneGrid(QtWidgets.QWidget):
         self._drag_snapshot = None
         self._hover_cell = None  # (row, lane) under the cursor, for pen preview
         self._pen_cursor = None  # cached QCursor for the active controller
-        self._bg_color = "#ffffff"  # card background, set from theme
+        self._bg_color = BG_SURFACE  # card background, set from theme
         self._cell_errors = {}
 
         layout = QtWidgets.QVBoxLayout(self)

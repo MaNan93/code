@@ -8,6 +8,7 @@ from plm.frontend.qt.widgets.common import (
     make_icon_button,
 )
 from plm.frontend.qt.widgets.project_list import ProjectList
+from plm.frontend.qt.styles.tokens import PRIMARY, SPACING_MD, SPACING_SM, TEXT_SUB
 
 
 class NavPanel(QtWidgets.QFrame):
@@ -26,10 +27,10 @@ class NavPanel(QtWidgets.QFrame):
     def __init__(self, projects=(), recent_project="", parent=None):
         super().__init__(parent)
         self.setObjectName("NavPanel")
-        self.expanded_width = 260
+        self.expanded_width = 240
         self.collapsed_width = 56
-        self.expanded_min_width = 200
-        self.expanded_max_width = 400
+        self.expanded_min_width = 240
+        self.expanded_max_width = 240
         self.is_collapsed = False
         self.is_animating = False
         self._target_collapsed = False
@@ -51,8 +52,8 @@ class NavPanel(QtWidgets.QFrame):
         self.animation_group.finished.connect(self._on_collapse_animation_finished)
         root = QtWidgets.QVBoxLayout(self)
         root.setSizeConstraint(QtWidgets.QLayout.SetNoConstraint)
-        root.setContentsMargins(12, 8, 12, 8)
-        root.setSpacing(8)
+        root.setContentsMargins(SPACING_MD, SPACING_SM, SPACING_MD, SPACING_SM)
+        root.setSpacing(SPACING_SM)
 
         self.brand_row = QtWidgets.QWidget()
         self.brand_row.setObjectName("NavBrandRow")
@@ -64,10 +65,10 @@ class NavPanel(QtWidgets.QFrame):
         self.logo_label.setObjectName("NavLogo")
         self.logo_label.setPixmap(
             load_lucide_icon(
-                "layout-dashboard", "#1677FF", align_visible_left=True
-            ).pixmap(20, 20)
+                "layout-dashboard", PRIMARY, 18, align_visible_left=True
+            ).pixmap(18, 18)
         )
-        self.logo_label.setFixedSize(20, 20)
+        self.logo_label.setFixedSize(18, 18)
         self.brand_layout.addWidget(self.logo_label)
         self.brand_logo_gap = QtWidgets.QSpacerItem(
             8, 0, QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Minimum
@@ -85,7 +86,7 @@ class NavPanel(QtWidgets.QFrame):
         )
         self.brand_layout.addItem(self.brand_button_gap)
         self.collapse_btn = make_icon_button(
-            "panel-left", "收起侧边栏", "NavCollapseButton", 32, ICON_SIZE
+            "panel-left", "收起侧边栏", "NavCollapseButton", 36, ICON_SIZE
         )
         self.collapse_btn.clicked.connect(self.toggle_collapse)
         self.brand_layout.addWidget(self.collapse_btn)
@@ -230,7 +231,7 @@ class NavPanel(QtWidgets.QFrame):
         self.collapse_btn.setIcon(
             load_lucide_icon(
                 "panel-right" if self.is_collapsed else "panel-left",
-                "#666666",
+                TEXT_SUB,
             )
         )
         self.collapse_btn.setToolTip(
@@ -284,7 +285,7 @@ class NavPanel(QtWidgets.QFrame):
                 button.setMinimumWidth(0)
                 button.setMaximumWidth(QtWidgets.QWIDGETSIZE_MAX)
             else:
-                button.setFixedSize(32, 32)
+                button.setFixedSize(36, 36)
             button.style().unpolish(button)
             button.style().polish(button)
 
@@ -299,7 +300,7 @@ class NavPanel(QtWidgets.QFrame):
             icon_name,
             tooltip,
             "NavIconBtn",
-            32,
+            36,
             ICON_SIZE,
         )
         button.clicked.connect(callback)
@@ -413,7 +414,7 @@ class NavPanel(QtWidgets.QFrame):
         for button, value in ((self.docs_btn, "docs"), (self.settings_btn, "settings")):
             selected = name == value
             button.setProperty("selected", selected)
-            color = "#1677FF" if selected else "#666666"
+            color = PRIMARY if selected else TEXT_SUB
             icon_name = "file-text" if value == "docs" else "settings"
             button.setIcon(
                 load_lucide_icon(icon_name, color, align_visible_left=True)
@@ -421,10 +422,10 @@ class NavPanel(QtWidgets.QFrame):
             button.style().unpolish(button)
             button.style().polish(button)
         self.collapsed_docs_btn.setIcon(
-            load_lucide_icon("file-text", "#1677FF" if name == "docs" else "#666666")
+            load_lucide_icon("file-text", PRIMARY if name == "docs" else TEXT_SUB)
         )
         self.collapsed_settings_btn.setIcon(
             load_lucide_icon(
-                "settings", "#1677FF" if name == "settings" else "#666666"
+                "settings", PRIMARY if name == "settings" else TEXT_SUB
             )
         )

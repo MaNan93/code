@@ -3,6 +3,9 @@
 import re
 
 from PyQt5 import QtCore, QtGui, QtWidgets
+from plm.frontend.qt.styles.tokens import (
+    BG_SUBTLE, FONT_MONO, PRIMARY, PRIMARY_HOVER, TEXT_MAIN, TEXT_MUTED, TEXT_SUB,
+)
 
 
 class VerilogHighlighter(QtGui.QSyntaxHighlighter):
@@ -30,9 +33,9 @@ class VerilogHighlighter(QtGui.QSyntaxHighlighter):
         super().__init__(document)
         self.enabled = True
         self.formats = {}
-        for name, color in (("comment", "#6A737D"), ("keyword", "#D73A49"),
-                            ("string", "#032F62"), ("number", "#005CC5"),
-                            ("directive", "#6F42C1")):
+        for name, color in (("comment", TEXT_MUTED), ("keyword", PRIMARY),
+                            ("string", TEXT_SUB), ("number", PRIMARY_HOVER),
+                            ("directive", TEXT_SUB)):
             fmt = QtGui.QTextCharFormat()
             fmt.setForeground(QtGui.QColor(color))
             self.formats[name] = fmt
@@ -89,7 +92,8 @@ class CodePreview(QtWidgets.QPlainTextEdit):
         self.setObjectName("ArtifactCodePreview")
         self.setReadOnly(True)
         self.setLineWrapMode(QtWidgets.QPlainTextEdit.NoWrap)
-        font = QtGui.QFontDatabase.systemFont(QtGui.QFontDatabase.FixedFont)
+        font = QtGui.QFont("JetBrains Mono")
+        font.setStyleHint(QtGui.QFont.Monospace)
         font.setPointSize(10)
         self.setFont(font)
         self.line_numbers = LineNumberArea(self)
@@ -123,9 +127,9 @@ class CodePreview(QtWidgets.QPlainTextEdit):
 
     def paint_line_numbers(self, event):
         painter = QtGui.QPainter(self.line_numbers)
-        painter.fillRect(event.rect(), QtGui.QColor("#F6F8FA"))
+        painter.fillRect(event.rect(), QtGui.QColor(BG_SUBTLE))
         painter.setFont(self.font())
-        painter.setPen(QtGui.QColor("#8C959F"))
+        painter.setPen(QtGui.QColor(TEXT_MUTED))
         block = self.firstVisibleBlock()
         number = block.blockNumber()
         top = int(self.blockBoundingGeometry(block).translated(self.contentOffset()).top())

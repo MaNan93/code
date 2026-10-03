@@ -24,7 +24,7 @@ class LogPanel(QtWidgets.QFrame):
         header_layout.addWidget(title)
         header_layout.addStretch(1)
         self.clear_btn = make_icon_button(
-            "trash-2", "清空日志", "LogClearButton", 20, 20
+            "trash-2", "清空日志", "LogClearButton", 24, ICON_SIZE
         )
         self.clear_btn.clicked.connect(self.clear)
         header_layout.addWidget(self.clear_btn)
@@ -42,12 +42,6 @@ class LogPanel(QtWidgets.QFrame):
         self.status_bar = QtWidgets.QFrame()
         self.status_bar.setObjectName("LogStatusBar")
         self.status_bar.setFixedHeight(24)
-        self.status_bar.setStyleSheet(
-            "QFrame#LogStatusBar {"
-            " background: #FAFAFB;"
-            " border-top: 1px solid #EAEAEA;"
-            "}"
-        )
         status_layout = QtWidgets.QHBoxLayout(self.status_bar)
         status_layout.setContentsMargins(16, 0, 12, 0)
         status_layout.setSpacing(0)

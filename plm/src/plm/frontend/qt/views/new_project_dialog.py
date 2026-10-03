@@ -6,6 +6,7 @@ from pathlib import Path
 from PyQt5 import QtCore, QtWidgets
 
 from plm.frontend.qt.widgets.common import load_lucide_icon
+from plm.frontend.qt.styles.tokens import BG_SURFACE, SPACING_MD, SPACING_XL, TEXT_MAIN
 
 
 class NewProjectDialog(QtWidgets.QDialog):
@@ -13,15 +14,9 @@ class NewProjectDialog(QtWidgets.QDialog):
         super().__init__(parent)
         self.setWindowTitle("新建项目")
         self.resize(520, 180)
-        self.setStyleSheet("""
-            QDialog { background: white; }
-            QLineEdit { border: 1px solid #D9D9D9; border-radius: 6px; padding: 6px; }
-            QPushButton { border: 1px solid #D9D9D9; border-radius: 6px; padding: 6px 14px; background: white; }
-            QPushButton#CreateProjectButton { background: #1677FF; border-color: #1677FF; color: white; }
-        """)
         form = QtWidgets.QFormLayout(self)
-        form.setContentsMargins(20, 20, 20, 20)
-        form.setSpacing(12)
+        form.setContentsMargins(SPACING_XL, SPACING_XL, SPACING_XL, SPACING_XL)
+        form.setSpacing(SPACING_MD)
         self.name = QtWidgets.QLineEdit()
         home_location = os.path.expanduser("~")
         default_location = (
@@ -46,13 +41,13 @@ class NewProjectDialog(QtWidgets.QDialog):
         buttons.rejected.connect(self.reject)
         create_button = buttons.button(QtWidgets.QDialogButtonBox.Ok)
         create_button.setText("创建项目")
-        create_button.setObjectName("CreateProjectButton")
-        create_button.setIcon(load_lucide_icon("rocket", "#FFFFFF", 20))
-        create_button.setIconSize(QtCore.QSize(20, 20))
+        create_button.setObjectName("PrimaryBtn")
+        create_button.setIcon(load_lucide_icon("rocket", BG_SURFACE, 18))
+        create_button.setIconSize(QtCore.QSize(18, 18))
         cancel_button = buttons.button(QtWidgets.QDialogButtonBox.Cancel)
         cancel_button.setText("取消")
-        cancel_button.setIcon(load_lucide_icon("x", "#333333", 20))
-        cancel_button.setIconSize(QtCore.QSize(20, 20))
+        cancel_button.setIcon(load_lucide_icon("x", TEXT_MAIN, 18))
+        cancel_button.setIconSize(QtCore.QSize(18, 18))
         form.addRow(buttons)
 
     def browse(self):

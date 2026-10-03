@@ -3,6 +3,9 @@ from copy import deepcopy
 from plm.frontend.qt.widgets.common import apply_drop_shadow, make_icon_button
 from plm.frontend.qt.widgets.config_editor import CsvTableEditor, GenerationEditor
 from plm.frontend.qt.views.artifacts_panel import ArtifactsPanel
+from plm.frontend.qt.styles.tokens import (
+    BG_SURFACE, BORDER_HOVER, SHADOW_SM, SPACING_LG, SPACING_SM, TEXT_MUTED,
+)
 
 class EscapeLineEdit(QtWidgets.QLineEdit):
     escapePressed = QtCore.pyqtSignal()
@@ -39,11 +42,11 @@ class ConfigHeader(QtWidgets.QFrame):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setObjectName("ConfigHeader")
-        self.setFixedHeight(56)
+        self.setFixedHeight(48)
         self._original_title = ""
         layout = QtWidgets.QHBoxLayout(self)
-        layout.setContentsMargins(20, 8, 12, 8)
-        layout.setSpacing(8)
+        layout.setContentsMargins(SPACING_LG, 0, SPACING_LG, 0)
+        layout.setSpacing(SPACING_SM)
         self.title_label = DoubleClickLabel("重写 PLM Qt 前端布局")
         self.title_label.setObjectName("ConfigSessionTitle")
         self.title_label.setToolTip("双击重命名")
@@ -58,10 +61,10 @@ class ConfigHeader(QtWidgets.QFrame):
         layout.addWidget(self.title_edit)
         layout.addStretch(1)
         self.log_btn = make_icon_button(
-            "panel-bottom", "显示/隐藏输出面板", "HeaderButton", 28
+            "panel-bottom", "显示/隐藏输出面板", "HeaderButton", 32, 18
         )
         self.artifacts_btn = make_icon_button(
-            "panel-right", "显示/隐藏 Artifacts", "HeaderButton", 28
+            "panel-right", "显示/隐藏 Artifacts", "HeaderButton", 32, 18
         )
         self.log_btn.clicked.connect(self.logToggleRequested.emit)
         self.artifacts_btn.clicked.connect(self.artifactsToggleRequested.emit)
@@ -96,8 +99,10 @@ class ConfigHeader(QtWidgets.QFrame):
 class ConfigTabPage(QtWidgets.QWidget):
     def __init__(self, title, description, editor, fill_editor=False, parent=None):
         super().__init__(parent)
+        self.setObjectName("Card")
+        apply_drop_shadow(self, shadow=SHADOW_SM)
         root = QtWidgets.QVBoxLayout(self)
-        root.setContentsMargins(20, 16, 20, 16)
+        root.setContentsMargins(SPACING_LG, SPACING_LG, SPACING_LG, SPACING_LG)
         root.setSpacing(0)
         heading = QtWidgets.QLabel(title)
         heading.setObjectName("ConfigTitle")
@@ -140,11 +145,11 @@ class DragHandle(QtWidgets.QWidget):
         painter = QtGui.QPainter(self)
         painter.setRenderHint(QtGui.QPainter.Antialiasing, True)
         capsule = QtCore.QRectF(0.5, 0.5, 13, 35)
-        painter.setPen(QtGui.QPen(QtGui.QColor("#C0C4CC"), 1))
-        painter.setBrush(QtGui.QColor("#FFFFFF"))
+        painter.setPen(QtGui.QPen(QtGui.QColor(BORDER_HOVER), 1))
+        painter.setBrush(QtGui.QColor(BG_SURFACE))
         painter.drawRoundedRect(capsule, 7, 7)
         painter.setPen(QtCore.Qt.NoPen)
-        painter.setBrush(QtGui.QColor("#A0A5B0"))
+        painter.setBrush(QtGui.QColor(TEXT_MUTED))
         painter.drawRect(QtCore.QRectF(4, 14, 1.5, 8))
         painter.drawRect(QtCore.QRectF(8.5, 14, 1.5, 8))
 
@@ -180,7 +185,6 @@ class ConfigPage(QtWidgets.QFrame):
         self._history = []
         self._history_index = -1
         self._saved_content = None
-        apply_drop_shadow(self)
         self.artifacts_width = 400
         self.restore_artifacts_width = 400
         self.artifacts_maximized = False
@@ -194,7 +198,7 @@ class ConfigPage(QtWidgets.QFrame):
         self.header.logToggleRequested.connect(self.logToggleRequested.emit)
         self.header.artifactsToggleRequested.connect(self.toggle_artifacts)
         root.addWidget(self.header)
-        root.addSpacing(12)
+        root.addSpacing(SPACING_LG)
 
         self.config_area = QtWidgets.QWidget()
         self.config_area.setObjectName("ConfigArea")

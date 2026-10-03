@@ -10,14 +10,15 @@ from PyQt5 import QtCore, QtGui, QtWidgets
 from plm.frontend.qt.models.preferences import DEFAULT_EDITOR
 from plm.frontend.qt.widgets.code_preview import CodePreview
 from plm.frontend.qt.widgets.common import (
-    ICON_SIZE, apply_drop_shadow, make_icon_button, open_in_file_manager,
+    ICON_SIZE, StyledMenu, apply_drop_shadow, load_lucide_icon, make_icon_button, open_in_file_manager,
 )
+from plm.frontend.qt.styles.tokens import PRIMARY, SHADOW_MD, SUCCESS, TEXT_MUTED
 
 
 _STATUS_COLORS = {
-    "New": "#107E3E",
-    "Modified": "#1677FF",
-    "Unchanged": "#8C8C8C",
+    "New": SUCCESS,
+    "Modified": PRIMARY,
+    "Unchanged": TEXT_MUTED,
 }
 
 
@@ -39,10 +40,10 @@ class ArtifactsPanel(QtWidgets.QFrame):
         self._current_contents = {}
         self._previous_contents = {}
         self.setObjectName("ArtifactsPanel")
-        apply_drop_shadow(self, offset=(0, 2), blur_radius=12, alpha=30)
+        apply_drop_shadow(self, shadow=SHADOW_MD)
 
         root = QtWidgets.QVBoxLayout(self)
-        root.setContentsMargins(12, 0, 12, 12)
+        root.setContentsMargins(16, 0, 16, 16)
         root.setSpacing(12)
         toolbar = QtWidgets.QWidget()
         self.toolbar = toolbar
@@ -66,13 +67,13 @@ class ArtifactsPanel(QtWidgets.QFrame):
             ("more-horizontal", "更多"),
             ("maximize", "展开"),
         )):
-            button = make_icon_button(icon, tooltip, "ArtifactsToolButton", 24, ICON_SIZE)
+            button = make_icon_button(icon, tooltip, "ArtifactsToolButton", 28, ICON_SIZE)
             toolbar_layout.addWidget(button)
             self.toolbar_buttons.append(button)
             if index == 0:
                 toolbar_layout.addStretch(1)
         self.diff_button = make_icon_button(
-            "git-compare", "显示与上一次预览的差异", "ArtifactsToolButton", 24, ICON_SIZE
+            "git-compare", "显示与上一次预览的差异", "ArtifactsToolButton", 28, ICON_SIZE
         )
         toolbar_layout.addWidget(self.diff_button)
         root.addWidget(toolbar)
@@ -95,6 +96,7 @@ class ArtifactsPanel(QtWidgets.QFrame):
         self.file_tree.hide()
 
         self.search_bar = QtWidgets.QWidget()
+        self.search_bar.setObjectName("ArtifactSearchBar")
         search_layout = QtWidgets.QHBoxLayout(self.search_bar)
         search_layout.setContentsMargins(0, 0, 12, 0)
         search_layout.setSpacing(8)
@@ -117,6 +119,22 @@ class ArtifactsPanel(QtWidgets.QFrame):
             search_layout.addWidget(button)
         root.addWidget(self.search_bar)
         self.search_bar.hide()
+
+        self.empty_state = QtWidgets.QWidget()
+        empty_layout = QtWidgets.QVBoxLayout(self.empty_state)
+        empty_layout.setContentsMargins(0, 0, 0, 0)
+        empty_layout.setSpacing(8)
+        empty_layout.addStretch(1)
+        empty_icon = QtWidgets.QLabel()
+        empty_icon.setAlignment(QtCore.Qt.AlignCenter)
+        empty_icon.setPixmap(load_lucide_icon("file-x", TEXT_MUTED, 48).pixmap(48, 48))
+        empty_layout.addWidget(empty_icon)
+        self.empty_text = QtWidgets.QLabel("暂无生成文件")
+        self.empty_text.setObjectName("ArtifactEmptyText")
+        self.empty_text.setAlignment(QtCore.Qt.AlignCenter)
+        empty_layout.addWidget(self.empty_text)
+        empty_layout.addStretch(1)
+        root.addWidget(self.empty_state, 1)
 
         self.preview = CodePreview()
         self.preview.setPlaceholderText("尚无生成文件")
@@ -148,7 +166,7 @@ class ArtifactsPanel(QtWidgets.QFrame):
         ):
             self.toolbar_buttons[index].clicked.connect(callback)
 
-        self.more_menu = QtWidgets.QMenu(self)
+        self.more_menu = StyledMenu(self)
         self.more_menu.addAction("打开输出文件夹", self.open_folder)
         self.more_menu.addAction("刷新文件", self.refreshRequested.emit)
         self.more_menu.addAction("在编辑器中打开", self.open_in_editor)
@@ -272,6 +290,8 @@ class ArtifactsPanel(QtWidgets.QFrame):
     def _load_selected(self, *_):
         value = self.file_selector.currentData()
         self.current_path = Path(value) if value is not None else None
+        self.empty_state.setVisible(self.current_path is None)
+        self.preview.setVisible(self.current_path is not None)
         self.preview.clear()
         self._readable = False
         self.search_status.clear()

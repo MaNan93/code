@@ -8,18 +8,15 @@ from pathlib import Path
 from PyQt5 import QtCore, QtGui, QtSvg, QtWidgets
 
 from plm.core.paths import PLM_ROOT
-
+from plm.frontend.qt.styles.tokens import RADIUS_CARD, SHADOW_SM, TEXT_SUB
 
 LUCIDE_ICON_DIR = Path(__file__).resolve().parents[1] / "assets" / "icons"
 APP_ICON_PATH = Path(__file__).resolve().parents[1] / "assets" / "app_icon.svg"
 PROJECT_ROOT = PLM_ROOT
-ICON_SIZE = 20
+ICON_SIZE = 18
 
 
-def load_lucide_icon(
-    name, color="#666666", size=ICON_SIZE, align_visible_left=False
-):
-    """Load, rasterize, and recolor one Lucide SVG."""
+def load_lucide_icon(name, color=TEXT_SUB, size=ICON_SIZE, align_visible_left=False):
     path = LUCIDE_ICON_DIR / f"{name}.svg"
     source = QtGui.QPixmap(size, size)
     source.fill(QtCore.Qt.transparent)
@@ -30,7 +27,6 @@ def load_lucide_icon(
     painter.setRenderHint(QtGui.QPainter.Antialiasing, True)
     renderer.render(painter)
     painter.end()
-
     colored = QtGui.QPixmap(size, size)
     colored.fill(QtCore.Qt.transparent)
     painter = QtGui.QPainter(colored)
@@ -50,14 +46,8 @@ def load_lucide_icon(
     return QtGui.QIcon(colored)
 
 
-def make_icon_button(
-    icon_name,
-    tooltip,
-    object_name="IconButton",
-    button_size=28,
-    icon_size=ICON_SIZE,
-    color="#666666",
-):
+def make_icon_button(icon_name, tooltip, object_name="IconButton", button_size=28,
+                     icon_size=ICON_SIZE, color=TEXT_SUB):
     button = QtWidgets.QPushButton()
     button.setObjectName(object_name)
     button.setIcon(load_lucide_icon(icon_name, color, icon_size))
@@ -68,18 +58,21 @@ def make_icon_button(
     return button
 
 
-def apply_drop_shadow(widget, offset=(0, 1), blur_radius=4, alpha=15):
-    """Apply one of the shared elevation levels to a widget."""
-    shadow = QtWidgets.QGraphicsDropShadowEffect(widget)
-    shadow.setOffset(*offset)
-    shadow.setBlurRadius(blur_radius)
-    shadow.setColor(QtGui.QColor(0, 0, 0, alpha))
-    widget.setGraphicsEffect(shadow)
-    return shadow
+def apply_drop_shadow(widget, offset=None, blur_radius=None, alpha=None, shadow=SHADOW_SM):
+    preset = shadow or SHADOW_SM
+    final_offset = preset["offset"] if offset is None else offset
+    final_blur = preset["blur_radius"] if blur_radius is None else blur_radius
+    final_rgba = preset["rgba"]
+    final_alpha = final_rgba[3] if alpha is None else alpha
+    effect = QtWidgets.QGraphicsDropShadowEffect(widget)
+    effect.setOffset(*final_offset)
+    effect.setBlurRadius(final_blur)
+    effect.setColor(QtGui.QColor(final_rgba[0], final_rgba[1], final_rgba[2], final_alpha))
+    widget.setGraphicsEffect(effect)
+    return effect
 
 
 def open_in_file_manager(path):
-    """Open a local path with the platform file manager."""
     resolved_path = Path(path).resolve()
     if not resolved_path.exists():
         return False
@@ -96,22 +89,13 @@ def open_in_file_manager(path):
 
 
 class StyledMenu(QtWidgets.QMenu):
-    """Shared rounded popup menu without native black corner artifacts."""
-
-    RADIUS = 8.0
+    """Rounded popup clipped at the native window boundary."""
+    RADIUS = float(RADIUS_CARD)
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.setAttribute(QtCore.Qt.WA_TranslucentBackground)
-        self.setWindowFlags(
-            self.windowFlags()
-            | QtCore.Qt.FramelessWindowHint
-            | QtCore.Qt.NoDropShadowWindowHint
-        )
-        # A transparent outer QSS margin renders black on X11/Xvfb without a
-        # compositor.  Keep the popup itself flush and clip the native window
-        # to the same 8 px rounded shape instead.
-        self.setStyleSheet("QMenu { margin: 0px; }")
+        self.setWindowFlags(self.windowFlags() | QtCore.Qt.FramelessWindowHint | QtCore.Qt.NoDropShadowWindowHint)
 
     def _apply_round_mask(self):
         if self.width() <= 0 or self.height() <= 0:
@@ -119,8 +103,7 @@ class StyledMenu(QtWidgets.QMenu):
         rect = QtCore.QRectF(self.rect()).adjusted(0.0, 0.0, -1.0, -1.0)
         path = QtGui.QPainterPath()
         path.addRoundedRect(rect, self.RADIUS, self.RADIUS)
-        polygon = path.toFillPolygon().toPolygon()
-        self.setMask(QtGui.QRegion(polygon))
+        self.setMask(QtGui.QRegion(path.toFillPolygon().toPolygon()))
 
     def resizeEvent(self, event):
         super().resizeEvent(event)

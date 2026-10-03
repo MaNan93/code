@@ -5,6 +5,7 @@ from PyQt5 import QtCore, QtGui, QtWidgets
 
 from plm.frontend.qt.controllers import AppController
 from plm.frontend.qt.styles import APP_QSS
+from plm.frontend.qt.styles.tokens import PRIMARY
 from plm.frontend.qt.views.nav_panel import NavPanel
 from plm.frontend.qt.views.config_page import ConfigPage
 from plm.frontend.qt.views.log_panel import LogPanel
@@ -24,7 +25,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.setWindowTitle("plmConsultant")
         self.resize(1400, 900)
         self.setMinimumSize(960, 640)
-        self.setWindowIcon(load_lucide_icon("layout-dashboard", "#1677FF"))
+        self.setWindowIcon(load_lucide_icon("layout-dashboard", PRIMARY))
         self._log_sizes = [700, 200]
         self.placeholder_overlay = None
         self._app_event_filter_installed = False

@@ -3,6 +3,7 @@
 from pathlib import Path
 
 from PyQt5 import QtCore, QtGui, QtWidgets
+from plm.frontend.qt.styles.tokens import SHADOW_LG, TEXT_MAIN, TEXT_MUTED, TEXT_SUB
 
 from plm.frontend.qt.widgets.common import (
     ICON_SIZE,
@@ -46,7 +47,7 @@ class HoverCard(QtWidgets.QFrame):
         super().__init__(parent, QtCore.Qt.ToolTip | QtCore.Qt.FramelessWindowHint)
         self.setObjectName("ProjectHoverCard")
         self.setFixedWidth(260)
-        apply_drop_shadow(self, offset=(0, 4), blur_radius=12, alpha=30)
+        apply_drop_shadow(self, shadow=SHADOW_LG)
         self.project_path = None
 
         root = QtWidgets.QVBoxLayout(self)
@@ -58,11 +59,11 @@ class HoverCard(QtWidgets.QFrame):
         folder_icon = QtWidgets.QLabel()
         folder_icon.setFixedSize(ICON_SIZE, ICON_SIZE)
         folder_icon.setPixmap(
-            load_lucide_icon("folder", "#666666").pixmap(ICON_SIZE, ICON_SIZE)
+            load_lucide_icon("folder", TEXT_SUB).pixmap(ICON_SIZE, ICON_SIZE)
         )
         self.name_label = QtWidgets.QLabel()
         self.name_label.setObjectName("HoverProjectName")
-        self.pin_btn = HoverIconButton("pin", "#B0B5C0", "#666666", 16)
+        self.pin_btn = HoverIconButton("pin", TEXT_MUTED, TEXT_SUB, 18)
         self.pin_btn.setObjectName("HoverPinButton")
         self.pin_btn.setFixedSize(24, 24)
         self.pin_btn.setCursor(QtCore.Qt.PointingHandCursor)
@@ -84,7 +85,7 @@ class HoverCard(QtWidgets.QFrame):
         path_icon = QtWidgets.QLabel()
         path_icon.setFixedSize(ICON_SIZE, ICON_SIZE)
         path_icon.setPixmap(
-            load_lucide_icon("folder-open", "#666666").pixmap(
+            load_lucide_icon("folder-open", TEXT_SUB).pixmap(
                 ICON_SIZE, ICON_SIZE
             )
         )
@@ -94,7 +95,7 @@ class HoverCard(QtWidgets.QFrame):
             QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Preferred
         )
         self.open_btn = HoverIconButton(
-            "external-link", "#666666", "#1A1A1A", 16
+            "external-link", TEXT_SUB, TEXT_MAIN, 18
         )
         self.open_btn.setObjectName("HoverOpenButton")
         self.open_btn.setFixedSize(24, 24)

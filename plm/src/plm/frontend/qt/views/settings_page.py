@@ -9,6 +9,7 @@ from .secondary_page import SecondaryPage
 
 
 RECOMMENDED_FONT_CHOICES = (
+    "Inter",
     "Microsoft YaHei UI",
     "PingFang SC",
     "Noto Sans CJK SC",
@@ -70,13 +71,6 @@ class SettingsPage(SecondaryPage):
         self._select_font_family(current_family)
         self.font_family_combo.activated.connect(self._font_choice_activated)
         self.font_family_combo.setFixedSize(280, 36)
-        chevron_path = (LUCIDE_ICON_DIR / "chevron-down.svg").as_posix()
-        self.font_family_combo.setStyleSheet(
-            "QComboBox { border: 1px solid #E0E0E0; border-radius: 6px; }"
-            "QComboBox::drop-down { border: none; width: 40px; }"
-            f"QComboBox::down-arrow {{ image: url({chevron_path});"
-            " width: 16px; height: 16px; }"
-        )
 
         self.font_size_spin = QtWidgets.QSpinBox()
         self.font_size_spin.setObjectName("SettingsFontSize")
@@ -217,6 +211,7 @@ class SettingsPage(SecondaryPage):
         self.flag_table.setObjectName("ConfigDataTable")
         self.flag_table.setHorizontalHeaderLabels(("参数", "值"))
         self.flag_table.verticalHeader().hide()
+        self.flag_table.verticalHeader().setDefaultSectionSize(40)
         self.flag_table.horizontalHeader().setSectionResizeMode(0, QtWidgets.QHeaderView.Stretch)
         self.flag_table.horizontalHeader().setSectionResizeMode(1, QtWidgets.QHeaderView.ResizeToContents)
         self.flag_table.setAlternatingRowColors(True)

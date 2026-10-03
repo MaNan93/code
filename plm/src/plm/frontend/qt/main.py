@@ -19,6 +19,7 @@ except ImportError:
 
 from plm.frontend.qt.main_window import APP_ICON_PATH, MainWindow
 from plm.frontend.qt.styles import APP_QSS
+from plm.frontend.qt.models.preferences import DEFAULT_FONT_FAMILY
 
 
 def main(argv=None):
@@ -44,7 +45,7 @@ def main(argv=None):
     # platform style underneath it.
     app.setStyle("Fusion")
     font = QtGui.QFont()
-    font.setFamily("Microsoft YaHei UI")
+    font.setFamily(DEFAULT_FONT_FAMILY)
     font.setStyleStrategy(QtGui.QFont.PreferAntialias)
     font.setHintingPreference(QtGui.QFont.PreferFullHinting)
     app.setFont(font)

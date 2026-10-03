@@ -10,6 +10,7 @@ from PyQt5 import QtCore, QtGui, QtWidgets
 from plm.frontend.qt.widgets import sap_icons
 from plm.frontend.qt.widgets.common import StyledMenu
 from plm.frontend.qt.widgets.theme import ACCENT, RoundedComboBox
+from plm.frontend.qt.styles.tokens import DANGER, TEXT_SUB
 
 
 _DRAG_HANDLE_ICON = None
@@ -20,7 +21,7 @@ def drag_handle_icon():
     global _DRAG_HANDLE_ICON
     if _DRAG_HANDLE_ICON is None:
         _DRAG_HANDLE_ICON = sap_icons.icon(
-            "vertical-grip", color="#758ca4", size=18
+            "vertical-grip", color=TEXT_SUB, size=18
         )
     return _DRAG_HANDLE_ICON
 
@@ -218,6 +219,7 @@ class EditableTable(QtWidgets.QWidget):
         self.table.setAlternatingRowColors(True)
         self.table.rowContextMenuRequested.connect(self._on_row_context_menu)
         row_header = self.table.verticalHeader()
+        row_header.setDefaultSectionSize(40)
         row_header.hide()
         self.table.rowMoveRequested.connect(self._on_row_drop)
         self.table.itemChanged.connect(self._on_item_changed)
@@ -341,8 +343,10 @@ class EditableTable(QtWidgets.QWidget):
                             continue
                         item.setToolTip(message)
                         if message:
-                            item.setBackground(QtGui.QColor("#fff0f0"))
-                            item.setForeground(QtGui.QColor("#bb0000"))
+                            error_bg = QtGui.QColor(DANGER)
+                            error_bg.setAlpha(20)
+                            item.setBackground(error_bg)
+                            item.setForeground(QtGui.QColor(DANGER))
                         else:
                             item.setData(QtCore.Qt.BackgroundRole, None)
                             item.setData(QtCore.Qt.ForegroundRole, None)

@@ -1,5 +1,8 @@
 from pathlib import Path
 from PyQt5 import QtCore, QtGui, QtWidgets
+from plm.frontend.qt.styles.tokens import (
+    BG_SUBTLE, BORDER, FONT_MONO, TEXT_MAIN, TEXT_MUTED, TEXT_SUB,
+)
 from .secondary_page import SecondaryPage
 DOCS_DIR = Path(__file__).resolve().parents[3] / "docs"
 
@@ -19,19 +22,15 @@ class DocumentationPage(SecondaryPage):
         self.doc_browser.setOpenExternalLinks(True)
         self.doc_browser.setSearchPaths([str(DOCS_DIR)])
         self.doc_browser.setVerticalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOff)
-        self.doc_browser.document().setDefaultStyleSheet(
-            "h1 { color: #1A1A1A; font-size: 16px; font-weight: 600; margin: 16px 0 8px 0; }"
-            "h2, h3 { color: #1A1A1A; font-size: 14px; font-weight: 600;"
-            " margin: 12px 0 6px 0; }"
-            "p { color: #333333; font-size: 13px; line-height: 160%;"
-            " margin: 4px 0 10px 0; }"
-            "table { border-collapse: collapse; border: 1px solid #EAEAEA;"
-            " border-radius: 6px; }"
-            "th { background-color: #F0F2F5; color: #1A1A1A; font-size: 13px;"
-            " font-weight: 600; padding: 8px 12px; border-bottom: 1px solid #EAEAEA; }"
-            "td { color: #333333; font-size: 13px; font-weight: 400;"
-            " padding: 8px 12px; }"
-        )
+        doc_css = """
+        h1 {{ color: {text_main}; font-size: 16px; font-weight: 600; margin: 16px 0 8px 0; }}
+        h2, h3 {{ color: {text_main}; font-size: 14px; font-weight: 600; margin: 12px 0 6px 0; }}
+        p {{ color: {text_main}; font-size: 13px; line-height: 160%; margin: 4px 0 10px 0; }}
+        table {{ border-collapse: collapse; border: 1px solid {border}; border-radius: 6px; }}
+        th {{ background-color: {bg_subtle}; color: {text_main}; font-size: 13px; font-weight: 600; padding: 8px 12px; border-bottom: 1px solid {border}; }}
+        td {{ color: {text_main}; font-size: 13px; font-weight: 400; padding: 8px 12px; }}
+        """.format(text_main=TEXT_MAIN, border=BORDER, bg_subtle=BG_SUBTLE)
+        self.doc_browser.document().setDefaultStyleSheet(doc_css)
         layout.addWidget(self.doc_browser, 1)
         return content
 
@@ -106,7 +105,7 @@ class DocumentationPage(SecondaryPage):
             if heading_level:
                 cursor.select(QtGui.QTextCursor.BlockUnderCursor)
                 heading_format = QtGui.QTextCharFormat()
-                heading_format.setForeground(QtGui.QColor("#1A1A1A"))
+                heading_format.setForeground(QtGui.QColor(TEXT_MAIN))
                 heading_format.setFontFamily(self.doc_browser.font().family())
                 heading_format.clearProperty(QtGui.QTextFormat.FontSizeAdjustment)
                 heading_format.setProperty(
@@ -127,7 +126,7 @@ class DocumentationPage(SecondaryPage):
             if block.text().strip().startswith("操作："):
                 cursor.select(QtGui.QTextCursor.BlockUnderCursor)
                 note_format = QtGui.QTextCharFormat()
-                note_format.setForeground(QtGui.QColor("#8C92A4"))
+                note_format.setForeground(QtGui.QColor(TEXT_MUTED))
                 note_format.setProperty(QtGui.QTextFormat.FontPixelSize, 12)
                 cursor.mergeCharFormat(note_format)
 
@@ -137,7 +136,7 @@ class DocumentationPage(SecondaryPage):
                 table_format = table.format()
                 table_format.setBorder(1)
                 table_format.setBorderStyle(QtGui.QTextFrameFormat.BorderStyle_Solid)
-                table_format.setBorderBrush(QtGui.QColor("#EAEAEA"))
+                table_format.setBorderBrush(QtGui.QColor(BORDER))
                 table_format.setCellPadding(8)
                 table_format.setCellSpacing(0)
                 table_format.setWidth(
@@ -147,7 +146,7 @@ class DocumentationPage(SecondaryPage):
                 for column in range(table.columns()):
                     cell = table.cellAt(0, column)
                     cell_format = cell.format()
-                    cell_format.setBackground(QtGui.QColor("#F0F2F5"))
+                    cell_format.setBackground(QtGui.QColor(BG_SUBTLE))
                     cell.setFormat(cell_format)
                     cell_cursor = cell.firstCursorPosition()
                     cell_cursor.setPosition(
@@ -155,14 +154,14 @@ class DocumentationPage(SecondaryPage):
                         QtGui.QTextCursor.KeepAnchor,
                     )
                     header_format = QtGui.QTextCharFormat()
-                    header_format.setForeground(QtGui.QColor("#1A1A1A"))
+                    header_format.setForeground(QtGui.QColor(TEXT_MAIN))
                     header_format.setProperty(QtGui.QTextFormat.FontPixelSize, 13)
                     header_format.setFontWeight(QtGui.QFont.Bold)
                     cell_cursor.mergeCharFormat(header_format)
             if block_format.property(QtGui.QTextFormat.BlockCodeFence):
                 cursor.select(QtGui.QTextCursor.BlockUnderCursor)
                 code_format = QtGui.QTextCharFormat()
-                code_format.setFontFamilies(["Consolas", "Courier New", "monospace"])
+                code_format.setFontFamilies(["JetBrains Mono", "Consolas", "Courier New", "monospace"])
                 code_format.setProperty(QtGui.QTextFormat.FontPixelSize, 13)
                 cursor.setCharFormat(code_format)
                 block_format.setLineHeight(

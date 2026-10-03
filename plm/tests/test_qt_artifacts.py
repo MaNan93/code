@@ -8,6 +8,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PyQt5 import QtCore, QtGui, QtTest, QtWidgets
 
+from plm.frontend.qt.styles.tokens import PRIMARY, TEXT_MUTED, TEXT_SUB
 from plm.frontend.qt.views.artifacts_panel import ArtifactsPanel
 from plm.frontend.qt.widgets.code_preview import CodePreview
 
@@ -212,14 +213,14 @@ class ArtifactPreviewTests(unittest.TestCase):
         highlighter.rehighlight()
         block = editor.document().firstBlock()
         self.assertEqual(block.userState(), 1)
-        self.assertEqual(block.layout().formats()[0].format.foreground().color().name(), "#6a737d")
+        self.assertEqual(block.layout().formats()[0].format.foreground().color().name(), TEXT_MUTED.lower())
         block = block.next()
         formats = block.layout().formats()
-        self.assertEqual(formats[0].format.foreground().color().name(), "#6a737d")
-        self.assertTrue(any(f.format.foreground().color().name() == "#d73a49" for f in formats))
+        self.assertEqual(formats[0].format.foreground().color().name(), TEXT_MUTED.lower())
+        self.assertTrue(any(f.format.foreground().color().name() == PRIMARY.lower() for f in formats))
         block = block.next()
         self.assertEqual(block.userState(), 0)
-        self.assertEqual(block.layout().formats()[0].format.foreground().color().name(), "#032f62")
+        self.assertEqual(block.layout().formats()[0].format.foreground().color().name(), TEXT_SUB.lower())
         highlighter.set_enabled(False)
         self.assertFalse(block.layout().formats())
         path = self.file("text.txt", "module ordinary_text; endmodule")

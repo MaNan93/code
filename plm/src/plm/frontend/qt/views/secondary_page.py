@@ -1,5 +1,6 @@
 from PyQt5 import QtCore, QtWidgets
 from plm.frontend.qt.widgets.common import make_icon_button
+from plm.frontend.qt.styles.tokens import SPACING_LG, SPACING_SM, SPACING_XL, TEXT_MAIN
 
 class SecondaryPage(QtWidgets.QFrame):
     """Full-window Settings or documentation page."""
@@ -20,12 +21,12 @@ class SecondaryPage(QtWidgets.QFrame):
 
         header = QtWidgets.QFrame()
         header.setObjectName("PlaceholderDialogHeader")
-        header.setFixedHeight(56)
+        header.setFixedHeight(48)
         header_layout = QtWidgets.QHBoxLayout(header)
-        header_layout.setContentsMargins(20, 0, 20, 0)
-        header_layout.setSpacing(12)
+        header_layout.setContentsMargins(SPACING_LG, 0, SPACING_LG, 0)
+        header_layout.setSpacing(SPACING_SM)
         self.back_btn = make_icon_button(
-            "arrow-left", "返回", "PlaceholderBackButton", 32, 20, "#333333"
+            "arrow-left", "返回", "PlaceholderBackButton", 32, 18, TEXT_MAIN
         )
         self.back_btn.clicked.connect(self.closeRequested.emit)
         header_layout.addWidget(self.back_btn)
@@ -40,7 +41,7 @@ class SecondaryPage(QtWidgets.QFrame):
         page_area = QtWidgets.QWidget()
         page_area.setObjectName("PlaceholderPageArea")
         page_area_layout = QtWidgets.QHBoxLayout(page_area)
-        page_area_layout.setContentsMargins(32, 40, 32, 40)
+        page_area_layout.setContentsMargins(SPACING_XL, SPACING_XL, SPACING_XL, SPACING_XL)
         page_area_layout.setSpacing(0)
         page_area_layout.addStretch(1)
 

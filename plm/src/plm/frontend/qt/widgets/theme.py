@@ -1,26 +1,21 @@
-"""Compatibility styling helpers for restored legacy Qt widgets.
-
-Keep the restored table/lane-grid behavior without bringing back the old
-font/theme stack. New UI code should continue using plm.frontend.qt.styles
-and widgets.common directly.
-"""
-
+"""Compatibility styling aliases backed by the BeautifulUI token set."""
 from PyQt5 import QtWidgets
-
+from plm.frontend.qt.styles.tokens import (
+    BG_SUBTLE, BORDER, BORDER_HOVER, PRIMARY, TEXT_MAIN, TEXT_MUTED, TEXT_SUB, SHADOW_MD,
+)
 from plm.frontend.qt.widgets.common import apply_drop_shadow
 
-ACCENT = "#1677FF"
-BORDER = "#E0E0E0"
-BORDER_STRONG = "#B8BDC6"
-TEXT = "#333333"
-TEXT_SECONDARY = "#666666"
-TEXT_TERTIARY = "#8C8C8C"
-BG_HOVER = "#F5F5F5"
+ACCENT = PRIMARY
+BORDER_STRONG = BORDER_HOVER
+TEXT = TEXT_MAIN
+TEXT_SECONDARY = TEXT_SUB
+TEXT_TERTIARY = TEXT_MUTED
+BG_HOVER = BG_SUBTLE
 
 
 class RoundedComboBox(QtWidgets.QComboBox):
     """Compatibility alias; visual styling comes from the application QSS."""
 
 
-def add_shadow(widget, blur=8, offset=(0, 1), alpha=30):
-    return apply_drop_shadow(widget, offset=offset, blur_radius=blur, alpha=alpha)
+def add_shadow(widget, blur=None, offset=None, alpha=None):
+    return apply_drop_shadow(widget, offset=offset, blur_radius=blur, alpha=alpha, shadow=SHADOW_MD)

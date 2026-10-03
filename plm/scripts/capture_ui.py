@@ -53,6 +53,20 @@ with tempfile.TemporaryDirectory(prefix="plm-ui-") as td:
     assert w.config_page.mapping_editor.table.rowCount() > 0, "lane mapping did not load"
     assert w.config_page.signals_editor.table.rowCount() > 0, "signals did not load"
 
+    # The original UI used row context menus rather than persistent row
+    # add/delete buttons. Keep that interaction in the refactored editor.
+    assert not w.config_page.findChildren(QtWidgets.QPushButton, "ConfigRowButton")
+    controller_editor=w.config_page.controllers_editor
+    row_menu=controller_editor._build_row_context_menu(0)
+    assert [action.text() for action in row_menu.actions() if not action.isSeparator()] == [
+        "Insert row above", "Insert row below", "Delete current row"
+    ]
+    first_item=controller_editor.table.item(0,0)
+    menu_pos=controller_editor.table.visualItemRect(first_item).center()
+    row_menu.popup(controller_editor.table.viewport().mapToGlobal(menu_pos))
+    screen_shot("01-controller-context-menu")
+    row_menu.close(); row_menu.deleteLater()
+
     # Make the business state concrete before visual review: choose a valid
     # generation configuration and generate real RTL/TB artifacts.
     w.config_page.generation_editor.arch.setCurrentText("original_pipe")

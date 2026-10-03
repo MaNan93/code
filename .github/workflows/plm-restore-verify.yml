@@ -1,0 +1,42 @@
+name: PLM restore verify
+
+on:
+  push:
+    paths:
+      - ".github/workflows/plm-restore-verify.yml"
+      - "plm/scripts/finalize_restored_workflow_tests.py"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: plm
+    env:
+      QT_QPA_PLATFORM: offscreen
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v10.2.0
+        with:
+          python-version: "3.12"
+          working-directory: plm
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+      - run: sudo apt-get update && sudo apt-get install -y libgl1 libegl1
+      - run: uv sync --extra qt --locked
+      - name: Apply restored behavior alignment
+        run: uv run python scripts/finalize_restored_workflow_tests.py
+      - name: Verify workflow behaviors
+        run: uv run python -u -m unittest -v tests.test_qt_workflow
+      - name: Persist verified changes
+        shell: bash
+        run: |
+          git -C .. config user.name "github-actions[bot]"
+          git -C .. config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git -C .. add plm/src/plm/frontend/qt/controllers/app_controller.py plm/tests/test_qt_workflow.py
+          git -C .. commit -m "qt: align restored workflow behaviors"
+          git -C .. push origin HEAD:plm-ui-refactor

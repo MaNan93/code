@@ -64,6 +64,7 @@ jobs:
       - run: PLM_RUN_RTL_SIM=1 uv run python -m unittest -v tests.test_dpr_phy_input
 
   wheel:
+    if: github.ref != 'refs/heads/plm-ui-refactor'
     strategy:
       matrix:
         os: [ubuntu-latest, windows-latest]

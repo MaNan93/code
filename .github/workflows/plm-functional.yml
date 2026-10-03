@@ -65,6 +65,7 @@ jobs:
             tests.test_qt_artifacts.ArtifactPreviewTests.test_file_tree_is_overlay_and_closes_after_selection \
             tests.test_qt_artifacts.ArtifactPreviewTests.test_file_tree_blank_click_closes_overlay \
             tests.test_qt_artifacts.ArtifactPreviewTests.test_search_supports_line_jump \
+            tests.test_qt_artifacts.ArtifactPreviewTests.test_diff_switches_between_unified_diff_and_current_file \
             tests.test_qt_artifacts.ArtifactPreviewTests.test_toolbar_routes_to_selected_output_and_signals
       - name: Generation business linkage
         run: |

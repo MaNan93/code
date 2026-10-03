@@ -11,6 +11,8 @@ from plm.frontend.qt.views.log_panel import LogPanel
 from plm.frontend.qt.widgets.common import load_lucide_icon
 
 __all__ = ["MainWindow"]
+
+
 class MainWindow(QtWidgets.QMainWindow):
     """Native QMainWindow containing horizontal and vertical splitters."""
 
@@ -62,11 +64,17 @@ class MainWindow(QtWidgets.QMainWindow):
         self.undo_action.setShortcuts([QtGui.QKeySequence("Ctrl+Z")])
         self.undo_action.triggered.connect(self.config_page.undo)
         self.redo_action = QtWidgets.QAction("重做", self)
-        self.redo_action.setShortcuts([QtGui.QKeySequence("Ctrl+Y"), QtGui.QKeySequence("Ctrl+Shift+Z")])
+        self.redo_action.setShortcuts(
+            [QtGui.QKeySequence("Ctrl+Y"), QtGui.QKeySequence("Ctrl+Shift+Z")]
+        )
         self.redo_action.triggered.connect(self.config_page.redo)
         self.addActions([self.undo_action, self.redo_action])
         self.config_page.historyChanged.connect(self._update_history_actions)
         self._update_history_actions()
+
+        app = QtWidgets.QApplication.instance()
+        if app is not None:
+            app.installEventFilter(self)
 
     def _update_history_actions(self):
         self.undo_action.setEnabled(self.config_page.can_undo())
@@ -78,6 +86,14 @@ class MainWindow(QtWidgets.QMainWindow):
             event.ignore()
             return
         super().closeEvent(event)
+
+    def eventFilter(self, watched, event):
+        app = QtWidgets.QApplication.instance()
+        if watched is app and event.type() == QtCore.QEvent.ApplicationActivate:
+            # Re-check both source CSV signatures and generated-output hashes
+            # when the user returns from an external editor.
+            QtCore.QTimer.singleShot(0, self.controller.validate_current)
+        return super().eventFilter(watched, event)
 
     def _apply_initial_sizes(self):
         main_width = max(261, self.main_splitter.width())
@@ -119,23 +135,36 @@ class MainWindow(QtWidgets.QMainWindow):
         self.nav_panel.set_active("docs")
         self._show_placeholder("docs")
 
+    def _set_background_blur(self, enabled):
+        central = self.centralWidget()
+        if central is None:
+            return
+        if enabled:
+            effect = QtWidgets.QGraphicsBlurEffect(central)
+            effect.setBlurRadius(7.0)
+            central.setGraphicsEffect(effect)
+        else:
+            central.setGraphicsEffect(None)
+
     def _show_placeholder(self, page):
         self._close_placeholder()
-        self.placeholder_overlay = self.controller.create_secondary_page(page, self)
-        self.placeholder_overlay.setGeometry(self.rect())
-        self.placeholder_overlay.closeRequested.connect(self._close_placeholder)
-        self.placeholder_overlay.preferencesSaved.connect(self.controller.save_preferences)
-        self.placeholder_overlay.show()
-        self.placeholder_overlay.raise_()
-        self.placeholder_overlay.setFocus(QtCore.Qt.OtherFocusReason)
+        overlay = self.controller.create_secondary_page(page, self)
+        self._set_background_blur(True)
+        self.placeholder_overlay = overlay
+        overlay.setGeometry(self.rect())
+        overlay.closeRequested.connect(self._close_placeholder)
+        overlay.preferencesSaved.connect(self.controller.save_preferences)
+        overlay.show()
+        overlay.raise_()
+        overlay.setFocus(QtCore.Qt.OtherFocusReason)
 
     def _close_placeholder(self):
-        if self.placeholder_overlay is None:
-            return
         overlay = self.placeholder_overlay
         self.placeholder_overlay = None
-        overlay.hide()
-        overlay.deleteLater()
+        if overlay is not None:
+            overlay.hide()
+            overlay.deleteLater()
+        self._set_background_blur(False)
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
@@ -147,7 +176,6 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def _apply_preferences(self, preferences):
         self.controller.apply_preferences(preferences)
-
 
 
 if __name__ == "__main__":

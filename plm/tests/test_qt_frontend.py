@@ -464,20 +464,28 @@ class QtFrontendLayoutTests(unittest.TestCase):
                 settings.setValue("navigation/recent_path", original_path)
 
     def test_config_header_inline_rename_save_and_cancel(self):
-        header = self.window.config_page.header
-        self.assertIsInstance(header, ConfigHeader)
-        self.assertEqual(header.height(), 56)
+        # Test the header in isolation so titleChanged cannot rename a bundled
+        # sample directory and pollute subsequent frontend tests.
+        header = ConfigHeader()
+        self.addCleanup(header.deleteLater)
+        header.title_label.setText("原始名称")
+        header.show()
+        self.app.processEvents()
+        changed_spy = QtTest.QSignalSpy(header.titleChanged)
+
         header.enter_edit_mode()
         self.assertTrue(header.title_edit.isVisible())
         header.title_edit.setText("新的会话名称")
         header.title_edit.returnPressed.emit()
         self.assertEqual(header.title_label.text(), "新的会话名称")
-        self.assertEqual(self.window.windowTitle(), "plmConsultant")
+        self.assertEqual(len(changed_spy), 1)
+        self.assertEqual(changed_spy[0][0], "新的会话名称")
 
         header.enter_edit_mode()
         header.title_edit.setText("不应保存")
         header.title_edit.escapePressed.emit()
         self.assertEqual(header.title_label.text(), "新的会话名称")
+        self.assertEqual(len(changed_spy), 1)
 
     def test_project_row_actions_and_nav_signals(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -854,14 +862,16 @@ class QtFrontendLayoutTests(unittest.TestCase):
             "external-link",
             "refresh-cw",
             "braces",
+            "git-compare",
             "search",
             "link",
             "file",
             "more-horizontal",
             "maximize",
             "plus",
+            "rocket",
         )
-        self.assertEqual(len(icon_names), 26)
+        self.assertEqual(len(icon_names), 28)
         self.assertEqual(
             {path.stem for path in LUCIDE_ICON_DIR.glob("*.svg")},
             set(icon_names),

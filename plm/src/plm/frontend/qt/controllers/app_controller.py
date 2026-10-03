@@ -81,11 +81,8 @@ class AppController:
     def _update_window_title(self, *_):
         if not hasattr(self, "window"):
             return
-        if self.current_name:
-            marker = "*" if self.config_page.dirty else ""
-            self.window.setWindowTitle(f"plmConsultant - {self.current_name}{marker}")
-        else:
-            self.window.setWindowTitle("plmConsultant")
+        marker = " *" if self.current_name and self.config_page.dirty else ""
+        self.window.setWindowTitle(f"plmConsultant{marker}")
 
     def _set_output_state(self, state, detail=""):
         labels = {

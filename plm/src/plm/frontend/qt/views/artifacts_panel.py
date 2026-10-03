@@ -43,7 +43,7 @@ class ArtifactsPanel(QtWidgets.QFrame):
 
         root = QtWidgets.QVBoxLayout(self)
         root.setContentsMargins(12, 0, 12, 12)
-        root.setSpacing(10)
+        root.setSpacing(12)
         toolbar = QtWidgets.QWidget()
         toolbar.setObjectName("ArtifactsToolbar")
         toolbar.setFixedHeight(40)
@@ -51,9 +51,8 @@ class ArtifactsPanel(QtWidgets.QFrame):
         toolbar_layout.setContentsMargins(16, 0, 16, 0)
         toolbar_layout.setSpacing(8)
         self.toolbar_buttons = []
-        # Preserve the original 0..8 toolbar action indexes.  Existing UI
-        # code and tests address these controls by position; Diff is an added
-        # action and therefore lives at index 9 instead of shifting them.
+        # Keep the original 0..8 public toolbar list stable. Diff is a new
+        # control, but is intentionally separate from that compatibility list.
         for index, (icon, tooltip) in enumerate((
             ("folder", "打开输出文件夹"),
             ("refresh-cw", "刷新文件"),
@@ -64,13 +63,16 @@ class ArtifactsPanel(QtWidgets.QFrame):
             ("file", "显示/隐藏文件树"),
             ("more-horizontal", "更多"),
             ("maximize", "展开"),
-            ("git-compare", "显示与上一次预览的差异"),
         )):
             button = make_icon_button(icon, tooltip, "ArtifactsToolButton", 24, ICON_SIZE)
             toolbar_layout.addWidget(button)
             self.toolbar_buttons.append(button)
             if index == 0:
                 toolbar_layout.addStretch(1)
+        self.diff_button = make_icon_button(
+            "git-compare", "显示与上一次预览的差异", "ArtifactsToolButton", 24, ICON_SIZE
+        )
+        toolbar_layout.addWidget(self.diff_button)
         root.addWidget(toolbar)
 
         # Kept as a compatibility/data model for controller/tests. The visible
@@ -128,7 +130,6 @@ class ArtifactsPanel(QtWidgets.QFrame):
         self.tree_button.setCheckable(True)
         self.tree_button.setChecked(True)
         self.tree_button.toggled.connect(self.file_tree.setVisible)
-        self.diff_button = self.toolbar_buttons[9]
         self.diff_button.setCheckable(True)
         self.diff_button.toggled.connect(self._load_selected)
 

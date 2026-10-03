@@ -7,6 +7,17 @@ from plm.frontend.qt.models.preferences import DEFAULT_EDITOR, DEFAULT_FONT_FAMI
 from plm.frontend.qt.widgets.common import LUCIDE_ICON_DIR
 from .secondary_page import SecondaryPage
 
+
+CJK_FONT_CHOICES = (
+    "Microsoft YaHei UI",
+    "PingFang SC",
+    "Noto Sans CJK SC",
+    "SimHei",
+    "SimSun",
+    "Source Han Sans SC",
+)
+
+
 class SettingsPage(SecondaryPage):
     def __init__(self, parent=None, preferences=None):
         self.initial_preferences = {
@@ -41,17 +52,28 @@ class SettingsPage(SecondaryPage):
         )
         preferences = self.initial_preferences
 
-        self.font_family_combo = QtWidgets.QFontComboBox()
+        self.font_family_combo = QtWidgets.QComboBox()
         self.font_family_combo.setObjectName("SettingsFontFamily")
-        self.font_family_combo.setCurrentFont(
-            QtGui.QFont(
-                preferences["font_family"]
+        current_family = preferences["font_family"]
+        installed_families = QtGui.QFontDatabase().families()
+        families = []
+        for family in (*CJK_FONT_CHOICES, *installed_families):
+            if family not in families:
+                families.append(family)
+        if current_family not in families:
+            families.insert(0, current_family)
+        for family in families:
+            self.font_family_combo.addItem(family)
+            self.font_family_combo.setItemData(
+                self.font_family_combo.count() - 1,
+                QtGui.QFont(family),
+                QtCore.Qt.FontRole,
             )
-        )
+        self.font_family_combo.setCurrentText(current_family)
         self.font_family_combo.setFixedSize(280, 36)
         chevron_path = (LUCIDE_ICON_DIR / "chevron-down.svg").as_posix()
         self.font_family_combo.setStyleSheet(
-            "QFontComboBox { border: 1px solid #E0E0E0; border-radius: 6px; }"
+            "QComboBox { border: 1px solid #E0E0E0; border-radius: 6px; }"
             "QComboBox::drop-down { border: none; width: 40px; }"
             f"QComboBox::down-arrow {{ image: url({chevron_path});"
             " width: 16px; height: 16px; }"
@@ -250,7 +272,7 @@ class SettingsPage(SecondaryPage):
 
     def _preferences(self):
         return {
-            "font_family": self.font_family_combo.currentFont().family(),
+            "font_family": self.font_family_combo.currentText(),
             "font_size": self.font_size_spin.value(),
             "editor_path": self.editor_path_edit.text().strip() or DEFAULT_EDITOR,
             "verible_path": self.verible_path_edit.text().strip(),
@@ -268,7 +290,7 @@ class SettingsPage(SecondaryPage):
         self.settings_status.setText("设置已保存")
 
     def _reset_settings(self):
-        self.font_family_combo.setCurrentFont(QtGui.QFont(DEFAULT_FONT_FAMILY))
+        self.font_family_combo.setCurrentText(DEFAULT_FONT_FAMILY)
         self.font_size_spin.setValue(DEFAULT_FONT_SIZE)
         self.editor_path_edit.setText(DEFAULT_EDITOR)
         self.verible_path_edit.clear()

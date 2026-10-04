@@ -7,23 +7,9 @@ Controller IDs remain editable and retain their values after reordering.
 
 from PyQt5 import QtCore, QtGui, QtWidgets
 
-from plm.frontend.qt.widgets import sap_icons
 from plm.frontend.qt.widgets.common import StyledMenu
-from plm.frontend.qt.widgets.theme import ACCENT, RoundedComboBox
-from plm.frontend.qt.styles.tokens import DANGER, TEXT_SUB
+from plm.frontend.qt.styles.tokens import DANGER, PRIMARY
 
-
-_DRAG_HANDLE_ICON = None
-
-
-def drag_handle_icon():
-    """Return the shared six-dot row-reorder handle icon."""
-    global _DRAG_HANDLE_ICON
-    if _DRAG_HANDLE_ICON is None:
-        _DRAG_HANDLE_ICON = sap_icons.icon(
-            "vertical-grip", color=TEXT_SUB, size=18
-        )
-    return _DRAG_HANDLE_ICON
 
 
 def _ui_scale():
@@ -155,7 +141,7 @@ class RowDragTable(QtWidgets.QTableWidget):
             rect = self.visualRect(self.model().index(self._drop_before_row, 0))
             y = rect.top()
         painter = QtGui.QPainter(self.viewport())
-        painter.setPen(QtGui.QPen(QtGui.QColor(ACCENT), 2))
+        painter.setPen(QtGui.QPen(QtGui.QColor(PRIMARY), 2))
         painter.drawLine(0, y, self.viewport().width(), y)
 
 
@@ -270,7 +256,7 @@ class EditableTable(QtWidgets.QWidget):
                 # both sides, so include that space too; otherwise a column
                 # can fit its heading while clipping values such as
                 # "perlane" in the editor below it.
-                probe = RoundedComboBox(self.table)
+                probe = QtWidgets.QComboBox(self.table)
                 probe.addItems(column["options"])
                 probe.ensurePolished()
                 minimum = max(
@@ -401,7 +387,7 @@ class EditableTable(QtWidgets.QWidget):
                 key = col["key"]
                 value = row.get(key, "")
                 if col.get("options"):
-                    combo = RoundedComboBox()
+                    combo = QtWidgets.QComboBox()
                     combo.addItems(col["options"])
                     # Preserve invalid CSV values so validation can report them
                     # instead of silently replacing them with the first option.

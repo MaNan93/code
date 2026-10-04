@@ -160,9 +160,9 @@ class RowDragTable(QtWidgets.QTableWidget):
 
 
 class _PaddedItemDelegate(QtWidgets.QStyledItemDelegate):
-    """Paint table text with a reliable two-space visual inset."""
+    """Paint table text with a compact, consistent visual inset."""
 
-    HORIZONTAL_PADDING = 12
+    HORIZONTAL_PADDING = 8
 
     def paint(self, painter, option, index):
         styled = QtWidgets.QStyleOptionViewItem(option)

@@ -279,7 +279,6 @@ class ConfigPage(QtWidgets.QFrame):
     def finish_editing(self):
         focus = QtWidgets.QApplication.focusWidget()
         for editor in (self.controllers_editor, self.mapping_editor, self.signals_editor):
-            editor.table.itemDelegate().finish_editing()
             if focus and editor.table.isAncestorOf(focus):
                 editor.table.setFocus()
                 break

@@ -195,6 +195,10 @@ class _LaneCellDelegate(QtWidgets.QStyledItemDelegate):
         else:
             super().updateEditorGeometry(editor, option, index)
 
+    def finish_editing(self):
+        """ConfigPage commits the active editor by moving focus to the table."""
+        return None
+
     @staticmethod
     def _draw_marker_band(painter, rect, color, opacity, joins_left, joins_right):
         """Draw one clipped segment of a continuous, round-ended marker band."""

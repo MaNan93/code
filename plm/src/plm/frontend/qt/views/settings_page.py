@@ -38,12 +38,12 @@ class SettingsPage(SecondaryPage):
 
     def _setting_row(self, label, control):
         row = QtWidgets.QFrame()
-        row.setObjectName("PlaceholderSettingRow")
+        row.setObjectName("SettingsRow")
         row.setFixedHeight(56)
         row_layout = QtWidgets.QHBoxLayout(row)
         row_layout.setContentsMargins(0, 0, 0, 0)
         key_label = QtWidgets.QLabel(label)
-        key_label.setObjectName("PlaceholderRowLabel")
+        key_label.setObjectName("SettingsRowLabel")
         row_layout.addWidget(key_label)
         row_layout.addStretch(1)
         row_layout.addWidget(control)

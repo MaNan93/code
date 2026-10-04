@@ -37,8 +37,8 @@ class QtRestoredBehaviorTests(unittest.TestCase):
         effect = self.window.centralWidget().graphicsEffect()
         self.assertIsInstance(effect, QtWidgets.QGraphicsBlurEffect)
         self.assertEqual(effect.blurRadius(), 7.0)
-        self.assertIsNotNone(self.window.placeholder_overlay)
-        self.assertTrue(self.window.placeholder_overlay.isVisible())
+        self.assertIsNotNone(self.window.secondary_overlay)
+        self.assertTrue(self.window.secondary_overlay.isVisible())
 
         self.window.on_open_docs()
         self.app.processEvents()
@@ -46,9 +46,9 @@ class QtRestoredBehaviorTests(unittest.TestCase):
             self.window.centralWidget().graphicsEffect(),
             QtWidgets.QGraphicsBlurEffect,
         )
-        self.window._close_placeholder()
+        self.window._close_secondary_page()
         self.app.processEvents()
-        self.assertIsNone(self.window.placeholder_overlay)
+        self.assertIsNone(self.window.secondary_overlay)
         self.assertIsNone(self.window.centralWidget().graphicsEffect())
 
     def test_application_activation_rechecks_external_state(self):

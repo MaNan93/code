@@ -5,7 +5,7 @@ on:
       - ".github/workflows/plm-ui-screenshots.yml"
       - "plm/scripts/capture_ui.py"
   workflow_dispatch:
-# Capture trigger for visual polish r2 review.
+# Final capture trigger for visual polish r2 verification.
 # This comment has no effect on the application or screenshot content.
 jobs:
   capture:

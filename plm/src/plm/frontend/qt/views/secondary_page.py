@@ -11,7 +11,7 @@ class SecondaryPage(QtWidgets.QFrame):
     def __init__(self, page, parent=None):
         super().__init__(parent)
         self.page = page
-        self.setObjectName("PlaceholderOverlay")
+        self.setObjectName("SecondaryOverlay")
         self.setAttribute(QtCore.Qt.WA_StyledBackground, True)
         self.setFocusPolicy(QtCore.Qt.StrongFocus)
 
@@ -20,33 +20,33 @@ class SecondaryPage(QtWidgets.QFrame):
         root.setSpacing(0)
 
         header = QtWidgets.QFrame()
-        header.setObjectName("PlaceholderDialogHeader")
+        header.setObjectName("SecondaryPageHeader")
         header.setFixedHeight(48)
         header_layout = QtWidgets.QHBoxLayout(header)
         header_layout.setContentsMargins(SPACING_LG, 0, SPACING_LG, 0)
         header_layout.setSpacing(SPACING_SM)
         self.back_btn = make_icon_button(
-            "arrow-left", "返回", "PlaceholderBackButton", 32, 18, TEXT_MAIN
+            "arrow-left", "返回", "SecondaryBackButton", 32, 18, TEXT_MAIN
         )
         self.back_btn.clicked.connect(self.closeRequested.emit)
         header_layout.addWidget(self.back_btn)
         self.title_label = QtWidgets.QLabel(
             "Settings" if page == "settings" else "Documentation"
         )
-        self.title_label.setObjectName("PlaceholderDialogTitle")
+        self.title_label.setObjectName("SecondaryPageTitle")
         header_layout.addWidget(self.title_label)
         header_layout.addStretch(1)
         root.addWidget(header)
 
         page_area = QtWidgets.QWidget()
-        page_area.setObjectName("PlaceholderPageArea")
+        page_area.setObjectName("SecondaryPageArea")
         page_area_layout = QtWidgets.QHBoxLayout(page_area)
         page_area_layout.setContentsMargins(SPACING_XL, SPACING_XL, SPACING_XL, SPACING_XL)
         page_area_layout.setSpacing(0)
         page_area_layout.addStretch(1)
 
         self.page_panel = QtWidgets.QWidget()
-        self.page_panel.setObjectName("PlaceholderPagePanel")
+        self.page_panel.setObjectName("SecondaryPagePanel")
         self.page_panel.setFixedWidth(800)
         self.page_panel.setSizePolicy(
             QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Expanding
@@ -57,7 +57,7 @@ class SecondaryPage(QtWidgets.QFrame):
         self.content = self._build_content()
         panel_layout.addWidget(self._build_menu(page))
         divider = QtWidgets.QFrame()
-        divider.setObjectName("PlaceholderTabDivider")
+        divider.setObjectName("SecondaryTabDivider")
         divider.setFixedHeight(1)
         panel_layout.addWidget(divider)
         panel_layout.addSpacing(24)
@@ -69,7 +69,7 @@ class SecondaryPage(QtWidgets.QFrame):
 
     def _build_menu(self, page):
         menu = QtWidgets.QWidget()
-        menu.setObjectName("PlaceholderTabs")
+        menu.setObjectName("SecondaryTabs")
         layout = QtWidgets.QHBoxLayout(menu)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(8)
@@ -81,7 +81,7 @@ class SecondaryPage(QtWidgets.QFrame):
         )
         for index, text in enumerate(entries):
             button = QtWidgets.QPushButton(text)
-            button.setObjectName("PlaceholderMenuButton")
+            button.setObjectName("SecondaryMenuButton")
             button.setCursor(QtCore.Qt.PointingHandCursor)
             button.clicked.connect(
                 lambda _checked=False, selected=index: self._select_section(selected)
@@ -93,16 +93,16 @@ class SecondaryPage(QtWidgets.QFrame):
 
     def _content_shell(self, heading, description):
         content = QtWidgets.QWidget()
-        content.setObjectName("PlaceholderContent")
+        content.setObjectName("SecondaryContent")
         layout = QtWidgets.QVBoxLayout(content)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
         self.heading_label = QtWidgets.QLabel(heading)
-        self.heading_label.setObjectName("PlaceholderHeading")
+        self.heading_label.setObjectName("SecondaryHeading")
         layout.addWidget(self.heading_label)
         layout.addSpacing(4)
         self.description_label = QtWidgets.QLabel(description)
-        self.description_label.setObjectName("PlaceholderDescription")
+        self.description_label.setObjectName("SecondaryDescription")
         self.description_label.setWordWrap(True)
         layout.addWidget(self.description_label)
         layout.addSpacing(24)

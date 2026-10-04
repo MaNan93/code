@@ -198,8 +198,8 @@ class ConfigPage(QtWidgets.QFrame):
         self._history = []
         self._history_index = -1
         self._saved_content = None
-        self.artifacts_width = 400
-        self.restore_artifacts_width = 400
+        self.artifacts_width = 380
+        self.restore_artifacts_width = 380
         self.artifacts_maximized = False
         self.drag_start_global_x = None
         self.drag_start_width = None

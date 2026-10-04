@@ -14,7 +14,6 @@ from plm.core.gen_flags import (
     PCLK_MODE_VALUES,
     SEL_MODE_VALUES,
 )
-from plm.frontend.qt.widgets.common import StyledMenu
 from plm.frontend.qt.widgets.lanegrid import LaneGrid
 from plm.frontend.qt.widgets.tables import EditableTable
 
@@ -40,7 +39,7 @@ class LaneCountCombo(QtWidgets.QComboBox):
 
 
 class CsvTableEditor(QtWidgets.QWidget):
-    """Compatibility facade over the original EditableTable/LaneGrid widgets."""
+    """Config-table facade shared by CSV-backed editor pages."""
 
     changed = QtCore.pyqtSignal()
 
@@ -49,7 +48,6 @@ class CsvTableEditor(QtWidgets.QWidget):
         self.mapping = mapping
         self._keys = tuple(columns)
         self._controllers = []
-        self._context_menu = None
 
         layout = QtWidgets.QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -71,12 +69,6 @@ class CsvTableEditor(QtWidgets.QWidget):
             self.table = self.editor.table
             self.editor.set_columns(self.lane_count.value())
             self.editor.changed.connect(self.changed.emit)
-            # ConfigPage.finish_editing historically asks every table delegate
-            # to finish editing. LaneGrid commits native item edits itself, so
-            # a no-op keeps that API without altering the original behavior.
-            delegate = self.table.itemDelegate()
-            if not hasattr(delegate, "finish_editing"):
-                delegate.finish_editing = lambda: None
             layout.addWidget(self.editor, 1)
             return
 
@@ -101,9 +93,6 @@ class CsvTableEditor(QtWidgets.QWidget):
         )
         self.table = self.editor.table
         self.editor.changed.connect(self.changed.emit)
-        delegate = self.table.itemDelegate()
-        if not hasattr(delegate, "finish_editing"):
-            delegate.finish_editing = lambda: None
         layout.addWidget(self.editor, 1)
 
     @property
@@ -180,43 +169,12 @@ class CsvTableEditor(QtWidgets.QWidget):
             translated[(row, key)] = message
         self.editor.set_cell_errors(translated)
 
-    # Compatibility helpers retained for tests and keyboard/menu callers.
+    # Small public helper used by tests and programmatic row insertion.
     def add_row(self):
         if self.mapping:
             self.editor._insert_row_below(len(self.editor.data) - 1)
         else:
             self.editor.insert_row_below(self.table.rowCount() - 1)
-
-    def delete_selected_rows(self):
-        row = self.table.currentRow()
-        if row < 0:
-            return
-        if self.mapping:
-            self.editor._delete_row(row)
-        else:
-            self.editor.delete_row(row)
-
-    def _build_row_context_menu(self, row):
-        menu = StyledMenu(self.table)
-        if row >= 0:
-            if self.mapping:
-                insert_above = lambda: self.editor._insert_row_above(row)
-                insert_below = lambda: self.editor._insert_row_below(row)
-                delete_row = lambda: self.editor._delete_row(row)
-                count = len(self.editor.data)
-            else:
-                insert_above = lambda: self.editor.insert_row_above(row)
-                insert_below = lambda: self.editor.insert_row_below(row)
-                delete_row = lambda: self.editor.delete_row(row)
-                count = self.table.rowCount()
-            menu.addAction("在上方插入行", insert_above)
-            menu.addAction("在下方插入行", insert_below)
-            menu.addSeparator()
-            action = menu.addAction("删除当前行", delete_row)
-            action.setEnabled(count > 1)
-        else:
-            menu.addAction("插入行", self.add_row)
-        return menu
 
 
 class GenerationEditor(QtWidgets.QWidget):

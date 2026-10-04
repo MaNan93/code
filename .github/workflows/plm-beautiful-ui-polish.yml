@@ -1,0 +1,11 @@
+name: PLM BeautifulUI r1 polish (retired)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  retired:
+    if: ${{ false }}
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "BeautifulUI r1 polish workflow retired"

@@ -48,7 +48,7 @@ class QtControlLogicTests(unittest.TestCase):
 
     def _close_window(self):
         self.window.config_page.mark_saved()
-        self.window._close_placeholder()
+        self.window._close_secondary_page()
         self.window.close()
         self.window.deleteLater()
         QtCore.QCoreApplication.sendPostedEvents(None, QtCore.QEvent.DeferredDelete)
@@ -105,7 +105,7 @@ class QtControlLogicTests(unittest.TestCase):
     def test_settings_save_reset_and_auto_detect_are_wired(self):
         self.window.nav_panel.settings_btn.click()
         self.app.processEvents()
-        page = self.window.placeholder_overlay
+        page = self.window.secondary_overlay
         self.assertIsInstance(page, SettingsPage)
 
         page.font_size_spin.setValue(DEFAULT_FONT_SIZE + 1)

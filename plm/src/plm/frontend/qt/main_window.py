@@ -27,7 +27,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.setMinimumSize(960, 640)
         self.setWindowIcon(load_lucide_icon("layout-dashboard", PRIMARY))
         self._log_sizes = [700, 200]
-        self.placeholder_overlay = None
+        self.secondary_overlay = None
         self._app_event_filter_installed = False
 
         self.main_splitter = QtWidgets.QSplitter(QtCore.Qt.Horizontal)
@@ -141,8 +141,6 @@ class MainWindow(QtWidgets.QMainWindow):
         self._log_sizes = sizes
         self.content_splitter.setSizes([sum(sizes), 0])
 
-    def on_new_chat(self):
-        self.controller.show_project_menu()
 
     def on_save(self):
         self.controller.hide_project_menu()
@@ -152,12 +150,12 @@ class MainWindow(QtWidgets.QMainWindow):
     def on_open_settings(self):
         self.controller.hide_project_menu()
         self.nav_panel.set_active("settings")
-        self._show_placeholder("settings")
+        self._show_secondary_page("settings")
 
     def on_open_docs(self):
         self.controller.hide_project_menu()
         self.nav_panel.set_active("docs")
-        self._show_placeholder("docs")
+        self._show_secondary_page("docs")
 
     def _set_background_blur(self, enabled):
         central = self.centralWidget()
@@ -170,21 +168,21 @@ class MainWindow(QtWidgets.QMainWindow):
         else:
             central.setGraphicsEffect(None)
 
-    def _show_placeholder(self, page):
-        self._close_placeholder()
+    def _show_secondary_page(self, page):
+        self._close_secondary_page()
         overlay = self.controller.create_secondary_page(page, self)
         self._set_background_blur(True)
-        self.placeholder_overlay = overlay
+        self.secondary_overlay = overlay
         overlay.setGeometry(self.rect())
-        overlay.closeRequested.connect(self._close_placeholder)
+        overlay.closeRequested.connect(self._close_secondary_page)
         overlay.preferencesSaved.connect(self.controller.save_preferences)
         overlay.show()
         overlay.raise_()
         overlay.setFocus(QtCore.Qt.OtherFocusReason)
 
-    def _close_placeholder(self):
-        overlay = self.placeholder_overlay
-        self.placeholder_overlay = None
+    def _close_secondary_page(self):
+        overlay = self.secondary_overlay
+        self.secondary_overlay = None
         if overlay is not None:
             overlay.hide()
             overlay.deleteLater()
@@ -192,8 +190,8 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
-        if self.placeholder_overlay is not None:
-            self.placeholder_overlay.setGeometry(self.rect())
+        if self.secondary_overlay is not None:
+            self.secondary_overlay.setGeometry(self.rect())
 
     def _read_preferences(self):
         return self.settings_store.preferences()

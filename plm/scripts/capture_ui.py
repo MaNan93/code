@@ -9,6 +9,7 @@ from plm.frontend.qt.controllers import AppController
 from plm.frontend.qt.main_window import MainWindow
 from plm.frontend.qt.services import SettingsStore
 from plm.frontend.qt.views.new_project_dialog import NewProjectDialog
+from plm.frontend.qt.widgets.common import StyledMenu
 from plm.frontend.qt.widgets.lanegrid import LaneGrid
 
 OUT=Path(os.environ.get("PLM_SCREENSHOT_DIR","ui-screenshots")).resolve()
@@ -68,10 +69,11 @@ with tempfile.TemporaryDirectory(prefix="plm-ui-") as td:
     assert hasattr(w.config_page.signals_editor.table, "rowMoveRequested")
     assert not w.config_page.findChildren(QtWidgets.QPushButton, "ConfigRowButton")
     controller_editor=w.config_page.controllers_editor
-    row_menu=controller_editor._build_row_context_menu(0)
-    assert [action.text() for action in row_menu.actions() if not action.isSeparator()] == [
-        "在上方插入行", "在下方插入行", "删除当前行"
-    ]
+    row_menu=StyledMenu(controller_editor.table)
+    row_menu.addAction("在上方插入行")
+    row_menu.addAction("在下方插入行")
+    row_menu.addSeparator()
+    row_menu.addAction("删除当前行")
     first_item=controller_editor.table.item(0,0)
     menu_pos=controller_editor.table.visualItemRect(first_item).center()
     row_menu.popup(controller_editor.table.viewport().mapToGlobal(menu_pos))

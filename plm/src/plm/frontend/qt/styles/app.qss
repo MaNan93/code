@@ -256,7 +256,7 @@ QLabel#ConfigSessionTitle {
 QLineEdit#ConfigSessionEditor { min-height: 32px; }
 QPushButton#HeaderButton, QPushButton#ArtifactsToolButton,
 QPushButton#LogClearButton, QPushButton#LogCloseBtn,
-QPushButton#PlaceholderBackButton {
+QPushButton#SecondaryBackButton {
     background: transparent;
     border: none;
     border-radius: $radius_control;
@@ -264,7 +264,7 @@ QPushButton#PlaceholderBackButton {
 }
 QPushButton#HeaderButton:hover, QPushButton#ArtifactsToolButton:hover,
 QPushButton#LogClearButton:hover, QPushButton#LogCloseBtn:hover,
-QPushButton#PlaceholderBackButton:hover { background-color: $bg_subtle; }
+QPushButton#SecondaryBackButton:hover { background-color: $bg_subtle; }
 QPushButton#ArtifactsToolButton:checked { background-color: $primary_light; }
 QWidget#ConfigArea, QScrollArea#ConfigScroll, QWidget#ConfigScrollContent { background: $bg_main; border: none; }
 QTabWidget#ConfigTabs::pane { border: none; background: transparent; top: -1px; }
@@ -343,20 +343,20 @@ QLabel#GenerationStatus[state="external_changed"], QLabel#ArtifactStatus[state="
 QLabel#GenerationStatus[state="failed"], QLabel#ArtifactStatus[state="failed"],
 QLabel#GenerationStatus[state="invalid"], QLabel#ArtifactStatus[state="invalid"] { color: $danger; }
 
-QFrame#PlaceholderOverlay, QWidget#PlaceholderPageArea { background-color: $bg_main; }
-QFrame#PlaceholderDialogHeader {
+QFrame#SecondaryOverlay, QWidget#SecondaryPageArea { background-color: $bg_main; }
+QFrame#SecondaryPageHeader {
     background-color: $bg_surface;
     border: none;
     border-bottom: 1px solid $border;
 }
-QLabel#PlaceholderDialogTitle {
+QLabel#SecondaryPageTitle {
     color: $text_main;
     font-size: $font_size_lg;
     font-weight: bold;
 }
-QWidget#PlaceholderPagePanel, QWidget#PlaceholderContent, QWidget#PlaceholderTabs { background: transparent; }
-QFrame#PlaceholderTabDivider { background-color: $border; border: none; }
-QPushButton#PlaceholderMenuButton {
+QWidget#SecondaryPagePanel, QWidget#SecondaryContent, QWidget#SecondaryTabs { background: transparent; }
+QFrame#SecondaryTabDivider { background-color: $border; border: none; }
+QPushButton#SecondaryMenuButton {
     min-height: 36px; max-height: 36px;
     background: transparent;
     border: none;
@@ -366,15 +366,15 @@ QPushButton#PlaceholderMenuButton {
     font-size: $font_size_body;
     padding: 0 $spacing_md;
 }
-QPushButton#PlaceholderMenuButton:hover { background: transparent; color: $text_main; }
-QPushButton#PlaceholderMenuButton[selected="true"] {
+QPushButton#SecondaryMenuButton:hover { background: transparent; color: $text_main; }
+QPushButton#SecondaryMenuButton[selected="true"] {
     background: transparent;
     color: $primary;
     border-bottom: 2px solid $primary;
     font-weight: bold;
 }
-QLabel#PlaceholderHeading { color: $text_main; font-size: $font_size_lg; font-weight: bold; }
-QLabel#PlaceholderDescription { color: $text_sub; font-size: $font_size_body; }
+QLabel#SecondaryHeading { color: $text_main; font-size: $font_size_lg; font-weight: bold; }
+QLabel#SecondaryDescription { color: $text_sub; font-size: $font_size_body; }
 QTextBrowser#DocumentationBrowser {
     background-color: $bg_surface;
     color: $text_main;
@@ -382,12 +382,12 @@ QTextBrowser#DocumentationBrowser {
     border-radius: $radius_card;
     padding: $spacing_xs;
 }
-QFrame#PlaceholderSettingRow {
+QFrame#SettingsRow {
     background-color: transparent;
     border: none;
     border-bottom: 1px solid $border;
 }
-QLabel#PlaceholderRowLabel { color: $text_main; font-size: $font_size_body; }
+QLabel#SettingsRowLabel { color: $text_main; font-size: $font_size_body; }
 QLabel#SettingsStatus { color: $text_sub; font-size: $font_size_sm; }
 QFontComboBox#SettingsFontFamily, QComboBox#SettingsFontFamily,
 QSpinBox#SettingsFontSize, QLineEdit#SettingsEditorPath { min-height: 36px; max-height: 36px; }

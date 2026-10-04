@@ -146,8 +146,8 @@ with tempfile.TemporaryDirectory(prefix="plm-ui-") as td:
         "SimHei", "SimSun", "Source Han Sans SC", "DejaVu Sans",
     )
     for idx,name in enumerate(("general","appearance","tools","formatter")):
-        w.placeholder_overlay.menu_buttons[idx].click()
-        page=w.placeholder_overlay
+        w.secondary_overlay.menu_buttons[idx].click()
+        page=w.secondary_overlay
         if name == "formatter":
             assert page.settings_content_layout.getContentsMargins() == (32,24,32,24)
             assert page.settings_content_layout.stretch(page._formatter_layout_index) == 1
@@ -193,11 +193,11 @@ with tempfile.TemporaryDirectory(prefix="plm-ui-") as td:
             screen_shot("04-settings-appearance-fonts")
             font_combo.hidePopup()
             font_combo.setCurrentIndex(selected)
-    w._close_placeholder()
+    w._close_secondary_page()
     w.on_open_docs(); app.processEvents()
     for idx,name in enumerate(("getting-started","configuration","generation")):
-        w.placeholder_overlay.menu_buttons[idx].click(); shot(w,f"05-docs-{name}")
-    w._close_placeholder()
+        w.secondary_overlay.menu_buttons[idx].click(); shot(w,f"05-docs-{name}")
+    w._close_secondary_page()
 
     artifacts.show_search()
     search_layout=artifacts.search_bar.layout()

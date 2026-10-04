@@ -266,10 +266,10 @@ class QtFrontendLayoutTests(unittest.TestCase):
         nav.new_chat_btn.click()
         nav.save_btn.click()
         nav.settings_btn.click()
-        self.assertEqual(self.window.placeholder_overlay.page, "settings")
-        self.window._close_placeholder()
+        self.assertEqual(self.window.secondary_overlay.page, "settings")
+        self.window._close_secondary_page()
         nav.docs_btn.click()
-        self.assertEqual(self.window.placeholder_overlay.page, "docs")
+        self.assertEqual(self.window.secondary_overlay.page, "docs")
 
         self.assertEqual(len(new_chat_spy), 1)
         self.assertEqual(len(save_spy), 1)
@@ -722,7 +722,7 @@ class QtFrontendLayoutTests(unittest.TestCase):
         nav = self.window.nav_panel
         nav.settings_btn.click()
         self.app.processEvents()
-        overlay = self.window.placeholder_overlay
+        overlay = self.window.secondary_overlay
         self.assertIsNotNone(overlay)
         self.assertTrue(overlay.isVisible())
         self.assertEqual(overlay.page, "settings")
@@ -731,14 +731,14 @@ class QtFrontendLayoutTests(unittest.TestCase):
         self.assertEqual(overlay.back_btn.text(), "")
         self.assertEqual(overlay.back_btn.size(), QtCore.QSize(32, 32))
         self.assertEqual(overlay.back_btn.iconSize(), QtCore.QSize(20, 20))
-        panel = overlay.findChild(QtWidgets.QWidget, "PlaceholderPagePanel")
+        panel = overlay.findChild(QtWidgets.QWidget, "SecondaryPagePanel")
         self.assertEqual(panel.width(), 800)
         self.assertEqual(panel.mapTo(overlay, QtCore.QPoint()).y(), 96)
         self.assertEqual(
             panel.mapTo(overlay, panel.rect().center()).x(),
             overlay.rect().center().x(),
         )
-        divider = overlay.findChild(QtWidgets.QFrame, "PlaceholderTabDivider")
+        divider = overlay.findChild(QtWidgets.QFrame, "SecondaryTabDivider")
         self.assertEqual(divider.height(), 1)
         for row in overlay.setting_rows.values():
             self.assertEqual(row.height(), 56)
@@ -752,20 +752,20 @@ class QtFrontendLayoutTests(unittest.TestCase):
 
         nav.docs_btn.click()
         self.app.processEvents()
-        overlay = self.window.placeholder_overlay
+        overlay = self.window.secondary_overlay
         self.assertIsNotNone(overlay)
         self.assertEqual(overlay.page, "docs")
         self.assertEqual(overlay.title_label.text(), "Documentation")
         overlay.back_btn.click()
         self.app.processEvents()
-        self.assertIsNone(self.window.placeholder_overlay)
+        self.assertIsNone(self.window.secondary_overlay)
 
         nav.settings_btn.click()
         self.app.processEvents()
-        overlay = self.window.placeholder_overlay
+        overlay = self.window.secondary_overlay
         QtTest.QTest.keyClick(overlay, QtCore.Qt.Key_Escape)
         self.app.processEvents()
-        self.assertIsNone(self.window.placeholder_overlay)
+        self.assertIsNone(self.window.secondary_overlay)
 
     def test_settings_are_saved_and_applied(self):
         settings = QtCore.QSettings("plm", "plmConsultant")
@@ -780,7 +780,7 @@ class QtFrontendLayoutTests(unittest.TestCase):
         try:
             self.window.nav_panel.settings_btn.click()
             self.app.processEvents()
-            overlay = self.window.placeholder_overlay
+            overlay = self.window.secondary_overlay
             overlay.font_size_spin.setValue(15)
             overlay.editor_path_edit.setText("custom-editor")
             overlay.save_settings_btn.click()
@@ -822,7 +822,7 @@ class QtFrontendLayoutTests(unittest.TestCase):
             with patch("plm.frontend.qt.views.documentation_page.DOCS_DIR", docs_dir):
                 self.window.nav_panel.docs_btn.click()
                 self.app.processEvents()
-                overlay = self.window.placeholder_overlay
+                overlay = self.window.secondary_overlay
                 self.assertIn("Frontend Guide", overlay.doc_browser.toPlainText())
                 tables = [
                     frame

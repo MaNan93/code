@@ -170,6 +170,10 @@ class _PaddedItemDelegate(QtWidgets.QStyledItemDelegate):
     def updateEditorGeometry(self, editor, option, index):
         editor.setGeometry(option.rect.adjusted(self.HORIZONTAL_PADDING, 1, -self.HORIZONTAL_PADDING, -1))
 
+    def finish_editing(self):
+        """ConfigPage commits the active editor by moving focus to the table."""
+        return None
+
 
 class EditableTable(QtWidgets.QWidget):
     changed = QtCore.pyqtSignal()

@@ -10,11 +10,11 @@ import copy
 
 from PyQt5 import QtCore, QtGui, QtWidgets
 
-from plm.frontend.qt.widgets.common import StyledMenu
+from plm.frontend.qt.widgets.common import StyledMenu, apply_drop_shadow
 from plm.frontend.qt.widgets.tables import RowDragTable
-from plm.frontend.qt.widgets.theme import BORDER, BORDER_STRONG, TEXT, add_shadow
 from plm.frontend.qt.styles.tokens import (
-    BG_MAIN, BG_SUBTLE, BG_SURFACE, DANGER, FONT_SIZE_SM, PRIMARY, PRIMARY_HOVER,
+    BG_MAIN, BG_SUBTLE, BG_SURFACE, BORDER, BORDER_HOVER, DANGER, FONT_SIZE_SM,
+    PRIMARY, PRIMARY_HOVER,
     RADIUS_CHIP, SHADOW_SM, SPACING_LG, SPACING_MD, SPACING_XS, SUCCESS,
     TEXT_MAIN, TEXT_MUTED, TEXT_SUB,
 )
@@ -443,16 +443,17 @@ class LaneGrid(QtWidgets.QWidget):
                 f"  {outline}"
                 f"}}"
                 f"QPushButton#lgSwatch:hover {{"
-                f"  border-color: {BORDER_STRONG};"
+                f"  border-color: {BORDER_HOVER};"
                 f"}}"
             )
             btn.setCursor(QtCore.Qt.PointingHandCursor)
             btn.setMinimumHeight(int((SPACING_LG * 2) * scale))
-            add_shadow(
+            apply_drop_shadow(
                 btn,
-                blur=int(SHADOW_SM["blur_radius"] * scale),
+                blur_radius=int(SHADOW_SM["blur_radius"] * scale),
                 offset=(0, int(SHADOW_SM["offset"][1] * scale)),
                 alpha=SHADOW_SM["rgba"][3],
+                shadow=SHADOW_SM,
             )
             btn.clicked.connect(lambda _checked=False, cid=cid: self._set_active_controller(cid))
             self._palette_flow.addWidget(btn)

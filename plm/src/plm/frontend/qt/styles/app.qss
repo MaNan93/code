@@ -72,6 +72,7 @@ QFrame#Card, QWidget#Card, QFrame#ProjectHoverCard {
     border: 1px solid $border;
     border-radius: $radius_card;
 }
+QFrame#ProjectHoverCard { margin: 4px; }
 
 QTableWidget {
     background-color: $bg_surface;
@@ -107,6 +108,7 @@ QMenu {
     border: 1px solid $border;
     border-radius: $radius_card;
     padding: 6px;
+    margin: 4px;
 }
 QMenu::item {
     min-height: 28px;
@@ -129,18 +131,18 @@ QTabWidget::pane { border: none; background: transparent; }
 QTabBar { background: transparent; }
 QTabBar::tab {
     background: transparent;
-    color: $text_sub;
-    padding: $spacing_sm $spacing_lg;
+    color: #64748B;
+    padding: 8px 24px;
     border: none;
     border-bottom: 2px solid transparent;
-    font-size: $font_size_body;
+    font-size: 13px;
 }
 QTabBar::tab:selected {
-    color: $primary;
-    border-bottom: 2px solid $primary;
+    color: #3B82F6;
+    border-bottom: 2px solid #3B82F6;
     font-weight: bold;
 }
-QTabBar::tab:hover:!selected { color: $text_main; }
+QTabBar::tab:hover:!selected { color: #1E293B; }
 
 QScrollBar:vertical {
     background: transparent;

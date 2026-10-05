@@ -14,14 +14,16 @@ class DocumentationPage(SecondaryPage):
         return self._build_docs_content()
 
     def _build_docs_content(self):
-        content, layout = self._content_shell(
-            "Getting Started", "从项目配置开始，快速完成 PLM 生成流程。"
-        )
+        content = QtWidgets.QWidget()
+        content.setObjectName("SecondaryContent")
+        layout = QtWidgets.QVBoxLayout(content)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
         self.doc_browser = QtWidgets.QTextBrowser()
         self.doc_browser.setObjectName("DocumentationBrowser")
         self.doc_browser.setOpenExternalLinks(True)
         self.doc_browser.setSearchPaths([str(DOCS_DIR)])
-        self.doc_browser.setVerticalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOff)
+        self.doc_browser.setVerticalScrollBarPolicy(QtCore.Qt.ScrollBarAsNeeded)
         doc_css = """
         h1 {{ color: {text_main}; font-size: 16px; font-weight: 600; margin: 16px 0 8px 0; }}
         h2, h3 {{ color: {text_main}; font-size: 14px; font-weight: 600; margin: 12px 0 6px 0; }}
@@ -37,27 +39,19 @@ class DocumentationPage(SecondaryPage):
     def _show_section(self, index):
         docs = (
             (
-                "Getting Started",
-                "Qt 前端的项目配置、标签页与常用操作。",
                 "qt_frontend_guide.md",
                 None,
             ),
             (
-                "Configuration",
-                "Controller、Lane Mapping 与 PIPE Signals 配置格式。",
                 "tool_usage.md",
                 "## 2. 配置文件格式（`config/` 下三个 CSV）",
             ),
             (
-                "Generation",
-                "生成 RTL 与 Testbench 的命令、参数和输出规则。",
                 "tool_usage.md",
                 "## 3. `plm generate`：生成匹配的 RTL 与 testbench",
             ),
         )
-        title, description, filename, section = docs[index]
-        self.heading_label.setText(title)
-        self.description_label.setText(description)
+        filename, section = docs[index]
         self._load_document(filename, section)
 
     @staticmethod

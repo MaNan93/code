@@ -120,8 +120,10 @@ class MainWindow(QtWidgets.QMainWindow):
             self.controller.validate_current()
 
     def _apply_initial_sizes(self):
-        main_width = max(261, self.main_splitter.width())
-        self.main_splitter.setSizes([260, main_width - 260])
+        nav_width = self.nav_panel.expanded_width
+        main_width = max(nav_width + 1,
+                         self.main_splitter.width() - self.main_splitter.handleWidth())
+        self.main_splitter.setSizes([nav_width, main_width - nav_width])
         self.content_splitter.setSizes(self._log_sizes)
 
     def toggle_log(self):

@@ -203,6 +203,27 @@ class WorkspaceTests(unittest.TestCase):
 
 
 class ExporterTests(unittest.TestCase):
+    def test_parameter_check_accepts_alignment_and_rejects_wrong_widths(self):
+        cfg = Config(ROOT / "test" / "bifurcate" / "config")
+        plan = GenerationPlan.build(cfg, GenerationOptions(quiet=True))
+        for wrong_parameter in (None, "NL", "NC"):
+            with self.subTest(wrong_parameter=wrong_parameter), tempfile.TemporaryDirectory() as td:
+                def format_parameters(text, *_args, **_kwargs):
+                    for name, value in (("NL", plan.lane_count), ("NC", plan.num_ctrl)):
+                        replacement = value * 10 if name == wrong_parameter else value
+                        text = text.replace(
+                            f"parameter int {name} = {value}",
+                            f"parameter int {name}\t  =\n        {replacement}",
+                        )
+                    return text
+
+                with mock.patch.object(exporter, "format_sv", side_effect=format_parameters):
+                    if wrong_parameter is None:
+                        exporter.export_all(plan, Path(td) / "rtl")
+                    else:
+                        with self.assertRaisesRegex(ValidationError, "top-level port/width check failed"):
+                            exporter.export_all(plan, Path(td) / "rtl")
+
     def test_generated_outputs_have_no_dft_clock_bypass(self):
         config_dir = ROOT / "test" / "bifurcate" / "config"
         with tempfile.TemporaryDirectory() as td:

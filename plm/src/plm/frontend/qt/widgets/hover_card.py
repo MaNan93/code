@@ -45,6 +45,7 @@ class HoverCard(QtWidgets.QFrame):
 
     def __init__(self, parent=None):
         super().__init__(parent, QtCore.Qt.ToolTip | QtCore.Qt.FramelessWindowHint)
+        self.setAttribute(QtCore.Qt.WA_TranslucentBackground)
         self.setObjectName("ProjectHoverCard")
         self.setFixedWidth(260)
         apply_drop_shadow(self, shadow=SHADOW_LG)

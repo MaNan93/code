@@ -1,6 +1,29 @@
-from PyQt5 import QtCore, QtWidgets
+from PyQt5 import QtCore, QtGui, QtWidgets
 from plm.frontend.qt.widgets.common import make_icon_button
 from plm.frontend.qt.styles.tokens import SPACING_LG, SPACING_SM, SPACING_XL, TEXT_MAIN
+
+
+class SecondaryMenuButton(QtWidgets.QPushButton):
+    """Reserve enough space for the selected label before it becomes bold."""
+
+    def sizeHint(self):
+        self.ensurePolished()
+        font = QtGui.QFont(self.font())
+        font.setBold(True)
+        metrics = QtGui.QFontMetrics(font)
+        text_width = max(metrics.horizontalAdvance(self.text()),
+                         metrics.boundingRect(self.text()).width())
+        option = QtWidgets.QStyleOptionButton()
+        self.initStyleOption(option)
+        size = self.style().sizeFromContents(
+            QtWidgets.QStyle.CT_PushButton, option,
+            QtCore.QSize(text_width + 2, metrics.height()), self,
+        )
+        return super().sizeHint().expandedTo(size)
+
+    def minimumSizeHint(self):
+        return self.sizeHint()
+
 
 class SecondaryPage(QtWidgets.QFrame):
     """Full-window Settings or documentation page."""
@@ -80,7 +103,7 @@ class SecondaryPage(QtWidgets.QFrame):
             else ("Getting Started", "Configuration", "Generation")
         )
         for index, text in enumerate(entries):
-            button = QtWidgets.QPushButton(text)
+            button = SecondaryMenuButton(text)
             button.setObjectName("SecondaryMenuButton")
             button.setCursor(QtCore.Qt.PointingHandCursor)
             button.clicked.connect(
@@ -114,6 +137,8 @@ class SecondaryPage(QtWidgets.QFrame):
             button.setProperty("selected", button_index == index)
             button.style().unpolish(button)
             button.style().polish(button)
+            button.updateGeometry()
+            button.update()
 
         self._show_section(index)
 

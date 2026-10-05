@@ -17,7 +17,8 @@ except ImportError:
         "(or, offline, transfer the PyQt5/PyQt5-sip wheels to this machine and pip install those)."
     )
 
-from plm.frontend.qt.main_window import APP_ICON_PATH, MainWindow
+from plm.frontend.qt.main_window import MainWindow
+from plm.frontend.qt.widgets.common import APP_ICON_PATH
 from plm.frontend.qt.styles import APP_QSS
 from plm.frontend.qt.models.preferences import DEFAULT_FONT_FAMILY
 

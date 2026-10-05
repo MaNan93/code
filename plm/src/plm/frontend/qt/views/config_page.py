@@ -7,6 +7,29 @@ from plm.frontend.qt.styles.tokens import (
     BG_SURFACE, BORDER_HOVER, SHADOW_SM, SPACING_LG, SPACING_SM, TEXT_MUTED,
 )
 
+
+class ConfigTabBar(QtWidgets.QTabBar):
+    """Keep the full label visible when the selected tab becomes bold."""
+
+    def tabSizeHint(self, index):
+        self.ensurePolished()
+        option = QtWidgets.QStyleOptionTab()
+        self.initStyleOption(option, index)
+        font = QtGui.QFont(self.font())
+        font.setBold(True)
+        metrics = QtGui.QFontMetrics(font)
+        text_width = max(metrics.horizontalAdvance(option.text),
+                         metrics.boundingRect(option.text).width())
+        size = self.style().sizeFromContents(
+            QtWidgets.QStyle.CT_TabBarTab, option,
+            QtCore.QSize(text_width + 2, metrics.height()), self,
+        )
+        return super().tabSizeHint(index).expandedTo(size)
+
+    def minimumTabSizeHint(self, index):
+        return self.tabSizeHint(index)
+
+
 class EscapeLineEdit(QtWidgets.QLineEdit):
     escapePressed = QtCore.pyqtSignal()
 
@@ -219,6 +242,8 @@ class ConfigPage(QtWidgets.QFrame):
         config_layout.setContentsMargins(0, 0, 0, 0)
         self.tabs = QtWidgets.QTabWidget()
         self.tabs.setObjectName("ConfigTabs")
+        self.tabs.setTabBar(ConfigTabBar(self.tabs))
+        self.tabs.tabBar().setExpanding(False)
         self.tabs.setUsesScrollButtons(False)
         self.controllers_editor = CsvTableEditor(("ctrl_id", "ctrl_name", "max_width"))
         self.mapping_editor = CsvTableEditor(("mode", "lane0", "lane1", "lane2", "lane3"), mapping=True)

@@ -835,7 +835,7 @@ class QtFrontendLayoutTests(unittest.TestCase):
                 self.assertEqual(tables[0].format().width().rawValue(), 600)
                 self.assertEqual(
                     overlay.doc_browser.verticalScrollBarPolicy(),
-                    QtCore.Qt.ScrollBarAlwaysOff,
+                    QtCore.Qt.ScrollBarAsNeeded,
                 )
 
                 overlay.menu_buttons[1].click()

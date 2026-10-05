@@ -619,7 +619,10 @@ class SampleRegressionTests(unittest.TestCase):
                             f"mode {old_mode}->{new_mode} disturbs an unchanged lane",
                         )
 
-    def test_all_bundled_samples_validate_and_generate(self):
+    @mock.patch("plm.core.verible.find_verible", return_value=None)
+    def test_all_bundled_samples_validate_and_generate(self, _formatter):
+        # Golden samples use the generator's native formatting, independently
+        # of whichever Verible version happens to be installed on the host.
         for source in sorted((ROOT / "test").iterdir()):
             if not (source / "config").is_dir():
                 continue
@@ -663,8 +666,8 @@ class SampleRegressionTests(unittest.TestCase):
                     )
                     for relative in sorted(expected_files):
                         self.assertEqual(
-                            (actual_root / relative).read_bytes(),
-                            (expected_root / relative).read_bytes(),
+                            (actual_root / relative).read_text(encoding="utf-8"),
+                            (expected_root / relative).read_text(encoding="utf-8"),
                             f"{source.name}/{output_name}/{relative} is stale; regenerate samples",
                         )
 

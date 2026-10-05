@@ -4,7 +4,7 @@ import sys
 from PyQt5 import QtCore, QtGui, QtWidgets
 
 from plm.frontend.qt.controllers import AppController
-from plm.frontend.qt.styles import APP_QSS
+from plm.frontend.qt.exceptions import install_exception_handler
 from plm.frontend.qt.styles.tokens import PRIMARY
 from plm.frontend.qt.views.nav_panel import NavPanel
 from plm.frontend.qt.views.config_page import ConfigPage
@@ -19,6 +19,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def __init__(self):
         super().__init__()
+        install_exception_handler()
         self.controller = AppController()
         self.settings_store = self.controller.settings
         self._apply_preferences(self._read_preferences())
@@ -100,7 +101,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def closeEvent(self, event):
         self.controller.hide_project_menu()
-        if not self.controller._confirm_switch():
+        if not self.controller.confirm_switch():
             event.ignore()
             return
         self._remove_app_event_filter()
@@ -130,14 +131,15 @@ class MainWindow(QtWidgets.QMainWindow):
         sizes = self.content_splitter.sizes()
         total = sum(sizes)
         if sizes[1] > 0:
-            self._log_sizes = sizes
-            self.content_splitter.setSizes([total, 0])
+            self.hide_log()
         else:
+            self.content_splitter.setStretchFactor(1, 1)
             bottom = max(140, int(total * 0.25))
             self.content_splitter.setSizes([max(1, total - bottom), bottom])
 
     def hide_log(self):
         sizes = self.content_splitter.sizes()
+        self.content_splitter.setStretchFactor(1, 0)
         if sizes[1] <= 0:
             return
         self._log_sizes = sizes
@@ -151,12 +153,10 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def on_open_settings(self):
         self.controller.hide_project_menu()
-        self.nav_panel.set_active("settings")
         self._show_secondary_page("settings")
 
     def on_open_docs(self):
         self.controller.hide_project_menu()
-        self.nav_panel.set_active("docs")
         self._show_secondary_page("docs")
 
     def _set_background_blur(self, enabled):
@@ -173,6 +173,7 @@ class MainWindow(QtWidgets.QMainWindow):
     def _show_secondary_page(self, page):
         self._close_secondary_page()
         overlay = self.controller.create_secondary_page(page, self)
+        self.nav_panel.set_active(page)
         self._set_background_blur(True)
         self.secondary_overlay = overlay
         overlay.setGeometry(self.rect())
@@ -188,6 +189,7 @@ class MainWindow(QtWidgets.QMainWindow):
         if overlay is not None:
             overlay.hide()
             overlay.deleteLater()
+        self.nav_panel.set_active(None)
         self._set_background_blur(False)
 
     def resizeEvent(self, event):
@@ -203,18 +205,5 @@ class MainWindow(QtWidgets.QMainWindow):
 
 
 if __name__ == "__main__":
-    if hasattr(QtCore.Qt, "AA_EnableHighDpiScaling"):
-        QtWidgets.QApplication.setAttribute(QtCore.Qt.AA_EnableHighDpiScaling, True)
-    if hasattr(QtCore.Qt, "AA_UseHighDpiPixmaps"):
-        QtWidgets.QApplication.setAttribute(QtCore.Qt.AA_UseHighDpiPixmaps, True)
-    app = QtWidgets.QApplication(sys.argv)
-    app.setStyle("Fusion")
-    font = QtGui.QFont()
-    font.setFamily("Microsoft YaHei UI")
-    font.setStyleStrategy(QtGui.QFont.PreferAntialias)
-    font.setHintingPreference(QtGui.QFont.PreferFullHinting)
-    app.setFont(font)
-    app.setStyleSheet(APP_QSS)
-    window = MainWindow()
-    window.show()
-    sys.exit(app.exec_())
+    from plm.frontend.qt.main import main
+    sys.exit(main())

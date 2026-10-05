@@ -31,7 +31,8 @@ assert PROJECT_ROOT == PLM_ROOT
 assert (DOCS_DIR / 'tool_usage.md').is_file()
 assert (DOCS_DIR / 'qt_frontend_guide.md').is_file()
 assert APP_ICON_PATH.is_file()
-assert not (PLM_ROOT / 'frontend/qt/widgets/lanegrid.py').exists()
+assert (PLM_ROOT / 'frontend/qt/widgets/lanegrid.py').is_file()
+assert (PLM_ROOT / 'frontend/qt/widgets/tables.py').is_file()
 app = QtWidgets.QApplication([])
 app.setStyle('Fusion')
 with tempfile.TemporaryDirectory(prefix='plm wheel smoke ') as temporary:
@@ -60,13 +61,13 @@ with tempfile.TemporaryDirectory(prefix='plm wheel smoke ') as temporary:
             assert 'dft_mode' not in top
             assert (config/'tb/tb_pipe_lane_mapper.sv').is_file()
     window.on_open_settings()
-    window.placeholder_overlay.menu_buttons[3].click()
+    window.secondary_overlay.menu_buttons[2].click()
     app.processEvents()
-    assert window.placeholder_overlay.formatter_panel.isVisible()
-    window._close_placeholder()
+    assert window.secondary_overlay.formatter_panel.isVisible()
+    window._close_secondary_page()
     window.on_open_docs()
     app.processEvents()
-    assert 'PLM Qt' in window.placeholder_overlay.doc_browser.toPlainText()
+    assert 'PLM Qt' in window.secondary_overlay.doc_browser.toPlainText()
     window.close()
 print('Installed wheel: CLI, Qt resources, Formatter, docs and all 4 clock/DPR combinations passed.')
 '''

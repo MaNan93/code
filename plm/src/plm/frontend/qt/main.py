@@ -19,7 +19,6 @@ except ImportError:
 
 from plm.frontend.qt.main_window import MainWindow
 from plm.frontend.qt.widgets.common import APP_ICON_PATH
-from plm.frontend.qt.styles import APP_QSS
 from plm.frontend.qt.models.preferences import DEFAULT_FONT_FAMILY
 
 
@@ -50,7 +49,6 @@ def main(argv=None):
     font.setStyleStrategy(QtGui.QFont.PreferAntialias)
     font.setHintingPreference(QtGui.QFont.PreferFullHinting)
     app.setFont(font)
-    app.setStyleSheet(APP_QSS)
     win = MainWindow()
     win.show()
     return app.exec_()

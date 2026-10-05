@@ -147,7 +147,7 @@ with tempfile.TemporaryDirectory(prefix="plm-ui-") as td:
         "Inter", "Microsoft YaHei UI", "PingFang SC", "Noto Sans CJK SC",
         "SimHei", "SimSun", "Source Han Sans SC", "DejaVu Sans",
     )
-    for idx,name in enumerate(("general","appearance","tools","formatter")):
+    for idx,name in enumerate(("general","appearance","formatter")):
         w.secondary_overlay.menu_buttons[idx].click()
         page=w.secondary_overlay
         if name == "formatter":

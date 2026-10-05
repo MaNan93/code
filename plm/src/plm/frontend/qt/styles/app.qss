@@ -128,8 +128,8 @@ QMenu::separator {
 }
 
 QTabWidget::pane { border: none; background: transparent; }
-QTabBar { background: transparent; }
-QTabBar::tab {
+QTabWidget#ConfigTabs QTabBar { background: transparent; }
+QTabWidget#ConfigTabs QTabBar::tab {
     background: transparent;
     color: #64748B;
     padding: 8px 24px;
@@ -137,12 +137,12 @@ QTabBar::tab {
     border-bottom: 2px solid transparent;
     font-size: 13px;
 }
-QTabBar::tab:selected {
+QTabWidget#ConfigTabs QTabBar::tab:selected {
     color: #3B82F6;
     border-bottom: 2px solid #3B82F6;
     font-weight: bold;
 }
-QTabBar::tab:hover:!selected { color: #1E293B; }
+QTabWidget#ConfigTabs QTabBar::tab:hover:!selected { color: #1E293B; }
 
 QScrollBar:vertical {
     background: transparent;
@@ -229,7 +229,7 @@ QPushButton#ProjectButton[selected="true"], QPushButton#NavFooterButton[selected
 QLabel#ProjectName { color: $text_main; font-size: $font_size_body; }
 QLabel#ProjectName[selected="true"] { color: $primary; font-weight: bold; }
 QPushButton#NavIconBtn, QPushButton#NavCollapseButton {
-    min-width: 36px; max-width: 36px; min-height: 36px; max-height: 36px;
+    min-width: 32px; max-width: 32px; min-height: 32px; max-height: 32px;
     background: transparent; border: none; border-radius: $radius_control; padding: 0;
 }
 QPushButton#ProjectArchiveBtn, QPushButton#ProjectMoreBtn {

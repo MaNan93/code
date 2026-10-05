@@ -5,7 +5,7 @@ dragged to reorder them, while a context menu inserts or deletes rows.
 Controller IDs remain editable and retain their values after reordering.
 """
 
-from PyQt5 import QtCore, QtGui, QtWidgets
+from PyQt5 import QtCore, QtGui, QtWidgets, sip
 
 from plm.frontend.qt.widgets.common import StyledMenu
 from plm.frontend.qt.styles.tokens import DANGER, PRIMARY
@@ -168,6 +168,9 @@ class _PaddedItemDelegate(QtWidgets.QStyledItemDelegate):
         painter.restore()
 
     def updateEditorGeometry(self, editor, option, index):
+        # Row rebuilds can delete cell widgets before a queued relayout runs.
+        if editor is None or sip.isdeleted(editor):
+            return
         editor.setGeometry(option.rect.adjusted(self.HORIZONTAL_PADDING, 1, -self.HORIZONTAL_PADDING, -1))
 
 class EditableTable(QtWidgets.QWidget):

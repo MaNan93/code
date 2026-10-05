@@ -3,6 +3,7 @@
 import os
 import subprocess
 import sys
+from functools import lru_cache
 from pathlib import Path
 
 from PyQt5 import QtCore, QtGui, QtSvg, QtWidgets
@@ -16,6 +17,7 @@ PROJECT_ROOT = PLM_ROOT
 ICON_SIZE = 18
 
 
+@lru_cache(maxsize=256)
 def load_lucide_icon(name, color=TEXT_SUB, size=ICON_SIZE, align_visible_left=False):
     path = LUCIDE_ICON_DIR / f"{name}.svg"
     source = QtGui.QPixmap(size, size)

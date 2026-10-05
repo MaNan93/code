@@ -15,6 +15,7 @@ from plm.frontend.qt.controllers import AppController
 from plm.frontend.qt.main_window import MainWindow
 from plm.frontend.qt.services import ProjectService, SettingsStore, WorkspaceService
 from plm.frontend.qt.widgets.common import PROJECT_ROOT
+from qt_test_support import dispose_new_widgets
 
 
 class QtWorkflowTests(unittest.TestCase):
@@ -26,6 +27,7 @@ class QtWorkflowTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
+        self.addCleanup(dispose_new_widgets, self.app, set(self.app.topLevelWidgets()))
         self.root = Path(self.temp.name).resolve()
         for name in ("demo", "other"):
             shutil.copytree(
@@ -93,7 +95,7 @@ class QtWorkflowTests(unittest.TestCase):
         self.assertTrue(page.dirty)
         with patch.object(QtWidgets.QMessageBox, "warning") as warning:
             window.nav_panel.save_btn.click()
-        warning.assert_called_once()
+        warning.assert_not_called()
         self.assertTrue(page.dirty)
         self.assertEqual((self.root / "test/demo/config/controllers.csv").read_text(), csv_text)
         page.controllers_editor.table.item(0, 0).setText("0")
@@ -284,6 +286,9 @@ class QtWorkflowTests(unittest.TestCase):
         self.assertIn("demo", [w.project_name for w in window.nav_panel.project_list.project_widgets])
         self.assertEqual(controller.current_project.config_dir, external.parent / "renamed/config")
         controller.delete_project("renamed")
+        self.assertIsNone(controller.current_name)
+        self.assertIsNone(window.nav_panel.project_list.selected_project_name)
+        window.nav_panel.project_list.select_project("demo")
         self.assertEqual(controller.current_name, "demo")
         self.assertFalse((external.parent / "renamed").exists())
         self.assertTrue(controller.save_current())

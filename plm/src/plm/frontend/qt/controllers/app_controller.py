@@ -26,6 +26,7 @@ class AppController:
         self.current_project = None
         self._saved_signature = None
         self._generation_failure = None
+        self._checking_external = False
         for path in self.settings.project_paths():
             try:
                 self.projects.register(path)
@@ -163,7 +164,7 @@ class AppController:
             menu.deleteLater()
             self.project_menu = None
 
-    def _confirm_switch(self):
+    def confirm_switch(self):
         self.config_page.finish_editing()
         if not self.current_project or not self.config_page.dirty:
             return True
@@ -177,8 +178,12 @@ class AppController:
         )
 
     def _activate_path(self, config_dir):
-        project = next(p for p in self.projects.discover() if p.config_dir == config_dir)
-        self.settings.bind_projects(self.projects.discover())
+        discovered = self.projects.discover()
+        project = next((p for p in discovered if p.config_dir == config_dir), None)
+        if project is None:
+            self.log_panel.append_log(f"项目已不存在或无法读取：{config_dir}")
+            return False
+        self.settings.bind_projects(discovered)
         state = self.settings.get_project_state(project.name)
         state.is_archived = False
         state.is_cleared = False
@@ -201,7 +206,7 @@ class AppController:
         except (OSError, ValueError) as error:
             QtWidgets.QMessageBox.warning(self.window, "打开项目失败", str(error))
             return
-        if not self._confirm_switch():
+        if not self.confirm_switch():
             self.projects.external_dirs = previous_dirs
             return
         self._activate_path(config_dir)
@@ -215,7 +220,7 @@ class AppController:
         if not location:
             QtWidgets.QMessageBox.warning(self.window, "新建项目失败", "请选择保存位置")
             return
-        if not self._confirm_switch():
+        if not self.confirm_switch():
             return
         try:
             config_dir = self.projects.create(location, name)
@@ -230,7 +235,7 @@ class AppController:
     def select_project(self, name):
         if name == self.current_name:
             return
-        if not self._confirm_switch():
+        if not self.confirm_switch():
             self.nav.project_list.select_project(self.current_name)
             return
         project = self._project(name)
@@ -255,6 +260,15 @@ class AppController:
         self._update_window_title()
 
     def _check_external_changes(self):
+        if self._checking_external:
+            return False
+        self._checking_external = True
+        try:
+            return self._check_external_changes_once()
+        finally:
+            self._checking_external = False
+
+    def _check_external_changes_once(self):
         try:
             if self.workspaces.signature(self.current_project) == self._saved_signature:
                 return True
@@ -304,7 +318,8 @@ class AppController:
             self._show_validation_error(error)
             self.validate_current()
             self.log_panel.append_log(f"保存失败：{error}")
-            QtWidgets.QMessageBox.warning(self.window, "保存失败", str(error))
+            if not isinstance(error, ValidationError):
+                QtWidgets.QMessageBox.warning(self.window, "保存失败", str(error))
             return False
         self.validate_current()
         self.log_panel.append_log(f"已保存配置：{self.current_name}")
@@ -426,7 +441,7 @@ class AppController:
         self._update_window_title()
 
     def _show_empty_project(self):
-        if self.nav.project_list.count() == 0:
+        if self.current_project is None:
             self.config_page.set_content({})
             self.config_page.update_title("无项目")
             self.refresh_artifacts()
@@ -476,10 +491,13 @@ class AppController:
             if self.current_name == old_name:
                 self.config_page.update_title(old_name)
             return
-        self.settings.remove_project_state(old_name)
         discovered = self.projects.discover()
+        renamed = next((p for p in discovered if p.config_dir == config_dir), None)
+        if renamed is None:
+            self.log_panel.append_log(f"重命名后的项目无法读取：{config_dir}")
+            return
+        self.settings.remove_project_state(old_name)
         self.settings.bind_projects(discovered)
-        renamed = next(p for p in discovered if p.config_dir == config_dir)
         state.name = renamed.name
         self.settings.save_project_state(state)
         self.settings.save_project_paths(self.projects.external_dirs)

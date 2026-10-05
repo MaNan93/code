@@ -1,4 +1,6 @@
 from pathlib import Path
+import re
+import unicodedata
 from PyQt5 import QtCore, QtGui, QtWidgets
 from plm.frontend.qt.styles.tokens import (
     BG_SUBTLE, BORDER, FONT_MONO, TEXT_MAIN, TEXT_MUTED, TEXT_SUB,
@@ -59,21 +61,37 @@ class DocumentationPage(SecondaryPage):
         if not heading:
             return markdown
         lines = markdown.splitlines()
-        try:
-            start = next(i for i, line in enumerate(lines) if line.strip() == heading)
-        except StopIteration:
-            return markdown
-        level = len(heading) - len(heading.lstrip("#"))
-        end = len(lines)
-        for index in range(start + 1, len(lines)):
-            stripped = lines[index].lstrip()
-            if not stripped.startswith("#"):
+        def normalize(title):
+            title = unicodedata.normalize("NFKC", title).casefold()
+            title = title.translate(str.maketrans({"`": "", "*": "", "_": "", "~": "",
+                                                   "–": "-", "—": "-"}))
+            return re.sub(r"\s+", "", title)
+
+        heading_pattern = re.compile(r"^\s*(#{1,6})\s+(.+?)\s*#*\s*$")
+        target = heading_pattern.match(heading.strip())
+        wanted = normalize(target.group(2) if target else heading.strip())
+        start = None
+        level = None
+        fence = None
+        for index, line in enumerate(lines):
+            delimiter = re.match(r"^\s*(`{3,}|~{3,})", line)
+            if delimiter:
+                marker = delimiter.group(1)
+                if fence is None:
+                    fence = marker
+                elif marker[0] == fence[0] and len(marker) >= len(fence):
+                    fence = None
                 continue
-            next_level = len(stripped) - len(stripped.lstrip("#"))
-            if next_level <= level:
-                end = index
-                break
-        return "\n".join(lines[start:end])
+            match = heading_pattern.match(line) if fence is None else None
+            if match is None:
+                continue
+            next_level = len(match.group(1))
+            if start is None:
+                if normalize(match.group(2)) == wanted:
+                    start, level = index, next_level
+            elif next_level <= level:
+                return "\n".join(lines[start:index])
+        return markdown if start is None else "\n".join(lines[start:])
 
     def _load_document(self, filename, section=None):
         path = DOCS_DIR / filename
@@ -134,7 +152,7 @@ class DocumentationPage(SecondaryPage):
                 table_format.setCellPadding(8)
                 table_format.setCellSpacing(0)
                 table_format.setWidth(
-                    QtGui.QTextLength(QtGui.QTextLength.FixedLength, 600)
+                    QtGui.QTextLength(QtGui.QTextLength.PercentageLength, 100)
                 )
                 table.setFormat(table_format)
                 for column in range(table.columns()):
@@ -158,6 +176,12 @@ class DocumentationPage(SecondaryPage):
                 code_format.setFontFamilies(["JetBrains Mono", "Consolas", "Courier New", "monospace"])
                 code_format.setProperty(QtGui.QTextFormat.FontPixelSize, 13)
                 cursor.setCharFormat(code_format)
+                cursor.setBlockCharFormat(code_format)
+                block_format.setBackground(QtGui.QColor(BG_SUBTLE))
+                block_format.setLeftMargin(12)
+                block_format.setRightMargin(12)
+                block_format.setTopMargin(6)
+                block_format.setBottomMargin(6)
                 block_format.setLineHeight(
                     160, QtGui.QTextBlockFormat.ProportionalHeight
                 )

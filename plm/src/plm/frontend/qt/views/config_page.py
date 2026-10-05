@@ -4,7 +4,7 @@ from plm.frontend.qt.widgets.common import apply_drop_shadow, make_icon_button
 from plm.frontend.qt.widgets.config_editor import CsvTableEditor, GenerationEditor
 from plm.frontend.qt.views.artifacts_panel import ArtifactsPanel
 from plm.frontend.qt.styles.tokens import (
-    BG_SURFACE, BORDER_HOVER, SHADOW_SM, SPACING_LG, SPACING_SM, TEXT_MUTED,
+    BG_SURFACE, BORDER_HOVER, SHADOW_SM, SPACING_LG, SPACING_MD, SPACING_SM, TEXT_MUTED,
 )
 
 
@@ -218,6 +218,8 @@ class ConfigPage(QtWidgets.QFrame):
         super().__init__(parent)
         self.setObjectName("ConfigPage")
         self.dirty = False
+        self.validation_issues = ()
+        self._first_error = None
         self._history = []
         self._history_index = -1
         self._saved_content = None
@@ -234,7 +236,7 @@ class ConfigPage(QtWidgets.QFrame):
         self.header.logToggleRequested.connect(self.logToggleRequested.emit)
         self.header.artifactsToggleRequested.connect(self.toggle_artifacts)
         root.addWidget(self.header)
-        root.addSpacing(SPACING_LG)
+        root.addSpacing(SPACING_MD)
 
         self.config_area = QtWidgets.QWidget()
         self.config_area.setObjectName("ConfigArea")
@@ -256,8 +258,8 @@ class ConfigPage(QtWidgets.QFrame):
             editor.changed.connect(self._mark_dirty)
         self.generation_editor.generateRequested.connect(self.generateRequested.emit)
         for tab_name, title, description, editor, fill_editor in (
-            ("Controller", "Controller Configuration", "配置控制器 ID、名称和最大 Lane 宽度。", self.controllers_editor, False),
-            ("LaneMapping", "Lane Mapping Configuration", "配置物理 Lane 与控制器 Lane 的映射关系。", self.mapping_editor, False),
+            ("Controller", "Controller Configuration", "配置控制器 ID、名称和最大 Lane 宽度。", self.controllers_editor, True),
+            ("LaneMapping", "Lane Mapping Configuration", "配置物理 Lane 与控制器 Lane 的映射关系。", self.mapping_editor, True),
             ("Signals", "PIPE Signals", "配置 PIPE 信号、方向、位宽与安全值。", self.signals_editor, True),
             ("Generation", "Generation Settings", "选择生成参数并生成匹配的 RTL 和 Testbench。", self.generation_editor, False),
         ):

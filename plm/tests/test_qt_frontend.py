@@ -92,7 +92,7 @@ class QtFrontendLayoutTests(unittest.TestCase):
             "project": nav.project_list.project_widgets[0].header.mapTo(
                 nav, QtCore.QPoint()
             ).y(),
-            "docs": nav.docs_btn.mapTo(nav, QtCore.QPoint()).y(),
+            "docs": nav.docs_btn.mapTo(nav, QtCore.QPoint(0, nav.docs_btn.height())).y(),
         }
         collapse_finished = QtTest.QSignalSpy(nav.animation_group.finished)
         nav.collapse_btn.click()
@@ -124,6 +124,7 @@ class QtFrontendLayoutTests(unittest.TestCase):
         center_positions = {
             widget.mapTo(nav, widget.rect().center()).x() for widget in aligned_widgets
         }
+        self.assertEqual(len(center_positions), 1)
         self.assertEqual(center_positions, {(nav.width() - 1) // 2})
         self.assertEqual(
             nav.collapse_btn.mapTo(nav, QtCore.QPoint()).y(),
@@ -142,7 +143,7 @@ class QtFrontendLayoutTests(unittest.TestCase):
             stable_y_positions["project"],
         )
         self.assertEqual(
-            nav.collapsed_docs_btn.mapTo(nav, QtCore.QPoint()).y(),
+            nav.collapsed_docs_btn.mapTo(nav, QtCore.QPoint(0, nav.collapsed_docs_btn.height())).y(),
             stable_y_positions["docs"],
         )
         self.assertLess(
@@ -199,7 +200,7 @@ class QtFrontendLayoutTests(unittest.TestCase):
             widget.project_name for widget in nav.project_list.project_widgets
         }
         first_project = nav.project_list.project_widgets[0]
-        self.assertEqual(first_project.folder_icon.size(), QtCore.QSize(20, 20))
+        self.assertEqual(first_project.folder_icon.size(), QtCore.QSize(18, 18))
         self.assertEqual(first_project.header.layout().contentsMargins().left(), 0)
         self.assertEqual(
             first_project.header.layout().itemAt(1).spacerItem().sizeHint().width(), 8
@@ -214,8 +215,8 @@ class QtFrontendLayoutTests(unittest.TestCase):
         self.assertEqual(
             first_project.findChildren(QtWidgets.QPushButton, "SessionButton"), []
         )
-        self.assertEqual(first_project.archive_btn.size(), QtCore.QSize(24, 24))
-        self.assertEqual(first_project.more_btn.size(), QtCore.QSize(24, 24))
+        self.assertEqual(first_project.archive_btn.size(), QtCore.QSize(28, 28))
+        self.assertEqual(first_project.more_btn.size(), QtCore.QSize(28, 28))
         self.assertTrue(first_project.archive_btn.isHidden())
         self.assertTrue(first_project.more_btn.isHidden())
         hover_card = nav.project_list.hover_card
@@ -288,7 +289,7 @@ class QtFrontendLayoutTests(unittest.TestCase):
         initial_count = project_list.count()
         self.assertGreater(initial_count, 0)
         for row, widget in enumerate(project_list.project_widgets):
-            self.assertEqual(project_list.item(row).sizeHint().height(), 32)
+            self.assertEqual(project_list.item(row).sizeHint().height(), 36)
             self.assertEqual(widget.layout().count(), 1)
             self.assertIs(widget.layout().itemAt(0).widget(), widget.header)
             self.assertFalse(widget.header.isCheckable())
@@ -362,7 +363,7 @@ class QtFrontendLayoutTests(unittest.TestCase):
         self.assertEqual(nav.expanded_max_width, 400)
         self.assertEqual(nav.brand_row.height(), 40)
         self.assertEqual(nav.brand_layout.spacing(), 0)
-        self.assertEqual(nav.logo_label.size(), QtCore.QSize(20, 20))
+        self.assertEqual(nav.logo_label.size(), QtCore.QSize(18, 18))
         self.assertEqual(nav.brand_logo_gap.sizeHint().width(), 8)
         self.assertEqual(nav.brand_button_gap.sizeHint().width(), 2)
         self.assertEqual(nav.collapse_btn.size(), QtCore.QSize(32, 32))
@@ -382,13 +383,13 @@ class QtFrontendLayoutTests(unittest.TestCase):
             nav.settings_btn,
             nav.docs_btn,
         ):
-            self.assertEqual(button.height(), 32)
+            self.assertEqual(button.height(), 36)
 
         project_index = root.indexOf(nav.project_list)
         collapsed_project_index = root.indexOf(nav.collapsed_projects)
         self.assertEqual(root.stretch(project_index), 1)
         self.assertEqual(root.stretch(collapsed_project_index), 1)
-        self.assertEqual(first_project.header.height(), 32)
+        self.assertEqual(first_project.header.height(), 36)
 
         footer_layout = nav.footer.layout()
         self.assertIsInstance(footer_layout, QtWidgets.QVBoxLayout)
@@ -578,10 +579,7 @@ class QtFrontendLayoutTests(unittest.TestCase):
             actions["置顶"].trigger()
             actions["重命名"].trigger()
             actions["归档"].trigger()
-            delete_button = menu.findChild(
-                QtWidgets.QPushButton, "ProjectDeleteMenuButton"
-            )
-            delete_button.click()
+            actions["删除"].trigger()
 
             self.assertEqual(len(pin_spy), 1)
             self.assertEqual(len(rename_spy), 1)
@@ -654,8 +652,8 @@ class QtFrontendLayoutTests(unittest.TestCase):
         )
         self.assertEqual(toolbar.layout().spacing(), 8)
         for button in panel.toolbar_buttons:
-            self.assertEqual(button.size(), QtCore.QSize(24, 24))
-            self.assertEqual(button.iconSize(), QtCore.QSize(20, 20))
+            self.assertEqual(button.size(), QtCore.QSize(28, 28))
+            self.assertEqual(button.iconSize(), QtCore.QSize(18, 18))
 
         self.assertEqual(panel.layout().spacing(), 12)
         self.assertIsInstance(panel.preview, QtWidgets.QPlainTextEdit)
@@ -718,7 +716,7 @@ class QtFrontendLayoutTests(unittest.TestCase):
                 settings.setValue("tools/editor_path", original)
             settings.sync()
 
-    def test_settings_and_docs_open_visual_placeholders(self):
+    def test_settings_and_docs_open_secondary_pages(self):
         nav = self.window.nav_panel
         nav.settings_btn.click()
         self.app.processEvents()
@@ -730,10 +728,10 @@ class QtFrontendLayoutTests(unittest.TestCase):
         self.assertEqual(overlay.geometry(), self.window.rect())
         self.assertEqual(overlay.back_btn.text(), "")
         self.assertEqual(overlay.back_btn.size(), QtCore.QSize(32, 32))
-        self.assertEqual(overlay.back_btn.iconSize(), QtCore.QSize(20, 20))
+        self.assertEqual(overlay.back_btn.iconSize(), QtCore.QSize(18, 18))
         panel = overlay.findChild(QtWidgets.QWidget, "SecondaryPagePanel")
         self.assertEqual(panel.width(), 800)
-        self.assertEqual(panel.mapTo(overlay, QtCore.QPoint()).y(), 96)
+        self.assertEqual(panel.mapTo(overlay, QtCore.QPoint()).y(), 72)
         self.assertEqual(
             panel.mapTo(overlay, panel.rect().center()).x(),
             overlay.rect().center().x(),
@@ -742,9 +740,9 @@ class QtFrontendLayoutTests(unittest.TestCase):
         self.assertEqual(divider.height(), 1)
         for row in overlay.setting_rows.values():
             self.assertEqual(row.height(), 56)
-        self.assertEqual(overlay.font_family_combo.size(), QtCore.QSize(280, 36))
-        self.assertEqual(overlay.font_size_spin.size(), QtCore.QSize(280, 36))
-        self.assertIn("chevron-down.svg", overlay.font_family_combo.styleSheet())
+        self.assertEqual(overlay.font_family_combo.size(), QtCore.QSize(280, 54))
+        self.assertEqual(overlay.font_size_spin.size(), QtCore.QSize(280, 54))
+        self.assertGreater(overlay.font_family_combo.count(), 0)
         self.assertEqual(
             overlay.font_size_spin.buttonSymbols(),
             QtWidgets.QAbstractSpinBox.NoButtons,
@@ -832,7 +830,8 @@ class QtFrontendLayoutTests(unittest.TestCase):
                     if isinstance(frame, QtGui.QTextTable)
                 ]
                 self.assertTrue(tables)
-                self.assertEqual(tables[0].format().width().rawValue(), 600)
+                self.assertEqual(tables[0].format().width().type(), QtGui.QTextLength.PercentageLength)
+                self.assertEqual(tables[0].format().width().rawValue(), 100)
                 self.assertEqual(
                     overlay.doc_browser.verticalScrollBarPolicy(),
                     QtCore.Qt.ScrollBarAsNeeded,
@@ -880,12 +879,13 @@ class QtFrontendLayoutTests(unittest.TestCase):
             "search",
             "link",
             "file",
+            "file-x",
             "more-horizontal",
             "maximize",
             "plus",
             "rocket",
         )
-        self.assertEqual(len(icon_names), 28)
+        self.assertEqual(len(icon_names), 29)
         self.assertEqual(
             {path.stem for path in LUCIDE_ICON_DIR.glob("*.svg")},
             set(icon_names),
@@ -895,8 +895,8 @@ class QtFrontendLayoutTests(unittest.TestCase):
             self.assertFalse(load_lucide_icon(name).isNull())
 
     def test_global_stylesheet_contains_key_visual_rules(self):
-        self.assertIn("background-color: #F1F1F5", APP_QSS)
-        self.assertIn("border-top-left-radius: 8px", APP_QSS)
+        self.assertIn("background-color: #F7F9FC", APP_QSS)
+        self.assertIn("border-radius: 8px", APP_QSS)
         self.assertIn("QSplitter::handle", APP_QSS)
         self.assertIn("QTabWidget#ConfigTabs QTabBar::tab:selected", APP_QSS)
         self.assertIn("QScrollBar::handle:vertical", APP_QSS)

@@ -109,7 +109,7 @@ Verible 设置保存在本机，不写入这个项目文件。
 
 ## Settings 与 Documentation
 
-Settings 有 General、Appearance、Tools、Formatter 四个分页。
+Settings 有 General、Appearance、Formatter 三个分页。默认编辑器在 General 中设置。
 字体、字号、外部编辑器和 Verible 设置均保存在本机，重启后恢复。
 Documentation 内置当前工具说明和本指南，安装包中也可使用。
 

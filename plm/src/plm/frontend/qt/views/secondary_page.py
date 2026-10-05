@@ -98,7 +98,7 @@ class SecondaryPage(QtWidgets.QFrame):
         layout.setSpacing(8)
         self.menu_buttons = []
         entries = (
-            ("General", "Appearance", "Tools", "Formatter")
+            ("General", "Appearance", "Formatter")
             if page == "settings"
             else ("Getting Started", "Configuration", "Generation")
         )

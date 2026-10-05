@@ -67,10 +67,14 @@ class ProjectList(QtWidgets.QListWidget):
             ),
             None,
         )
-        if selected_widget is None and self.project_widgets:
+        if selected_widget is None and project_name and self.project_widgets:
             selected_widget = self.project_widgets[0]
         if selected_widget is None:
             self.selected_project_name = None
+            self.clearSelection()
+            self.setCurrentRow(-1)
+            for widget in self.project_widgets:
+                widget.set_selected(False)
             return None
 
         self.selected_project_name = selected_widget.project_name

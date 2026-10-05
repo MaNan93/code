@@ -49,9 +49,22 @@ Formatter 的路径和参数由 QSettings 提供给每次校验、生成和状�
 `None` 表示项目内置格式化参数，空字典表示 Verible 自身默认值。
 仅修改外观不会覆盖 Formatter 偏好。设置变化会重新检查输出是否过期。
 
-旧 `lanegrid`、`tables`、`settings`、`theme`、`sap_icons`、`code_highlighter`
-控件及 SAP/72 字体已移除。当前文件预览使用自己的只读编辑器和高亮器；
+旧 `settings`、`theme`、`sap_icons`、`code_highlighter` 控件及 SAP/72 字体已移除。
+`lanegrid.py` 和 `tables.py` 仍由配置编辑器使用，随发行包一起提供。
+当前文件预览使用自己的只读编辑器和高亮器；
 SVG 图标与字体偏好沿用现有界面。
+Qt 回调的未捕获异常写入 traceback 和窗口日志，事件循环继续运行。
+保存时的配置校验错误通过单元格标记与日志反馈，不重复弹出模态提示。
+导航栏默认 260px，可在 200–400px 范围拖动；收起后为 56px，图标按钮为 32px。
+展开恢复收起前的宽度。
+表格配置页填满卡片高度；多通道网格保留字符所需列宽，空间不足时横向滚动。
+笔刷拖拽超过系统拖动阈值后生效，单击等待双击判定后涂色，双击直接编辑原值。
+重新加载表格取消待涂单击；日志收起时取消其拉伸权重，窗口缩放不会再次展开。
+外部改动检查在模态提示期间阻止重入，并在退出或异常时释放检查标记。
+Settings 分为 General（编辑器）、Appearance（字体）和 Formatter；非法参数会
+切换到 Formatter 并聚焦输入框。参数控件按内容与单元格内边距自适应尺寸。
+关闭二级页面清除导航激活态；Documentation 归一化章节标题、忽略代码块内
+标题，表格使用内容区百分比宽度，代码块使用浅灰背景与等宽字体。
 
 ## 参数、入口与打包
 
@@ -82,6 +95,8 @@ uv run python scripts/check_wheel.py
 CI 覆盖 Linux/Windows、Python 3.9/3.12 的回归，并在 Linux/Windows 检查 wheel。
 单独的 Linux RTL 仿真任务安装 Verilator，设置 `PLM_RUN_RTL_SIM=1` 验证 PHY input
 模式 DPR 仿真。未设置此变量时，耗时仿真测试跳过；生成文本检查仍执行。
+样例快照测试禁用外部格式化器，并按统一换行的文本比较，避免本机 Verible
+版本与 Windows 换行影响结果。格式化器行为另由生成集成测试覆盖。
 
 ## 历史决定
 

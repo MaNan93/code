@@ -16,7 +16,7 @@ _CJK_FONT_FALLBACKS = (
 
 def _font_family_stack(font_family):
     requested = (font_family or "Inter").replace('"', "").strip()
-    families = (requested, "Inter", *_CJK_FONT_FALLBACKS)
+    families = (requested, *_CJK_FONT_FALLBACKS)
     seen = set()
     ordered = []
     for family in families:

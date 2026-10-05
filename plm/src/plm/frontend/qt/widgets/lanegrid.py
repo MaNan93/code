@@ -481,6 +481,7 @@ class LaneGrid(QtWidgets.QWidget):
 
     # ------------------------------------------------------------ grid construction
     def _render(self):
+        self.table._cancel_pending_paint()
         self._building = True
         self.table.blockSignals(True)
         self.table.clear()
@@ -523,6 +524,15 @@ class LaneGrid(QtWidgets.QWidget):
         avail = max(1, usable - mode_w)
         n = max(1, self.lane_count)
         lane_w, remainder = divmod(avail, n)
+        font = QtGui.QFont(self.table.font())
+        font.setBold(True)
+        minimum = QtGui.QFontMetrics(font).horizontalAdvance(str(max(31, n - 1))) + 2 * SPACING_MD
+        overflow = lane_w < minimum
+        self.table.setHorizontalScrollBarPolicy(
+            QtCore.Qt.ScrollBarAsNeeded if overflow else QtCore.Qt.ScrollBarAlwaysOff
+        )
+        if overflow:
+            lane_w, remainder = minimum, 0
         self.table.setColumnWidth(0, mode_w)
         for lane_idx in range(self.lane_count):
             self.table.setColumnWidth(
@@ -546,6 +556,8 @@ class LaneGrid(QtWidgets.QWidget):
                 item.setToolTip(f"Lane {lane_idx}")
 
     def _render_body(self):
+        # A reload or row change invalidates coordinates of deferred clicks.
+        self.table._cancel_pending_paint()
         self._building = True
         self.table.blockSignals(True)
         self.table.setRowCount(0)
@@ -623,8 +635,7 @@ class LaneGrid(QtWidgets.QWidget):
         self._drag_current = (r, lane_idx)
         self._drag_snapshot = copy.deepcopy(self.data)
         self._hover_cell = None  # suppress preview during drag
-        # Lay the stroke down on press so a plain click (press + release,
-        # no movement) still paints one cell.
+        # Called only after a drag starts or a single click is confirmed.
         self._paint_current_rect()
 
     def _continue_paint(self, r, lane_idx):
@@ -672,15 +683,6 @@ class LaneGrid(QtWidgets.QWidget):
         self.table.blockSignals(False)
         self._building = False
         self._refresh_cell_styles()
-
-    def _rollback_to_snapshot(self):
-        """Undo the just-completed first click's own paint stroke before a
-        double-click opens the cell for editing -- otherwise the value the
-        user meant to hand-type over would already have been overwritten
-        by that first click's paint."""
-        if self._drag_snapshot is not None:
-            self.data = copy.deepcopy(self._drag_snapshot)
-            self._sync_table_from_data()
 
     # ------------------------------------------------------------ hover tracking
     def _on_cell_hover(self, pos):
@@ -753,20 +755,18 @@ class LaneGrid(QtWidgets.QWidget):
 
 
 class _LaneTable(RowDragTable):
-    """QTableWidget whose mouse events drive the owning LaneGrid's
-    paint-drag, hover-preview, and double-click-edit-with-rollback
-    behavior. Qt delivers a double-click as mousePress+mouseRelease (first
-    click) followed by mouseDoubleClick+mouseRelease (second click) rather
-    than a second mousePress -- so the first click's own snapshot/paint
-    (from _begin_paint) is exactly the state mouseDoubleClickEvent rolls
-    back to before opening the editor.
-
-    Mouse tracking is enabled so mouseMoveEvent fires even without a
-    button held; that drives the faded hover-preview stroke."""
+    """Separate pending clicks, paint drags, and native double-click edits."""
 
     def __init__(self, grid):
         super().__init__(drag_columns={0})
         self._grid = grid
+        self._press_pos = None
+        self._pending_cell = None
+        self._click_cell = None
+        self._click_timer = QtCore.QTimer(self)
+        self._click_timer.setSingleShot(True)
+        self._click_timer.setTimerType(QtCore.Qt.PreciseTimer)
+        self._click_timer.timeout.connect(self._commit_single_click)
         self.setMouseTracking(True)
         self.viewport().setMouseTracking(True)
 
@@ -781,11 +781,20 @@ class _LaneTable(RowDragTable):
         if event.button() == QtCore.Qt.LeftButton:
             cell = self._grid._cell_at(event.pos())
             if cell is not None:
-                self._grid._begin_paint(*cell)
+                self._commit_single_click()
+                self._press_pos = QtCore.QPoint(event.pos())
+                self._pending_cell = cell
                 return  # don't let the base class turn this into a selection drag
         super().mousePressEvent(event)
 
     def mouseMoveEvent(self, event):
+        if self._pending_cell is not None and event.buttons() & QtCore.Qt.LeftButton:
+            if (event.pos() - self._press_pos).manhattanLength() >= QtWidgets.QApplication.startDragDistance():
+                self._grid._begin_paint(*self._pending_cell)
+                self._pending_cell = None
+                self._press_pos = None
+            else:
+                return
         if self._grid._drag_active:
             cell = self._grid._cell_at(event.pos())
             if cell is not None:
@@ -803,17 +812,39 @@ class _LaneTable(RowDragTable):
         if self._grid._drag_active:
             self._grid._end_paint()
             return
+        if event.button() == QtCore.Qt.LeftButton and self._pending_cell is not None:
+            self._click_cell = self._pending_cell
+            self._pending_cell = None
+            self._press_pos = None
+            # Qt sends the first release before the double-click event.
+            # Wait for that decision so editing never sees a painted value.
+            self._click_timer.start(QtWidgets.QApplication.doubleClickInterval() + 1)
+            return
         super().mouseReleaseEvent(event)
 
     def mouseDoubleClickEvent(self, event):
+        self._cancel_pending_paint()
         cell = self._grid._cell_at(event.pos())
         if cell is not None:
-            self._grid._rollback_to_snapshot()
             item = self.itemAt(event.pos())
             if item is not None:
                 self.editItem(item)
             return
         super().mouseDoubleClickEvent(event)
+
+    def _cancel_pending_paint(self):
+        self._click_timer.stop()
+        self._press_pos = None
+        self._pending_cell = None
+        self._click_cell = None
+
+    def _commit_single_click(self):
+        cell = self._click_cell
+        self._click_cell = None
+        self._click_timer.stop()
+        if cell is not None and self.state() != QtWidgets.QAbstractItemView.EditingState:
+            self._grid._begin_paint(*cell)
+            self._grid._end_paint()
 
     def leaveEvent(self, event):
         self._grid._on_cell_leave()

@@ -1,3 +1,5 @@
+import sys
+
 from PyQt5 import QtCore, QtGui, QtWidgets
 from plm.core.verible import (
     DEFAULT_VERIBLE_FLAGS, VERIBLE_ALIGN_PARAMS, VERIBLE_INDENT_PARAMS,
@@ -5,6 +7,7 @@ from plm.core.verible import (
 )
 from plm.frontend.qt.models.preferences import DEFAULT_EDITOR, DEFAULT_FONT_FAMILY, DEFAULT_FONT_SIZE
 from plm.frontend.qt.widgets.common import LUCIDE_ICON_DIR
+from plm.frontend.qt.styles.tokens import SPACING_MD, SPACING_SM
 from .secondary_page import SecondaryPage
 
 
@@ -19,6 +22,30 @@ RECOMMENDED_FONT_CHOICES = (
     "DejaVu Sans",
 )
 MORE_FONTS_LABEL = "更多字体..."
+
+
+def _executable_filter():
+    return "Executables (*.exe);;All files (*)" if sys.platform == "win32" else "All files (*)"
+
+
+class _FormatterTable(QtWidgets.QTableWidget):
+    """Include styled cell padding when sizing embedded parameter controls."""
+
+    def sizeHintForColumn(self, column):
+        width = super().sizeHintForColumn(column)
+        if column == 1:
+            for row in range(self.rowCount()):
+                control = self.cellWidget(row, column)
+                if control is not None:
+                    width = max(width, control.sizeHint().width() + 2 * SPACING_MD + 1)
+        return width
+
+    def sizeHintForRow(self, row):
+        height = super().sizeHintForRow(row)
+        control = self.cellWidget(row, 1)
+        if control is not None:
+            height = max(height, control.sizeHint().height() + 2 * SPACING_SM + 1)
+        return height
 
 
 class SettingsPage(SecondaryPage):
@@ -137,19 +164,18 @@ class SettingsPage(SecondaryPage):
         return content
 
     def _show_section(self, index):
-        titles = ("General", "Appearance", "Tools", "Formatter")
+        titles = ("General", "Appearance", "Formatter")
         descriptions = (
             "配置会保存在本机，并在下次启动时自动恢复。",
             "调整整个应用的字体与字号。",
-            "设置从预览面板打开文件时使用的编辑器。",
             "Verible 设置用于 RTL 和 Testbench 格式化，保存后会重新检查输出状态。",
         )
-        visible_rows = ({"editor"}, {"font", "size"}, {"editor"}, set())[index]
+        visible_rows = ({"editor"}, {"font", "size"}, set())[index]
         self.heading_label.setText(titles[index])
         self.description_label.setText(descriptions[index])
         for name, row in self.setting_rows.items():
             row.setVisible(name in visible_rows)
-        is_formatter = index == 3
+        is_formatter = index == 2
         self.formatter_panel.setVisible(is_formatter)
         # Formatter uses the whole content column: top aligned, 32 px side
         # padding / 24 px vertical padding, with its table taking all spare
@@ -207,15 +233,14 @@ class SettingsPage(SecondaryPage):
             button.clicked.connect(callback)
             path_row.addWidget(button)
         layout.addLayout(path_row)
-        self.flag_table = QtWidgets.QTableWidget(0, 2)
+        self.flag_table = _FormatterTable(0, 2)
         self.flag_table.setObjectName("ConfigDataTable")
         self.flag_table.setHorizontalHeaderLabels(("参数", "值"))
         self.flag_table.verticalHeader().hide()
         self.flag_table.verticalHeader().setDefaultSectionSize(40)
         formatter_header = self.flag_table.horizontalHeader()
         formatter_header.setSectionResizeMode(0, QtWidgets.QHeaderView.Stretch)
-        formatter_header.setSectionResizeMode(1, QtWidgets.QHeaderView.Fixed)
-        formatter_header.resizeSection(1, 180)
+        formatter_header.setSectionResizeMode(1, QtWidgets.QHeaderView.ResizeToContents)
         self.flag_table.setAlternatingRowColors(True)
         self.flag_table.setVerticalScrollMode(QtWidgets.QAbstractItemView.ScrollPerPixel)
         self.flag_table.setHorizontalScrollMode(QtWidgets.QAbstractItemView.ScrollPerPixel)
@@ -237,8 +262,7 @@ class SettingsPage(SecondaryPage):
                 default_value = DEFAULT_VERIBLE_FLAGS[name]
                 if choices:
                     control = QtWidgets.QComboBox()
-                    control.setFixedHeight(36)
-                    control.setMinimumWidth(168)
+                    control.setMinimumHeight(36)
                     control.addItem(f"{default_value} (default)", default_value)
                     for choice in choices:
                         if choice != default_value:
@@ -247,8 +271,7 @@ class SettingsPage(SecondaryPage):
                     control.currentIndexChanged.connect(self._flags_changed)
                 else:
                     control = QtWidgets.QLineEdit()
-                    control.setFixedHeight(36)
-                    control.setMinimumWidth(168)
+                    control.setMinimumHeight(36)
                     control.setToolTip(f"PLM 默认值：{default_value}")
                     if name in VERIBLE_INT_PARAMS:
                         control.setValidator(QtGui.QIntValidator(0, 2147483647, control))
@@ -266,7 +289,13 @@ class SettingsPage(SecondaryPage):
         buttons.addStretch(1)
         layout.addLayout(buttons)
         self._fill_flags(preferences["verible_flags"])
+        self.flag_table.resizeRowsToContents()
         return panel
+
+    def changeEvent(self, event):
+        super().changeEvent(event)
+        if event.type() in (QtCore.QEvent.FontChange, QtCore.QEvent.StyleChange) and hasattr(self, "flag_table"):
+            self.flag_table.resizeRowsToContents()
 
     def _flags_changed(self, *_):
         self._flags_dirty = True
@@ -302,7 +331,7 @@ class SettingsPage(SecondaryPage):
     def _browse_verible(self):
         path, _filter = QtWidgets.QFileDialog.getOpenFileName(
             self, "选择 verible-verilog-format", self.verible_path_edit.text().strip(),
-            "Executables (*.exe);;All files (*)",
+            _executable_filter(),
         )
         if path:
             self.verible_path_edit.setText(path)
@@ -318,7 +347,7 @@ class SettingsPage(SecondaryPage):
             self,
             "选择默认编辑器",
             self.editor_path_edit.text().strip(),
-            "Executables (*.exe);;All files (*)",
+            _executable_filter(),
         )
         if path:
             self.editor_path_edit.setText(path)
@@ -340,6 +369,13 @@ class SettingsPage(SecondaryPage):
             control = self._flag_controls[name]
             if control.text().strip() and not control.hasAcceptableInput():
                 self.settings_status.setText(f"{name} 必须是非负整数。")
+                formatter_index = next((i for i, button in enumerate(self.menu_buttons)
+                                        if button.text() == "Formatter"), 2)
+                self._select_section(formatter_index)
+                row = list(self._flag_controls).index(name)
+                self.flag_table.scrollToItem(self.flag_table.item(row, 0))
+                control.setFocus(QtCore.Qt.OtherFocusReason)
+                control.selectAll()
                 return
         preferences = self._preferences()
         self.preferencesSaved.emit(preferences)

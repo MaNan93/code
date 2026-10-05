@@ -27,10 +27,10 @@ class NavPanel(QtWidgets.QFrame):
     def __init__(self, projects=(), recent_project="", parent=None):
         super().__init__(parent)
         self.setObjectName("NavPanel")
-        self.expanded_width = 240
+        self.expanded_width = 260
         self.collapsed_width = 56
-        self.expanded_min_width = 240
-        self.expanded_max_width = 240
+        self.expanded_min_width = 200
+        self.expanded_max_width = 400
         self.is_collapsed = False
         self.is_animating = False
         self._target_collapsed = False
@@ -86,7 +86,7 @@ class NavPanel(QtWidgets.QFrame):
         )
         self.brand_layout.addItem(self.brand_button_gap)
         self.collapse_btn = make_icon_button(
-            "panel-left", "收起侧边栏", "NavCollapseButton", 36, ICON_SIZE
+            "panel-left", "收起侧边栏", "NavCollapseButton", 32, ICON_SIZE
         )
         self.collapse_btn.clicked.connect(self.toggle_collapse)
         self.brand_layout.addWidget(self.collapse_btn)
@@ -118,7 +118,8 @@ class NavPanel(QtWidgets.QFrame):
         root.addWidget(self.project_list, 1)
 
         self.current_project_name = self.project_list.select_project(
-            recent_project, emit_signal=False
+            recent_project or (config_projects[0].name if config_projects else ""),
+            emit_signal=False,
         )
 
         self.collapsed_projects = QtWidgets.QWidget()
@@ -198,6 +199,8 @@ class NavPanel(QtWidgets.QFrame):
 
         self._target_collapsed = not self.is_collapsed
         start_width = self.width()
+        if self._target_collapsed:
+            self.expanded_width = start_width
         end_width = (
             self.collapsed_width if self._target_collapsed else self.expanded_width
         )
@@ -285,7 +288,7 @@ class NavPanel(QtWidgets.QFrame):
                 button.setMinimumWidth(0)
                 button.setMaximumWidth(QtWidgets.QWIDGETSIZE_MAX)
             else:
-                button.setFixedSize(36, 36)
+                button.setFixedSize(32, 32)
             button.style().unpolish(button)
             button.style().polish(button)
 
@@ -300,7 +303,7 @@ class NavPanel(QtWidgets.QFrame):
             icon_name,
             tooltip,
             "NavIconBtn",
-            36,
+            32,
             ICON_SIZE,
         )
         button.clicked.connect(callback)
@@ -367,6 +370,7 @@ class NavPanel(QtWidgets.QFrame):
         self.project_list.projectPinned.connect(self.project_pinned.emit)
         self.project_list.projectSelected.connect(self._project_selected)
         self.layout().replaceWidget(old, self.project_list)
+        self.layout().setStretch(self.layout().indexOf(self.project_list), 1)
         old.hide()
         old.deleteLater()
         self.project_list.setVisible(not self.is_collapsed)

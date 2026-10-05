@@ -2,6 +2,7 @@
 
 import json
 import os
+import re
 from pathlib import Path
 import subprocess
 import tempfile
@@ -18,6 +19,7 @@ from plm.frontend.qt.controllers import AppController
 from plm.frontend.qt.main_window import MainWindow
 from plm.frontend.qt.services import ProjectService, SettingsStore, WorkspaceService
 from plm.frontend.qt.views.settings_page import SettingsPage
+from qt_test_support import dispose_new_widgets
 
 
 class GenerationIntegrationTests(unittest.TestCase):
@@ -28,6 +30,7 @@ class GenerationIntegrationTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory(prefix="plm generation test ")
         self.addCleanup(self.temp.cleanup)
+        self.addCleanup(dispose_new_widgets, self.app, set(self.app.topLevelWidgets()))
         self.root = Path(self.temp.name).resolve()
         scaffold_default_content(self.root / "test/demo")
         self.store = SettingsStore(QtCore.QSettings(str(self.root / "settings.ini"), QtCore.QSettings.IniFormat))
@@ -141,8 +144,8 @@ class GenerationIntegrationTests(unittest.TestCase):
                     controller.generate_current()
                     self.assertEqual(controller.generation_state, "up_to_date")
                     top = (controller.current_project.config_dir.parent / "rtl/src/pipe_lane_mapper.sv").read_text()
-                    self.assertEqual("input logic dpr_pclk," in top, arch == "serdes" and dpr)
-                    self.assertEqual("output logic dpr_pclk," in top, arch == "original_pipe" and dpr)
+                    self.assertEqual(bool(re.search(r"\binput\s+logic\s+dpr_pclk\s*,", top)), arch == "serdes" and dpr)
+                    self.assertEqual(bool(re.search(r"\boutput\s+logic\s+dpr_pclk\s*,", top)), arch == "original_pipe" and dpr)
                     self.assertNotIn("dft_mode", top)
                     self.assertEqual(editor.pclk_mode.currentText(), "pclk_as_phy_input" if arch == "serdes" else "pclk_as_phy_output")
         self.assertFalse(editor.pclk_mode.isEnabled())

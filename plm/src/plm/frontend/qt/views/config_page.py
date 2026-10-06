@@ -1,10 +1,10 @@
 from PyQt5 import QtCore, QtGui, QtWidgets
 from copy import deepcopy
-from plm.frontend.qt.widgets.common import apply_drop_shadow, make_icon_button
+from plm.frontend.qt.widgets.common import make_icon_button
 from plm.frontend.qt.widgets.config_editor import CsvTableEditor, GenerationEditor
 from plm.frontend.qt.views.artifacts_panel import ArtifactsPanel
 from plm.frontend.qt.styles.tokens import (
-    SHADOW_SM, SPACING_LG, SPACING_MD,
+    SPACING_LG, SPACING_MD,
 )
 
 
@@ -136,8 +136,7 @@ class ConfigHeader(QtWidgets.QFrame):
 class ConfigTabPage(QtWidgets.QWidget):
     def __init__(self, title, description, editor, fill_editor=False, parent=None):
         super().__init__(parent)
-        self.setObjectName("Card")
-        apply_drop_shadow(self, shadow=SHADOW_SM)
+        self.setObjectName("ConfigTabPage")
         root = QtWidgets.QVBoxLayout(self)
         root.setContentsMargins(SPACING_LG, SPACING_LG, SPACING_LG, SPACING_LG)
         root.setSpacing(0)
@@ -235,6 +234,15 @@ class ConfigPage(QtWidgets.QFrame):
         )
         self.artifacts_panel.maximizeRequested.connect(self.toggle_artifacts_maximized)
         self.artifacts_panel.widthRequested.connect(self._on_artifacts_width_requested)
+        self._artifacts_animation = QtCore.QPropertyAnimation(
+            self.artifacts_panel, b"geometry", self
+        )
+        self._artifacts_animation.setDuration(200)
+        self._artifacts_animation.setEasingCurve(QtCore.QEasingCurve.OutCubic)
+        self._hide_artifacts_after_animation = False
+        self._artifacts_animation.finished.connect(
+            self._finish_artifacts_animation
+        )
         self.tabs.currentChanged.connect(
             lambda _index: self.artifacts_panel.raise_()
             if self.artifacts_panel.isVisible() else None
@@ -366,11 +374,33 @@ class ConfigPage(QtWidgets.QFrame):
         return super().eventFilter(watched, event)
 
     def toggle_artifacts(self):
-        visible = not self.artifacts_panel.isVisible()
-        self.artifacts_panel.setVisible(visible)
-        if visible:
-            self.reposition_artifacts()
-            self.artifacts_panel.raise_()
+        target = self._artifacts_target_geometry()
+        if target is None:
+            self.artifacts_panel.setVisible(not self.artifacts_panel.isVisible())
+            return
+        reopening = (
+            self._artifacts_animation.state() == QtCore.QAbstractAnimation.Running
+            and self._hide_artifacts_after_animation
+        )
+        if not self.artifacts_panel.isVisible() or reopening:
+            start = (
+                self.artifacts_panel.geometry()
+                if reopening
+                else QtCore.QRect(
+                    self.config_area.width(), 0, target.width(), target.height()
+                )
+            )
+            self._animate_artifacts(start, target, hide_after=False)
+            return
+        end = QtCore.QRect(
+            self.config_area.width(),
+            0,
+            self.artifacts_panel.width(),
+            self.config_area.height(),
+        )
+        self._animate_artifacts(
+            self.artifacts_panel.geometry(), end, hide_after=True
+        )
 
     def toggle_artifacts_maximized(self):
         if not self.artifacts_panel.isVisible():
@@ -384,15 +414,45 @@ class ConfigPage(QtWidgets.QFrame):
         self.artifacts_panel.set_maximized(self.artifacts_maximized)
         self.reposition_artifacts()
 
-    def reposition_artifacts(self):
-        if not self.artifacts_panel.isVisible():
-            return
+    def _artifacts_target_geometry(self):
         total_w = self.config_area.width()
         total_h = self.config_area.height()
         if total_w <= 0 or total_h <= 0:
+            return None
+        panel_w = (
+            total_w
+            if self.artifacts_maximized
+            else min(self.artifacts_width, total_w)
+        )
+        return QtCore.QRect(total_w - panel_w, 0, panel_w, total_h)
+
+    def _animate_artifacts(self, start, end, hide_after):
+        self._artifacts_animation.stop()
+        self._hide_artifacts_after_animation = hide_after
+        self.artifacts_panel.setGeometry(start)
+        self.artifacts_panel.show()
+        self.artifacts_panel.raise_()
+        self._artifacts_animation.setStartValue(start)
+        self._artifacts_animation.setEndValue(end)
+        self._artifacts_animation.start()
+
+    def _finish_artifacts_animation(self):
+        if self._hide_artifacts_after_animation:
+            self.artifacts_panel.hide()
+        self._hide_artifacts_after_animation = False
+
+    def reposition_artifacts(self):
+        if self._artifacts_animation.state() == QtCore.QAbstractAnimation.Running:
+            self._artifacts_animation.stop()
+            if self._hide_artifacts_after_animation:
+                self.artifacts_panel.hide()
+            self._hide_artifacts_after_animation = False
+        if not self.artifacts_panel.isVisible():
             return
-        panel_w = total_w if self.artifacts_maximized else min(self.artifacts_width, total_w)
-        self.artifacts_panel.setGeometry(total_w - panel_w, 0, panel_w, total_h)
+        target = self._artifacts_target_geometry()
+        if target is None:
+            return
+        self.artifacts_panel.setGeometry(target)
         self.artifacts_panel.raise_()
 
     def _on_artifacts_width_requested(self, width):

@@ -74,10 +74,14 @@ class QtControlLogicTests(unittest.TestCase):
     def test_header_log_and_artifacts_buttons_toggle_panels(self):
         page = self.window.config_page
         self.assertTrue(page.artifacts_panel.isVisible())
+        hidden = QtTest.QSignalSpy(page._artifacts_animation.finished)
         page.header.artifacts_btn.click()
+        self.assertTrue(hidden.wait(1000))
         self.assertFalse(page.artifacts_panel.isVisible())
+        shown = QtTest.QSignalSpy(page._artifacts_animation.finished)
         page.header.artifacts_btn.click()
         self.assertTrue(page.artifacts_panel.isVisible())
+        self.assertTrue(shown.wait(1000))
 
         self.assertGreater(self.window.content_splitter.sizes()[1], 0)
         page.header.log_btn.click()

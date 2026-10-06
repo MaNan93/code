@@ -4,8 +4,16 @@ import re
 
 from PyQt5 import QtCore, QtGui, QtWidgets
 from plm.frontend.qt.styles.tokens import (
-    BG_SUBTLE, PRIMARY, PRIMARY_HOVER, TEXT_MUTED, TEXT_SUB,
+    BG_SURFACE, BORDER, TEXT_MUTED,
 )
+
+
+SYNTAX_COMMENT = "#6E7781"
+SYNTAX_KEYWORD = "#CF222E"
+SYNTAX_PORT = "#0086B3"
+SYNTAX_NUMBER = "#986801"
+SYNTAX_STRING = "#0A3069"
+SYNTAX_DIRECTIVE = "#8250DF"
 
 
 class VerilogHighlighter(QtGui.QSyntaxHighlighter):
@@ -33,11 +41,18 @@ class VerilogHighlighter(QtGui.QSyntaxHighlighter):
         super().__init__(document)
         self.enabled = True
         self.formats = {}
-        for name, color in (("comment", TEXT_SUB), ("keyword", PRIMARY),
-                            ("string", TEXT_SUB), ("number", PRIMARY_HOVER),
-                            ("directive", TEXT_SUB)):
+        for name, color in (
+            ("comment", SYNTAX_COMMENT),
+            ("keyword", SYNTAX_KEYWORD),
+            ("port", SYNTAX_PORT),
+            ("string", SYNTAX_STRING),
+            ("number", SYNTAX_NUMBER),
+            ("directive", SYNTAX_DIRECTIVE),
+        ):
             fmt = QtGui.QTextCharFormat()
             fmt.setForeground(QtGui.QColor(color))
+            if name == "comment":
+                fmt.setFontItalic(True)
             self.formats[name] = fmt
 
     def set_enabled(self, enabled):
@@ -66,12 +81,25 @@ class VerilogHighlighter(QtGui.QSyntaxHighlighter):
         for match in self.TOKENS.finditer(text, start):
             kind = match.lastgroup
             if kind == "word":
-                if match.group() not in self.KEYWORDS:
+                if match.group() in self.KEYWORDS:
+                    kind = "keyword"
+                elif self._is_port_identifier(text, match.start()):
+                    kind = "port"
+                else:
                     continue
-                kind = "keyword"
             self._format(text, match.start(), match.end(), kind)
-            if kind == "comment" and match.group().startswith("/*") and not match.group().endswith("*/"):
+            if (
+                kind == "comment"
+                and match.group().startswith("/*")
+                and not match.group().endswith("*/")
+            ):
                 self.setCurrentBlockState(1)
+
+    @staticmethod
+    def _is_port_identifier(text, position):
+        prefix = text[:position]
+        statement = prefix.rsplit(";", 1)[-1]
+        return re.search(r"\b(?:input|output|inout)\b", statement) is not None
 
 
 class LineNumberArea(QtWidgets.QWidget):
@@ -103,7 +131,8 @@ class CodePreview(QtWidgets.QPlainTextEdit):
         self.update_line_number_width()
 
     def line_number_width(self):
-        return 16 + self.fontMetrics().horizontalAdvance("9") * len(str(self.blockCount()))
+        digits = len(str(self.blockCount()))
+        return 16 + self.fontMetrics().horizontalAdvance("9") * digits
 
     def update_line_number_width(self, *_):
         width = self.line_number_width()
@@ -116,18 +145,29 @@ class CodePreview(QtWidgets.QPlainTextEdit):
         if dy:
             self.line_numbers.scroll(0, dy)
         else:
-            self.line_numbers.update(0, rect.y(), self.line_numbers.width(), rect.height())
+            self.line_numbers.update(
+                0, rect.y(), self.line_numbers.width(), rect.height()
+            )
         if rect.contains(self.viewport().rect()):
             self.update_line_number_width()
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
         rect = self.contentsRect()
-        self.line_numbers.setGeometry(rect.left(), rect.top(), self.line_number_width(), rect.height())
+        self.line_numbers.setGeometry(
+            rect.left(), rect.top(), self.line_number_width(), rect.height()
+        )
 
     def paint_line_numbers(self, event):
         painter = QtGui.QPainter(self.line_numbers)
-        painter.fillRect(event.rect(), QtGui.QColor(BG_SUBTLE))
+        painter.fillRect(event.rect(), QtGui.QColor(BG_SURFACE))
+        painter.setPen(QtGui.QColor(BORDER))
+        painter.drawLine(
+            self.line_numbers.width() - 1,
+            event.rect().top(),
+            self.line_numbers.width() - 1,
+            event.rect().bottom(),
+        )
         painter.setFont(self.font())
         painter.setPen(QtGui.QColor(TEXT_MUTED))
         block = self.firstVisibleBlock()
@@ -136,8 +176,14 @@ class CodePreview(QtWidgets.QPlainTextEdit):
         while block.isValid() and top <= event.rect().bottom():
             height = int(self.blockBoundingRect(block).height())
             if block.isVisible() and top + height >= event.rect().top():
-                painter.drawText(0, top, self.line_numbers.width() - 6,
-                                 self.fontMetrics().height(), QtCore.Qt.AlignRight, str(number + 1))
+                painter.drawText(
+                    0,
+                    top,
+                    self.line_numbers.width() - 6,
+                    self.fontMetrics().height(),
+                    QtCore.Qt.AlignRight,
+                    str(number + 1),
+                )
             top += height
             block = block.next()
             number += 1

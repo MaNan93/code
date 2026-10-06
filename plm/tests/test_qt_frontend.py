@@ -667,10 +667,15 @@ class QtFrontendLayoutTests(unittest.TestCase):
         self.assertEqual(page.artifacts_panel.width(), page.config_area.width())
         page.toggle_artifacts_maximized()
         self.assertEqual(page.artifacts_panel.width(), original_width + 60)
+        hidden = QtTest.QSignalSpy(page._artifacts_animation.finished)
         page.toggle_artifacts()
+        self.assertTrue(hidden.wait(1000))
         self.assertFalse(page.artifacts_panel.isVisible())
+        shown = QtTest.QSignalSpy(page._artifacts_animation.finished)
         page.toggle_artifacts()
         self.assertTrue(page.artifacts_panel.isVisible())
+        self.assertTrue(shown.wait(1000))
+        self.assertEqual(page._artifacts_animation.duration(), 200)
 
     def test_artifact_file_selection_and_copy_path(self):
         panel = self.window.config_page.artifacts_panel
@@ -872,7 +877,7 @@ class QtFrontendLayoutTests(unittest.TestCase):
             self.assertFalse(load_lucide_icon(name).isNull())
 
     def test_global_stylesheet_contains_key_visual_rules(self):
-        self.assertIn("background-color: #F7F9FC", APP_QSS)
+        self.assertIn("background-color: #FFFFFF", APP_QSS)
         self.assertIn("border-radius: 8px", APP_QSS)
         self.assertIn("QSplitter::handle", APP_QSS)
         self.assertIn("QTabWidget#ConfigTabs QTabBar::tab:selected", APP_QSS)
@@ -881,6 +886,7 @@ class QtFrontendLayoutTests(unittest.TestCase):
         self.assertIn("QFrame#WindowTitleBar", APP_QSS)
         self.assertIn('QFrame#WindowTitleBar[windowActive="false"]', APP_QSS)
         self.assertIn('QFrame#NavPanel[windowActive="false"]', APP_QSS)
+        self.assertIn("background-color: #DCFCE7", APP_QSS)
         self.assertIn("qlineargradient", APP_QSS)
 
 

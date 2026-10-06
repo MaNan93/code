@@ -11,7 +11,13 @@ from plm.frontend.qt.models.artifacts import ArtifactSelection
 from plm.frontend.qt.models.preferences import DEFAULT_EDITOR
 from plm.frontend.qt.widgets.code_preview import CodePreview
 from plm.frontend.qt.widgets.common import (
-    ICON_SIZE, StyledMenu, apply_drop_shadow, load_lucide_icon, make_icon_button, open_in_file_manager,
+    ICON_SIZE,
+    StatusBadge,
+    StyledMenu,
+    apply_drop_shadow,
+    load_lucide_icon,
+    make_icon_button,
+    open_in_file_manager,
 )
 from plm.frontend.qt.styles.tokens import PRIMARY, SUCCESS, TEXT_MUTED
 
@@ -140,9 +146,15 @@ class ArtifactsPanel(QtWidgets.QFrame):
         self.preview = CodePreview()
         self.preview.setPlaceholderText("尚无生成文件")
         root.addWidget(self.preview, 1)
-        self.status = QtWidgets.QLabel("尚无生成文件")
+        self.status = StatusBadge("尚无生成文件")
         self.status.setObjectName("ArtifactStatus")
-        root.addWidget(self.status)
+        status_row = QtWidgets.QHBoxLayout()
+        status_row.setContentsMargins(0, 0, 0, 0)
+        status_row.addWidget(
+            self.status, 0, QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter
+        )
+        status_row.addStretch(1)
+        root.addLayout(status_row)
 
         self.search_input.textChanged.connect(self._search_changed)
         self.search_input.returnPressed.connect(self.find_text)

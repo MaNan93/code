@@ -15,12 +15,19 @@ from plm.frontend.qt.widgets.common import StyledMenu, apply_drop_shadow
 from plm.frontend.qt.widgets.tables import RowDragTable
 from plm.frontend.qt.styles.tokens import (
     BG_MAIN, BG_SUBTLE, BG_SURFACE, BORDER, BORDER_HOVER, DANGER, FONT_SIZE_SM,
-    PRIMARY, PRIMARY_HOVER,
-    RADIUS_CHIP, SHADOW_SM, SPACING_LG, SPACING_MD, SPACING_XS, SUCCESS,
-    TEXT_MAIN, TEXT_MUTED, TEXT_SUB,
+    PRIMARY_HOVER, PRIMARY_LIGHT,
+    RADIUS_CHIP, SHADOW_SM, SPACING_LG, SPACING_MD, SPACING_XS,
+    TEXT_MAIN, TEXT_MUTED,
 )
 
-LANE_GRID_PALETTE = [PRIMARY, TEXT_SUB, SUCCESS, DANGER, TEXT_MUTED]
+LANE_GRID_PALETTE = [
+    "#6366F1",
+    "#0EA5E9",
+    "#8B5CF6",
+    "#F59E0B",
+    "#14B8A6",
+    "#EC4899",
+]
 LANE_GRID_UNASSIGNED_BG = BG_SUBTLE
 
 # Keep the mode column compact and let the active lane columns consume the
@@ -144,7 +151,7 @@ class _LaneCellDelegate(QtWidgets.QStyledItemDelegate):
         else:
             painter.fillRect(rect, QtGui.QColor(LANE_GRID_UNASSIGNED_BG))
         if option.state & QtWidgets.QStyle.State_Selected:
-            painter.fillRect(rect, QtGui.QColor(SUCCESS + "18"))
+            painter.fillRect(rect, QtGui.QColor(PRIMARY_LIGHT))
 
         # Adjacent cells assigned to the same controller join into one
         # continuous marker band. Only the two outer ends retain rounded caps.

@@ -15,6 +15,7 @@ from plm.core.gen_flags import (
     SEL_MODE_VALUES,
 )
 from plm.frontend.qt.widgets.lanegrid import LaneGrid
+from plm.frontend.qt.widgets.common import StatusBadge
 from plm.frontend.qt.widgets.tables import EditableTable
 
 
@@ -206,9 +207,12 @@ class GenerationEditor(QtWidgets.QWidget):
         self.generate_btn.setObjectName("ConfigGenerateButton")
         self.generate_btn.clicked.connect(self.generateRequested.emit)
         actions = QtWidgets.QHBoxLayout()
-        self.status_label = QtWidgets.QLabel("请选择项目")
+        self.status_label = StatusBadge("请选择项目")
         self.status_label.setObjectName("GenerationStatus")
-        actions.addWidget(self.status_label, 1)
+        actions.addWidget(
+            self.status_label, 0, QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter
+        )
+        actions.addStretch(1)
         actions.addWidget(self.generate_btn)
         layout.addRow("", actions)
         self.arch.currentIndexChanged.connect(self._sync_pclk)

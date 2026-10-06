@@ -60,6 +60,25 @@ def make_icon_button(icon_name, tooltip, object_name="IconButton", button_size=2
     return button
 
 
+class StatusBadge(QtWidgets.QLabel):
+    """Compact status label with a palette-colored indicator dot."""
+
+    def __init__(self, text="", parent=None):
+        super().__init__(text, parent)
+        self.setContentsMargins(10, 0, 0, 0)
+
+    def paintEvent(self, event):
+        super().paintEvent(event)
+        if not self.text():
+            return
+        painter = QtGui.QPainter(self)
+        painter.setRenderHint(QtGui.QPainter.Antialiasing, True)
+        painter.setPen(QtCore.Qt.NoPen)
+        painter.setBrush(self.palette().color(QtGui.QPalette.WindowText))
+        painter.drawEllipse(QtCore.QPointF(8.0, self.height() / 2.0), 2.5, 2.5)
+        painter.end()
+
+
 def apply_drop_shadow(widget, offset=None, blur_radius=None, alpha=None, shadow=SHADOW_SM):
     preset = shadow or SHADOW_SM
     final_offset = preset["offset"] if offset is None else offset

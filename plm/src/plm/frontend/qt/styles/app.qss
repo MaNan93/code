@@ -186,21 +186,29 @@ QMenu::separator {
 }
 
 QTabWidget::pane { border: none; background: transparent; }
-QTabWidget#ConfigTabs QTabBar { background: transparent; }
+QTabWidget#ConfigTabs QTabBar {
+    background-color: $bg_subtle;
+    border-radius: $radius_control;
+    padding: 3px;
+}
 QTabWidget#ConfigTabs QTabBar::tab {
     background: transparent;
-    color: #64748B;
-    padding: 8px 24px;
+    color: $text_sub;
+    padding: 6px 16px;
     border: none;
-    border-bottom: 2px solid transparent;
+    border-radius: $radius_chip;
     font-size: 13px;
+    font-weight: 500;
 }
 QTabWidget#ConfigTabs QTabBar::tab:selected {
-    color: #3B82F6;
-    border-bottom: 2px solid #3B82F6;
-    font-weight: bold;
+    background-color: $bg_surface;
+    color: $text_main;
+    font-weight: 600;
 }
-QTabWidget#ConfigTabs QTabBar::tab:hover:!selected { color: #1E293B; }
+QTabWidget#ConfigTabs QTabBar::tab:hover:!selected {
+    background-color: rgba(203, 213, 225, 72);
+    color: $text_main;
+}
 
 QScrollBar:vertical {
     background: transparent;
@@ -336,7 +344,8 @@ QPushButton#HeaderButton { border-radius: 0; }
 QPushButton#ArtifactsToolButton:checked { background-color: $primary_light; }
 QPushButton#ArtifactsToolButton::menu-indicator { image: none; width: 0; height: 0; }
 QWidget#ConfigArea, QScrollArea#ConfigScroll, QWidget#ConfigScrollContent { background: $bg_main; border: none; }
-QTabWidget#ConfigTabs::pane { border: none; background: transparent; top: -1px; }
+QTabWidget#ConfigTabs::pane { border: none; background: transparent; }
+QWidget#ConfigTabPage { background: transparent; border: none; }
 QLabel#ConfigTitle { color: $text_main; font-size: $font_size_lg; font-weight: bold; }
 QLabel#ConfigDescription { color: $text_sub; font-size: $font_size_body; }
 QTableWidget#ConfigDataTable {
@@ -377,11 +386,10 @@ QTreeWidget#ArtifactFileTree {
 }
 QTreeWidget#ArtifactFileTree::item { min-height: 28px; border-radius: $radius_chip; }
 QTreeWidget#ArtifactFileTree::item:selected { background: $primary_light; color: $primary; }
-QLabel#ArtifactEmptyText, QLabel#ArtifactStatus {
+QLabel#ArtifactEmptyText {
     color: $text_muted;
     font-size: $font_size_body;
 }
-QLabel#ArtifactStatus { font-size: $font_size_sm; }
 
 QFrame#LogPanel {
     background-color: $bg_surface;
@@ -407,12 +415,36 @@ QFrame#LogStatusBar {
 }
 QLabel#LogStatusText { color: $text_sub; font-size: $font_size_sm; }
 
-QLabel#GenerationStatus, QLabel#ArtifactStatus { color: $text_muted; }
-QLabel#GenerationStatus[state="up_to_date"], QLabel#ArtifactStatus[state="up_to_date"] { color: $success; }
+QLabel#GenerationStatus, QLabel#ArtifactStatus {
+    background-color: $bg_subtle;
+    color: $text_sub;
+    border: none;
+    border-radius: 10px;
+    padding: 3px 8px;
+    font-size: $font_size_sm;
+}
+QLabel#GenerationStatus[state="up_to_date"],
+QLabel#ArtifactStatus[state="up_to_date"] {
+    background-color: #DCFCE7;
+    color: #15803D;
+}
 QLabel#GenerationStatus[state="out_of_date"], QLabel#ArtifactStatus[state="out_of_date"],
-QLabel#GenerationStatus[state="external_changed"], QLabel#ArtifactStatus[state="external_changed"] { color: $text_sub; }
+QLabel#GenerationStatus[state="external_changed"],
+QLabel#ArtifactStatus[state="external_changed"] {
+    background-color: #FEF3C7;
+    color: #B45309;
+}
+QLabel#GenerationStatus[state="generating"],
+QLabel#ArtifactStatus[state="generating"] {
+    background-color: #DBEAFE;
+    color: #1D4ED8;
+}
 QLabel#GenerationStatus[state="failed"], QLabel#ArtifactStatus[state="failed"],
-QLabel#GenerationStatus[state="invalid"], QLabel#ArtifactStatus[state="invalid"] { color: $danger; }
+QLabel#GenerationStatus[state="invalid"],
+QLabel#ArtifactStatus[state="invalid"] {
+    background-color: #FEE2E2;
+    color: #B91C1C;
+}
 
 QFrame#SecondaryPage, QWidget#SecondaryPageArea { background-color: $bg_main; }
 QFrame#SecondaryPageHeader {

@@ -1,7 +1,7 @@
 """Download the Lucide SVG assets used by the Qt front end.
 
 Install the one script dependency first:
-    pip install requests
+    uv pip install requests
 """
 
 from pathlib import Path
@@ -30,11 +30,17 @@ ICON_NAMES = (
     "external-link",
     "refresh-cw",
     "braces",
+    "git-compare",
     "search",
     "link",
     "file",
+    "file-x",
     "more-horizontal",
     "maximize",
+    "rocket",
+    "minus",
+    "square",
+    "copy",
 )
 # Lucide renamed this icon upstream but the application keeps the requested
 # stable asset filename.

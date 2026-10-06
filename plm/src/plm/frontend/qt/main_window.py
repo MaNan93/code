@@ -1,7 +1,5 @@
 """Frameless PLM desktop window with a full-width custom title bar."""
 
-import sys
-
 from PyQt5 import QtCore, QtGui, QtWidgets
 
 from plm.frontend.qt.controllers import AppController
@@ -521,7 +519,3 @@ class MainWindow(QtWidgets.QMainWindow):
             self._update_resize_handles()
         self.nav_panel.set_active(None)
         self._update_history_actions()
-
-if __name__ == "__main__":
-    from plm.frontend.qt.main import main
-    sys.exit(main())

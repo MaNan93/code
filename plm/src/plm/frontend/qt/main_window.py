@@ -249,7 +249,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.window_shell.setObjectName("WindowShell")
         self.window_shell.setProperty("maximized", False)
         shell_layout = QtWidgets.QVBoxLayout(self.window_shell)
-        shell_layout.setContentsMargins(3, 3, 3, 3)
+        shell_layout.setContentsMargins(0, 0, 0, 0)
         shell_layout.setSpacing(0)
 
         self.nav_panel = self.controller.create_navigation()
@@ -423,8 +423,6 @@ class MainWindow(QtWidgets.QMainWindow):
     def _sync_window_frame_state(self):
         maximized = self.isMaximized() or self.isFullScreen()
         self.window_shell.setProperty("maximized", "true" if maximized else "false")
-        inset = 0 if maximized else 3
-        self.window_shell.layout().setContentsMargins(inset, inset, inset, inset)
         self.window_shell.style().unpolish(self.window_shell)
         self.window_shell.style().polish(self.window_shell)
         self.window_shell.update()

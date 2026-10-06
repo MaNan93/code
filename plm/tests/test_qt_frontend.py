@@ -69,7 +69,7 @@ class QtFrontendLayoutTests(unittest.TestCase):
         shell_layout = self.window.window_shell.layout()
         self.assertIsInstance(shell_layout, QtWidgets.QVBoxLayout)
         self.assertEqual(shell_layout.spacing(), 0)
-        self.assertEqual(shell_layout.contentsMargins(), QtCore.QMargins(3, 3, 3, 3))
+        self.assertEqual(shell_layout.contentsMargins(), QtCore.QMargins(0, 0, 0, 0))
         self.assertEqual(shell_layout.count(), 2)
         self.assertIs(shell_layout.itemAt(0).widget(), self.window.title_bar)
         self.assertIs(shell_layout.itemAt(1).widget(), self.window.body_container)
@@ -117,6 +117,7 @@ class QtFrontendLayoutTests(unittest.TestCase):
         stable_y_positions = {
             "new": nav.new_chat_btn.mapTo(nav, QtCore.QPoint()).y(),
             "save": nav.save_btn.mapTo(nav, QtCore.QPoint()).y(),
+            "settings": nav.settings_btn.mapTo(nav, QtCore.QPoint()).y(),
             "docs": nav.docs_btn.mapTo(nav, QtCore.QPoint(0, nav.docs_btn.height())).y(),
         }
         collapse_finished = QtTest.QSignalSpy(nav.animation_group.finished)
@@ -141,8 +142,8 @@ class QtFrontendLayoutTests(unittest.TestCase):
         aligned_widgets = [
             nav.new_chat_btn,
             nav.save_btn,
-            nav.collapsed_settings_btn,
-            nav.collapsed_docs_btn,
+            nav.settings_btn,
+            nav.docs_btn,
         ]
         center_positions = {
             widget.mapTo(nav, widget.rect().center()).x() for widget in aligned_widgets
@@ -158,18 +159,25 @@ class QtFrontendLayoutTests(unittest.TestCase):
             stable_y_positions["save"],
         )
         self.assertEqual(
-            nav.collapsed_docs_btn.mapTo(nav, QtCore.QPoint(0, nav.collapsed_docs_btn.height())).y(),
+            nav.docs_btn.mapTo(nav, QtCore.QPoint(0, nav.docs_btn.height())).y(),
             stable_y_positions["docs"],
         )
         self.assertLess(
-            nav.collapsed_settings_btn.mapTo(nav, QtCore.QPoint()).y(),
-            nav.collapsed_docs_btn.mapTo(nav, QtCore.QPoint()).y(),
+            nav.settings_btn.mapTo(nav, QtCore.QPoint()).y(),
+            nav.docs_btn.mapTo(nav, QtCore.QPoint()).y(),
         )
+        self.assertEqual(nav.settings_btn.mapTo(nav, QtCore.QPoint()).y(), stable_y_positions["settings"])
+        self.assertTrue(nav.footer.isVisible())
+        self.assertEqual(nav.settings_btn.text(), "")
+        self.assertEqual(nav.docs_btn.text(), "")
 
         expand_finished = QtTest.QSignalSpy(nav.animation_group.finished)
         nav.collapse_btn.click()
-        self.assertTrue(nav.project_list.isVisible())
+        self.assertFalse(nav.project_list.isVisible())
         self.assertTrue(expand_finished.wait(1000))
+        self.assertTrue(nav.project_list.isVisible())
+        self.assertEqual(nav.settings_btn.text(), "Settings")
+        self.assertEqual(nav.docs_btn.text(), "Docs")
         self.assertFalse(nav.is_collapsed)
         self.assertEqual(nav.width(), 260)
         self.assertEqual(nav.minimumWidth(), 260)
@@ -408,7 +416,6 @@ class QtFrontendLayoutTests(unittest.TestCase):
         self.assertIs(footer_layout.itemAt(0).widget(), nav.settings_row)
         self.assertIs(footer_layout.itemAt(1).widget(), nav.docs_row)
         self.assertEqual(nav.collapsed_projects.layout().spacing(), 8)
-        self.assertEqual(nav.collapsed_footer.layout().spacing(), 8)
 
         for animation in (nav.animation_min, nav.animation_max):
             self.assertEqual(animation.duration(), 200)

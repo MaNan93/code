@@ -11,9 +11,6 @@ BG_SUBTLE = "#EFECE6"
 BORDER = "#EAE6DF"
 BORDER_HOVER = "#DBD5CA"
 BORDER_FOCUS = "#3B82F6"
-BUFFER_BORDER = "#F2EBDC"
-RIM_BORDER = "#2B2F36"
-BORDER_INNER = "#EAE6DF"
 TEXT_MAIN = "#1E293B"
 TEXT_SUB = "#64748B"
 TEXT_HEADER = "#475569"
@@ -54,9 +51,6 @@ QSS_TOKENS = {
     "border": BORDER,
     "border_hover": BORDER_HOVER,
     "border_focus": BORDER_FOCUS,
-    "border_buffer": BUFFER_BORDER,
-    "border_outline": RIM_BORDER,
-    "border_inner": BORDER_INNER,
     "text_main": TEXT_MAIN,
     "text_sub": TEXT_SUB,
     "text_header": TEXT_HEADER,

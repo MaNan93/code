@@ -122,29 +122,11 @@ class NavPanel(QtWidgets.QFrame):
         footer_layout.addWidget(self.docs_row)
         root.addWidget(self.footer)
 
-        self.collapsed_footer = QtWidgets.QWidget()
-        collapsed_footer_layout = QtWidgets.QVBoxLayout(self.collapsed_footer)
-        collapsed_footer_layout.setContentsMargins(0, 0, 0, 0)
-        collapsed_footer_layout.setSpacing(8)
-        collapsed_footer_layout.setAlignment(QtCore.Qt.AlignLeft)
-        self.collapsed_settings_btn = self._collapsed_icon_button(
-            "settings",
-            "Settings",
-            lambda _checked=False: self.settings_requested.emit(),
-        )
-        self.collapsed_docs_btn = self._collapsed_icon_button(
-            "file-text",
-            "Docs",
-            lambda _checked=False: self.docs_requested.emit(),
-        )
-        collapsed_footer_layout.addWidget(
-            self.collapsed_settings_btn, 0, QtCore.Qt.AlignLeft
-        )
-        collapsed_footer_layout.addWidget(
-            self.collapsed_docs_btn, 0, QtCore.Qt.AlignLeft
-        )
-        self.collapsed_footer.hide()
-        root.addWidget(self.collapsed_footer)
+        for button in (self.new_chat_btn, self.save_btn, self.settings_btn, self.docs_btn):
+            button.setMinimumWidth(0)
+            button.setMaximumWidth(QtWidgets.QWIDGETSIZE_MAX)
+            button.setFixedHeight(36)
+            button.setSizePolicy(QtWidgets.QSizePolicy.Ignored, QtWidgets.QSizePolicy.Fixed)
 
     def toggle_collapse(self):
         if self.is_animating:
@@ -193,33 +175,12 @@ class NavPanel(QtWidgets.QFrame):
 
         self.new_chat_btn.setText("新对话" if visible else "")
         self.save_btn.setText("保存" if visible else "")
-        for button in (self.new_chat_btn, self.save_btn):
-            # Keep one geometry and one style in both states. The button fills
-            # the 32 px collapsed content width without moving its icon.
-            button.setObjectName("NavActionButton")
-            button.setMinimumWidth(0)
-            button.setMaximumWidth(QtWidgets.QWIDGETSIZE_MAX)
-            button.setFixedHeight(36)
-            button.style().unpolish(button)
-            button.style().polish(button)
+        self.settings_btn.setText("Settings" if visible else "")
+        self.docs_btn.setText("Docs" if visible else "")
 
         self.project_title.setText("项目" if visible else "")
         self.project_list.setVisible(visible)
         self.collapsed_projects.setVisible(not visible)
-        self.footer.setVisible(visible)
-        self.collapsed_footer.setVisible(not visible)
-
-    def _collapsed_icon_button(self, icon_name, tooltip, callback):
-        button = make_icon_button(
-            icon_name,
-            tooltip,
-            "NavIconBtn",
-            32,
-            ICON_SIZE,
-        )
-        button.setIcon(load_lucide_icon(icon_name, align_visible_left=True))
-        button.clicked.connect(callback)
-        return button
 
     @staticmethod
     def _nav_row(widget):
@@ -233,6 +194,7 @@ class NavPanel(QtWidgets.QFrame):
 
     def _action_button(self, icon_name, text, requested_signal):
         button = QtWidgets.QPushButton(text)
+        button.setToolTip(text)
         button.setObjectName("NavActionButton")
         button.setIcon(load_lucide_icon(icon_name, align_visible_left=True))
         button.setIconSize(QtCore.QSize(ICON_SIZE, ICON_SIZE))
@@ -244,6 +206,7 @@ class NavPanel(QtWidgets.QFrame):
 
     def _footer_button(self, icon_name, text, requested_signal):
         button = QtWidgets.QPushButton(text)
+        button.setToolTip(text)
         button.setObjectName("NavFooterButton")
         button.setIcon(load_lucide_icon(icon_name, align_visible_left=True))
         button.setIconSize(QtCore.QSize(ICON_SIZE, ICON_SIZE))
@@ -306,17 +269,3 @@ class NavPanel(QtWidgets.QFrame):
             )
             button.style().unpolish(button)
             button.style().polish(button)
-        self.collapsed_docs_btn.setIcon(
-            load_lucide_icon(
-                "file-text",
-                PRIMARY if name == "docs" else TEXT_SUB,
-                align_visible_left=True,
-            )
-        )
-        self.collapsed_settings_btn.setIcon(
-            load_lucide_icon(
-                "settings",
-                PRIMARY if name == "settings" else TEXT_SUB,
-                align_visible_left=True,
-            )
-        )

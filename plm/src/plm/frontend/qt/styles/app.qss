@@ -177,14 +177,15 @@ QSplitter::handle:vertical { height: 1px; }
 QSplitter#MainSplitter { background-color: $bg_main; }
 
 QFrame#NavPanel {
-    background-color: $bg_main;
+    background-color: #E6F9F6;
     border-right: 1px solid $border;
 }
 QFrame#NavPanel[collapsed="true"] {
-    background-color: $bg_main;
+    background-color: #E6F9F6;
     border-right: 1px solid $border;
 }
-QWidget#NavBrandRow { background: transparent; }
+QFrame#NavPanel > QWidget, QWidget#NavRow, QWidget#ProjectItem,
+QListWidget#ProjectList > QWidget { background: transparent; }
 QLabel#NavAppName {
     color: $text_main;
     font-size: $font_size_lg;
@@ -268,6 +269,7 @@ QPushButton#HeaderButton:hover, QPushButton#ArtifactsToolButton:hover,
 QPushButton#LogClearButton:hover, QPushButton#LogCloseBtn:hover,
 QPushButton#SecondaryBackButton:hover { background-color: $bg_subtle; }
 QPushButton#ArtifactsToolButton:checked { background-color: $primary_light; }
+QPushButton#ArtifactsToolButton::menu-indicator { image: none; width: 0; height: 0; }
 QWidget#ConfigArea, QScrollArea#ConfigScroll, QWidget#ConfigScrollContent { background: $bg_main; border: none; }
 QTabWidget#ConfigTabs::pane { border: none; background: transparent; top: -1px; }
 QLabel#ConfigTitle { color: $text_main; font-size: $font_size_lg; font-weight: bold; }

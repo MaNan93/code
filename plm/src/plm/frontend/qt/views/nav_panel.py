@@ -143,6 +143,7 @@ class NavPanel(QtWidgets.QFrame):
                 button, 0, QtCore.Qt.AlignHCenter
             )
             self.collapsed_project_buttons.append(button)
+            button.hide()
         collapsed_projects_layout.addStretch(1)
         self.collapsed_projects.hide()
         root.addWidget(self.collapsed_projects, 1)
@@ -312,6 +313,7 @@ class NavPanel(QtWidgets.QFrame):
     @staticmethod
     def _nav_row(widget):
         row = QtWidgets.QWidget()
+        row.setObjectName("NavRow")
         layout = QtWidgets.QHBoxLayout(row)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
@@ -386,6 +388,7 @@ class NavPanel(QtWidgets.QFrame):
                 len(self.collapsed_project_buttons), button, 0, QtCore.Qt.AlignHCenter
             )
             self.collapsed_project_buttons.append(button)
+            button.hide()
 
     def apply_pin(self, name):
         self.project_list.apply_pin(name)

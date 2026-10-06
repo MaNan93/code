@@ -28,6 +28,7 @@ class ProjectItemWidget(QtWidgets.QWidget):
 
     def __init__(self, project_name, project_path=None, parent=None):
         super().__init__(parent)
+        self.setObjectName("ProjectItem")
         self.project_name = project_name
         self.project_path = Path(project_path or PROJECT_ROOT / project_name).resolve()
         root = QtWidgets.QVBoxLayout(self)

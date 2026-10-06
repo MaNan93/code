@@ -211,7 +211,10 @@ class QtFrontendLayoutTests(unittest.TestCase):
         }
         first_project = nav.project_list.project_widgets[0]
         self.assertEqual(first_project.folder_icon.size(), QtCore.QSize(18, 18))
-        self.assertEqual(first_project.header.layout().contentsMargins().left(), 0)
+        self.assertEqual(
+            first_project.header.layout().contentsMargins(),
+            QtCore.QMargins(12, 0, 6, 0),
+        )
         self.assertEqual(
             first_project.header.layout().itemAt(1).spacerItem().sizeHint().width(), 8
         )
@@ -321,7 +324,6 @@ class QtFrontendLayoutTests(unittest.TestCase):
         for layout in (
             nav.new_chat_row_layout,
             nav.save_row_layout,
-            first_project.header.layout(),
             nav.settings_row_layout,
             nav.docs_row_layout,
         ):
@@ -330,17 +332,24 @@ class QtFrontendLayoutTests(unittest.TestCase):
                 (margins.left(), margins.top(), margins.right(), margins.bottom()),
                 (0, 0, 0, 0),
             )
+        self.assertEqual(
+            first_project.header.layout().contentsMargins(),
+            QtCore.QMargins(12, 0, 6, 0),
+        )
 
-        aligned_widgets = (
+        nav_buttons = (
             nav.new_chat_btn,
             nav.save_btn,
-            first_project.folder_icon,
             nav.settings_btn,
             nav.docs_btn,
         )
         self.assertEqual(
-            {widget.mapTo(nav, QtCore.QPoint()).x() for widget in aligned_widgets},
+            {widget.mapTo(nav, QtCore.QPoint()).x() for widget in nav_buttons},
             {12},
+        )
+        self.assertEqual(
+            first_project.folder_icon.mapTo(nav, QtCore.QPoint()).x(),
+            24,
         )
         icon_pixmaps = (
             nav.new_chat_btn.icon().pixmap(ICON_SIZE, ICON_SIZE),

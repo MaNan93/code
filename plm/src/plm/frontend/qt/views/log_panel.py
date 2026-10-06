@@ -1,8 +1,8 @@
 from PyQt5 import QtCore, QtWidgets
-from plm.frontend.qt.widgets.common import ICON_SIZE, LayeredFrame, make_icon_button
+from plm.frontend.qt.widgets.common import ICON_SIZE, make_icon_button
 
 
-class LogPanel(LayeredFrame):
+class LogPanel(QtWidgets.QFrame):
     """Region 4: output tab, clear action, and auto-scrolling log."""
 
     closeRequested = QtCore.pyqtSignal()

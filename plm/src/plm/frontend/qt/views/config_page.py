@@ -1,6 +1,6 @@
 from PyQt5 import QtCore, QtGui, QtWidgets
 from copy import deepcopy
-from plm.frontend.qt.widgets.common import LayeredFrame, make_icon_button
+from plm.frontend.qt.widgets.common import make_icon_button
 from plm.frontend.qt.widgets.config_editor import CsvTableEditor, GenerationEditor
 from plm.frontend.qt.views.artifacts_panel import ArtifactsPanel
 from plm.frontend.qt.styles.tokens import (
@@ -158,7 +158,7 @@ class ConfigTabPage(QtWidgets.QWidget):
         root.addWidget(scroll, 1)
 
 
-class ConfigPage(LayeredFrame):
+class ConfigPage(QtWidgets.QFrame):
     """Region 2 with an absolute-positioned Region 5 overlay."""
 
     MAX_HISTORY = 50
@@ -169,7 +169,7 @@ class ConfigPage(LayeredFrame):
     historyChanged = QtCore.pyqtSignal()
 
     def __init__(self, parent=None, editor_path_provider=None):
-        super().__init__(parent, radius=12, rim_edges="top_left")
+        super().__init__(parent)
         self.setObjectName("ConfigPage")
         self.setAttribute(QtCore.Qt.WA_StyledBackground, True)
         self.dirty = False

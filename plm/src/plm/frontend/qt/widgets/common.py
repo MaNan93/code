@@ -9,43 +9,12 @@ from pathlib import Path
 from PyQt5 import QtCore, QtGui, QtSvg, QtWidgets
 
 from plm.core.paths import PLM_ROOT
-from plm.frontend.qt.styles.tokens import RADIUS_CARD, RIM_BORDER, SHADOW_SM, TEXT_SUB
+from plm.frontend.qt.styles.tokens import RADIUS_CARD, SHADOW_SM, TEXT_SUB
 
 LUCIDE_ICON_DIR = Path(__file__).resolve().parents[1] / "assets" / "icons"
 APP_ICON_PATH = Path(__file__).resolve().parents[1] / "assets" / "app_icon.svg"
 PROJECT_ROOT = PLM_ROOT
 ICON_SIZE = 18
-
-
-class LayeredFrame(QtWidgets.QFrame):
-    """QSS reserves the warm buffer; painting adds its outer one-pixel rim."""
-
-    def __init__(self, parent=None, radius=10, rim_edges="all"):
-        super().__init__(parent)
-        self._rim_radius = radius
-        self._rim_edges = rim_edges
-        self.setAttribute(QtCore.Qt.WA_StyledBackground, True)
-
-    def paintEvent(self, event):
-        super().paintEvent(event)
-        if self.width() < 2 or self.height() < 2:
-            return
-        rect = QtCore.QRectF(self.rect()).adjusted(0.5, 0.5, -0.5, -0.5)
-        radius = min(self._rim_radius, rect.width() / 2, rect.height() / 2)
-        path = QtGui.QPainterPath()
-        if self._rim_edges == "top_left":
-            path.moveTo(rect.left(), rect.bottom())
-            path.lineTo(rect.left(), rect.top() + radius)
-            path.quadTo(rect.topLeft(), QtCore.QPointF(rect.left() + radius, rect.top()))
-            path.lineTo(rect.right(), rect.top())
-        else:
-            path.addRoundedRect(rect, radius, radius)
-        painter = QtGui.QPainter(self)
-        painter.setRenderHint(QtGui.QPainter.Antialiasing)
-        painter.setPen(QtGui.QPen(QtGui.QColor(RIM_BORDER), 1))
-        painter.setBrush(QtCore.Qt.NoBrush)
-        painter.drawPath(path)
-        painter.end()
 
 
 @lru_cache(maxsize=256)

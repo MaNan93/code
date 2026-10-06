@@ -8,7 +8,6 @@ from plm.frontend.qt.styles.tokens import SHADOW_LG, TEXT_MAIN, TEXT_MUTED, TEXT
 
 from plm.frontend.qt.widgets.common import (
     ICON_SIZE,
-    LayeredFrame,
     apply_drop_shadow,
     load_lucide_icon,
     open_in_file_manager,
@@ -54,7 +53,7 @@ class HoverCard(QtWidgets.QFrame):
 
         window_layout = QtWidgets.QVBoxLayout(self)
         window_layout.setSpacing(0)
-        self.surface = LayeredFrame(self)
+        self.surface = QtWidgets.QFrame(self)
         self.surface.setObjectName("HoverCardSurface")
         effect = apply_drop_shadow(self.surface, shadow=SHADOW_LG)
         # Keep the effect's complete update region inside the layered window.

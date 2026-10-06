@@ -119,9 +119,9 @@ QComboBox QAbstractItemView {
     padding: $spacing_xs;
 }
 
-LayeredFrame, QFrame#Card, QWidget#Card, QFrame#HoverCardSurface {
+QFrame#Card, QWidget#Card, QFrame#HoverCardSurface {
     background-color: $bg_surface;
-    border: 3px solid $border_buffer;
+    border: 1px solid $border;
     border-radius: $radius_card;
 }
 QFrame#ProjectHoverCard { background: transparent; border: none; }
@@ -301,15 +301,15 @@ QPushButton#HoverPinButton:hover, QPushButton#HoverOpenButton:hover { background
 QFrame#ConfigPage {
     background-color: $bg_main;
     border: none;
-    border-left: 3px solid $border_buffer;
-    border-top: 3px solid $border_buffer;
+    border-left: 1px solid $border;
+    border-top: 1px solid $border;
     border-top-left-radius: 12px;
 }
 QFrame#ConfigHeader {
     background-color: $bg_surface;
     border: none;
     border-bottom: 1px solid $border;
-    border-top-left-radius: 9px;
+    border-top-left-radius: 12px;
 }
 QLabel#ConfigSessionTitle {
     color: $text_main;
@@ -347,7 +347,7 @@ QTableWidget#laneGrid { background-color: transparent; }
 
 QFrame#ArtifactsPanel {
     background-color: $bg_surface;
-    border: 3px solid $border_buffer;
+    border: 1px solid $border;
     border-radius: $radius_card;
 }
 QWidget#ArtifactsToolbar, QWidget#ArtifactSearchBar { background: transparent; }
@@ -383,8 +383,9 @@ QLabel#ArtifactEmptyText {
 
 QFrame#LogPanel {
     background-color: $bg_surface;
-    border: 3px solid $border_buffer;
-    border-radius: $radius_card;
+    border: none;
+    border-top: 1px solid $border;
+    border-radius: 0;
 }
 QFrame#LogHeader { background: transparent; border: none; }
 QLabel#LogTabTitle { color: $text_main; font-size: $font_size_body; font-weight: bold; }

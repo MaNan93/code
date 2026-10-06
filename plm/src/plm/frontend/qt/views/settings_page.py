@@ -5,23 +5,9 @@ from plm.core.verible import (
     DEFAULT_VERIBLE_FLAGS, VERIBLE_ALIGN_PARAMS, VERIBLE_INDENT_PARAMS,
     VERIBLE_BOOL_PARAMS, VERIBLE_INT_PARAMS, VERIBLE_STR_PARAMS, find_verible,
 )
-from plm.frontend.qt.models.preferences import DEFAULT_EDITOR, DEFAULT_FONT_FAMILY, DEFAULT_FONT_SIZE
-from plm.frontend.qt.widgets.common import LUCIDE_ICON_DIR
+from plm.frontend.qt.models.preferences import DEFAULT_EDITOR
 from plm.frontend.qt.styles.tokens import SPACING_MD, SPACING_SM
 from .secondary_page import SecondaryPage
-
-
-RECOMMENDED_FONT_CHOICES = (
-    "Inter",
-    "Microsoft YaHei UI",
-    "PingFang SC",
-    "Noto Sans CJK SC",
-    "SimHei",
-    "SimSun",
-    "Source Han Sans SC",
-    "DejaVu Sans",
-)
-MORE_FONTS_LABEL = "更多字体..."
 
 
 def _executable_filter():
@@ -51,8 +37,6 @@ class _FormatterTable(QtWidgets.QTableWidget):
 class SettingsPage(SecondaryPage):
     def __init__(self, parent=None, preferences=None):
         self.initial_preferences = {
-            "font_family": DEFAULT_FONT_FAMILY,
-            "font_size": DEFAULT_FONT_SIZE,
             "editor_path": DEFAULT_EDITOR,
             "verible_path": "",
             "verible_flags": None,
@@ -73,40 +57,17 @@ class SettingsPage(SecondaryPage):
         key_label.setObjectName("SettingsRowLabel")
         row_layout.addWidget(key_label)
         row_layout.addStretch(1)
-        row_layout.addWidget(control)
+        row_layout.addWidget(control, 0, QtCore.Qt.AlignVCenter)
         return row
 
     def _build_settings_content(self):
-        content, layout = self._content_shell(
-            "General", "配置会保存在本机，并在下次启动时自动恢复。"
-        )
+        content = QtWidgets.QWidget()
+        content.setObjectName("SecondaryContent")
+        layout = QtWidgets.QVBoxLayout(content)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
         self.settings_content_layout = layout
         preferences = self.initial_preferences
-
-        self.font_family_combo = QtWidgets.QComboBox()
-        self.font_family_combo.setObjectName("SettingsFontFamily")
-        current_family = preferences["font_family"]
-        for family in RECOMMENDED_FONT_CHOICES:
-            self.font_family_combo.addItem(family)
-            self.font_family_combo.setItemData(
-                self.font_family_combo.count() - 1,
-                QtGui.QFont(family),
-                QtCore.Qt.FontRole,
-            )
-        self.font_family_combo.addItem(MORE_FONTS_LABEL)
-        self._last_font_family = DEFAULT_FONT_FAMILY
-        self._select_font_family(current_family)
-        self.font_family_combo.activated.connect(self._font_choice_activated)
-        self.font_family_combo.setFixedSize(280, 36)
-
-        self.font_size_spin = QtWidgets.QSpinBox()
-        self.font_size_spin.setObjectName("SettingsFontSize")
-        self.font_size_spin.setRange(10, 20)
-        self.font_size_spin.setButtonSymbols(QtWidgets.QAbstractSpinBox.NoButtons)
-        self.font_size_spin.setValue(
-            preferences["font_size"]
-        )
-        self.font_size_spin.setFixedSize(280, 36)
 
         editor_control = QtWidgets.QWidget()
         editor_control.setObjectName("SettingsEditorControl")
@@ -123,12 +84,10 @@ class SettingsPage(SecondaryPage):
         browse_btn.setObjectName("SettingsBrowseButton")
         browse_btn.setFixedSize(68, 36)
         browse_btn.clicked.connect(self._browse_editor)
-        editor_layout.addWidget(self.editor_path_edit)
-        editor_layout.addWidget(browse_btn)
+        editor_layout.addWidget(self.editor_path_edit, 1, QtCore.Qt.AlignVCenter)
+        editor_layout.addWidget(browse_btn, 0, QtCore.Qt.AlignVCenter)
 
         self.setting_rows = {
-            "font": self._setting_row("界面字体", self.font_family_combo),
-            "size": self._setting_row("字体大小", self.font_size_spin),
             "editor": self._setting_row("默认编辑器", editor_control),
         }
         rows_layout = QtWidgets.QVBoxLayout()
@@ -148,15 +107,10 @@ class SettingsPage(SecondaryPage):
         self.settings_status.setObjectName("SettingsStatus")
         actions.addWidget(self.settings_status)
         actions.addStretch(1)
-        reset_btn = QtWidgets.QPushButton("恢复默认")
-        reset_btn.setObjectName("SettingsSecondaryButton")
-        reset_btn.setFixedHeight(36)
-        reset_btn.clicked.connect(self._reset_settings)
         self.save_settings_btn = QtWidgets.QPushButton("保存设置")
         self.save_settings_btn.setObjectName("SettingsPrimaryButton")
         self.save_settings_btn.setFixedHeight(36)
         self.save_settings_btn.clicked.connect(self._save_settings)
-        actions.addWidget(reset_btn)
         actions.addWidget(self.save_settings_btn)
         layout.addLayout(actions)
         self._bottom_stretch_index = layout.count()
@@ -164,18 +118,10 @@ class SettingsPage(SecondaryPage):
         return content
 
     def _show_section(self, index):
-        titles = ("General", "Appearance", "Formatter")
-        descriptions = (
-            "配置会保存在本机，并在下次启动时自动恢复。",
-            "调整整个应用的字体与字号。",
-            "Verible 设置用于 RTL 和 Testbench 格式化，保存后会重新检查输出状态。",
-        )
-        visible_rows = ({"editor"}, {"font", "size"}, set())[index]
-        self.heading_label.setText(titles[index])
-        self.description_label.setText(descriptions[index])
+        visible_rows = ({"editor"}, set())[index]
         for name, row in self.setting_rows.items():
             row.setVisible(name in visible_rows)
-        is_formatter = index == 2
+        is_formatter = index == 1
         self.formatter_panel.setVisible(is_formatter)
         # Formatter uses the whole content column: top aligned, 32 px side
         # padding / 24 px vertical padding, with its table taking all spare
@@ -193,30 +139,6 @@ class SettingsPage(SecondaryPage):
         self.settings_content_layout.setStretch(
             self._bottom_stretch_index, 0 if is_formatter else 1
         )
-
-    def _select_font_family(self, family):
-        family = str(family or DEFAULT_FONT_FAMILY)
-        index = self.font_family_combo.findText(family)
-        if index < 0:
-            more_index = self.font_family_combo.findText(MORE_FONTS_LABEL)
-            index = more_index if more_index >= 0 else self.font_family_combo.count()
-            self.font_family_combo.insertItem(index, family)
-            self.font_family_combo.setItemData(index, QtGui.QFont(family), QtCore.Qt.FontRole)
-        self.font_family_combo.setCurrentIndex(index)
-        self._last_font_family = family
-
-    def _font_choice_activated(self, index):
-        selected = self.font_family_combo.itemText(index)
-        if selected != MORE_FONTS_LABEL:
-            self._last_font_family = selected
-            return
-        font, accepted = QtWidgets.QFontDialog.getFont(
-            QtGui.QFont(self._last_font_family), self, "选择界面字体"
-        )
-        if accepted:
-            self._select_font_family(font.family())
-        else:
-            self._select_font_family(self._last_font_family)
 
     def _build_formatter(self, preferences):
         panel = QtWidgets.QWidget()
@@ -279,15 +201,6 @@ class SettingsPage(SecondaryPage):
                 self.flag_table.setCellWidget(row, 1, control)
                 self._flag_controls[name] = control
         layout.addWidget(self.flag_table, 1)
-        buttons = QtWidgets.QHBoxLayout()
-        self.reset_formatter_btn = QtWidgets.QPushButton("恢复默认参数")
-        self.reset_formatter_btn.setObjectName("SettingsSecondaryButton")
-        self.reset_formatter_btn.clicked.connect(
-            lambda: self._fill_flags(DEFAULT_VERIBLE_FLAGS)
-        )
-        buttons.addWidget(self.reset_formatter_btn)
-        buttons.addStretch(1)
-        layout.addLayout(buttons)
         self._fill_flags(preferences["verible_flags"])
         self.flag_table.resizeRowsToContents()
         return panel
@@ -353,12 +266,7 @@ class SettingsPage(SecondaryPage):
             self.editor_path_edit.setText(path)
 
     def _preferences(self):
-        font_family = self.font_family_combo.currentText()
-        if font_family == MORE_FONTS_LABEL:
-            font_family = self._last_font_family
         return {
-            "font_family": font_family,
-            "font_size": self.font_size_spin.value(),
             "editor_path": self.editor_path_edit.text().strip() or DEFAULT_EDITOR,
             "verible_path": self.verible_path_edit.text().strip(),
             "verible_flags": self._formatter_flags(),
@@ -370,7 +278,7 @@ class SettingsPage(SecondaryPage):
             if control.text().strip() and not control.hasAcceptableInput():
                 self.settings_status.setText(f"{name} 必须是非负整数。")
                 formatter_index = next((i for i, button in enumerate(self.menu_buttons)
-                                        if button.text() == "Formatter"), 2)
+                                        if button.text() == "Formatter"), 1)
                 self._select_section(formatter_index)
                 row = list(self._flag_controls).index(name)
                 self.flag_table.scrollToItem(self.flag_table.item(row, 0))
@@ -381,10 +289,3 @@ class SettingsPage(SecondaryPage):
         self.preferencesSaved.emit(preferences)
         self.settings_status.setText("设置已保存")
 
-    def _reset_settings(self):
-        self._select_font_family(DEFAULT_FONT_FAMILY)
-        self.font_size_spin.setValue(DEFAULT_FONT_SIZE)
-        self.editor_path_edit.setText(DEFAULT_EDITOR)
-        self.verible_path_edit.clear()
-        self._fill_flags(DEFAULT_VERIBLE_FLAGS)
-        self._save_settings()

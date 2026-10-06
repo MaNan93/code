@@ -52,7 +52,6 @@ class GenerationIntegrationTests(unittest.TestCase):
             self.assertEqual(reloaded.formatter_preferences()["verible_flags"], flags)
             page = SettingsPage(preferences=reloaded.preferences())
             self.addCleanup(page.close)
-            page.font_size_spin.setValue(15)
             expected = dict(DEFAULT_VERIBLE_FLAGS)
             if flags:
                 expected.update(flags)

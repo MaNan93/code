@@ -34,7 +34,7 @@ class SecondaryPage(QtWidgets.QFrame):
     def __init__(self, page, parent=None):
         super().__init__(parent)
         self.page = page
-        self.setObjectName("SecondaryOverlay")
+        self.setObjectName("SecondaryPage")
         self.setAttribute(QtCore.Qt.WA_StyledBackground, True)
         self.setFocusPolicy(QtCore.Qt.StrongFocus)
 
@@ -98,7 +98,7 @@ class SecondaryPage(QtWidgets.QFrame):
         layout.setSpacing(8)
         self.menu_buttons = []
         entries = (
-            ("General", "Appearance", "Formatter")
+            ("General", "Formatter")
             if page == "settings"
             else ("Getting Started", "Configuration", "Generation")
         )
@@ -113,24 +113,6 @@ class SecondaryPage(QtWidgets.QFrame):
             self.menu_buttons.append(button)
         layout.addStretch(1)
         return menu
-
-    def _content_shell(self, heading, description):
-        content = QtWidgets.QWidget()
-        content.setObjectName("SecondaryContent")
-        layout = QtWidgets.QVBoxLayout(content)
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(0)
-        self.heading_label = QtWidgets.QLabel(heading)
-        self.heading_label.setObjectName("SecondaryHeading")
-        layout.addWidget(self.heading_label)
-        layout.addSpacing(4)
-        self.description_label = QtWidgets.QLabel(description)
-        self.description_label.setObjectName("SecondaryDescription")
-        self.description_label.setWordWrap(True)
-        layout.addWidget(self.description_label)
-        layout.addSpacing(24)
-        return content, layout
-
 
     def _select_section(self, index):
         for button_index, button in enumerate(self.menu_buttons):

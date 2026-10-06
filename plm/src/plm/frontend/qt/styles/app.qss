@@ -7,7 +7,7 @@ QWidget {
 }
 QWidget:disabled { color: $text_muted; }
 QLabel { background: transparent; }
-QMainWindow, QWidget#AppRoot { background-color: $bg_main; }
+QMainWindow { background-color: $bg_main; }
 
 QPushButton {
     background-color: $bg_surface;
@@ -28,17 +28,16 @@ QPushButton:disabled {
     border-color: $border;
 }
 QPushButton#PrimaryBtn, QPushButton#SettingsPrimaryButton,
-QPushButton#ConfigGenerateButton, QPushButton#CreateProjectButton {
+QPushButton#ConfigGenerateButton {
     background-color: $primary;
     border: none;
     color: $bg_surface;
 }
 QPushButton#PrimaryBtn:hover, QPushButton#SettingsPrimaryButton:hover,
-QPushButton#ConfigGenerateButton:hover, QPushButton#CreateProjectButton:hover {
+QPushButton#ConfigGenerateButton:hover {
     background-color: $primary_hover;
 }
-QPushButton#SettingsSecondaryButton, QPushButton#SettingsBrowseButton,
-QPushButton#ConfigRowButton {
+QPushButton#SettingsSecondaryButton, QPushButton#SettingsBrowseButton {
     background-color: $bg_surface;
     border: 1px solid $border;
     border-radius: $radius_control;
@@ -171,18 +170,14 @@ QScrollBar::handle:horizontal:hover { background: $text_muted; }
 QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal { width: 0; }
 
 QSplitter::handle { background-color: transparent; }
-QSplitter::handle:horizontal { width: 4px; }
-QSplitter::handle:horizontal:hover { background-color: $border_hover; }
 QSplitter::handle:vertical { height: 1px; }
-QSplitter#MainSplitter { background-color: $bg_main; }
 
 QFrame#NavPanel {
-    background-color: #E6F9F6;
+    background-color: $bg_chrome;
     border-right: 1px solid $border;
 }
-QFrame#NavPanel[collapsed="true"] {
-    background-color: #E6F9F6;
-    border-right: 1px solid $border;
+QFrame#NavPanel[windowActive="false"] {
+    background-color: $bg_chrome_inactive;
 }
 QFrame#NavPanel > QWidget, QWidget#NavRow, QWidget#ProjectItem,
 QListWidget#ProjectList > QWidget { background: transparent; }
@@ -229,6 +224,7 @@ QPushButton#ProjectButton[selected="true"], QPushButton#NavFooterButton[selected
 }
 QLabel#ProjectName { color: $text_main; font-size: $font_size_body; }
 QLabel#ProjectName[selected="true"] { color: $primary; font-weight: bold; }
+QLineEdit#ProjectNameEditor { padding: 2px 4px; }
 QPushButton#NavIconBtn, QPushButton#NavCollapseButton {
     min-width: 32px; max-width: 32px; min-height: 32px; max-height: 32px;
     background: transparent; border: none; border-radius: $radius_control; padding: 0;
@@ -256,7 +252,11 @@ QLabel#ConfigSessionTitle {
     font-size: $font_size_lg;
     font-weight: bold;
 }
-QLineEdit#ConfigSessionEditor { min-height: 32px; }
+QLineEdit#ConfigSessionEditor {
+    min-height: 24px;
+    max-height: 24px;
+    padding: 2px 8px;
+}
 QPushButton#HeaderButton, QPushButton#ArtifactsToolButton,
 QPushButton#LogClearButton, QPushButton#LogCloseBtn,
 QPushButton#SecondaryBackButton {
@@ -349,7 +349,7 @@ QLabel#GenerationStatus[state="external_changed"], QLabel#ArtifactStatus[state="
 QLabel#GenerationStatus[state="failed"], QLabel#ArtifactStatus[state="failed"],
 QLabel#GenerationStatus[state="invalid"], QLabel#ArtifactStatus[state="invalid"] { color: $danger; }
 
-QFrame#SecondaryOverlay, QWidget#SecondaryPageArea { background-color: $bg_main; }
+QFrame#SecondaryPage, QWidget#SecondaryPageArea { background-color: $bg_main; }
 QFrame#SecondaryPageHeader {
     background-color: $bg_surface;
     border: none;
@@ -379,8 +379,6 @@ QPushButton#SecondaryMenuButton[selected="true"] {
     border-bottom: 2px solid $primary;
     font-weight: bold;
 }
-QLabel#SecondaryHeading { color: $text_main; font-size: $font_size_lg; font-weight: bold; }
-QLabel#SecondaryDescription { color: $text_sub; font-size: $font_size_body; }
 QTextBrowser#DocumentationBrowser {
     background-color: $bg_surface;
     color: $text_main;
@@ -395,10 +393,11 @@ QFrame#SettingsRow {
 }
 QLabel#SettingsRowLabel { color: $text_main; font-size: $font_size_body; }
 QLabel#SettingsStatus { color: $text_sub; font-size: $font_size_sm; }
-QFontComboBox#SettingsFontFamily, QComboBox#SettingsFontFamily,
-QSpinBox#SettingsFontSize, QLineEdit#SettingsEditorPath { min-height: 36px; max-height: 36px; }
+QLineEdit#SettingsEditorPath { padding: 4px $spacing_md; }
 
 QDialog { background-color: $bg_main; color: $text_main; }
+QMessageBox { background-color: $bg_surface; color: $text_main; }
+QMessageBox QLabel { background: transparent; color: $text_main; }
 QLabel#NewProjectDialogTitle {
     color: $text_main;
     font-size: $font_size_lg;

@@ -47,11 +47,7 @@ with tempfile.TemporaryDirectory(prefix="plm-ui-") as td:
         w=MainWindow()
     w.resize(1400,900); w.show(); app.processEvents()
 
-    # Visual review uses the BeautifulUI r1 font baseline while retaining the
-    # explicit CJK fallback stack for mixed English/Chinese labels.
-    preferences=controller.settings.preferences()
-    preferences["font_family"]="Inter"
-    controller.save_preferences(preferences)
+    # Visual review uses the fixed font baseline and CJK fallback stack.
     stylesheet=app.styleSheet()
     assert 'font-family: "Inter", "Microsoft YaHei UI", "PingFang SC", "Noto Sans CJK SC", "SimHei", "SimSun", sans-serif;' in stylesheet
 
@@ -114,7 +110,7 @@ with tempfile.TemporaryDirectory(prefix="plm-ui-") as td:
     controller.generate_current()
     assert controller.generation_state == "up_to_date", controller.generation_state
     artifacts=w.config_page.artifacts_panel
-    assert artifacts.file_selector.count() > 0, "artifacts did not load"
+    assert artifacts.selection.files, "artifacts did not load"
     assert artifacts.file_tree.topLevelItemCount() > 0, "artifact tree did not load"
     assert any(text.endswith(("New","Modified","Unchanged")) for text in tree_texts(artifacts.file_tree))
     assert w.log_panel.status_bar.isVisible(), "generation status bar is hidden"
@@ -143,13 +139,9 @@ with tempfile.TemporaryDirectory(prefix="plm-ui-") as td:
     dlg.show(); shot(dlg,"03-new-project"); dlg.close()
 
     w.on_open_settings(); app.processEvents()
-    required_fonts=(
-        "Inter", "Microsoft YaHei UI", "PingFang SC", "Noto Sans CJK SC",
-        "SimHei", "SimSun", "Source Han Sans SC", "DejaVu Sans",
-    )
-    for idx,name in enumerate(("general","appearance","formatter")):
-        w.secondary_overlay.menu_buttons[idx].click()
-        page=w.secondary_overlay
+    for idx,name in enumerate(("general","formatter")):
+        page=w.view_stack.currentWidget()
+        page.menu_buttons[idx].click()
         if name == "formatter":
             assert page.settings_content_layout.getContentsMargins() == (32,24,32,24)
             assert page.settings_content_layout.stretch(page._formatter_layout_index) == 1
@@ -165,40 +157,21 @@ with tempfile.TemporaryDirectory(prefix="plm-ui-") as td:
             assert page._flag_controls["column_limit"].text() == "120"
             assert page.flag_table.horizontalHeaderItem(1).text() == "值"
             button_texts=[button.text() for button in page.formatter_panel.findChildren(QtWidgets.QPushButton)]
-            assert "恢复默认参数" in button_texts
             assert "项目默认参数" not in button_texts
             assert "使用 Verible 默认参数" not in button_texts
             assert page.flag_table.verticalScrollMode() == QtWidgets.QAbstractItemView.ScrollPerPixel
         if name == "general":
             assert page.setting_rows["editor"].isVisible()
-            assert not page.setting_rows["font"].isVisible()
-            assert not page.setting_rows["size"].isVisible()
-        elif name == "appearance":
-            assert page.setting_rows["font"].isVisible()
-            assert page.setting_rows["size"].isVisible()
-            assert not page.setting_rows["editor"].isVisible()
         shot(w,f"04-settings-{name}")
         if name == "formatter":
             align_control=page._flag_controls["assignment_statement_alignment"]
             align_control.showPopup()
             screen_shot("04-settings-formatter-defaults")
             align_control.hidePopup()
-        if name == "appearance":
-            font_combo=w.findChild(QtWidgets.QComboBox,"SettingsFontFamily")
-            assert font_combo is not None
-            expected_fonts=list(required_fonts)+["更多字体..."]
-            assert [font_combo.itemText(i) for i in range(font_combo.count())] == expected_fonts
-            selected=font_combo.currentIndex()
-            font_combo.setCurrentIndex(0)
-            font_combo.showPopup()
-            font_combo.view().scrollToTop()
-            screen_shot("04-settings-appearance-fonts")
-            font_combo.hidePopup()
-            font_combo.setCurrentIndex(selected)
     w._close_secondary_page()
     w.on_open_docs(); app.processEvents()
     for idx,name in enumerate(("getting-started","configuration","generation")):
-        w.secondary_overlay.menu_buttons[idx].click(); shot(w,f"05-docs-{name}")
+        w.view_stack.currentWidget().menu_buttons[idx].click(); shot(w,f"05-docs-{name}")
     w._close_secondary_page()
 
     artifacts.show_search()
@@ -212,9 +185,9 @@ with tempfile.TemporaryDirectory(prefix="plm-ui-") as td:
     w.config_page.toggle_artifacts_maximized(); shot(w,"07-artifacts-maximized")
 
     # Force one preview-only content change to prove unified diff rendering.
-    selected_path=Path(artifacts.file_selector.currentData())
+    selected_path=artifacts.current_path
     selected_path.write_text(selected_path.read_text(encoding="utf-8")+"\n// visual diff check\n",encoding="utf-8")
-    files=[Path(artifacts.file_selector.itemData(i)) for i in range(artifacts.file_selector.count())]
+    files=list(artifacts.selection.files)
     relative=selected_path.relative_to(project).as_posix()
     artifacts.set_files(files,project,statuses={relative:"Modified"})
     artifacts.diff_button.setChecked(True)

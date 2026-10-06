@@ -29,13 +29,10 @@ class NavPanel(QtWidgets.QFrame):
         self.setObjectName("NavPanel")
         self.expanded_width = 260
         self.collapsed_width = 56
-        self.expanded_min_width = 200
-        self.expanded_max_width = 400
         self.is_collapsed = False
         self.is_animating = False
         self._target_collapsed = False
-        self.setMinimumWidth(self.expanded_min_width)
-        self.setMaximumWidth(self.expanded_max_width)
+        self.setFixedWidth(self.expanded_width)
 
         self.animation_min = QtCore.QPropertyAnimation(self, b"minimumWidth", self)
         self.animation_max = QtCore.QPropertyAnimation(self, b"maximumWidth", self)
@@ -48,7 +45,6 @@ class NavPanel(QtWidgets.QFrame):
         self.animation_group = QtCore.QParallelAnimationGroup(self)
         self.animation_group.addAnimation(self.animation_min)
         self.animation_group.addAnimation(self.animation_max)
-        self.animation_max.valueChanged.connect(self._apply_animated_width)
         self.animation_group.finished.connect(self._on_collapse_animation_finished)
         root = QtWidgets.QVBoxLayout(self)
         root.setSizeConstraint(QtWidgets.QLayout.SetNoConstraint)
@@ -123,27 +119,13 @@ class NavPanel(QtWidgets.QFrame):
         )
 
         self.collapsed_projects = QtWidgets.QWidget()
+        # Fill the project-list space while collapsed, keeping the footer below.
         collapsed_projects_layout = QtWidgets.QVBoxLayout(self.collapsed_projects)
-        self.collapsed_projects_layout = collapsed_projects_layout
         collapsed_projects_layout.setContentsMargins(0, 0, 0, 0)
         collapsed_projects_layout.setSpacing(8)
         collapsed_projects_layout.setAlignment(
             QtCore.Qt.AlignTop | QtCore.Qt.AlignHCenter
         )
-        self.collapsed_project_buttons = []
-        for project in config_projects:
-            button = self._collapsed_icon_button(
-                "folder",
-                project.name,
-                lambda _checked=False, value=project.name: (
-                    self.project_list.select_project(value)
-                ),
-            )
-            collapsed_projects_layout.addWidget(
-                button, 0, QtCore.Qt.AlignHCenter
-            )
-            self.collapsed_project_buttons.append(button)
-            button.hide()
         collapsed_projects_layout.addStretch(1)
         self.collapsed_projects.hide()
         root.addWidget(self.collapsed_projects, 1)
@@ -200,8 +182,6 @@ class NavPanel(QtWidgets.QFrame):
 
         self._target_collapsed = not self.is_collapsed
         start_width = self.width()
-        if self._target_collapsed:
-            self.expanded_width = start_width
         end_width = (
             self.collapsed_width if self._target_collapsed else self.expanded_width
         )
@@ -209,29 +189,16 @@ class NavPanel(QtWidgets.QFrame):
             self._set_expanded_content_visible(True)
 
         self.is_animating = True
-        splitter = self.parentWidget()
-        if isinstance(splitter, QtWidgets.QSplitter):
-            splitter.handle(1).setEnabled(False)
         for animation in (self.animation_min, self.animation_max):
             animation.setStartValue(start_width)
             animation.setEndValue(end_width)
         self.animation_group.start()
 
-    def _apply_animated_width(self, width):
-        splitter = self.parentWidget()
-        if not isinstance(splitter, QtWidgets.QSplitter) or splitter.count() != 2:
-            return
-        total_width = sum(splitter.sizes())
-        nav_width = int(width)
-        splitter.setSizes([nav_width, max(1, total_width - nav_width)])
-
     def _on_collapse_animation_finished(self):
         self.is_collapsed = self._target_collapsed
+        self.setFixedWidth(self.collapsed_width if self.is_collapsed else self.expanded_width)
         if self.is_collapsed:
             self._set_expanded_content_visible(False)
-        else:
-            self.setMinimumWidth(self.expanded_min_width)
-            self.setMaximumWidth(self.expanded_max_width)
         self.collapse_btn.setIcon(
             load_lucide_icon(
                 "panel-right" if self.is_collapsed else "panel-left",
@@ -241,9 +208,6 @@ class NavPanel(QtWidgets.QFrame):
         self.collapse_btn.setToolTip(
             "展开侧边栏" if self.is_collapsed else "收起侧边栏"
         )
-        splitter = self.parentWidget()
-        if isinstance(splitter, QtWidgets.QSplitter):
-            splitter.handle(1).setEnabled(not self.is_collapsed)
         self.is_animating = False
 
     def _set_expanded_content_visible(self, visible):
@@ -353,14 +317,9 @@ class NavPanel(QtWidgets.QFrame):
 
     def apply_rename(self, old_name, new_name, config_dir):
         self.project_list.apply_rename(old_name, new_name, config_dir)
-        for button in self.collapsed_project_buttons:
-            if button.toolTip() == old_name:
-                button.setToolTip(new_name)
-                break
 
     def apply_remove(self, name):
         self.project_list.apply_remove(name)
-        self._remove_collapsed_project(name)
         self.current_project_name = self.project_list.selected_project_name
 
     def set_projects(self, projects, selected_name):
@@ -377,28 +336,9 @@ class NavPanel(QtWidgets.QFrame):
         old.deleteLater()
         self.project_list.setVisible(not self.is_collapsed)
         self.current_project_name = self.project_list.select_project(selected_name, emit_signal=False)
-        for button in tuple(self.collapsed_project_buttons):
-            self._remove_collapsed_project(button.toolTip())
-        for project in projects:
-            button = self._collapsed_icon_button(
-                "folder", project.name,
-                lambda _checked=False, value=project.name: self.project_list.select_project(value),
-            )
-            self.collapsed_projects_layout.insertWidget(
-                len(self.collapsed_project_buttons), button, 0, QtCore.Qt.AlignHCenter
-            )
-            self.collapsed_project_buttons.append(button)
-            button.hide()
 
     def apply_pin(self, name):
         self.project_list.apply_pin(name)
-        for button in self.collapsed_project_buttons:
-            if button.toolTip() == name:
-                self.collapsed_project_buttons.remove(button)
-                self.collapsed_project_buttons.insert(0, button)
-                self.collapsed_projects_layout.removeWidget(button)
-                self.collapsed_projects_layout.insertWidget(0, button)
-                break
 
     def _project_selected(self, project_name):
         self.current_project_name = project_name
@@ -407,15 +347,6 @@ class NavPanel(QtWidgets.QFrame):
     def emit_current_project(self):
         if self.current_project_name:
             self.project_selected.emit(self.current_project_name)
-
-    def _remove_collapsed_project(self, project_name):
-        for button in tuple(self.collapsed_project_buttons):
-            if button.toolTip() != project_name:
-                continue
-            self.collapsed_project_buttons.remove(button)
-            button.setParent(None)
-            button.deleteLater()
-            break
 
     def set_active(self, name):
         for button, value in ((self.docs_btn, "docs"), (self.settings_btn, "settings")):

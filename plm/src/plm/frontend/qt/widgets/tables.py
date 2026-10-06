@@ -188,7 +188,7 @@ class EditableTable(QtWidgets.QWidget):
         super().__init__(parent)
         self.columns = columns
         self.id_column = id_column
-        self._data = []  # seed values; live data always read from the widgets via get_rows()
+        self._data = []
         self._building = False  # guards _on_row_moved against signals fired by our own re-render
         self._column_resize_pending = False
 
@@ -213,6 +213,13 @@ class EditableTable(QtWidgets.QWidget):
         self.table.rowMoveRequested.connect(self._on_row_drop)
         self.table.itemChanged.connect(self._on_item_changed)
         layout.addWidget(self.table)
+        self._option_probes = {}
+        for index, column in enumerate(columns):
+            if column.get("options"):
+                probe = QtWidgets.QComboBox(self.table)
+                probe.addItems(column["options"])
+                probe.hide()
+                self._option_probes[index] = probe
         self._schedule_column_resize()
 
     def resizeEvent(self, event):
@@ -258,14 +265,12 @@ class EditableTable(QtWidgets.QWidget):
                 # both sides, so include that space too; otherwise a column
                 # can fit its heading while clipping values such as
                 # "perlane" in the editor below it.
-                probe = QtWidgets.QComboBox(self.table)
-                probe.addItems(column["options"])
+                probe = self._option_probes[index]
                 probe.ensurePolished()
                 minimum = max(
                     minimum,
                     probe.sizeHint().width() + 2 * _PaddedItemDelegate.HORIZONTAL_PADDING,
                 )
-                probe.deleteLater()
             minimums.append(minimum)
             if not column.get("width"):
                 flexible.append(index)
@@ -284,32 +289,37 @@ class EditableTable(QtWidgets.QWidget):
 
     # ------------------------------------------------------------ public data interface
     def get_rows(self):
-        """Read current values straight out of the live widgets (not
-        self._data, which only ever seeds a render) so an in-progress edit
-        is captured even without a focus-out event."""
-        rows = []
-        for r in range(self.table.rowCount()):
-            row = {}
-            for c, col in enumerate(self.columns):
-                w = self.table.cellWidget(r, c)
-                if isinstance(w, QtWidgets.QComboBox):
-                    row[col["key"]] = w.currentText()
-                else:
-                    item = self.table.item(r, c)
-                    row[col["key"]] = item.text() if item else ""
-            rows.append(row)
+        """Return a model snapshot, including the one active text editor."""
+        rows = [dict(row) for row in self._data]
+        editor = QtWidgets.QApplication.focusWidget()
+        if (
+            isinstance(editor, QtWidgets.QLineEdit)
+            and editor.parentWidget() is self.table.viewport()
+            and self.table.state() == QtWidgets.QAbstractItemView.EditingState
+        ):
+            row, column = self.table.currentRow(), self.table.currentColumn()
+            if 0 <= row < len(rows) and 0 <= column < len(self.columns):
+                rows[row][self.columns[column]["key"]] = editor.text()
         return rows
 
     def set_rows(self, rows):
-        self._data = [dict(r) for r in (rows or [])]
+        self._data = [
+            {column["key"]: str(row.get(column["key"], "")) for column in self.columns}
+            for row in (rows or [])
+        ]
         self._render_body()
 
-    def _on_item_changed(self, _item):
+    def _on_item_changed(self, item):
         if not self._building:
-            self.changed.emit()
+            self._update_value(item.row(), self.columns[item.column()]["key"], item.text())
 
-    def _on_combo_changed(self, _text):
+    def _on_combo_changed(self, row, key, text):
         if not self._building:
+            self._update_value(row, key, text)
+
+    def _update_value(self, row, key, value):
+        if 0 <= row < len(self._data) and self._data[row].get(key) != value:
+            self._data[row][key] = value
             self.changed.emit()
 
     def set_cell_errors(self, errors):
@@ -401,7 +411,10 @@ class EditableTable(QtWidgets.QWidget):
                         lambda pos, widget=combo, row_index=r:
                         self._show_row_context_menu(row_index, widget.mapToGlobal(pos))
                     )
-                    combo.currentTextChanged.connect(self._on_combo_changed)
+                    combo.currentTextChanged.connect(
+                        lambda text, row_index=r, key=key:
+                        self._on_combo_changed(row_index, key, text)
+                    )
                     self.table.setCellWidget(r, c, combo)
                 else:
                     item = QtWidgets.QTableWidgetItem(str(value))

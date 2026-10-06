@@ -1,7 +1,6 @@
 """Collect a project name and a user-selected parent directory."""
 
 import os
-from pathlib import Path
 
 from PyQt5 import QtCore, QtWidgets
 

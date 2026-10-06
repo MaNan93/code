@@ -3,7 +3,7 @@ import re
 import unicodedata
 from PyQt5 import QtCore, QtGui, QtWidgets
 from plm.frontend.qt.styles.tokens import (
-    BG_SUBTLE, BORDER, FONT_MONO, TEXT_MAIN, TEXT_MUTED, TEXT_SUB,
+    BG_SUBTLE, BORDER, TEXT_MAIN, TEXT_MUTED,
 )
 from .secondary_page import SecondaryPage
 DOCS_DIR = Path(__file__).resolve().parents[3] / "docs"

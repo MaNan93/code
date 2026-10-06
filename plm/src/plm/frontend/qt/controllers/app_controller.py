@@ -4,10 +4,9 @@ import hashlib
 import os
 from pathlib import Path
 
-from PyQt5 import QtCore, QtGui, QtWidgets
+from PyQt5 import QtCore, QtWidgets
 
 from plm.core.validation import ValidationError, ValidationIssue
-from plm.frontend.qt.models.preferences import DEFAULT_FONT_FAMILY, DEFAULT_FONT_SIZE
 from plm.frontend.qt.services import ProjectService, SettingsStore, WorkspaceService
 from plm.frontend.qt.views.documentation_page import DocumentationPage
 from plm.frontend.qt.views.nav_panel import NavPanel
@@ -101,7 +100,7 @@ class AppController:
         if self.current_project is None:
             self._set_output_state("no_project")
         else:
-            has_outputs = self.config_page.artifacts_panel.file_selector.count() > 0
+            has_outputs = bool(self.config_page.artifacts_panel.selection.files)
             self._set_output_state("out_of_date" if has_outputs else "ready", "配置已修改，正在检查生成状态。")
         self.validation_timer.start()
 
@@ -524,19 +523,4 @@ class AppController:
 
     def save_preferences(self, preferences):
         self.settings.save_preferences(preferences)
-        self.apply_preferences(preferences)
         self.validate_current()
-
-    def apply_preferences(self, preferences):
-        from plm.frontend.qt.styles import build_app_stylesheet
-
-        app = QtWidgets.QApplication.instance()
-        if app is None:
-            return
-        family = preferences.get("font_family") or DEFAULT_FONT_FAMILY
-        size = int(preferences.get("font_size") or DEFAULT_FONT_SIZE)
-        font = QtGui.QFont(family)
-        font.setPixelSize(size)
-        font.setStyleStrategy(QtGui.QFont.PreferAntialias)
-        app.setFont(font)
-        app.setStyleSheet(build_app_stylesheet(family, size))

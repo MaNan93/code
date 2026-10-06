@@ -12,7 +12,7 @@ from plm.frontend.qt.models import ProjectInfo
 from plm.frontend.qt.main_window import MainWindow
 from plm.frontend.qt.styles import APP_QSS
 from plm.frontend.qt.views.artifacts_panel import ArtifactsPanel
-from plm.frontend.qt.views.config_page import ConfigHeader, DragHandle
+from plm.frontend.qt.views.config_page import ConfigHeader
 from plm.frontend.qt.views.log_panel import LogPanel
 from plm.frontend.qt.views.nav_panel import NavPanel
 from plm.frontend.qt.widgets.common import ICON_SIZE, LUCIDE_ICON_DIR, load_lucide_icon
@@ -59,23 +59,21 @@ class QtFrontendLayoutTests(unittest.TestCase):
         )
         self.app.processEvents()
 
-    def test_native_window_and_nested_splitters(self):
+    def test_native_window_with_fixed_sidebar_and_log_splitter(self):
         self.assertFalse(self.window.windowFlags() & QtCore.Qt.FramelessWindowHint)
         self.assertEqual(self.window.windowTitle(), "plmConsultant")
         self.assertIsInstance(self.window.nav_panel, NavPanel)
         self.assertEqual(self.window.nav_panel.width(), 260)
-        self.assertIs(self.window.centralWidget(), self.window.main_splitter)
-        self.assertEqual(self.window.main_splitter.orientation(), QtCore.Qt.Horizontal)
+        self.assertIs(self.window.centralWidget(), self.window.view_stack)
+        self.assertIs(self.window.view_stack.widget(0), self.window.main_container)
+        main_layout = self.window.main_container.layout()
+        self.assertIsInstance(main_layout, QtWidgets.QHBoxLayout)
+        self.assertEqual(main_layout.spacing(), 0)
+        self.assertEqual(main_layout.contentsMargins(), QtCore.QMargins(0, 0, 0, 0))
         self.assertEqual(self.window.content_splitter.orientation(), QtCore.Qt.Vertical)
-        self.assertEqual(self.window.main_splitter.handleWidth(), 4)
-        self.assertFalse(self.window.main_splitter.childrenCollapsible())
-        self.assertEqual(self.window.main_splitter.count(), 2)
-        self.assertEqual(self.window.nav_panel.minimumWidth(), 200)
-        self.assertEqual(self.window.nav_panel.maximumWidth(), 400)
-        self.assertEqual(
-            self.window.main_splitter.handle(1).cursor().shape(),
-            QtCore.Qt.SplitHCursor,
-        )
+        self.assertEqual(main_layout.count(), 2)
+        self.assertEqual(self.window.nav_panel.minimumWidth(), 260)
+        self.assertEqual(self.window.nav_panel.maximumWidth(), 260)
         self.assertEqual(self.window.content_splitter.handleWidth(), 1)
         self.assertIsInstance(self.window.log_panel, LogPanel)
         self.assertEqual(
@@ -89,9 +87,6 @@ class QtFrontendLayoutTests(unittest.TestCase):
             "toggle": nav.collapse_btn.mapTo(nav, QtCore.QPoint()).y(),
             "new": nav.new_chat_btn.mapTo(nav, QtCore.QPoint()).y(),
             "save": nav.save_btn.mapTo(nav, QtCore.QPoint()).y(),
-            "project": nav.project_list.project_widgets[0].header.mapTo(
-                nav, QtCore.QPoint()
-            ).y(),
             "docs": nav.docs_btn.mapTo(nav, QtCore.QPoint(0, nav.docs_btn.height())).y(),
         }
         collapse_finished = QtTest.QSignalSpy(nav.animation_group.finished)
@@ -103,7 +98,6 @@ class QtFrontendLayoutTests(unittest.TestCase):
         self.assertFalse(nav.is_animating)
         self.assertTrue(nav.is_collapsed)
         self.assertEqual(nav.width(), 56)
-        self.assertFalse(self.window.main_splitter.handle(1).isEnabled())
         self.assertFalse(nav.project_list.isVisible())
         self.assertFalse(nav.logo_label.isVisible())
         self.assertEqual(nav.new_chat_btn.objectName(), "NavIconBtn")
@@ -111,13 +105,12 @@ class QtFrontendLayoutTests(unittest.TestCase):
         self.assertEqual(
             self.window.content_splitter.geometry().left()
             - (nav.geometry().right() + 1),
-            4,
+            0,
         )
         aligned_widgets = [
             nav.collapse_btn,
             nav.new_chat_btn,
             nav.save_btn,
-            *nav.collapsed_project_buttons,
             nav.collapsed_settings_btn,
             nav.collapsed_docs_btn,
         ]
@@ -139,10 +132,6 @@ class QtFrontendLayoutTests(unittest.TestCase):
             stable_y_positions["save"],
         )
         self.assertEqual(
-            nav.collapsed_project_buttons[0].mapTo(nav, QtCore.QPoint()).y(),
-            stable_y_positions["project"],
-        )
-        self.assertEqual(
             nav.collapsed_docs_btn.mapTo(nav, QtCore.QPoint(0, nav.collapsed_docs_btn.height())).y(),
             stable_y_positions["docs"],
         )
@@ -157,29 +146,24 @@ class QtFrontendLayoutTests(unittest.TestCase):
         self.assertTrue(expand_finished.wait(1000))
         self.assertFalse(nav.is_collapsed)
         self.assertEqual(nav.width(), 260)
-        self.assertEqual(nav.minimumWidth(), 200)
-        self.assertEqual(nav.maximumWidth(), 400)
-        self.assertTrue(self.window.main_splitter.handle(1).isEnabled())
+        self.assertEqual(nav.minimumWidth(), 260)
+        self.assertEqual(nav.maximumWidth(), 260)
         self.assertEqual(nav.new_chat_btn.objectName(), "NavActionButton")
         self.assertEqual(nav.save_btn.objectName(), "NavActionButton")
 
-    def test_nav_splitter_resizes_only_while_expanded(self):
+    def test_nav_width_stays_fixed_when_window_resizes(self):
         nav = self.window.nav_panel
-        self.window.main_splitter.moveSplitter(100, 1)
+        self.window.resize(1200, 760)
         self.app.processEvents()
-        self.assertEqual(nav.width(), 200)
+        self.assertEqual(nav.width(), 260)
 
-        self.window.main_splitter.moveSplitter(500, 1)
+        self.window.resize(1600, 1000)
         self.app.processEvents()
-        self.assertEqual(nav.width(), 400)
-
-        self.window.main_splitter.moveSplitter(320, 1)
-        self.app.processEvents()
-        self.assertEqual(nav.width(), 320)
+        self.assertEqual(nav.width(), 260)
 
         nav.collapse_btn.click()
         QtTest.QTest.qWait(250)
-        self.window.main_splitter.moveSplitter(300, 1)
+        self.window.resize(1200, 760)
         self.app.processEvents()
         self.assertEqual(nav.width(), 56)
 
@@ -267,10 +251,10 @@ class QtFrontendLayoutTests(unittest.TestCase):
         nav.new_chat_btn.click()
         nav.save_btn.click()
         nav.settings_btn.click()
-        self.assertEqual(self.window.secondary_overlay.page, "settings")
+        self.assertEqual(self.window.view_stack.currentWidget().page, "settings")
         self.window._close_secondary_page()
         nav.docs_btn.click()
-        self.assertEqual(self.window.secondary_overlay.page, "docs")
+        self.assertEqual(self.window.view_stack.currentWidget().page, "docs")
 
         self.assertEqual(len(new_chat_spy), 1)
         self.assertEqual(len(save_spy), 1)
@@ -359,8 +343,8 @@ class QtFrontendLayoutTests(unittest.TestCase):
         self.assertEqual(root.spacing(), 8)
         self.assertEqual(nav.expanded_width, 260)
         self.assertEqual(nav.collapsed_width, 56)
-        self.assertEqual(nav.expanded_min_width, 200)
-        self.assertEqual(nav.expanded_max_width, 400)
+        self.assertEqual(nav.minimumWidth(), 260)
+        self.assertEqual(nav.maximumWidth(), 260)
         self.assertEqual(nav.brand_row.height(), 40)
         self.assertEqual(nav.brand_layout.spacing(), 0)
         self.assertEqual(nav.logo_label.size(), QtCore.QSize(18, 18))
@@ -536,9 +520,9 @@ class QtFrontendLayoutTests(unittest.TestCase):
                 self.assertEqual(project_list.project_widgets[0].project_name, "second")
 
                 renamed_spy = QtTest.QSignalSpy(nav.project_renamed)
-                with patch.object(QtWidgets.QInputDialog, "getText",
-                                  return_value=("renamed", True)):
-                    project_list.rename_project(first)
+                project_list.rename_project(first)
+                first.project_name_edit.setText("renamed")
+                QtTest.QTest.keyClick(first.project_name_edit, QtCore.Qt.Key_Return)
                 self.assertEqual(first.project_name, "first")
                 self.assertEqual(renamed_spy[0], ["first", "renamed"])
                 nav.apply_rename("first", "renamed", root / "renamed/config")
@@ -624,20 +608,13 @@ class QtFrontendLayoutTests(unittest.TestCase):
         self.app.processEvents()
         self.assertGreater(self.window.content_splitter.sizes()[1], 0)
 
-    def test_artifacts_is_absolute_overlay_with_drag_handle(self):
+    def test_artifacts_is_pure_floating_drawer(self):
         page = self.window.config_page
         panel = page.artifacts_panel
-        handle = page.drag_handle
         self.assertIsInstance(panel, ArtifactsPanel)
-        self.assertIsInstance(handle, DragHandle)
         self.assertIs(panel.parent(), page.config_area)
-        self.assertIs(handle.parent(), page.config_area)
-        self.assertEqual(handle.size(), QtCore.QSize(8, 30))
         self.assertEqual(panel.geometry().right(), page.config_area.rect().right())
-        self.assertEqual(
-            handle.geometry().left() + handle.width() // 2,
-            panel.geometry().left(),
-        )
+        self.assertEqual(page.tabs.maximumWidth(), QtWidgets.QWIDGETSIZE_MAX)
         self.assertEqual(len(panel.toolbar_buttons), 9)
         toolbar = panel.findChild(QtWidgets.QWidget, "ArtifactsToolbar")
         toolbar_margins = toolbar.layout().contentsMargins()
@@ -657,7 +634,7 @@ class QtFrontendLayoutTests(unittest.TestCase):
 
         self.assertEqual(panel.layout().spacing(), 12)
         self.assertIsInstance(panel.preview, QtWidgets.QPlainTextEdit)
-        self.assertIsInstance(panel.file_selector, QtWidgets.QComboBox)
+        self.assertFalse(hasattr(panel, "file_selector"))
 
     def test_config_header_has_twelve_pixel_gap_before_tabs(self):
         page = self.window.config_page
@@ -667,17 +644,13 @@ class QtFrontendLayoutTests(unittest.TestCase):
     def test_artifacts_drag_visibility_and_maximize(self):
         page = self.window.config_page
         original_width = page.artifacts_panel.width()
-        page.handle_artifacts_drag("start", 800)
-        page.handle_artifacts_drag("move", 740)
+        page.artifacts_panel.widthRequested.emit(original_width + 60)
         self.assertEqual(page.artifacts_panel.width(), original_width + 60)
-        page.finish_artifacts_drag()
-        self.assertIsNone(page.drag_start_global_x)
 
         page.toggle_artifacts_maximized()
         self.assertEqual(page.artifacts_panel.width(), page.config_area.width())
-        self.assertFalse(page.drag_handle.isVisible())
         page.toggle_artifacts_maximized()
-        self.assertTrue(page.drag_handle.isVisible())
+        self.assertEqual(page.artifacts_panel.width(), original_width + 60)
         page.toggle_artifacts()
         self.assertFalse(page.artifacts_panel.isVisible())
         page.toggle_artifacts()
@@ -689,7 +662,7 @@ class QtFrontendLayoutTests(unittest.TestCase):
             generated = Path(directory).resolve() / "generated.sv"
             generated.write_text("module generated; endmodule\n", encoding="utf-8")
             panel.set_files([generated], Path(directory).resolve())
-            self.assertEqual(panel.file_selector.count(), 1)
+            self.assertEqual(len(panel.selection.files), 1)
             self.assertEqual(panel.preview.toPlainText(), generated.read_text())
             panel.copy_path()
             self.assertEqual(QtWidgets.QApplication.clipboard().text(), str(generated))
@@ -720,12 +693,12 @@ class QtFrontendLayoutTests(unittest.TestCase):
         nav = self.window.nav_panel
         nav.settings_btn.click()
         self.app.processEvents()
-        overlay = self.window.secondary_overlay
+        overlay = self.window.view_stack.currentWidget()
         self.assertIsNotNone(overlay)
         self.assertTrue(overlay.isVisible())
         self.assertEqual(overlay.page, "settings")
         self.assertEqual(overlay.title_label.text(), "Settings")
-        self.assertEqual(overlay.geometry(), self.window.rect())
+        self.assertEqual(overlay.size(), self.window.view_stack.size())
         self.assertEqual(overlay.back_btn.text(), "")
         self.assertEqual(overlay.back_btn.size(), QtCore.QSize(32, 32))
         self.assertEqual(overlay.back_btn.iconSize(), QtCore.QSize(18, 18))
@@ -740,55 +713,43 @@ class QtFrontendLayoutTests(unittest.TestCase):
         self.assertEqual(divider.height(), 1)
         for row in overlay.setting_rows.values():
             self.assertEqual(row.height(), 56)
-        self.assertEqual(overlay.font_family_combo.size(), QtCore.QSize(280, 54))
-        self.assertEqual(overlay.font_size_spin.size(), QtCore.QSize(280, 54))
-        self.assertGreater(overlay.font_family_combo.count(), 0)
-        self.assertEqual(
-            overlay.font_size_spin.buttonSymbols(),
-            QtWidgets.QAbstractSpinBox.NoButtons,
-        )
 
         nav.docs_btn.click()
         self.app.processEvents()
-        overlay = self.window.secondary_overlay
+        overlay = self.window.view_stack.currentWidget()
         self.assertIsNotNone(overlay)
         self.assertEqual(overlay.page, "docs")
         self.assertEqual(overlay.title_label.text(), "Documentation")
         overlay.back_btn.click()
         self.app.processEvents()
-        self.assertIsNone(self.window.secondary_overlay)
+        self.assertIs(self.window.view_stack.currentWidget(), self.window.main_container)
 
         nav.settings_btn.click()
         self.app.processEvents()
-        overlay = self.window.secondary_overlay
+        overlay = self.window.view_stack.currentWidget()
         QtTest.QTest.keyClick(overlay, QtCore.Qt.Key_Escape)
         self.app.processEvents()
-        self.assertIsNone(self.window.secondary_overlay)
+        self.assertIs(self.window.view_stack.currentWidget(), self.window.main_container)
 
-    def test_settings_are_saved_and_applied(self):
+    def test_settings_are_saved(self):
         settings = QtCore.QSettings("plm", "plmConsultant")
         original = {
             key: settings.value(key)
             for key in (
-                "appearance/font_family",
-                "appearance/font_size",
                 "tools/editor_path",
             )
         }
         try:
             self.window.nav_panel.settings_btn.click()
             self.app.processEvents()
-            overlay = self.window.secondary_overlay
-            overlay.font_size_spin.setValue(15)
+            overlay = self.window.view_stack.currentWidget()
             overlay.editor_path_edit.setText("custom-editor")
             overlay.save_settings_btn.click()
             self.app.processEvents()
 
-            self.assertEqual(settings.value("appearance/font_size", type=int), 15)
             self.assertEqual(
                 settings.value("tools/editor_path", type=str), "custom-editor"
             )
-            self.assertEqual(self.app.font().pixelSize(), 15)
             self.assertEqual(overlay.settings_status.text(), "设置已保存")
         finally:
             for key, value in original.items():
@@ -797,7 +758,6 @@ class QtFrontendLayoutTests(unittest.TestCase):
                 else:
                     settings.setValue(key, value)
             settings.sync()
-            self.window._apply_preferences(self.window._read_preferences())
 
     def test_docs_menu_loads_real_markdown_sections(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -820,7 +780,7 @@ class QtFrontendLayoutTests(unittest.TestCase):
             with patch("plm.frontend.qt.views.documentation_page.DOCS_DIR", docs_dir):
                 self.window.nav_panel.docs_btn.click()
                 self.app.processEvents()
-                overlay = self.window.secondary_overlay
+                overlay = self.window.view_stack.currentWidget()
                 self.assertIn("Frontend Guide", overlay.doc_browser.toPlainText())
                 tables = [
                     frame
@@ -857,7 +817,6 @@ class QtFrontendLayoutTests(unittest.TestCase):
         icon_names = (
             "layout-dashboard",
             "arrow-left",
-            "chevron-down",
             "panel-left",
             "x",
             "panel-bottom",
@@ -882,10 +841,9 @@ class QtFrontendLayoutTests(unittest.TestCase):
             "file-x",
             "more-horizontal",
             "maximize",
-            "plus",
             "rocket",
         )
-        self.assertEqual(len(icon_names), 29)
+        self.assertEqual(len(icon_names), 27)
         self.assertEqual(
             {path.stem for path in LUCIDE_ICON_DIR.glob("*.svg")},
             set(icon_names),

@@ -50,6 +50,7 @@ class ProjectList(QtWidgets.QListWidget):
             widget.hoverLeft.connect(self._project_hover_left)
             widget.pinRequested.connect(self.pin_project)
             widget.renameRequested.connect(self.rename_project)
+            widget.renameCommitted.connect(self._commit_rename)
             widget.archiveRequested.connect(self.archive_project)
             widget.deleteRequested.connect(self.delete_project)
             widget.projectSelected.connect(self.select_project)
@@ -113,17 +114,15 @@ class ProjectList(QtWidgets.QListWidget):
         self.select_project(self.selected_project_name, emit_signal=False)
 
     def rename_project(self, widget):
-        old_name = widget.project_name
-        new_name, accepted = QtWidgets.QInputDialog.getText(
-            self,
-            "重命名项目",
-            "请输入新的项目名称：",
-            text=widget.project_path.name,
-        )
-        new_name = new_name.strip()
-        if not accepted or not new_name or new_name == old_name:
-            return
-        self.projectRenamed.emit(old_name, new_name)
+        self._hover_timer.stop()
+        self._hide_timer.stop()
+        self._pending_hover_widget = None
+        self.hover_card.hide()
+        widget.begin_rename()
+
+    def _commit_rename(self, widget, new_name):
+        if widget in self.project_widgets:
+            self.projectRenamed.emit(widget.project_name, new_name)
 
     def apply_rename(self, old_name, new_name, config_dir):
         widget = next((w for w in self.project_widgets if w.project_name == old_name), None)
@@ -193,6 +192,8 @@ class ProjectList(QtWidgets.QListWidget):
                 self.select_project(self.project_widgets[0].project_name)
 
     def _schedule_hover_card(self, widget):
+        if widget.project_name_edit.isVisible():
+            return
         self._hide_timer.stop()
         self.hover_card.hide()
         self._pending_hover_widget = widget
@@ -209,7 +210,7 @@ class ProjectList(QtWidgets.QListWidget):
 
     def _show_hover_card(self):
         widget = self._pending_hover_widget
-        if widget is None or not widget.header.underMouse():
+        if widget is None or widget.project_name_edit.isVisible() or not widget.header.underMouse():
             return
         self.hover_card.set_project(widget.project_name, widget.project_path)
         self.hover_card.adjustSize()

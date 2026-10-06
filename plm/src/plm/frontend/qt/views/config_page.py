@@ -4,7 +4,7 @@ from plm.frontend.qt.widgets.common import apply_drop_shadow, make_icon_button
 from plm.frontend.qt.widgets.config_editor import CsvTableEditor, GenerationEditor
 from plm.frontend.qt.views.artifacts_panel import ArtifactsPanel
 from plm.frontend.qt.styles.tokens import (
-    BG_SURFACE, BORDER_HOVER, SHADOW_SM, SPACING_LG, SPACING_MD, SPACING_SM, TEXT_MUTED,
+    SHADOW_SM, SPACING_LG, SPACING_MD, SPACING_SM,
 )
 
 
@@ -32,6 +32,7 @@ class ConfigTabBar(QtWidgets.QTabBar):
 
 class EscapeLineEdit(QtWidgets.QLineEdit):
     escapePressed = QtCore.pyqtSignal()
+    focusLost = QtCore.pyqtSignal()
 
     def keyPressEvent(self, event):
         if event.key() == QtCore.Qt.Key_Escape:
@@ -39,6 +40,12 @@ class EscapeLineEdit(QtWidgets.QLineEdit):
             event.accept()
             return
         super().keyPressEvent(event)
+
+    def focusOutEvent(self, event):
+        super().focusOutEvent(event)
+        # Also finish when the name is unchanged; editingFinished may not fire.
+        if event.reason() != QtCore.Qt.PopupFocusReason:
+            self.focusLost.emit()
 
 
 class DoubleClickLabel(QtWidgets.QLabel):
@@ -67,6 +74,7 @@ class ConfigHeader(QtWidgets.QFrame):
         self.setObjectName("ConfigHeader")
         self.setFixedHeight(48)
         self._original_title = ""
+        self._editing_title = False
         layout = QtWidgets.QHBoxLayout(self)
         layout.setContentsMargins(SPACING_LG, 0, SPACING_LG, 0)
         layout.setSpacing(SPACING_SM)
@@ -80,8 +88,9 @@ class ConfigHeader(QtWidgets.QFrame):
         self.title_edit.hide()
         self.title_edit.returnPressed.connect(self.save_title)
         self.title_edit.editingFinished.connect(self.save_title)
+        self.title_edit.focusLost.connect(self.save_title)
         self.title_edit.escapePressed.connect(self.cancel_title)
-        layout.addWidget(self.title_edit)
+        layout.addWidget(self.title_edit, 0, QtCore.Qt.AlignVCenter)
         layout.addStretch(1)
         self.log_btn = make_icon_button(
             "panel-bottom", "显示/隐藏输出面板", "HeaderButton", 32, 18
@@ -96,6 +105,7 @@ class ConfigHeader(QtWidgets.QFrame):
 
     def enter_edit_mode(self):
         self._original_title = self.title_label.text()
+        self._editing_title = True
         self.title_edit.setText(self._original_title)
         self.title_label.hide()
         self.title_edit.show()
@@ -103,8 +113,9 @@ class ConfigHeader(QtWidgets.QFrame):
         self.title_edit.setFocus(QtCore.Qt.OtherFocusReason)
 
     def save_title(self):
-        if not self.title_edit.isVisible():
+        if not self._editing_title:
             return
+        self._editing_title = False
         new_title = self.title_edit.text().strip() or self._original_title
         self.title_label.setText(new_title)
         self.title_edit.hide()
@@ -112,8 +123,9 @@ class ConfigHeader(QtWidgets.QFrame):
         self.titleChanged.emit(new_title)
 
     def cancel_title(self):
-        if not self.title_edit.isVisible():
+        if not self._editing_title:
             return
+        self._editing_title = False
         self.title_edit.hide()
         self.title_label.setText(self._original_title)
         self.title_label.show()
@@ -153,61 +165,10 @@ class ConfigTabPage(QtWidgets.QWidget):
         root.addWidget(scroll, 1)
 
 
-class DragHandle(QtWidgets.QWidget):
-    """Low-emphasis resize affordance for the floating Artifacts panel."""
-
-    def __init__(self, on_drag, on_release, parent=None):
-        super().__init__(parent)
-        self.on_drag = on_drag
-        self.on_release = on_release
-        self.drag_start_x = None
-        self.setFixedSize(8, 30)
-        self.setCursor(QtCore.Qt.SplitHCursor)
-        self.setAttribute(QtCore.Qt.WA_Hover, True)
-
-    def paintEvent(self, event):
-        painter = QtGui.QPainter(self)
-        painter.setRenderHint(QtGui.QPainter.Antialiasing, True)
-        hovered = self.underMouse() or self.drag_start_x is not None
-        if hovered:
-            capsule = QtCore.QRectF(0.5, 0.5, 7, 29)
-            painter.setPen(QtGui.QPen(QtGui.QColor(BORDER_HOVER), 1))
-            painter.setBrush(QtGui.QColor(BG_SURFACE))
-            painter.drawRoundedRect(capsule, 4, 4)
-        guide = QtGui.QColor(TEXT_MUTED)
-        guide.setAlpha(190 if hovered else 95)
-        painter.setPen(QtCore.Qt.NoPen)
-        painter.setBrush(guide)
-        painter.drawRoundedRect(QtCore.QRectF(2.0, 10, 1.25, 10), 0.6, 0.6)
-        painter.drawRoundedRect(QtCore.QRectF(4.75, 10, 1.25, 10), 0.6, 0.6)
-
-    def enterEvent(self, event):
-        self.update()
-        super().enterEvent(event)
-
-    def leaveEvent(self, event):
-        self.update()
-        super().leaveEvent(event)
-
-    def mousePressEvent(self, event):
-        if event.button() == QtCore.Qt.LeftButton:
-            self.drag_start_x = event.globalPos().x()
-            self.on_drag("start", self.drag_start_x)
-            event.accept()
-
-    def mouseMoveEvent(self, event):
-        if self.drag_start_x is not None:
-            self.on_drag("move", event.globalPos().x())
-            event.accept()
-
-    def mouseReleaseEvent(self, event):
-        if self.drag_start_x is not None:
-            self.drag_start_x = None
-            self.on_release()
-            event.accept()
-
 class ConfigPage(QtWidgets.QFrame):
     """Region 2 with an absolute-positioned Region 5 overlay."""
+
+    MAX_HISTORY = 50
 
     logToggleRequested = QtCore.pyqtSignal()
     dirtyChanged = QtCore.pyqtSignal(bool)
@@ -226,8 +187,6 @@ class ConfigPage(QtWidgets.QFrame):
         self.artifacts_width = 380
         self.restore_artifacts_width = 380
         self.artifacts_maximized = False
-        self.drag_start_global_x = None
-        self.drag_start_width = None
 
         root = QtWidgets.QVBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
@@ -273,11 +232,12 @@ class ConfigPage(QtWidgets.QFrame):
             self.config_area, editor_path_provider=editor_path_provider
         )
         self.artifacts_panel.maximizeRequested.connect(self.toggle_artifacts_maximized)
-        self.drag_handle = DragHandle(
-            self.handle_artifacts_drag, self.finish_artifacts_drag, self.config_area
+        self.artifacts_panel.widthRequested.connect(self._on_artifacts_width_requested)
+        self.tabs.currentChanged.connect(
+            lambda _index: self.artifacts_panel.raise_()
+            if self.artifacts_panel.isVisible() else None
         )
         self.artifacts_panel.show()
-        self.drag_handle.show()
         self.config_area.installEventFilter(self)
         QtCore.QTimer.singleShot(0, self.reposition_artifacts)
 
@@ -291,7 +251,9 @@ class ConfigPage(QtWidgets.QFrame):
             return
         self._history = self._history[:self._history_index + 1]
         self._history.append(deepcopy(payload))
-        self._history_index += 1
+        if len(self._history) > self.MAX_HISTORY:
+            del self._history[:-self.MAX_HISTORY]
+        self._history_index = len(self._history) - 1
         self._update_dirty()
         self.historyChanged.emit()
 
@@ -404,28 +366,9 @@ class ConfigPage(QtWidgets.QFrame):
     def toggle_artifacts(self):
         visible = not self.artifacts_panel.isVisible()
         self.artifacts_panel.setVisible(visible)
-        self.drag_handle.setVisible(visible and not self.artifacts_maximized)
         if visible:
             self.reposition_artifacts()
             self.artifacts_panel.raise_()
-            self.drag_handle.raise_()
-        else:
-            self._resize_editors(self.config_area.width() - 48)
-
-    def _resize_editors(self, available_width):
-        editor_width = max(280, available_width)
-        for editor in (self.controllers_editor, self.mapping_editor,
-                       self.signals_editor, self.generation_editor):
-            editor.setMaximumWidth(editor_width)
-
-        # The Artifacts panel is intentionally an absolute overlay, but the
-        # configuration card should not continue underneath it. Constraining
-        # the tab widget keeps headings/descriptions readable instead of
-        # letting the overlay visually crop their final words.
-        if self.artifacts_panel.isVisible() and not self.artifacts_maximized:
-            self.tabs.setMaximumWidth(max(360, editor_width + 48))
-        else:
-            self.tabs.setMaximumWidth(16777215)
 
     def toggle_artifacts_maximized(self):
         if not self.artifacts_panel.isVisible():
@@ -433,52 +376,27 @@ class ConfigPage(QtWidgets.QFrame):
         if self.artifacts_maximized:
             self.artifacts_maximized = False
             self.artifacts_width = self.restore_artifacts_width
-            self.drag_handle.show()
         else:
             self.restore_artifacts_width = self.artifacts_panel.width()
             self.artifacts_maximized = True
-            self.drag_handle.hide()
+        self.artifacts_panel.set_maximized(self.artifacts_maximized)
         self.reposition_artifacts()
 
     def reposition_artifacts(self):
         if not self.artifacts_panel.isVisible():
             return
-        total_width = self.config_area.width()
-        total_height = self.config_area.height()
-        if total_width <= 0 or total_height <= 0:
+        total_w = self.config_area.width()
+        total_h = self.config_area.height()
+        if total_w <= 0 or total_h <= 0:
             return
-        minimum = min(300, total_width)
-        panel_width = (
-            total_width
-            if self.artifacts_maximized
-            else max(minimum, min(self.artifacts_width, total_width))
-        )
-        panel_x = total_width - panel_width
-        self._resize_editors(panel_x - 48)
-        self.artifacts_panel.setGeometry(panel_x, 0, panel_width, total_height)
-        handle_x = panel_x - self.drag_handle.width() // 2
-        handle_y = (total_height - self.drag_handle.height()) // 2
-        self.drag_handle.setGeometry(
-            handle_x, handle_y, self.drag_handle.width(), self.drag_handle.height()
-        )
+        panel_w = total_w if self.artifacts_maximized else min(self.artifacts_width, total_w)
+        self.artifacts_panel.setGeometry(total_w - panel_w, 0, panel_w, total_h)
         self.artifacts_panel.raise_()
-        self.drag_handle.raise_()
 
-    def handle_artifacts_drag(self, action, global_x):
-        if action == "start":
-            self.drag_start_global_x = global_x
-            self.drag_start_width = self.artifacts_panel.width()
+    def _on_artifacts_width_requested(self, width):
+        if self.artifacts_maximized:
             return
-        if action != "move" or self.drag_start_global_x is None:
-            return
-        delta = self.drag_start_global_x - global_x
-        maximum = self.config_area.width()
+        maximum = max(1, self.config_area.width())
         minimum = min(300, maximum)
-        self.artifacts_width = max(
-            minimum, min(self.drag_start_width + delta, maximum)
-        )
+        self.artifacts_width = max(minimum, min(int(width), maximum))
         self.reposition_artifacts()
-
-    def finish_artifacts_drag(self):
-        self.drag_start_global_x = None
-        self.drag_start_width = None

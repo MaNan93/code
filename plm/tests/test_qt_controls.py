@@ -13,7 +13,6 @@ from PyQt5 import QtCore, QtTest, QtWidgets
 
 from plm.frontend.qt.controllers import AppController
 from plm.frontend.qt.main_window import MainWindow
-from plm.frontend.qt.models.preferences import DEFAULT_FONT_SIZE
 from plm.frontend.qt.services import ProjectService, SettingsStore, WorkspaceService
 from plm.frontend.qt.views.settings_page import SettingsPage
 from plm.frontend.qt.widgets.common import PROJECT_ROOT
@@ -102,25 +101,17 @@ class QtControlLogicTests(unittest.TestCase):
         panel.close_btn.click()
         self.assertEqual(self.window.content_splitter.sizes()[1], 0)
 
-    def test_settings_save_reset_and_auto_detect_are_wired(self):
+    def test_settings_save_and_auto_detect_are_wired(self):
         self.window.nav_panel.settings_btn.click()
         self.app.processEvents()
-        page = self.window.secondary_overlay
+        page = self.window.view_stack.currentWidget()
         self.assertIsInstance(page, SettingsPage)
 
-        page.font_size_spin.setValue(DEFAULT_FONT_SIZE + 1)
+        page.editor_path_edit.setText("custom-editor")
         page.save_settings_btn.click()
         self.assertEqual(
-            self.store.preferences()["font_size"], DEFAULT_FONT_SIZE + 1
+            self.store.preferences()["editor_path"], "custom-editor"
         )
-
-        reset = next(
-            button for button in page.findChildren(QtWidgets.QPushButton)
-            if button.text() == "恢复默认"
-        )
-        reset.click()
-        self.assertEqual(page.font_size_spin.value(), DEFAULT_FONT_SIZE)
-        self.assertEqual(self.store.preferences()["font_size"], DEFAULT_FONT_SIZE)
 
         detect = next(
             button for button in page.findChildren(QtWidgets.QPushButton)

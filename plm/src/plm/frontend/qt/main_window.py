@@ -1,12 +1,14 @@
 """Codex-style PyQt5 views for plmConsultant using the native title bar."""
 
 import sys
+import ctypes
+from ctypes import wintypes
 from PyQt5 import QtCore, QtGui, QtWidgets
 
 from plm.frontend.qt.controllers import AppController
 from plm.frontend.qt.exceptions import install_exception_handler
-from plm.frontend.qt.styles.tokens import PRIMARY
-from plm.frontend.qt.views.nav_panel import NavPanel
+from plm.frontend.qt.styles import APP_QSS
+from plm.frontend.qt.styles.tokens import BG_CHROME, BG_CHROME_INACTIVE, BG_SURFACE, FONT_SIZE_BODY, PRIMARY
 from plm.frontend.qt.views.config_page import ConfigPage
 from plm.frontend.qt.views.log_panel import LogPanel
 from plm.frontend.qt.widgets.common import load_lucide_icon
@@ -15,28 +17,36 @@ __all__ = ["MainWindow"]
 
 
 class MainWindow(QtWidgets.QMainWindow):
-    """Native QMainWindow containing horizontal and vertical splitters."""
+    """Native QMainWindow with a fixed sidebar and vertically split content."""
 
     def __init__(self):
         super().__init__()
         install_exception_handler()
         self.controller = AppController()
-        self.settings_store = self.controller.settings
-        self._apply_preferences(self._read_preferences())
+        app = QtWidgets.QApplication.instance()
+        font = QtGui.QFont("Inter")
+        font.setPixelSize(FONT_SIZE_BODY)
+        font.setStyleStrategy(QtGui.QFont.PreferAntialias)
+        font.setHintingPreference(QtGui.QFont.PreferFullHinting)
+        app.setFont(font)
+        palette = app.palette()
+        palette.setColor(QtGui.QPalette.Window, QtGui.QColor(BG_SURFACE))
+        app.setPalette(palette)
+        app.setStyleSheet(APP_QSS)
         self.setWindowTitle("plmConsultant")
         self.resize(1400, 900)
         self.setMinimumSize(960, 640)
         self.setWindowIcon(load_lucide_icon("layout-dashboard", PRIMARY))
         self._log_sizes = [700, 200]
-        self.secondary_overlay = None
-        self._app_event_filter_installed = False
+        self._activation_connected = False
 
-        self.main_splitter = QtWidgets.QSplitter(QtCore.Qt.Horizontal)
-        self.main_splitter.setObjectName("MainSplitter")
-        self.main_splitter.setHandleWidth(4)
-        self.main_splitter.setChildrenCollapsible(False)
+        self.main_container = QtWidgets.QWidget()
+        self.main_container.setObjectName("MainContainer")
+        main_layout = QtWidgets.QHBoxLayout(self.main_container)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.setSpacing(0)
         self.nav_panel = self.controller.create_navigation()
-        self.main_splitter.addWidget(self.nav_panel)
+        main_layout.addWidget(self.nav_panel)
 
         self.content_splitter = QtWidgets.QSplitter(QtCore.Qt.Vertical)
         self.content_splitter.setObjectName("ContentSplitter")
@@ -50,13 +60,14 @@ class MainWindow(QtWidgets.QMainWindow):
         self.log_panel.closeRequested.connect(self.hide_log)
         self.content_splitter.addWidget(self.config_page)
         self.content_splitter.addWidget(self.log_panel)
-        self.main_splitter.addWidget(self.content_splitter)
-        self.main_splitter.handle(1).setCursor(QtCore.Qt.SplitHCursor)
-        self.main_splitter.setStretchFactor(0, 0)
-        self.main_splitter.setStretchFactor(1, 1)
+        main_layout.addWidget(self.content_splitter, 1)
         self.content_splitter.setStretchFactor(0, 3)
         self.content_splitter.setStretchFactor(1, 1)
-        self.setCentralWidget(self.main_splitter)
+        self.view_stack = QtWidgets.QStackedWidget(self)
+        self.view_stack.setObjectName("ViewStack")
+        self.view_stack.addWidget(self.main_container)
+        self.view_stack.setCurrentWidget(self.main_container)
+        self.setCentralWidget(self.view_stack)
 
         QtCore.QTimer.singleShot(0, self._apply_initial_sizes)
 
@@ -74,26 +85,74 @@ class MainWindow(QtWidgets.QMainWindow):
         self.addActions([self.undo_action, self.redo_action])
         self.config_page.historyChanged.connect(self._update_history_actions)
         self._update_history_actions()
+        self._enable_background_focus(self.main_container)
 
-    def _install_app_event_filter(self):
-        if self._app_event_filter_installed:
+    def _connect_application_state(self):
+        if self._activation_connected:
             return
         app = QtWidgets.QApplication.instance()
         if app is not None:
-            app.installEventFilter(self)
-            self._app_event_filter_installed = True
+            app.applicationStateChanged.connect(self._application_state_changed)
+            self._activation_connected = True
 
-    def _remove_app_event_filter(self):
-        if not self._app_event_filter_installed:
+    def _disconnect_application_state(self):
+        if not self._activation_connected:
             return
         app = QtWidgets.QApplication.instance()
         if app is not None:
-            app.removeEventFilter(self)
-        self._app_event_filter_installed = False
+            app.applicationStateChanged.disconnect(self._application_state_changed)
+        self._activation_connected = False
+
+    @staticmethod
+    def _enable_background_focus(container):
+        # Blank areas take focus through Qt's normal mouse dispatch. Editors
+        # and item views keep their native focus-out commit behavior.
+        for widget in [container, *container.findChildren(QtWidgets.QWidget)]:
+            if type(widget) in (QtWidgets.QWidget, QtWidgets.QFrame) or widget is container:
+                if widget.focusPolicy() == QtCore.Qt.NoFocus:
+                    widget.setFocusPolicy(QtCore.Qt.ClickFocus)
+
+    def _application_state_changed(self, state):
+        if state == QtCore.Qt.ApplicationActive:
+            QtCore.QTimer.singleShot(0, self._refresh_after_activation)
+        else:
+            self._finish_focused_edit()
 
     def showEvent(self, event):
-        self._install_app_event_filter()
+        self._connect_application_state()
         super().showEvent(event)
+        self._sync_window_chrome()
+
+    def changeEvent(self, event):
+        super().changeEvent(event)
+        if event.type() == QtCore.QEvent.ActivationChange and hasattr(self, "nav_panel"):
+            self._sync_window_chrome()
+
+    def _sync_window_chrome(self):
+        active = self.isActiveWindow()
+        self.nav_panel.setProperty("windowActive", active)
+        self.nav_panel.style().unpolish(self.nav_panel)
+        self.nav_panel.style().polish(self.nav_panel)
+        self.nav_panel.update()
+        color = BG_CHROME if active else BG_CHROME_INACTIVE
+        self._set_native_caption_color(color)
+
+    def _set_native_caption_color(self, color):
+        if sys.platform != "win32" or QtGui.QGuiApplication.platformName() != "windows":
+            return
+        if sys.getwindowsversion().build < 22000:
+            return
+        try:
+            # DWMWA_CAPTION_COLOR uses COLORREF (0x00BBGGRR), not Qt's RGB order.
+            setter = ctypes.WinDLL("dwmapi").DwmSetWindowAttribute
+            setter.argtypes = [wintypes.HWND, wintypes.DWORD, ctypes.c_void_p, wintypes.DWORD]
+            setter.restype = wintypes.LONG
+            rgb = QtGui.QColor(color)
+            value = wintypes.DWORD(rgb.red() | (rgb.green() << 8) | (rgb.blue() << 16))
+            setter(wintypes.HWND(int(self.winId())), 35, ctypes.byref(value), ctypes.sizeof(value))
+        except (AttributeError, OSError):
+            # Native caption coloring is optional on unsupported platforms.
+            return
 
     def _update_history_actions(self):
         self.undo_action.setEnabled(self.config_page.can_undo())
@@ -104,27 +163,25 @@ class MainWindow(QtWidgets.QMainWindow):
         if not self.controller.confirm_switch():
             event.ignore()
             return
-        self._remove_app_event_filter()
+        self._disconnect_application_state()
         super().closeEvent(event)
 
-    def eventFilter(self, watched, event):
-        app = QtWidgets.QApplication.instance()
-        if watched is app and event.type() == QtCore.QEvent.ApplicationActivate:
-            # Re-check both source CSV signatures and generated-output hashes
-            # when the user returns from an external editor. Defer until the
-            # event is delivered, then confirm this window is still live.
-            QtCore.QTimer.singleShot(0, self._refresh_after_activation)
-        return super().eventFilter(watched, event)
+    def _finish_focused_edit(self):
+        editor = QtWidgets.QApplication.focusWidget()
+        if not isinstance(editor, (QtWidgets.QLineEdit, QtWidgets.QAbstractSpinBox, QtWidgets.QComboBox)):
+            return
+        if not self.isAncestorOf(editor):
+            return
+        # A spin box or editable combo owns its internal line edit's focus.
+        if isinstance(editor.parentWidget(), (QtWidgets.QAbstractSpinBox, QtWidgets.QComboBox)):
+            editor = editor.parentWidget()
+        editor.clearFocus()
 
     def _refresh_after_activation(self):
         if self.isVisible():
             self.controller.validate_current()
 
     def _apply_initial_sizes(self):
-        nav_width = self.nav_panel.expanded_width
-        main_width = max(nav_width + 1,
-                         self.main_splitter.width() - self.main_splitter.handleWidth())
-        self.main_splitter.setSizes([nav_width, main_width - nav_width])
         self.content_splitter.setSizes(self._log_sizes)
 
     def toggle_log(self):
@@ -159,50 +216,27 @@ class MainWindow(QtWidgets.QMainWindow):
         self.controller.hide_project_menu()
         self._show_secondary_page("docs")
 
-    def _set_background_blur(self, enabled):
-        central = self.centralWidget()
-        if central is None:
-            return
-        if enabled:
-            effect = QtWidgets.QGraphicsBlurEffect(central)
-            effect.setBlurRadius(7.0)
-            central.setGraphicsEffect(effect)
-        else:
-            central.setGraphicsEffect(None)
-
     def _show_secondary_page(self, page):
         self._close_secondary_page()
-        overlay = self.controller.create_secondary_page(page, self)
+        widget = self.controller.create_secondary_page(page, self)
+        self._enable_background_focus(widget)
+        widget.closeRequested.connect(self._close_secondary_page)
+        widget.preferencesSaved.connect(self.controller.save_preferences)
+        self.view_stack.addWidget(widget)
+        self.view_stack.setCurrentWidget(widget)
         self.nav_panel.set_active(page)
-        self._set_background_blur(True)
-        self.secondary_overlay = overlay
-        overlay.setGeometry(self.rect())
-        overlay.closeRequested.connect(self._close_secondary_page)
-        overlay.preferencesSaved.connect(self.controller.save_preferences)
-        overlay.show()
-        overlay.raise_()
-        overlay.setFocus(QtCore.Qt.OtherFocusReason)
+        self.undo_action.setEnabled(False)
+        self.redo_action.setEnabled(False)
+        widget.setFocus(QtCore.Qt.OtherFocusReason)
 
     def _close_secondary_page(self):
-        overlay = self.secondary_overlay
-        self.secondary_overlay = None
-        if overlay is not None:
-            overlay.hide()
-            overlay.deleteLater()
+        widget = self.view_stack.currentWidget()
+        if widget is not self.main_container:
+            self.view_stack.setCurrentWidget(self.main_container)
+            self.view_stack.removeWidget(widget)
+            widget.deleteLater()
         self.nav_panel.set_active(None)
-        self._set_background_blur(False)
-
-    def resizeEvent(self, event):
-        super().resizeEvent(event)
-        if self.secondary_overlay is not None:
-            self.secondary_overlay.setGeometry(self.rect())
-
-    def _read_preferences(self):
-        return self.settings_store.preferences()
-
-    def _apply_preferences(self, preferences):
-        self.controller.apply_preferences(preferences)
-
+        self._update_history_actions()
 
 if __name__ == "__main__":
     from plm.frontend.qt.main import main

@@ -63,12 +63,12 @@ class ArtifactPreviewTests(unittest.TestCase):
         one = self.file("rtl/one.sv", "module one; endmodule")
         two = self.file("tb/two.sv", "module two; endmodule")
         self.panel.set_files([one, two], self.root)
-        self.panel.file_selector.setCurrentIndex(1)
+        self.panel.select_file(two)
         two.write_text("module refreshed; endmodule", encoding="utf-8")
         self.panel.set_files([one, two], self.root)
         self.assertEqual(self.panel.current_path, two)
         self.assertIn("refreshed", self.panel.preview.toPlainText())
-        self.assertEqual(self.panel.file_selector.currentText(), str(Path("tb") / "two.sv"))
+        self.assertEqual(self.panel.current_path.relative_to(self.root), Path("tb") / "two.sv")
         self.panel.set_files([one], self.root)
         self.assertEqual(self.panel.current_path, one)
         self.panel.set_files([], self.root / "other")
@@ -85,11 +85,11 @@ class ArtifactPreviewTests(unittest.TestCase):
         empty = self.file("empty.sv", "")
         for path in (missing, binary):
             self.panel.set_files([valid, path], self.root)
-            self.panel.file_selector.setCurrentIndex(1)
+            self.panel.select_file(path)
             self.assertFalse(self.panel.preview.toPlainText())
             self.assertIn("无法读取", self.panel.status.text())
             self.assertFalse(self.panel.copy_content_action.isEnabled())
-            self.panel.file_selector.setCurrentIndex(0)
+            self.panel.select_file(valid)
             self.assertEqual(self.panel.preview.toPlainText(), valid.read_text())
         self.panel.set_files([empty], self.root)
         self.assertFalse(self.panel.preview.toPlainText())
@@ -129,7 +129,7 @@ class ArtifactPreviewTests(unittest.TestCase):
         QtTest.QTest.keyClick(self.panel.search_input, QtCore.Qt.Key_Return, QtCore.Qt.ShiftModifier)
         self.assertEqual(self.panel.preview.textCursor().selectionStart(), first)
 
-    def test_file_tree_is_overlay_and_closes_after_selection(self):
+    def test_file_tree_is_layout_managed_and_closes_after_selection(self):
         one = self.file("rtl/one.sv", "module one;\nendmodule\n")
         two = self.file("tb/two.sv", "module two;\nendmodule\n")
         self.panel.set_files([one, two], self.root)
@@ -142,8 +142,8 @@ class ArtifactPreviewTests(unittest.TestCase):
         self.app.processEvents()
         self.assertTrue(self.panel.file_tree.isVisible())
         self.assertIs(self.panel.file_tree.parent(), self.panel)
-        self.assertEqual(self.panel.preview.geometry(), preview_geometry)
-        self.assertTrue(self.panel.file_tree.geometry().intersects(preview_geometry))
+        self.assertLess(self.panel.preview.height(), preview_geometry.height())
+        self.assertFalse(self.panel.file_tree.geometry().intersects(self.panel.preview.geometry()))
 
         iterator = QtWidgets.QTreeWidgetItemIterator(self.panel.file_tree)
         target = None
@@ -227,7 +227,7 @@ class ArtifactPreviewTests(unittest.TestCase):
         verilog = self.file("rtl.sv", "module rtl; endmodule")
         self.panel.set_files([path, verilog], self.root)
         self.assertFalse(self.panel.preview.highlighter.enabled)
-        self.panel.file_selector.setCurrentIndex(1)
+        self.panel.select_file(verilog)
         self.assertTrue(self.panel.preview.highlighter.enabled)
         self.panel.highlight_button.click()
         self.assertFalse(self.panel.preview.highlighter.enabled)

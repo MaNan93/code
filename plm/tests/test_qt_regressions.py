@@ -68,26 +68,26 @@ class QtRegressionTests(unittest.TestCase):
         self.window.on_open_docs()
         self.assertFalse(nav.settings_btn.property("selected"))
         self.assertTrue(nav.docs_btn.property("selected"))
-        self.window.secondary_overlay.back_btn.click()
-        self.assertIsNone(self.window.secondary_overlay)
+        self.window.view_stack.currentWidget().back_btn.click()
+        self.assertIs(self.window.view_stack.currentWidget(), self.window.main_container)
         self.assertFalse(nav.docs_btn.property("selected"))
         self.window.on_open_settings()
-        QtTest.QTest.keyClick(self.window.secondary_overlay, QtCore.Qt.Key_Escape)
-        self.assertIsNone(self.window.secondary_overlay)
+        QtTest.QTest.keyClick(self.window.view_stack.currentWidget(), QtCore.Qt.Key_Escape)
+        self.assertIs(self.window.view_stack.currentWidget(), self.window.main_container)
         self.assertFalse(nav.settings_btn.property("selected"))
 
     def test_invalid_formatter_value_reveals_focuses_and_selects_input(self):
         self.window.on_open_settings()
-        page = self.window.secondary_overlay
+        page = self.window.view_stack.currentWidget()
         self.assertEqual([button.text() for button in page.menu_buttons],
-                         ["General", "Appearance", "Formatter"])
+                         ["General", "Formatter"])
         control = page._flag_controls["column_limit"]
         control.setText("-1")
         page._select_section(0)
         saved = QtTest.QSignalSpy(page.preferencesSaved)
         page._save_settings()
         self.app.processEvents()
-        self.assertTrue(page.menu_buttons[2].property("selected"))
+        self.assertTrue(page.menu_buttons[1].property("selected"))
         self.assertTrue(control.hasFocus())
         self.assertEqual(control.selectedText(), "-1")
         self.assertEqual(len(saved), 0)
@@ -95,7 +95,7 @@ class QtRegressionTests(unittest.TestCase):
 
     def test_executable_browsers_use_platform_appropriate_filters(self):
         self.window.on_open_settings()
-        page = self.window.secondary_overlay
+        page = self.window.view_stack.currentWidget()
         for platform in ("win32", "linux", "darwin"):
             with self.subTest(platform=platform), \
                     patch("plm.frontend.qt.views.settings_page.sys.platform", platform), \
@@ -108,8 +108,8 @@ class QtRegressionTests(unittest.TestCase):
 
     def test_formatter_value_column_fits_controls_with_large_font(self):
         self.window.on_open_settings()
-        page = self.window.secondary_overlay
-        page._select_section(2)
+        page = self.window.view_stack.currentWidget()
+        page._select_section(1)
         font = QtGui.QFont(page.font())
         font.setPixelSize(20)
         page.setFont(font)
@@ -132,7 +132,7 @@ class QtRegressionTests(unittest.TestCase):
 
     def test_document_tables_and_code_blocks_have_adaptive_formats(self):
         self.window.on_open_docs()
-        page = self.window.secondary_overlay
+        page = self.window.view_stack.currentWidget()
         page.doc_browser.setMarkdown("| A | B |\n|---|---|\n| x | y |\n\n```python\nprint('hello')\n```")
         page._format_document()
         document = page.doc_browser.document()

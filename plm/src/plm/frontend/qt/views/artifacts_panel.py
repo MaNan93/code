@@ -7,12 +7,13 @@ from pathlib import Path
 
 from PyQt5 import QtCore, QtGui, QtWidgets
 
+from plm.frontend.qt.models.artifacts import ArtifactSelection
 from plm.frontend.qt.models.preferences import DEFAULT_EDITOR
 from plm.frontend.qt.widgets.code_preview import CodePreview
 from plm.frontend.qt.widgets.common import (
     ICON_SIZE, StyledMenu, apply_drop_shadow, load_lucide_icon, make_icon_button, open_in_file_manager,
 )
-from plm.frontend.qt.styles.tokens import PRIMARY, SHADOW_MD, SUCCESS, TEXT_MUTED
+from plm.frontend.qt.styles.tokens import PRIMARY, SUCCESS, TEXT_MUTED
 
 
 _STATUS_COLORS = {
@@ -25,12 +26,15 @@ _STATUS_COLORS = {
 class ArtifactsPanel(QtWidgets.QFrame):
     maximizeRequested = QtCore.pyqtSignal()
     refreshRequested = QtCore.pyqtSignal()
+    widthRequested = QtCore.pyqtSignal(int)
+    RESIZE_EDGE_WIDTH = 6
 
     def __init__(self, parent=None, editor_path_provider=None):
         super().__init__(parent)
         self.editor_path_provider = editor_path_provider or (lambda: DEFAULT_EDITOR)
         self.workspace_root = None
-        self.current_path = None
+        self.selection = ArtifactSelection()
+        self._tree_items = {}
         self._readable = False
         self._file_status = "尚无生成文件"
         self._file_error = ""
@@ -40,8 +44,12 @@ class ArtifactsPanel(QtWidgets.QFrame):
         self._file_statuses = {}
         self._current_contents = {}
         self._previous_contents = {}
+        self.is_maximized = False
+        self._resize_origin_x = None
+        self._resize_origin_width = None
         self.setObjectName("ArtifactsPanel")
-        apply_drop_shadow(self, shadow=SHADOW_MD)
+        self.setMouseTracking(True)
+        apply_drop_shadow(self, offset=(-4, 0), blur_radius=16, alpha=36)
 
         root = QtWidgets.QVBoxLayout(self)
         root.setContentsMargins(16, 0, 16, 16)
@@ -79,21 +87,13 @@ class ArtifactsPanel(QtWidgets.QFrame):
         toolbar_layout.addWidget(self.diff_button)
         root.addWidget(toolbar)
 
-        # Kept as a compatibility/data model for controller/tests. The visible
-        # selector is the restored directory tree below.
-        self.file_selector = QtWidgets.QComboBox()
-        self.file_selector.hide()
-        self.file_selector.currentIndexChanged.connect(self._load_selected)
-
-        # The file tree is a floating overlay, matching the pre-refactor
-        # behavior: opening it must not resize or push the source preview.
         self.file_tree = QtWidgets.QTreeWidget(self)
         self.file_tree.setObjectName("ArtifactFileTree")
         self.file_tree.setHeaderHidden(True)
         self.file_tree.setIndentation(16)
         self.file_tree.setMaximumHeight(190)
         self.file_tree.itemClicked.connect(self._tree_item_clicked)
-        apply_drop_shadow(self.file_tree, offset=(0, 2), blur_radius=10, alpha=24)
+        root.addWidget(self.file_tree)
         self.file_tree.hide()
 
         self.search_bar = QtWidgets.QWidget()
@@ -207,7 +207,8 @@ class ArtifactsPanel(QtWidgets.QFrame):
     def set_files(self, files, root=None, statuses=None):
         root = Path(root).resolve() if root is not None else None
         files = [Path(value).resolve() for value in files]
-        previous_path = self.current_path if root == self.workspace_root else None
+        self.selection.set_files(files, keep_current=root == self.workspace_root)
+        files = self.selection.files
         if root == self.workspace_root:
             self._previous_contents = dict(self._current_contents)
         else:
@@ -216,23 +217,22 @@ class ArtifactsPanel(QtWidgets.QFrame):
         self._file_statuses = dict(statuses or {})
         self.workspace_root = root
 
-        self.file_selector.blockSignals(True)
-        self.file_selector.clear()
-        for path in files:
-            try:
-                display = path.relative_to(root) if root else path.name
-            except ValueError:
-                display = Path(path.name)
-            self.file_selector.addItem(str(display), str(path))
-        index = self.file_selector.findData(str(previous_path)) if previous_path is not None else -1
-        self.file_selector.setCurrentIndex(index if index >= 0 else (0 if files else -1))
-        self.file_selector.blockSignals(False)
-        self.file_selector.setEnabled(bool(files))
         self._rebuild_tree(files, root)
         self._load_selected()
 
+    @property
+    def current_path(self):
+        return self.selection.current_path
+
+    def select_file(self, path):
+        if not self.selection.select(path):
+            return False
+        self._load_selected()
+        return True
+
     def _rebuild_tree(self, files, root):
         self.file_tree.clear()
+        self._tree_items.clear()
         nodes = {}
         selected_item = None
         for path in files:
@@ -256,6 +256,7 @@ class ArtifactsPanel(QtWidgets.QFrame):
                 item = QtWidgets.QTreeWidgetItem(parent, [label])
                 nodes[key] = item
                 if is_file:
+                    self._tree_items[path] = item
                     item.setData(0, QtCore.Qt.UserRole, str(path))
                     item.setToolTip(0, str(relative))
                     status = self._file_statuses.get(relative.as_posix(), "")
@@ -273,9 +274,7 @@ class ArtifactsPanel(QtWidgets.QFrame):
         if not value:
             item.setExpanded(not item.isExpanded())
             return
-        index = self.file_selector.findData(value)
-        if index >= 0:
-            self.file_selector.setCurrentIndex(index)
+        if self.select_file(value):
             self.tree_button.setChecked(False)
 
     def _diff_available(self):
@@ -289,14 +288,12 @@ class ArtifactsPanel(QtWidgets.QFrame):
         )
 
     def _load_selected(self, *_):
-        value = self.file_selector.currentData()
-        self.current_path = Path(value) if value is not None else None
         self.empty_state.setVisible(self.current_path is None)
         self.preview.setVisible(self.current_path is not None)
         self.preview.clear()
         self._readable = False
         self.search_status.clear()
-        self.file_selector.setToolTip(str(self.current_path or ""))
+        self.preview.setToolTip(str(self.current_path or ""))
         self._file_error = ""
         text = ""
         if self.current_path is None:
@@ -337,7 +334,7 @@ class ArtifactsPanel(QtWidgets.QFrame):
                 self.preview.moveCursor(QtGui.QTextCursor.Start)
                 self.preview.horizontalScrollBar().setValue(0)
                 self._file_status = (
-                    f"{self.file_selector.currentIndex() + 1}/{self.file_selector.count()}"
+                    f"{self.selection.current_index + 1}/{len(self.selection.files)}"
                     f" · {len(text.splitlines())} 行"
                 )
         diff_available = self._diff_available()
@@ -358,15 +355,9 @@ class ArtifactsPanel(QtWidgets.QFrame):
         self._select_tree_path()
 
     def _select_tree_path(self):
-        if self.current_path is None:
-            return
-        iterator = QtWidgets.QTreeWidgetItemIterator(self.file_tree)
-        while iterator.value() is not None:
-            item = iterator.value()
-            if item.data(0, QtCore.Qt.UserRole) == str(self.current_path):
-                self.file_tree.setCurrentItem(item)
-                break
-            iterator += 1
+        item = self._tree_items.get(self.current_path)
+        if item is not None:
+            self.file_tree.setCurrentItem(item)
 
     def set_output_state(self, state, text, detail=""):
         self._output_state = state
@@ -402,13 +393,11 @@ class ArtifactsPanel(QtWidgets.QFrame):
     def show_search(self):
         if self._readable:
             self.search_bar.show()
-            self._position_file_tree()
             self.search_input.setFocus()
             self.search_input.selectAll()
 
     def hide_search(self):
         self.search_bar.hide()
-        self._position_file_tree()
         self.preview.setFocus()
 
     def _search_changed(self, *_):
@@ -443,22 +432,7 @@ class ArtifactsPanel(QtWidgets.QFrame):
         return found
 
     def _set_tree_visible(self, visible):
-        if visible:
-            self._position_file_tree()
-            self.file_tree.show()
-            self.file_tree.raise_()
-        else:
-            self.file_tree.hide()
-
-    def _position_file_tree(self):
-        if not hasattr(self, "file_tree"):
-            return
-        top_widget = self.search_bar if self.search_bar.isVisible() else self.toolbar
-        top = top_widget.geometry().bottom() + 4
-        left = self.preview.geometry().left()
-        width = max(120, self.preview.width())
-        available = max(80, self.status.geometry().top() - top - 8)
-        self.file_tree.setGeometry(left, top, width, min(190, available))
+        self.file_tree.setVisible(visible)
 
     def _apply_toolbar_density(self, width):
         # Keep file tree, More and maximize always reachable. Less critical
@@ -477,7 +451,57 @@ class ArtifactsPanel(QtWidgets.QFrame):
     def resizeEvent(self, event):
         super().resizeEvent(event)
         self._apply_toolbar_density(event.size().width())
-        self._position_file_tree()
+
+    def set_maximized(self, maximized: bool):
+        self.is_maximized = bool(maximized)
+        if self.is_maximized:
+            self._resize_origin_x = None
+            self._resize_origin_width = None
+            self.unsetCursor()
+
+    def mousePressEvent(self, event):
+        if (
+            not self.is_maximized
+            and event.button() == QtCore.Qt.LeftButton
+            and event.pos().x() <= self.RESIZE_EDGE_WIDTH
+        ):
+            self._resize_origin_x = event.globalPos().x()
+            self._resize_origin_width = self.width()
+            self.setCursor(QtCore.Qt.SplitHCursor)
+            event.accept()
+            return
+        super().mousePressEvent(event)
+
+    def mouseMoveEvent(self, event):
+        if (
+            not self.is_maximized
+            and self._resize_origin_x is not None
+            and event.buttons() & QtCore.Qt.LeftButton
+        ):
+            delta = self._resize_origin_x - event.globalPos().x()
+            self.widthRequested.emit(self._resize_origin_width + delta)
+            event.accept()
+            return
+        if not self.is_maximized and event.pos().x() <= self.RESIZE_EDGE_WIDTH:
+            self.setCursor(QtCore.Qt.SplitHCursor)
+        else:
+            self.unsetCursor()
+        super().mouseMoveEvent(event)
+
+    def mouseReleaseEvent(self, event):
+        if event.button() == QtCore.Qt.LeftButton and self._resize_origin_x is not None:
+            self._resize_origin_x = None
+            self._resize_origin_width = None
+            if event.pos().x() > self.RESIZE_EDGE_WIDTH:
+                self.unsetCursor()
+            event.accept()
+            return
+        super().mouseReleaseEvent(event)
+
+    def leaveEvent(self, event):
+        if self._resize_origin_x is None:
+            self.unsetCursor()
+        super().leaveEvent(event)
 
     def eventFilter(self, watched, event):
         if event.type() == QtCore.QEvent.MouseButtonPress and self.file_tree.isVisible():

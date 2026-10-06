@@ -6,6 +6,8 @@ PRIMARY_LIGHT = "#EFF6FF"
 BG_MAIN = "#F7F9FC"
 BG_SURFACE = "#FFFFFF"
 BG_SUBTLE = "#F1F5F9"
+BG_CHROME = "#EFF5F2"
+BG_CHROME_INACTIVE = "#F5F7F6"
 BORDER = "#E2E8F0"
 BORDER_HOVER = "#CBD5E1"
 BORDER_FOCUS = "#3B82F6"
@@ -15,7 +17,8 @@ TEXT_MUTED = "#94A3B8"
 DANGER = "#EF4444"
 SUCCESS = "#10B981"
 
-FONT_FAMILY = '"Inter", "Microsoft YaHei UI", "PingFang SC", sans-serif'
+FONT_FAMILY = ('"Inter", "Microsoft YaHei UI", "PingFang SC", '
+               '"Noto Sans CJK SC", "SimHei", "SimSun", sans-serif')
 FONT_MONO = '"JetBrains Mono", "Consolas", "Courier New", monospace'
 FONT_SIZE_BODY = 13
 FONT_SIZE_SM = 12
@@ -24,7 +27,6 @@ FONT_SIZE_LG = 15
 RADIUS_CHIP = 6
 RADIUS_CONTROL = 8
 RADIUS_CARD = 10
-RADIUS_WINDOW = 14
 
 SPACING_XS = 4
 SPACING_SM = 8
@@ -43,6 +45,8 @@ QSS_TOKENS = {
     "bg_main": BG_MAIN,
     "bg_surface": BG_SURFACE,
     "bg_subtle": BG_SUBTLE,
+    "bg_chrome": BG_CHROME,
+    "bg_chrome_inactive": BG_CHROME_INACTIVE,
     "border": BORDER,
     "border_hover": BORDER_HOVER,
     "border_focus": BORDER_FOCUS,
@@ -59,27 +63,8 @@ QSS_TOKENS = {
     "radius_chip": f"{RADIUS_CHIP}px",
     "radius_control": f"{RADIUS_CONTROL}px",
     "radius_card": f"{RADIUS_CARD}px",
-    "radius_window": f"{RADIUS_WINDOW}px",
     "spacing_xs": f"{SPACING_XS}px",
     "spacing_sm": f"{SPACING_SM}px",
     "spacing_md": f"{SPACING_MD}px",
     "spacing_lg": f"{SPACING_LG}px",
-    "spacing_xl": f"{SPACING_XL}px",
-}
-
-COLORS = {
-    "primary": PRIMARY,
-    "primary_hover": PRIMARY_HOVER,
-    "primary_light": PRIMARY_LIGHT,
-    "bg_main": BG_MAIN,
-    "bg_surface": BG_SURFACE,
-    "bg_subtle": BG_SUBTLE,
-    "border": BORDER,
-    "border_hover": BORDER_HOVER,
-    "border_focus": BORDER_FOCUS,
-    "text_main": TEXT_MAIN,
-    "text_sub": TEXT_SUB,
-    "text_muted": TEXT_MUTED,
-    "danger": DANGER,
-    "success": SUCCESS,
 }

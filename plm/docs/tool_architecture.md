@@ -29,7 +29,7 @@ PLM 使用 `pyproject.toml` 与 `src/` 包布局，提供 CLI 和唯一的 Qt �
 |---|---|
 | `models/` | 项目与偏好数据 |
 | `services/projects.py` | 项目发现、打开、新建、重命名、删除及安全标记 |
-| `services/settings.py` | QSettings，最近项目、置顶、归档、外观、工具偏好 |
+| `services/settings.py` | QSettings，最近项目、置顶、归档、编辑器与 Formatter 偏好 |
 | `services/workspaces.py` | 工作区加载、保存、核心校验、生成与输出新旧判断 |
 | `controllers/app_controller.py` | 项目选择、编辑保护、操作编排及列表刷新 |
 | `views/` | 配置、Settings、Documentation 页面 |
@@ -47,21 +47,21 @@ Qt 直接调用核心，不拼装 CLI 子进程。Controllers、Lane Mapping、P
 
 Formatter 的路径和参数由 QSettings 提供给每次校验、生成和状态检查。
 `None` 表示项目内置格式化参数，空字典表示 Verible 自身默认值。
-仅修改外观不会覆盖 Formatter 偏好。设置变化会重新检查输出是否过期。
+设置变化会重新检查输出是否过期。
 
 旧 `settings`、`theme`、`sap_icons`、`code_highlighter` 控件及 SAP/72 字体已移除。
 `lanegrid.py` 和 `tables.py` 仍由配置编辑器使用，随发行包一起提供。
 当前文件预览使用自己的只读编辑器和高亮器；
-SVG 图标与字体偏好沿用现有界面。
+界面使用 SVG 图标与固定的默认字体。
 Qt 回调的未捕获异常写入 traceback 和窗口日志，事件循环继续运行。
 保存时的配置校验错误通过单元格标记与日志反馈，不重复弹出模态提示。
-导航栏默认 260px，可在 200–400px 范围拖动；收起后为 56px，图标按钮为 32px。
-展开恢复收起前的宽度。
+导航栏展开宽度固定为 260px，收起后为 56px，图标按钮为 32px。
+侧边栏与内容区通过零间距水平布局连接，展开恢复 260px 固定宽度。
 表格配置页填满卡片高度；多通道网格保留字符所需列宽，空间不足时横向滚动。
 笔刷拖拽超过系统拖动阈值后生效，单击等待双击判定后涂色，双击直接编辑原值。
 重新加载表格取消待涂单击；日志收起时取消其拉伸权重，窗口缩放不会再次展开。
 外部改动检查在模态提示期间阻止重入，并在退出或异常时释放检查标记。
-Settings 分为 General（编辑器）、Appearance（字体）和 Formatter；非法参数会
+Settings 分为 General（编辑器）和 Formatter；非法参数会
 切换到 Formatter 并聚焦输入框。参数控件按内容与单元格内边距自适应尺寸。
 关闭二级页面清除导航激活态；Documentation 归一化章节标题、忽略代码块内
 标题，表格使用内容区百分比宽度，代码块使用浅灰背景与等宽字体。

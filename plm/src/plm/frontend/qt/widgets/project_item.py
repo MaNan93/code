@@ -22,6 +22,7 @@ class ProjectItemWidget(QtWidgets.QWidget):
     hoverLeft = QtCore.pyqtSignal(object)
     pinRequested = QtCore.pyqtSignal(object)
     renameRequested = QtCore.pyqtSignal(object)
+    renameCommitted = QtCore.pyqtSignal(object, str)
     archiveRequested = QtCore.pyqtSignal(object)
     deleteRequested = QtCore.pyqtSignal(object)
     projectSelected = QtCore.pyqtSignal(str)
@@ -31,6 +32,7 @@ class ProjectItemWidget(QtWidgets.QWidget):
         self.setObjectName("ProjectItem")
         self.project_name = project_name
         self.project_path = Path(project_path or PROJECT_ROOT / project_name).resolve()
+        self._renaming = False
         root = QtWidgets.QVBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(2)
@@ -41,7 +43,6 @@ class ProjectItemWidget(QtWidgets.QWidget):
         self.header.setMouseTracking(True)
         self.header.setContextMenuPolicy(QtCore.Qt.CustomContextMenu)
         self.header.customContextMenuRequested.connect(self.show_context_menu)
-        self.header.installEventFilter(self)
         header_layout = QtWidgets.QHBoxLayout(self.header)
         header_layout.setContentsMargins(0, 0, 0, 0)
         header_layout.setSpacing(0)
@@ -58,10 +59,19 @@ class ProjectItemWidget(QtWidgets.QWidget):
         self.project_name_label = QtWidgets.QLabel(self.project_name)
         self.project_name_label.setObjectName("ProjectName")
         self.project_name_label.setAttribute(QtCore.Qt.WA_TransparentForMouseEvents)
+        self.project_name_edit = QtWidgets.QLineEdit()
+        self.project_name_edit.setObjectName("ProjectNameEditor")
+        self.project_name_edit.setFixedHeight(28)
+        self.project_name_edit.setSizePolicy(
+            QtWidgets.QSizePolicy.Ignored, QtWidgets.QSizePolicy.Fixed
+        )
+        self.project_name_edit.hide()
+        self.project_name_edit.installEventFilter(self)
+        self.project_name_edit.returnPressed.connect(self._finish_rename)
         header_layout.addWidget(self.folder_icon)
         header_layout.addSpacing(8)
-        header_layout.addWidget(self.project_name_label)
-        header_layout.addStretch(1)
+        header_layout.addWidget(self.project_name_label, 1)
+        header_layout.addWidget(self.project_name_edit, 1, QtCore.Qt.AlignVCenter)
         self.archive_btn = make_icon_button(
             "archive", "归档项目", "ProjectArchiveBtn", 24, 16
         )
@@ -78,6 +88,7 @@ class ProjectItemWidget(QtWidgets.QWidget):
         header_layout.addSpacing(4)
         header_layout.addWidget(self.more_btn)
         root.addWidget(self.header)
+        self.header.installEventFilter(self)
 
     def _header_clicked(self, _checked=False):
         self.projectSelected.emit(self.project_name)
@@ -90,14 +101,22 @@ class ProjectItemWidget(QtWidgets.QWidget):
             widget.style().polish(widget)
 
     def eventFilter(self, watched, event):
+        if watched is self.project_name_edit:
+            if event.type() == QtCore.QEvent.KeyPress and event.key() == QtCore.Qt.Key_Escape:
+                self._finish_rename(cancel=True)
+                return True
+            if event.type() == QtCore.QEvent.FocusOut and event.reason() != QtCore.Qt.PopupFocusReason:
+                self._finish_rename()
         if watched is self.header:
             if event.type() == QtCore.QEvent.Enter:
                 self.archive_btn.show()
                 self.more_btn.show()
-                self.hoverEntered.emit(self)
+                if not self._renaming:
+                    self.hoverEntered.emit(self)
             elif event.type() == QtCore.QEvent.Leave:
-                self.archive_btn.hide()
-                self.more_btn.hide()
+                if not self._renaming:
+                    self.archive_btn.hide()
+                    self.more_btn.hide()
                 self.hoverLeft.emit(self)
             elif (
                 event.type() == QtCore.QEvent.MouseButtonDblClick
@@ -106,6 +125,28 @@ class ProjectItemWidget(QtWidgets.QWidget):
                 self.renameRequested.emit(self)
                 return True
         return super().eventFilter(watched, event)
+
+    def begin_rename(self):
+        self._renaming = True
+        self.project_name_edit.setText(self.project_path.name)
+        self.project_name_label.hide()
+        self.archive_btn.show()
+        self.more_btn.show()
+        self.project_name_edit.show()
+        self.project_name_edit.setFocus(QtCore.Qt.OtherFocusReason)
+        self.project_name_edit.selectAll()
+
+    def _finish_rename(self, cancel=False):
+        if not self._renaming:
+            return
+        self._renaming = False
+        new_name = self.project_name_edit.text().strip()
+        self.project_name_edit.hide()
+        self.project_name_label.show()
+        self.archive_btn.setVisible(self.header.underMouse())
+        self.more_btn.setVisible(self.header.underMouse())
+        if not cancel and new_name and new_name != self.project_path.name:
+            self.renameCommitted.emit(self, new_name)
 
     def show_context_menu(self, pos):
         menu = self.build_more_menu()
@@ -140,6 +181,7 @@ class ProjectItemWidget(QtWidgets.QWidget):
         )
 
         pin_action.triggered.connect(lambda: self.pinRequested.emit(self))
+        rename_action.triggered.connect(menu.close)
         rename_action.triggered.connect(lambda: self.renameRequested.emit(self))
         open_action.triggered.connect(lambda: open_in_file_manager(self.project_path))
         archive_action.triggered.connect(lambda: self.archiveRequested.emit(self))

@@ -61,13 +61,13 @@ with tempfile.TemporaryDirectory(prefix='plm wheel smoke ') as temporary:
             assert 'dft_mode' not in top
             assert (config/'tb/tb_pipe_lane_mapper.sv').is_file()
     window.on_open_settings()
-    window.secondary_overlay.menu_buttons[2].click()
+    window.view_stack.currentWidget().menu_buttons[1].click()
     app.processEvents()
-    assert window.secondary_overlay.formatter_panel.isVisible()
+    assert window.view_stack.currentWidget().formatter_panel.isVisible()
     window._close_secondary_page()
     window.on_open_docs()
     app.processEvents()
-    assert 'PLM Qt' in window.secondary_overlay.doc_browser.toPlainText()
+    assert 'PLM Qt' in window.view_stack.currentWidget().doc_browser.toPlainText()
     window.close()
 print('Installed wheel: CLI, Qt resources, Formatter, docs and all 4 clock/DPR combinations passed.')
 '''

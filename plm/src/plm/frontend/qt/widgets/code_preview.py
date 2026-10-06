@@ -4,7 +4,7 @@ import re
 
 from PyQt5 import QtCore, QtGui, QtWidgets
 from plm.frontend.qt.styles.tokens import (
-    BG_SUBTLE, FONT_MONO, PRIMARY, PRIMARY_HOVER, TEXT_MAIN, TEXT_MUTED, TEXT_SUB,
+    BG_SUBTLE, PRIMARY, PRIMARY_HOVER, TEXT_MUTED, TEXT_SUB,
 )
 
 

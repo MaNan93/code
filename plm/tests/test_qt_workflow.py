@@ -104,9 +104,9 @@ class QtWorkflowTests(unittest.TestCase):
         self.assertTrue((self.root / "test/demo/rtl/src/pipe_lane_mapper.sv").is_file())
         self.assertTrue((self.root / "test/demo/tb/tb_pipe_lane_mapper.sv").is_file())
         panel = page.artifacts_panel
-        files = [Path(panel.file_selector.itemData(i)) for i in range(panel.file_selector.count())]
+        files = list(panel.selection.files)
         generated = self.root / "test/demo/rtl/src/pipe_lane_mapper.sv"
-        panel.file_selector.setCurrentIndex(files.index(generated))
+        panel.select_file(files[files.index(generated)])
         self.assertEqual(panel.preview.toPlainText(), generated.read_text())
         self.assertIn("endmodule", panel.preview.toPlainText())
         self.assertTrue(panel.preview.isReadOnly())
@@ -135,8 +135,9 @@ class QtWorkflowTests(unittest.TestCase):
         self.assertEqual(nav.project_list.count(), 1)
 
         demo = nav.project_list.project_widgets[0]
-        with patch.object(QtWidgets.QInputDialog, "getText", return_value=("renamed", True)):
-            nav.project_list.rename_project(demo)
+        nav.project_list.rename_project(demo)
+        demo.project_name_edit.setText("renamed")
+        QtTest.QTest.keyClick(demo.project_name_edit, QtCore.Qt.Key_Return)
         self.assertEqual(nav.current_project_name, "renamed")
         self.assertEqual(self.store.recent_project(), "renamed")
         self.assertEqual(window.config_page.header.title_label.text(), "renamed")

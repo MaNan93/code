@@ -9,9 +9,7 @@ from urllib.parse import quote, unquote
 from PyQt5 import QtCore
 
 from plm.frontend.qt.models import ProjectState
-from plm.frontend.qt.models.preferences import (
-    DEFAULT_EDITOR, DEFAULT_FONT_FAMILY, DEFAULT_FONT_SIZE,
-)
+from plm.frontend.qt.models.preferences import DEFAULT_EDITOR
 
 
 class SettingsStore:
@@ -120,12 +118,6 @@ class SettingsStore:
 
     def preferences(self):
         return {
-            "font_family": self._settings.value(
-                "appearance/font_family", DEFAULT_FONT_FAMILY, type=str
-            ),
-            "font_size": self._settings.value(
-                "appearance/font_size", DEFAULT_FONT_SIZE, type=int
-            ),
             "editor_path": self._settings.value(
                 "tools/editor_path", DEFAULT_EDITOR, type=str
             ),
@@ -147,14 +139,6 @@ class SettingsStore:
         }
 
     def save_preferences(self, preferences):
-        self._settings.setValue(
-            "appearance/font_family",
-            preferences.get("font_family") or DEFAULT_FONT_FAMILY,
-        )
-        self._settings.setValue(
-            "appearance/font_size",
-            int(preferences.get("font_size") or DEFAULT_FONT_SIZE),
-        )
         self._settings.setValue(
             "tools/editor_path", preferences.get("editor_path") or DEFAULT_EDITOR
         )

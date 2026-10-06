@@ -12,6 +12,7 @@ from plm.frontend.qt.models.preferences import DEFAULT_EDITOR
 from plm.frontend.qt.widgets.code_preview import CodePreview
 from plm.frontend.qt.widgets.common import (
     ICON_SIZE,
+    LayeredFrame,
     StatusBadge,
     StyledMenu,
     apply_drop_shadow,
@@ -29,7 +30,7 @@ _STATUS_COLORS = {
 }
 
 
-class ArtifactsPanel(QtWidgets.QFrame):
+class ArtifactsPanel(LayeredFrame):
     maximizeRequested = QtCore.pyqtSignal()
     refreshRequested = QtCore.pyqtSignal()
     widthRequested = QtCore.pyqtSignal(int)

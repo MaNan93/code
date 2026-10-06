@@ -69,7 +69,7 @@ class QtFrontendLayoutTests(unittest.TestCase):
         shell_layout = self.window.window_shell.layout()
         self.assertIsInstance(shell_layout, QtWidgets.QVBoxLayout)
         self.assertEqual(shell_layout.spacing(), 0)
-        self.assertEqual(shell_layout.contentsMargins(), QtCore.QMargins(0, 0, 0, 0))
+        self.assertEqual(shell_layout.contentsMargins(), QtCore.QMargins(3, 3, 3, 3))
         self.assertEqual(shell_layout.count(), 2)
         self.assertIs(shell_layout.itemAt(0).widget(), self.window.title_bar)
         self.assertIs(shell_layout.itemAt(1).widget(), self.window.body_container)
@@ -78,7 +78,9 @@ class QtFrontendLayoutTests(unittest.TestCase):
         self.assertEqual(body_layout.spacing(), 0)
         self.assertEqual(body_layout.contentsMargins(), QtCore.QMargins(0, 0, 0, 0))
         self.assertIs(body_layout.itemAt(0).widget(), self.window.nav_panel)
-        self.assertIs(body_layout.itemAt(1).widget(), self.window.view_stack)
+        self.assertIs(body_layout.itemAt(1).widget(), self.window.nav_separator)
+        self.assertEqual(self.window.nav_separator.width(), 3)
+        self.assertIs(body_layout.itemAt(2).widget(), self.window.view_stack)
         self.assertEqual(self.window.title_bar.height(), 38)
         self.assertEqual(self.window.title_bar.logo_label.size(), QtCore.QSize(18, 18))
         self.assertEqual(self.window.title_bar.title_label.text(), "plmConsultant")
@@ -136,7 +138,7 @@ class QtFrontendLayoutTests(unittest.TestCase):
         self.assertEqual(
             self.window.content_splitter.geometry().left()
             - (nav.geometry().right() + 1),
-            0,
+            3,
         )
         aligned_widgets = [
             nav.new_chat_btn,

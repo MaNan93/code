@@ -59,19 +59,50 @@ class QtFrontendLayoutTests(unittest.TestCase):
         )
         self.app.processEvents()
 
-    def test_native_window_with_fixed_sidebar_and_log_splitter(self):
-        self.assertFalse(self.window.windowFlags() & QtCore.Qt.FramelessWindowHint)
+    def test_frameless_window_with_immersive_sidebar_and_log_splitter(self):
+        self.assertTrue(self.window.windowFlags() & QtCore.Qt.FramelessWindowHint)
         self.assertEqual(self.window.windowTitle(), "plmConsultant")
         self.assertIsInstance(self.window.nav_panel, NavPanel)
         self.assertEqual(self.window.nav_panel.width(), 260)
-        self.assertIs(self.window.centralWidget(), self.window.view_stack)
+        self.assertIs(self.window.centralWidget(), self.window.window_shell)
         self.assertIs(self.window.view_stack.widget(0), self.window.main_container)
-        main_layout = self.window.main_container.layout()
-        self.assertIsInstance(main_layout, QtWidgets.QHBoxLayout)
-        self.assertEqual(main_layout.spacing(), 0)
-        self.assertEqual(main_layout.contentsMargins(), QtCore.QMargins(0, 0, 0, 0))
+        shell_layout = self.window.window_shell.layout()
+        self.assertIsInstance(shell_layout, QtWidgets.QVBoxLayout)
+        self.assertEqual(shell_layout.spacing(), 0)
+        self.assertEqual(shell_layout.contentsMargins(), QtCore.QMargins(0, 0, 0, 0))
+        self.assertEqual(shell_layout.count(), 2)
+        self.assertIs(shell_layout.itemAt(0).widget(), self.window.title_bar)
+        self.assertIs(shell_layout.itemAt(1).widget(), self.window.body_container)
+        body_layout = self.window.body_container.layout()
+        self.assertIsInstance(body_layout, QtWidgets.QHBoxLayout)
+        self.assertEqual(body_layout.spacing(), 0)
+        self.assertEqual(body_layout.contentsMargins(), QtCore.QMargins(0, 0, 0, 0))
+        self.assertIs(body_layout.itemAt(0).widget(), self.window.nav_panel)
+        self.assertIs(body_layout.itemAt(1).widget(), self.window.view_stack)
+        self.assertEqual(self.window.title_bar.height(), 38)
+        self.assertEqual(self.window.title_bar.logo_label.size(), QtCore.QSize(18, 18))
+        self.assertEqual(self.window.title_bar.title_label.text(), "plmConsultant")
+        self.assertIs(
+            self.window.nav_panel.collapse_btn.parentWidget(),
+            self.window.title_bar,
+        )
+        self.assertEqual(len(self.window._resize_handles), 8)
+        self.assertEqual(
+            self.window.title_bar.minimize_btn.iconSize(), QtCore.QSize(14, 14)
+        )
+        self.assertEqual(
+            self.window.title_bar.maximize_btn.iconSize(), QtCore.QSize(12, 12)
+        )
+        self.assertEqual(
+            self.window.title_bar.close_btn.iconSize(), QtCore.QSize(14, 14)
+        )
+        self.assertEqual(
+            self.window.config_page.header.log_btn.size(), QtCore.QSize(46, 48)
+        )
+        self.assertEqual(
+            self.window.config_page.header.artifacts_btn.size(), QtCore.QSize(46, 48)
+        )
         self.assertEqual(self.window.content_splitter.orientation(), QtCore.Qt.Vertical)
-        self.assertEqual(main_layout.count(), 2)
         self.assertEqual(self.window.nav_panel.minimumWidth(), 260)
         self.assertEqual(self.window.nav_panel.maximumWidth(), 260)
         self.assertEqual(self.window.content_splitter.handleWidth(), 1)
@@ -84,7 +115,6 @@ class QtFrontendLayoutTests(unittest.TestCase):
     def test_nav_toggle_collapses_and_restores_sidebar(self):
         nav = self.window.nav_panel
         stable_y_positions = {
-            "toggle": nav.collapse_btn.mapTo(nav, QtCore.QPoint()).y(),
             "new": nav.new_chat_btn.mapTo(nav, QtCore.QPoint()).y(),
             "save": nav.save_btn.mapTo(nav, QtCore.QPoint()).y(),
             "docs": nav.docs_btn.mapTo(nav, QtCore.QPoint(0, nav.docs_btn.height())).y(),
@@ -99,7 +129,6 @@ class QtFrontendLayoutTests(unittest.TestCase):
         self.assertTrue(nav.is_collapsed)
         self.assertEqual(nav.width(), 56)
         self.assertFalse(nav.project_list.isVisible())
-        self.assertFalse(nav.logo_label.isVisible())
         self.assertEqual(nav.new_chat_btn.objectName(), "NavIconBtn")
         self.assertEqual(nav.save_btn.objectName(), "NavIconBtn")
         self.assertEqual(
@@ -108,7 +137,6 @@ class QtFrontendLayoutTests(unittest.TestCase):
             0,
         )
         aligned_widgets = [
-            nav.collapse_btn,
             nav.new_chat_btn,
             nav.save_btn,
             nav.collapsed_settings_btn,
@@ -119,10 +147,6 @@ class QtFrontendLayoutTests(unittest.TestCase):
         }
         self.assertEqual(len(center_positions), 1)
         self.assertEqual(center_positions, {(nav.width() - 1) // 2})
-        self.assertEqual(
-            nav.collapse_btn.mapTo(nav, QtCore.QPoint()).y(),
-            stable_y_positions["toggle"],
-        )
         self.assertEqual(
             nav.new_chat_btn.mapTo(nav, QtCore.QPoint()).y(),
             stable_y_positions["new"],
@@ -290,10 +314,9 @@ class QtFrontendLayoutTests(unittest.TestCase):
         margins = nav.layout().contentsMargins()
         self.assertEqual(
             (margins.left(), margins.top(), margins.right(), margins.bottom()),
-            (12, 8, 12, 8),
+            (12, 12, 12, 8),
         )
         for layout in (
-            nav.brand_layout,
             nav.new_chat_row_layout,
             nav.save_row_layout,
             first_project.header.layout(),
@@ -307,7 +330,6 @@ class QtFrontendLayoutTests(unittest.TestCase):
             )
 
         aligned_widgets = (
-            nav.logo_label,
             nav.new_chat_btn,
             nav.save_btn,
             first_project.folder_icon,
@@ -319,7 +341,6 @@ class QtFrontendLayoutTests(unittest.TestCase):
             {12},
         )
         icon_pixmaps = (
-            nav.logo_label.pixmap(),
             nav.new_chat_btn.icon().pixmap(ICON_SIZE, ICON_SIZE),
             nav.save_btn.icon().pixmap(ICON_SIZE, ICON_SIZE),
             first_project.folder_icon.pixmap(),
@@ -345,11 +366,6 @@ class QtFrontendLayoutTests(unittest.TestCase):
         self.assertEqual(nav.collapsed_width, 56)
         self.assertEqual(nav.minimumWidth(), 260)
         self.assertEqual(nav.maximumWidth(), 260)
-        self.assertEqual(nav.brand_row.height(), 40)
-        self.assertEqual(nav.brand_layout.spacing(), 0)
-        self.assertEqual(nav.logo_label.size(), QtCore.QSize(18, 18))
-        self.assertEqual(nav.brand_logo_gap.sizeHint().width(), 8)
-        self.assertEqual(nav.brand_button_gap.sizeHint().width(), 2)
         self.assertEqual(nav.collapse_btn.size(), QtCore.QSize(32, 32))
 
         for row_layout in (
@@ -842,8 +858,11 @@ class QtFrontendLayoutTests(unittest.TestCase):
             "more-horizontal",
             "maximize",
             "rocket",
+            "minus",
+            "square",
+            "copy",
         )
-        self.assertEqual(len(icon_names), 27)
+        self.assertEqual(len(icon_names), 30)
         self.assertEqual(
             {path.stem for path in LUCIDE_ICON_DIR.glob("*.svg")},
             set(icon_names),
@@ -858,6 +877,11 @@ class QtFrontendLayoutTests(unittest.TestCase):
         self.assertIn("QSplitter::handle", APP_QSS)
         self.assertIn("QTabWidget#ConfigTabs QTabBar::tab:selected", APP_QSS)
         self.assertIn("QScrollBar::handle:vertical", APP_QSS)
+        self.assertIn('QWidget#WindowShell[maximized="true"]', APP_QSS)
+        self.assertIn("QFrame#WindowTitleBar", APP_QSS)
+        self.assertIn('QFrame#WindowTitleBar[windowActive="false"]', APP_QSS)
+        self.assertIn('QFrame#NavPanel[windowActive="false"]', APP_QSS)
+        self.assertIn("qlineargradient", APP_QSS)
 
 
 if __name__ == "__main__":

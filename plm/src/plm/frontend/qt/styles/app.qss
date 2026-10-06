@@ -8,6 +8,65 @@ QWidget {
 QWidget:disabled { color: $text_muted; }
 QLabel { background: transparent; }
 QMainWindow { background-color: $bg_main; }
+QWidget#WindowShell {
+    background-color: $bg_main;
+    border: 1px solid $border_hover;
+}
+QWidget#WindowShell[maximized="true"] {
+    border: none;
+}
+QWidget#BodyContainer, QStackedWidget#ViewStack {
+    background-color: $bg_main;
+    border: none;
+}
+QWidget#WindowResizeHandle {
+    background: transparent;
+    border: none;
+}
+QFrame#WindowTitleBar {
+    background: qlineargradient(
+        x1: 0, y1: 0, x2: 1, y2: 0,
+        stop: 0 $nav_gradient_top,
+        stop: 0.35 $bg_chrome,
+        stop: 1 $bg_main
+    );
+    border: none;
+    border-bottom: 1px solid $border;
+}
+QFrame#WindowTitleBar[windowActive="false"] {
+    background: qlineargradient(
+        x1: 0, y1: 0, x2: 1, y2: 0,
+        stop: 0 $nav_gradient_inactive_top,
+        stop: 0.35 $bg_chrome_inactive,
+        stop: 1 $bg_subtle
+    );
+    border-bottom: 1px solid $border;
+}
+QLabel#WindowBrandLogo { background: transparent; }
+QLabel#WindowBrandName {
+    color: $text_main;
+    font-size: 13px;
+    font-weight: bold;
+    background: transparent;
+}
+QPushButton#WindowControlButton {
+    min-width: 46px;
+    max-width: 46px;
+    min-height: 38px;
+    max-height: 38px;
+    padding: 0;
+    border: none;
+    border-radius: 0;
+    background: transparent;
+}
+QPushButton#WindowControlButton[role="minimize"]:hover,
+QPushButton#WindowControlButton[role="maximize"]:hover {
+    background-color: rgba(148, 163, 184, 28);
+}
+QPushButton#WindowControlButton[role="close"]:hover {
+    background-color: #EF4444;
+    color: $bg_surface;
+}
 
 QPushButton {
     background-color: $bg_surface;
@@ -173,19 +232,24 @@ QSplitter::handle { background-color: transparent; }
 QSplitter::handle:vertical { height: 1px; }
 
 QFrame#NavPanel {
-    background-color: $bg_chrome;
+    background: qlineargradient(
+        x1: 0, y1: 0, x2: 0, y2: 1,
+        stop: 0 $nav_gradient_top,
+        stop: 0.55 $bg_chrome,
+        stop: 1 $nav_gradient_bottom
+    );
     border-right: 1px solid $border;
 }
 QFrame#NavPanel[windowActive="false"] {
-    background-color: $bg_chrome_inactive;
+    background: qlineargradient(
+        x1: 0, y1: 0, x2: 0, y2: 1,
+        stop: 0 $nav_gradient_inactive_top,
+        stop: 0.55 $bg_chrome_inactive,
+        stop: 1 $nav_gradient_inactive_bottom
+    );
 }
 QFrame#NavPanel > QWidget, QWidget#NavRow, QWidget#ProjectItem,
 QListWidget#ProjectList > QWidget { background: transparent; }
-QLabel#NavAppName {
-    color: $text_main;
-    font-size: $font_size_lg;
-    font-weight: bold;
-}
 QLabel#ProjectSectionTitle {
     color: $text_muted;
     font-size: $font_size_sm;
@@ -268,6 +332,7 @@ QPushButton#SecondaryBackButton {
 QPushButton#HeaderButton:hover, QPushButton#ArtifactsToolButton:hover,
 QPushButton#LogClearButton:hover, QPushButton#LogCloseBtn:hover,
 QPushButton#SecondaryBackButton:hover { background-color: $bg_subtle; }
+QPushButton#HeaderButton { border-radius: 0; }
 QPushButton#ArtifactsToolButton:checked { background-color: $primary_light; }
 QPushButton#ArtifactsToolButton::menu-indicator { image: none; width: 0; height: 0; }
 QWidget#ConfigArea, QScrollArea#ConfigScroll, QWidget#ConfigScrollContent { background: $bg_main; border: none; }

@@ -94,7 +94,7 @@ with tempfile.TemporaryDirectory(prefix="plm-ui-") as td:
     screen_shot("00-project-context-menu")
     project_menu.close(); project_menu.deleteLater()
 
-    # Dirty state is visible in the native window title, then undo restores it.
+    # Dirty state is visible in the custom window title, then undo restores it.
     name_item=w.config_page.controllers_editor.table.item(0,1)
     original_name=name_item.text()
     name_item.setText(original_name+"Tmp")

@@ -8,7 +8,12 @@ from plm.frontend.qt.widgets.common import (
     make_icon_button,
 )
 from plm.frontend.qt.widgets.project_list import ProjectList
-from plm.frontend.qt.styles.tokens import PRIMARY, SPACING_MD, SPACING_SM, TEXT_SUB
+from plm.frontend.qt.styles.tokens import (
+    PRIMARY,
+    SPACING_MD,
+    SPACING_SM,
+    TEXT_SUB,
+)
 
 
 class NavPanel(QtWidgets.QFrame):
@@ -48,46 +53,15 @@ class NavPanel(QtWidgets.QFrame):
         self.animation_group.finished.connect(self._on_collapse_animation_finished)
         root = QtWidgets.QVBoxLayout(self)
         root.setSizeConstraint(QtWidgets.QLayout.SetNoConstraint)
-        root.setContentsMargins(SPACING_MD, SPACING_SM, SPACING_MD, SPACING_SM)
+        root.setContentsMargins(SPACING_MD, SPACING_MD, SPACING_MD, SPACING_SM)
         root.setSpacing(SPACING_SM)
 
-        self.brand_row = QtWidgets.QWidget()
-        self.brand_row.setObjectName("NavBrandRow")
-        self.brand_row.setFixedHeight(40)
-        self.brand_layout = QtWidgets.QHBoxLayout(self.brand_row)
-        self.brand_layout.setContentsMargins(0, 0, 0, 0)
-        self.brand_layout.setSpacing(0)
-        self.logo_label = QtWidgets.QLabel()
-        self.logo_label.setObjectName("NavLogo")
-        self.logo_label.setPixmap(
-            load_lucide_icon(
-                "layout-dashboard", PRIMARY, 18, align_visible_left=True
-            ).pixmap(18, 18)
-        )
-        self.logo_label.setFixedSize(18, 18)
-        self.brand_layout.addWidget(self.logo_label)
-        self.brand_logo_gap = QtWidgets.QSpacerItem(
-            8, 0, QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Minimum
-        )
-        self.brand_layout.addItem(self.brand_logo_gap)
-        self.app_name_label = QtWidgets.QLabel("plmConsultant")
-        self.app_name_label.setObjectName("NavAppName")
-        self.brand_layout.addWidget(self.app_name_label)
-        self.brand_stretch = QtWidgets.QSpacerItem(
-            0, 0, QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Minimum
-        )
-        self.brand_layout.addItem(self.brand_stretch)
-        self.brand_button_gap = QtWidgets.QSpacerItem(
-            2, 0, QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Minimum
-        )
-        self.brand_layout.addItem(self.brand_button_gap)
         self.collapse_btn = make_icon_button(
             "panel-left", "收起侧边栏", "NavCollapseButton", 32, ICON_SIZE
         )
+        self.collapse_btn.setParent(self)
+        self.collapse_btn.hide()
         self.collapse_btn.clicked.connect(self.toggle_collapse)
-        self.brand_layout.addWidget(self.collapse_btn)
-        self.brand_layout.setAlignment(self.collapse_btn, QtCore.Qt.AlignVCenter)
-        root.addWidget(self.brand_row)
 
         self.new_chat_btn = self._action_button(
             "square-pen", "新对话", self.new_chat_requested
@@ -171,10 +145,6 @@ class NavPanel(QtWidgets.QFrame):
         )
         self.collapsed_footer.hide()
         root.addWidget(self.collapsed_footer)
-        self.collapsible_widgets = [
-            self.logo_label,
-            self.app_name_label,
-        ]
 
     def toggle_collapse(self):
         if self.is_animating:
@@ -214,33 +184,6 @@ class NavPanel(QtWidgets.QFrame):
         self.setProperty("collapsed", not visible)
         self.style().unpolish(self)
         self.style().polish(self)
-        for widget in self.collapsible_widgets:
-            widget.setVisible(visible)
-        if visible:
-            self.brand_logo_gap.changeSize(
-                8, 0, QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Minimum
-            )
-            self.brand_stretch.changeSize(
-                0, 0, QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Minimum
-            )
-            self.brand_button_gap.changeSize(
-                2, 0, QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Minimum
-            )
-        else:
-            for spacer in (
-                self.brand_logo_gap,
-                self.brand_stretch,
-                self.brand_button_gap,
-            ):
-                spacer.changeSize(
-                    0, 0, QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Minimum
-                )
-        self.brand_layout.invalidate()
-        # invalidate() only schedules a relayout. On Windows/offscreen the
-        # animation can finish before that pass runs, leaving the collapse
-        # button at its expanded x-position for a frame. Apply the geometry
-        # synchronously so every collapsed icon shares the same center.
-        self.brand_layout.activate()
         layout = self.layout()
         if layout is not None:
             layout.activate()

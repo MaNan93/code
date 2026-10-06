@@ -8,6 +8,10 @@ BG_SURFACE = "#FFFFFF"
 BG_SUBTLE = "#F1F5F9"
 BG_CHROME = "#EFF5F2"
 BG_CHROME_INACTIVE = "#F5F7F6"
+NAV_GRADIENT_TOP = "#E8F0EC"
+NAV_GRADIENT_BOTTOM = "#F5F8F6"
+NAV_GRADIENT_INACTIVE_TOP = "#F1F5F3"
+NAV_GRADIENT_INACTIVE_BOTTOM = "#FAFBFA"
 BORDER = "#E2E8F0"
 BORDER_HOVER = "#CBD5E1"
 BORDER_FOCUS = "#3B82F6"
@@ -47,6 +51,10 @@ QSS_TOKENS = {
     "bg_subtle": BG_SUBTLE,
     "bg_chrome": BG_CHROME,
     "bg_chrome_inactive": BG_CHROME_INACTIVE,
+    "nav_gradient_top": NAV_GRADIENT_TOP,
+    "nav_gradient_bottom": NAV_GRADIENT_BOTTOM,
+    "nav_gradient_inactive_top": NAV_GRADIENT_INACTIVE_TOP,
+    "nav_gradient_inactive_bottom": NAV_GRADIENT_INACTIVE_BOTTOM,
     "border": BORDER,
     "border_hover": BORDER_HOVER,
     "border_focus": BORDER_FOCUS,

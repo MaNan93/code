@@ -1,14 +1,18 @@
-"""Codex-style PyQt5 views for plmConsultant using the native title bar."""
+"""Frameless PLM desktop window with a full-width custom title bar."""
 
 import sys
-import ctypes
-from ctypes import wintypes
+
 from PyQt5 import QtCore, QtGui, QtWidgets
 
 from plm.frontend.qt.controllers import AppController
 from plm.frontend.qt.exceptions import install_exception_handler
 from plm.frontend.qt.styles import APP_QSS
-from plm.frontend.qt.styles.tokens import BG_CHROME, BG_CHROME_INACTIVE, BG_SURFACE, FONT_SIZE_BODY, PRIMARY
+from plm.frontend.qt.styles.tokens import (
+    BG_SURFACE,
+    FONT_SIZE_BODY,
+    PRIMARY,
+    TEXT_SUB,
+)
 from plm.frontend.qt.views.config_page import ConfigPage
 from plm.frontend.qt.views.log_panel import LogPanel
 from plm.frontend.qt.widgets.common import load_lucide_icon
@@ -16,11 +20,214 @@ from plm.frontend.qt.widgets.common import load_lucide_icon
 __all__ = ["MainWindow"]
 
 
+class WindowTitleBar(QtWidgets.QFrame):
+    """Full-width brand, drag surface, and frameless window controls."""
+
+    HEIGHT = 38
+
+    def __init__(self, window, sidebar_button=None):
+        super().__init__(window)
+        self._window = window
+        self._drag_offset = None
+        self.setObjectName("WindowTitleBar")
+        self.setFixedHeight(self.HEIGHT)
+
+        layout = QtWidgets.QHBoxLayout(self)
+        layout.setContentsMargins(12, 0, 0, 0)
+        layout.setSpacing(0)
+
+        self.logo_label = QtWidgets.QLabel()
+        self.logo_label.setObjectName("WindowBrandLogo")
+        self.logo_label.setPixmap(
+            load_lucide_icon("layout-dashboard", PRIMARY, 18).pixmap(18, 18)
+        )
+        self.logo_label.setFixedSize(18, 18)
+        self.logo_label.setAttribute(QtCore.Qt.WA_TransparentForMouseEvents)
+        layout.addWidget(self.logo_label, 0, QtCore.Qt.AlignVCenter)
+        layout.addSpacing(8)
+
+        self.title_label = QtWidgets.QLabel(window.windowTitle())
+        self.title_label.setObjectName("WindowBrandName")
+        self.title_label.setAlignment(QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter)
+        self.title_label.setAttribute(QtCore.Qt.WA_TransparentForMouseEvents)
+        layout.addWidget(self.title_label, 0, QtCore.Qt.AlignVCenter)
+        if sidebar_button is not None:
+            layout.addSpacing(8)
+            layout.addWidget(sidebar_button, 0, QtCore.Qt.AlignVCenter)
+            sidebar_button.show()
+        layout.addStretch(1)
+
+        self.minimize_btn = WindowControlButton("minimize", "最小化", self)
+        self.maximize_btn = WindowControlButton("maximize", "最大化", self)
+        self.close_btn = WindowControlButton("close", "关闭", self)
+        self.minimize_btn.clicked.connect(window.showMinimized)
+        self.maximize_btn.clicked.connect(self.toggle_maximized)
+        self.close_btn.clicked.connect(window.close)
+        for button in (self.minimize_btn, self.maximize_btn, self.close_btn):
+            layout.addWidget(button, 0, QtCore.Qt.AlignVCenter)
+        window.windowTitleChanged.connect(self.title_label.setText)
+
+    def toggle_maximized(self):
+        if self._window.isMaximized():
+            self._window.showNormal()
+        else:
+            self._window.showMaximized()
+        self.update_window_state()
+
+    def update_window_state(self):
+        maximized = self._window.isMaximized()
+        self.maximize_btn.setRestoredIcon(maximized)
+        self.maximize_btn.setToolTip("还原" if maximized else "最大化")
+
+    def mousePressEvent(self, event):
+        if event.button() == QtCore.Qt.LeftButton:
+            self._drag_offset = (
+                event.globalPos() - self._window.frameGeometry().topLeft()
+            )
+            event.accept()
+            return
+        super().mousePressEvent(event)
+
+    def mouseMoveEvent(self, event):
+        if self._drag_offset is not None and event.buttons() & QtCore.Qt.LeftButton:
+            if self._window.isMaximized():
+                ratio = event.pos().x() / max(1, self.width())
+                self._window.showNormal()
+                self.update_window_state()
+                title_left = self.mapTo(self._window, QtCore.QPoint()).x()
+                self._drag_offset = QtCore.QPoint(
+                    title_left + int(self.width() * ratio),
+                    min(event.pos().y(), self.HEIGHT),
+                )
+            self._window.move(event.globalPos() - self._drag_offset)
+            event.accept()
+            return
+        super().mouseMoveEvent(event)
+
+    def mouseReleaseEvent(self, event):
+        if event.button() == QtCore.Qt.LeftButton:
+            self._drag_offset = None
+        super().mouseReleaseEvent(event)
+
+    def mouseDoubleClickEvent(self, event):
+        if event.button() == QtCore.Qt.LeftButton:
+            self._drag_offset = None
+            self.toggle_maximized()
+            event.accept()
+            return
+        super().mouseDoubleClickEvent(event)
+
+
+class WindowControlButton(QtWidgets.QPushButton):
+    """Fixed-size title-bar button using centered Lucide vector icons."""
+
+    ICONS = {
+        "minimize": ("minus", 14),
+        "maximize": ("square", 12),
+        "close": ("x", 14),
+    }
+
+    def __init__(self, role, tooltip, parent=None):
+        super().__init__(parent)
+        self._role = role
+        self._restored_icon = False
+        self._icon_name, self._icon_size = self.ICONS[role]
+        self.setObjectName("WindowControlButton")
+        self.setProperty("role", role)
+        self.setFixedSize(46, WindowTitleBar.HEIGHT)
+        self.setIconSize(QtCore.QSize(self._icon_size, self._icon_size))
+        self.setToolTip(tooltip)
+        self.setCursor(QtCore.Qt.ArrowCursor)
+        self._refresh_icon()
+
+    def setRestoredIcon(self, restored):
+        restored = bool(restored)
+        if self._restored_icon != restored:
+            self._restored_icon = restored
+            self._icon_name = "copy" if restored else "square"
+            self._refresh_icon()
+
+    def _refresh_icon(self, hovered=False):
+        color = BG_SURFACE if self._role == "close" and hovered else TEXT_SUB
+        self.setIcon(load_lucide_icon(self._icon_name, color, self._icon_size))
+
+    def enterEvent(self, event):
+        if self._role == "close":
+            self._refresh_icon(hovered=True)
+        super().enterEvent(event)
+
+    def leaveEvent(self, event):
+        if self._role == "close":
+            self._refresh_icon()
+        super().leaveEvent(event)
+
+
+class WindowResizeHandle(QtWidgets.QWidget):
+    """Thin edge target that delegates resizing to the window system."""
+
+    def __init__(self, window, edges, cursor):
+        super().__init__(window)
+        self._window = window
+        self._edges = edges
+        self._start_global = None
+        self._start_geometry = None
+        self.setObjectName("WindowResizeHandle")
+        self.setCursor(cursor)
+
+    def mousePressEvent(self, event):
+        if event.button() != QtCore.Qt.LeftButton or self._window.isMaximized():
+            super().mousePressEvent(event)
+            return
+        handle = self._window.windowHandle()
+        if handle is not None and hasattr(handle, "startSystemResize"):
+            try:
+                if handle.startSystemResize(self._edges):
+                    event.accept()
+                    return
+            except RuntimeError:
+                pass
+        self._start_global = event.globalPos()
+        self._start_geometry = QtCore.QRect(self._window.geometry())
+        event.accept()
+
+    def mouseMoveEvent(self, event):
+        if self._start_global is None or not event.buttons() & QtCore.Qt.LeftButton:
+            super().mouseMoveEvent(event)
+            return
+        delta = event.globalPos() - self._start_global
+        rect = QtCore.QRect(self._start_geometry)
+        minimum = self._window.minimumSize()
+        if self._edges & QtCore.Qt.LeftEdge:
+            rect.setLeft(
+                min(rect.left() + delta.x(), rect.right() - minimum.width() + 1)
+            )
+        if self._edges & QtCore.Qt.RightEdge:
+            rect.setRight(
+                max(rect.right() + delta.x(), rect.left() + minimum.width() - 1)
+            )
+        if self._edges & QtCore.Qt.TopEdge:
+            rect.setTop(
+                min(rect.top() + delta.y(), rect.bottom() - minimum.height() + 1)
+            )
+        if self._edges & QtCore.Qt.BottomEdge:
+            rect.setBottom(
+                max(rect.bottom() + delta.y(), rect.top() + minimum.height() - 1)
+            )
+        self._window.setGeometry(rect)
+        event.accept()
+
+    def mouseReleaseEvent(self, event):
+        self._start_global = None
+        self._start_geometry = None
+        super().mouseReleaseEvent(event)
+
+
 class MainWindow(QtWidgets.QMainWindow):
-    """Native QMainWindow with a fixed sidebar and vertically split content."""
+    """Frameless window with full-width chrome and routed body content."""
 
     def __init__(self):
         super().__init__()
+        self.setWindowFlags(self.windowFlags() | QtCore.Qt.FramelessWindowHint)
         install_exception_handler()
         self.controller = AppController()
         app = QtWidgets.QApplication.instance()
@@ -40,13 +247,23 @@ class MainWindow(QtWidgets.QMainWindow):
         self._log_sizes = [700, 200]
         self._activation_connected = False
 
-        self.main_container = QtWidgets.QWidget()
-        self.main_container.setObjectName("MainContainer")
-        main_layout = QtWidgets.QHBoxLayout(self.main_container)
-        main_layout.setContentsMargins(0, 0, 0, 0)
-        main_layout.setSpacing(0)
+        self.window_shell = QtWidgets.QWidget()
+        self.window_shell.setObjectName("WindowShell")
+        self.window_shell.setProperty("maximized", False)
+        shell_layout = QtWidgets.QVBoxLayout(self.window_shell)
+        shell_layout.setContentsMargins(0, 0, 0, 0)
+        shell_layout.setSpacing(0)
+
         self.nav_panel = self.controller.create_navigation()
-        main_layout.addWidget(self.nav_panel)
+        self.title_bar = WindowTitleBar(self, self.nav_panel.collapse_btn)
+        shell_layout.addWidget(self.title_bar)
+
+        self.body_container = QtWidgets.QWidget()
+        self.body_container.setObjectName("BodyContainer")
+        body_layout = QtWidgets.QHBoxLayout(self.body_container)
+        body_layout.setContentsMargins(0, 0, 0, 0)
+        body_layout.setSpacing(0)
+        body_layout.addWidget(self.nav_panel)
 
         self.content_splitter = QtWidgets.QSplitter(QtCore.Qt.Vertical)
         self.content_splitter.setObjectName("ContentSplitter")
@@ -60,14 +277,23 @@ class MainWindow(QtWidgets.QMainWindow):
         self.log_panel.closeRequested.connect(self.hide_log)
         self.content_splitter.addWidget(self.config_page)
         self.content_splitter.addWidget(self.log_panel)
-        main_layout.addWidget(self.content_splitter, 1)
         self.content_splitter.setStretchFactor(0, 3)
         self.content_splitter.setStretchFactor(1, 1)
-        self.view_stack = QtWidgets.QStackedWidget(self)
+        self.main_container = QtWidgets.QWidget()
+        self.main_container.setObjectName("MainContainer")
+        main_layout = QtWidgets.QVBoxLayout(self.main_container)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.setSpacing(0)
+        main_layout.addWidget(self.content_splitter)
+
+        self.view_stack = QtWidgets.QStackedWidget(self.body_container)
         self.view_stack.setObjectName("ViewStack")
         self.view_stack.addWidget(self.main_container)
         self.view_stack.setCurrentWidget(self.main_container)
-        self.setCentralWidget(self.view_stack)
+        body_layout.addWidget(self.view_stack, 1)
+        shell_layout.addWidget(self.body_container, 1)
+        self.setCentralWidget(self.window_shell)
+        self._create_resize_handles()
 
         QtCore.QTimer.singleShot(0, self._apply_initial_sizes)
 
@@ -86,6 +312,51 @@ class MainWindow(QtWidgets.QMainWindow):
         self.config_page.historyChanged.connect(self._update_history_actions)
         self._update_history_actions()
         self._enable_background_focus(self.main_container)
+
+    def _create_resize_handles(self):
+        horizontal = QtCore.Qt.SizeHorCursor
+        vertical = QtCore.Qt.SizeVerCursor
+        diagonal_forward = QtCore.Qt.SizeFDiagCursor
+        diagonal_backward = QtCore.Qt.SizeBDiagCursor
+        self._resize_handles = {
+            "left": WindowResizeHandle(self, QtCore.Qt.LeftEdge, horizontal),
+            "right": WindowResizeHandle(self, QtCore.Qt.RightEdge, horizontal),
+            "top": WindowResizeHandle(self, QtCore.Qt.TopEdge, vertical),
+            "bottom": WindowResizeHandle(self, QtCore.Qt.BottomEdge, vertical),
+            "top_left": WindowResizeHandle(
+                self, QtCore.Qt.TopEdge | QtCore.Qt.LeftEdge, diagonal_forward
+            ),
+            "top_right": WindowResizeHandle(
+                self, QtCore.Qt.TopEdge | QtCore.Qt.RightEdge, diagonal_backward
+            ),
+            "bottom_left": WindowResizeHandle(
+                self, QtCore.Qt.BottomEdge | QtCore.Qt.LeftEdge, diagonal_backward
+            ),
+            "bottom_right": WindowResizeHandle(
+                self, QtCore.Qt.BottomEdge | QtCore.Qt.RightEdge, diagonal_forward
+            ),
+        }
+
+    def _update_resize_handles(self):
+        border = 6
+        corner = 10
+        width, height = self.width(), self.height()
+        geometries = {
+            "left": (0, corner, border, max(0, height - 2 * corner)),
+            "right": (width - border, corner, border, max(0, height - 2 * corner)),
+            "top": (corner, 0, max(0, width - 2 * corner), border),
+            "bottom": (corner, height - border, max(0, width - 2 * corner), border),
+            "top_left": (0, 0, corner, corner),
+            "top_right": (width - corner, 0, corner, corner),
+            "bottom_left": (0, height - corner, corner, corner),
+            "bottom_right": (width - corner, height - corner, corner, corner),
+        }
+        visible = not self.isMaximized() and not self.isFullScreen()
+        for name, handle in self._resize_handles.items():
+            handle.setGeometry(*geometries[name])
+            handle.setVisible(visible)
+            if visible:
+                handle.raise_()
 
     def _connect_application_state(self):
         if self._activation_connected:
@@ -113,6 +384,7 @@ class MainWindow(QtWidgets.QMainWindow):
                     widget.setFocusPolicy(QtCore.Qt.ClickFocus)
 
     def _application_state_changed(self, state):
+        self._sync_window_chrome(state == QtCore.Qt.ApplicationActive)
         if state == QtCore.Qt.ApplicationActive:
             QtCore.QTimer.singleShot(0, self._refresh_after_activation)
         else:
@@ -122,37 +394,42 @@ class MainWindow(QtWidgets.QMainWindow):
         self._connect_application_state()
         super().showEvent(event)
         self._sync_window_chrome()
+        self._sync_window_frame_state()
 
     def changeEvent(self, event):
         super().changeEvent(event)
-        if event.type() == QtCore.QEvent.ActivationChange and hasattr(self, "nav_panel"):
-            self._sync_window_chrome()
+        if event.type() == QtCore.QEvent.ActivationChange:
+            if hasattr(self, "nav_panel"):
+                self._sync_window_chrome()
+        elif event.type() == QtCore.QEvent.WindowStateChange:
+            if hasattr(self, "window_shell"):
+                QtCore.QTimer.singleShot(0, self._sync_window_frame_state)
 
-    def _sync_window_chrome(self):
-        active = self.isActiveWindow()
-        self.nav_panel.setProperty("windowActive", active)
-        self.nav_panel.style().unpolish(self.nav_panel)
-        self.nav_panel.style().polish(self.nav_panel)
-        self.nav_panel.update()
-        color = BG_CHROME if active else BG_CHROME_INACTIVE
-        self._set_native_caption_color(color)
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        if hasattr(self, "_resize_handles"):
+            self._update_resize_handles()
 
-    def _set_native_caption_color(self, color):
-        if sys.platform != "win32" or QtGui.QGuiApplication.platformName() != "windows":
-            return
-        if sys.getwindowsversion().build < 22000:
-            return
-        try:
-            # DWMWA_CAPTION_COLOR uses COLORREF (0x00BBGGRR), not Qt's RGB order.
-            setter = ctypes.WinDLL("dwmapi").DwmSetWindowAttribute
-            setter.argtypes = [wintypes.HWND, wintypes.DWORD, ctypes.c_void_p, wintypes.DWORD]
-            setter.restype = wintypes.LONG
-            rgb = QtGui.QColor(color)
-            value = wintypes.DWORD(rgb.red() | (rgb.green() << 8) | (rgb.blue() << 16))
-            setter(wintypes.HWND(int(self.winId())), 35, ctypes.byref(value), ctypes.sizeof(value))
-        except (AttributeError, OSError):
-            # Native caption coloring is optional on unsupported platforms.
-            return
+    def _sync_window_chrome(self, active=None):
+        if active is None:
+            app = QtWidgets.QApplication.instance()
+            active = self.isActiveWindow() and (
+                app is None or app.applicationState() == QtCore.Qt.ApplicationActive
+            )
+        for widget in (self.nav_panel, self.title_bar):
+            widget.setProperty("windowActive", "true" if active else "false")
+            widget.style().unpolish(widget)
+            widget.style().polish(widget)
+            widget.update()
+
+    def _sync_window_frame_state(self):
+        maximized = self.isMaximized() or self.isFullScreen()
+        self.window_shell.setProperty("maximized", "true" if maximized else "false")
+        self.window_shell.style().unpolish(self.window_shell)
+        self.window_shell.style().polish(self.window_shell)
+        self.window_shell.update()
+        self.title_bar.update_window_state()
+        self._update_resize_handles()
 
     def _update_history_actions(self):
         self.undo_action.setEnabled(self.config_page.can_undo())
@@ -168,7 +445,14 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def _finish_focused_edit(self):
         editor = QtWidgets.QApplication.focusWidget()
-        if not isinstance(editor, (QtWidgets.QLineEdit, QtWidgets.QAbstractSpinBox, QtWidgets.QComboBox)):
+        if not isinstance(
+            editor,
+            (
+                QtWidgets.QLineEdit,
+                QtWidgets.QAbstractSpinBox,
+                QtWidgets.QComboBox,
+            ),
+        ):
             return
         if not self.isAncestorOf(editor):
             return
@@ -201,8 +485,6 @@ class MainWindow(QtWidgets.QMainWindow):
             return
         self._log_sizes = sizes
         self.content_splitter.setSizes([sum(sizes), 0])
-
-
     def on_save(self):
         self.controller.hide_project_menu()
         self.nav_panel.set_active(None)
@@ -224,6 +506,7 @@ class MainWindow(QtWidgets.QMainWindow):
         widget.preferencesSaved.connect(self.controller.save_preferences)
         self.view_stack.addWidget(widget)
         self.view_stack.setCurrentWidget(widget)
+        self._update_resize_handles()
         self.nav_panel.set_active(page)
         self.undo_action.setEnabled(False)
         self.redo_action.setEnabled(False)
@@ -235,6 +518,7 @@ class MainWindow(QtWidgets.QMainWindow):
             self.view_stack.setCurrentWidget(self.main_container)
             self.view_stack.removeWidget(widget)
             widget.deleteLater()
+            self._update_resize_handles()
         self.nav_panel.set_active(None)
         self._update_history_actions()
 

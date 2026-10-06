@@ -4,7 +4,7 @@ from plm.frontend.qt.widgets.common import apply_drop_shadow, make_icon_button
 from plm.frontend.qt.widgets.config_editor import CsvTableEditor, GenerationEditor
 from plm.frontend.qt.views.artifacts_panel import ArtifactsPanel
 from plm.frontend.qt.styles.tokens import (
-    SHADOW_SM, SPACING_LG, SPACING_MD, SPACING_SM,
+    SHADOW_SM, SPACING_LG, SPACING_MD,
 )
 
 
@@ -76,8 +76,8 @@ class ConfigHeader(QtWidgets.QFrame):
         self._original_title = ""
         self._editing_title = False
         layout = QtWidgets.QHBoxLayout(self)
-        layout.setContentsMargins(SPACING_LG, 0, SPACING_LG, 0)
-        layout.setSpacing(SPACING_SM)
+        layout.setContentsMargins(SPACING_LG, 0, 0, 0)
+        layout.setSpacing(0)
         self.title_label = DoubleClickLabel("重写 PLM Qt 前端布局")
         self.title_label.setObjectName("ConfigSessionTitle")
         self.title_label.setToolTip("双击重命名")
@@ -93,15 +93,17 @@ class ConfigHeader(QtWidgets.QFrame):
         layout.addWidget(self.title_edit, 0, QtCore.Qt.AlignVCenter)
         layout.addStretch(1)
         self.log_btn = make_icon_button(
-            "panel-bottom", "显示/隐藏输出面板", "HeaderButton", 32, 18
+            "panel-bottom", "显示/隐藏输出面板", "HeaderButton", 46, 18
         )
         self.artifacts_btn = make_icon_button(
-            "panel-right", "显示/隐藏 Artifacts", "HeaderButton", 32, 18
+            "panel-right", "显示/隐藏 Artifacts", "HeaderButton", 46, 18
         )
+        self.log_btn.setFixedSize(46, self.height())
+        self.artifacts_btn.setFixedSize(46, self.height())
         self.log_btn.clicked.connect(self.logToggleRequested.emit)
         self.artifacts_btn.clicked.connect(self.artifactsToggleRequested.emit)
-        layout.addWidget(self.log_btn)
-        layout.addWidget(self.artifacts_btn)
+        layout.addWidget(self.log_btn, 0, QtCore.Qt.AlignVCenter)
+        layout.addWidget(self.artifacts_btn, 0, QtCore.Qt.AlignVCenter)
 
     def enter_edit_mode(self):
         self._original_title = self.title_label.text()

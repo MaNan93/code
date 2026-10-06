@@ -20,10 +20,10 @@ ICON_SIZE = 18
 class LayeredFrame(QtWidgets.QFrame):
     """QSS reserves the warm buffer; painting adds its outer one-pixel rim."""
 
-    def __init__(self, parent=None, radius=10, top_left_only=False):
+    def __init__(self, parent=None, radius=10, rim_edges="all"):
         super().__init__(parent)
         self._rim_radius = radius
-        self._rim_top_left_only = top_left_only
+        self._rim_edges = rim_edges
         self.setAttribute(QtCore.Qt.WA_StyledBackground, True)
 
     def paintEvent(self, event):
@@ -33,14 +33,11 @@ class LayeredFrame(QtWidgets.QFrame):
         rect = QtCore.QRectF(self.rect()).adjusted(0.5, 0.5, -0.5, -0.5)
         radius = min(self._rim_radius, rect.width() / 2, rect.height() / 2)
         path = QtGui.QPainterPath()
-        if self._rim_top_left_only:
-            path.moveTo(rect.left() + radius, rect.top())
-            path.lineTo(rect.right(), rect.top())
-            path.lineTo(rect.right(), rect.bottom())
-            path.lineTo(rect.left(), rect.bottom())
+        if self._rim_edges == "top_left":
+            path.moveTo(rect.left(), rect.bottom())
             path.lineTo(rect.left(), rect.top() + radius)
             path.quadTo(rect.topLeft(), QtCore.QPointF(rect.left() + radius, rect.top()))
-            path.closeSubpath()
+            path.lineTo(rect.right(), rect.top())
         else:
             path.addRoundedRect(rect, radius, radius)
         painter = QtGui.QPainter(self)

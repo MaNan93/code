@@ -169,7 +169,7 @@ class ConfigPage(LayeredFrame):
     historyChanged = QtCore.pyqtSignal()
 
     def __init__(self, parent=None, editor_path_provider=None):
-        super().__init__(parent, radius=12, top_left_only=True)
+        super().__init__(parent, radius=12, rim_edges="top_left")
         self.setObjectName("ConfigPage")
         self.setAttribute(QtCore.Qt.WA_StyledBackground, True)
         self.dirty = False

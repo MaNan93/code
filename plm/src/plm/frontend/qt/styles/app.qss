@@ -237,11 +237,6 @@ QFrame#NavPanel {
     background-color: $bg_sidebar;
     border: none;
 }
-QFrame#NavSeparator {
-    background-color: $border_buffer;
-    border: none;
-    border-left: 1px solid $border_inner;
-}
 QFrame#NavPanel[windowActive="false"] {
     background-color: $bg_sidebar_inactive;
 }
@@ -305,7 +300,9 @@ QPushButton#HoverPinButton:hover, QPushButton#HoverOpenButton:hover { background
 
 QFrame#ConfigPage {
     background-color: $bg_main;
-    border: 3px solid $border_buffer;
+    border: none;
+    border-left: 3px solid $border_buffer;
+    border-top: 3px solid $border_buffer;
     border-top-left-radius: 12px;
 }
 QFrame#ConfigHeader {

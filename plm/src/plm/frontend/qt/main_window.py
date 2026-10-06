@@ -262,10 +262,6 @@ class MainWindow(QtWidgets.QMainWindow):
         body_layout.setContentsMargins(0, 0, 0, 0)
         body_layout.setSpacing(0)
         body_layout.addWidget(self.nav_panel)
-        self.nav_separator = QtWidgets.QFrame(self.body_container)
-        self.nav_separator.setObjectName("NavSeparator")
-        self.nav_separator.setFixedWidth(3)
-        body_layout.addWidget(self.nav_separator)
 
         self.content_splitter = QtWidgets.QSplitter(QtCore.Qt.Vertical)
         self.content_splitter.setObjectName("ContentSplitter")

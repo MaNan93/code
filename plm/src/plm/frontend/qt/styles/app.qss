@@ -278,10 +278,11 @@ QPushButton#ProjectButton {
     background: transparent;
     border: none;
     border-radius: $radius_control;
-    padding: 0 $spacing_md;
     color: $text_main;
     text-align: left;
 }
+QPushButton#NavActionButton, QPushButton#NavFooterButton { padding: 0 7px; }
+QPushButton#ProjectButton { padding: 0 $spacing_md; }
 QPushButton#NavActionButton:hover, QPushButton#NavFooterButton:hover,
 QPushButton#ProjectButton:hover, QPushButton#NavIconBtn:hover,
 QPushButton#NavCollapseButton:hover, QPushButton#ProjectArchiveBtn:hover,

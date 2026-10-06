@@ -126,7 +126,7 @@ class NavPanel(QtWidgets.QFrame):
         collapsed_footer_layout = QtWidgets.QVBoxLayout(self.collapsed_footer)
         collapsed_footer_layout.setContentsMargins(0, 0, 0, 0)
         collapsed_footer_layout.setSpacing(8)
-        collapsed_footer_layout.setAlignment(QtCore.Qt.AlignHCenter)
+        collapsed_footer_layout.setAlignment(QtCore.Qt.AlignLeft)
         self.collapsed_settings_btn = self._collapsed_icon_button(
             "settings",
             "Settings",
@@ -138,10 +138,10 @@ class NavPanel(QtWidgets.QFrame):
             lambda _checked=False: self.docs_requested.emit(),
         )
         collapsed_footer_layout.addWidget(
-            self.collapsed_settings_btn, 0, QtCore.Qt.AlignHCenter
+            self.collapsed_settings_btn, 0, QtCore.Qt.AlignLeft
         )
         collapsed_footer_layout.addWidget(
-            self.collapsed_docs_btn, 0, QtCore.Qt.AlignHCenter
+            self.collapsed_docs_btn, 0, QtCore.Qt.AlignLeft
         )
         self.collapsed_footer.hide()
         root.addWidget(self.collapsed_footer)
@@ -155,8 +155,10 @@ class NavPanel(QtWidgets.QFrame):
         end_width = (
             self.collapsed_width if self._target_collapsed else self.expanded_width
         )
-        if not self._target_collapsed:
-            self._set_expanded_content_visible(True)
+        if self._target_collapsed:
+            # Remove text before the width animation so it cannot be squeezed
+            # or wrapped while the panel is shrinking.
+            self._set_expanded_content_visible(False)
 
         self.is_animating = True
         for animation in (self.animation_min, self.animation_max):
@@ -167,8 +169,9 @@ class NavPanel(QtWidgets.QFrame):
     def _on_collapse_animation_finished(self):
         self.is_collapsed = self._target_collapsed
         self.setFixedWidth(self.collapsed_width if self.is_collapsed else self.expanded_width)
-        if self.is_collapsed:
-            self._set_expanded_content_visible(False)
+        if not self.is_collapsed:
+            # Restore expanded content only after the panel has enough room.
+            self._set_expanded_content_visible(True)
         self.collapse_btn.setIcon(
             load_lucide_icon(
                 "panel-right" if self.is_collapsed else "panel-left",
@@ -191,12 +194,12 @@ class NavPanel(QtWidgets.QFrame):
         self.new_chat_btn.setText("新对话" if visible else "")
         self.save_btn.setText("保存" if visible else "")
         for button in (self.new_chat_btn, self.save_btn):
-            button.setObjectName("NavActionButton" if visible else "NavIconBtn")
-            if visible:
-                button.setMinimumWidth(0)
-                button.setMaximumWidth(QtWidgets.QWIDGETSIZE_MAX)
-            else:
-                button.setFixedSize(32, 32)
+            # Keep one geometry and one style in both states. The button fills
+            # the 32 px collapsed content width without moving its icon.
+            button.setObjectName("NavActionButton")
+            button.setMinimumWidth(0)
+            button.setMaximumWidth(QtWidgets.QWIDGETSIZE_MAX)
+            button.setFixedHeight(36)
             button.style().unpolish(button)
             button.style().polish(button)
 
@@ -214,6 +217,7 @@ class NavPanel(QtWidgets.QFrame):
             32,
             ICON_SIZE,
         )
+        button.setIcon(load_lucide_icon(icon_name, align_visible_left=True))
         button.clicked.connect(callback)
         return button
 
@@ -303,10 +307,16 @@ class NavPanel(QtWidgets.QFrame):
             button.style().unpolish(button)
             button.style().polish(button)
         self.collapsed_docs_btn.setIcon(
-            load_lucide_icon("file-text", PRIMARY if name == "docs" else TEXT_SUB)
+            load_lucide_icon(
+                "file-text",
+                PRIMARY if name == "docs" else TEXT_SUB,
+                align_visible_left=True,
+            )
         )
         self.collapsed_settings_btn.setIcon(
             load_lucide_icon(
-                "settings", PRIMARY if name == "settings" else TEXT_SUB
+                "settings",
+                PRIMARY if name == "settings" else TEXT_SUB,
+                align_visible_left=True,
             )
         )

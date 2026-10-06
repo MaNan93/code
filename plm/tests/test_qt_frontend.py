@@ -129,8 +129,10 @@ class QtFrontendLayoutTests(unittest.TestCase):
         self.assertTrue(nav.is_collapsed)
         self.assertEqual(nav.width(), 56)
         self.assertFalse(nav.project_list.isVisible())
-        self.assertEqual(nav.new_chat_btn.objectName(), "NavIconBtn")
-        self.assertEqual(nav.save_btn.objectName(), "NavIconBtn")
+        self.assertEqual(nav.new_chat_btn.objectName(), "NavActionButton")
+        self.assertEqual(nav.save_btn.objectName(), "NavActionButton")
+        self.assertEqual(nav.new_chat_btn.height(), 36)
+        self.assertEqual(nav.save_btn.height(), 36)
         self.assertEqual(
             self.window.content_splitter.geometry().left()
             - (nav.geometry().right() + 1),

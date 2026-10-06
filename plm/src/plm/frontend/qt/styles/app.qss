@@ -7,16 +7,17 @@ QWidget {
 }
 QWidget:disabled { color: $text_muted; }
 QLabel { background: transparent; }
-QMainWindow { background-color: $bg_main; }
+QMainWindow { background-color: $bg_sidebar; }
 QWidget#WindowShell {
-    background-color: $bg_main;
+    background-color: $bg_sidebar;
     border: 1px solid $border_hover;
 }
 QWidget#WindowShell[maximized="true"] {
     border: none;
 }
-QWidget#BodyContainer, QStackedWidget#ViewStack {
-    background-color: $bg_main;
+QWidget#BodyContainer, QStackedWidget#ViewStack,
+QWidget#MainContainer, QSplitter#ContentSplitter {
+    background-color: $bg_sidebar;
     border: none;
 }
 QWidget#WindowResizeHandle {
@@ -24,22 +25,12 @@ QWidget#WindowResizeHandle {
     border: none;
 }
 QFrame#WindowTitleBar {
-    background: qlineargradient(
-        x1: 0, y1: 0, x2: 1, y2: 0,
-        stop: 0 $nav_gradient_top,
-        stop: 0.35 $bg_chrome,
-        stop: 1 $bg_main
-    );
+    background-color: $bg_sidebar;
     border: none;
     border-bottom: 1px solid $border;
 }
 QFrame#WindowTitleBar[windowActive="false"] {
-    background: qlineargradient(
-        x1: 0, y1: 0, x2: 1, y2: 0,
-        stop: 0 $nav_gradient_inactive_top,
-        stop: 0.35 $bg_chrome_inactive,
-        stop: 1 $bg_subtle
-    );
+    background-color: $bg_sidebar_inactive;
     border-bottom: 1px solid $border;
 }
 QLabel#WindowBrandLogo { background: transparent; }
@@ -240,21 +231,11 @@ QSplitter::handle { background-color: transparent; }
 QSplitter::handle:vertical { height: 1px; }
 
 QFrame#NavPanel {
-    background: qlineargradient(
-        x1: 0, y1: 0, x2: 0, y2: 1,
-        stop: 0 $nav_gradient_top,
-        stop: 0.55 $bg_chrome,
-        stop: 1 $nav_gradient_bottom
-    );
+    background-color: $bg_sidebar;
     border-right: 1px solid $border;
 }
 QFrame#NavPanel[windowActive="false"] {
-    background: qlineargradient(
-        x1: 0, y1: 0, x2: 0, y2: 1,
-        stop: 0 $nav_gradient_inactive_top,
-        stop: 0.55 $bg_chrome_inactive,
-        stop: 1 $nav_gradient_inactive_bottom
-    );
+    background-color: $bg_sidebar_inactive;
 }
 QFrame#NavPanel > QWidget, QWidget#NavRow, QWidget#ProjectItem,
 QListWidget#ProjectList > QWidget { background: transparent; }
@@ -314,11 +295,18 @@ QPushButton#HoverPinButton, QPushButton#HoverOpenButton {
 }
 QPushButton#HoverPinButton:hover, QPushButton#HoverOpenButton:hover { background: $bg_subtle; }
 
-QFrame#ConfigPage { background-color: $bg_main; border: none; }
+QFrame#ConfigPage {
+    background-color: $bg_main;
+    border: none;
+    border-top: 1px solid $border;
+    border-left: 1px solid $border;
+    border-top-left-radius: 12px;
+}
 QFrame#ConfigHeader {
     background-color: $bg_surface;
     border: none;
     border-bottom: 1px solid $border;
+    border-top-left-radius: 12px;
 }
 QLabel#ConfigSessionTitle {
     color: $text_main;

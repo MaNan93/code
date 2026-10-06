@@ -72,6 +72,7 @@ class ConfigHeader(QtWidgets.QFrame):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setObjectName("ConfigHeader")
+        self.setAttribute(QtCore.Qt.WA_StyledBackground, True)
         self.setFixedHeight(48)
         self._original_title = ""
         self._editing_title = False
@@ -170,6 +171,7 @@ class ConfigPage(QtWidgets.QFrame):
     def __init__(self, parent=None, editor_path_provider=None):
         super().__init__(parent)
         self.setObjectName("ConfigPage")
+        self.setAttribute(QtCore.Qt.WA_StyledBackground, True)
         self.dirty = False
         self.validation_issues = ()
         self._first_error = None

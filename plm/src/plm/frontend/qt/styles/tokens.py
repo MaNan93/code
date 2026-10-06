@@ -5,15 +5,11 @@ PRIMARY_HOVER = "#2563EB"
 PRIMARY_LIGHT = "#EFF6FF"
 BG_MAIN = "#FFFFFF"
 BG_SURFACE = "#FFFFFF"
-BG_SUBTLE = "#F1F5F9"
-BG_CHROME = "#F8FAFC"
-BG_CHROME_INACTIVE = "#FAFAFA"
-NAV_GRADIENT_TOP = "#F8FAFC"
-NAV_GRADIENT_BOTTOM = "#F1F5F9"
-NAV_GRADIENT_INACTIVE_TOP = "#FAFAFA"
-NAV_GRADIENT_INACTIVE_BOTTOM = "#F8FAFC"
-BORDER = "#E2E8F0"
-BORDER_HOVER = "#CBD5E1"
+BG_SIDEBAR = "#F7F5F2"
+BG_SIDEBAR_INACTIVE = "#FAF9F7"
+BG_SUBTLE = "#EFECE6"
+BORDER = "#EAE6DF"
+BORDER_HOVER = "#DBD5CA"
 BORDER_FOCUS = "#3B82F6"
 TEXT_MAIN = "#1E293B"
 TEXT_SUB = "#64748B"
@@ -48,13 +44,9 @@ QSS_TOKENS = {
     "primary_light": PRIMARY_LIGHT,
     "bg_main": BG_MAIN,
     "bg_surface": BG_SURFACE,
+    "bg_sidebar": BG_SIDEBAR,
+    "bg_sidebar_inactive": BG_SIDEBAR_INACTIVE,
     "bg_subtle": BG_SUBTLE,
-    "bg_chrome": BG_CHROME,
-    "bg_chrome_inactive": BG_CHROME_INACTIVE,
-    "nav_gradient_top": NAV_GRADIENT_TOP,
-    "nav_gradient_bottom": NAV_GRADIENT_BOTTOM,
-    "nav_gradient_inactive_top": NAV_GRADIENT_INACTIVE_TOP,
-    "nav_gradient_inactive_bottom": NAV_GRADIENT_INACTIVE_BOTTOM,
     "border": BORDER,
     "border_hover": BORDER_HOVER,
     "border_focus": BORDER_FOCUS,

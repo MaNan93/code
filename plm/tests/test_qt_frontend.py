@@ -894,7 +894,8 @@ class QtFrontendLayoutTests(unittest.TestCase):
         self.assertIn('QFrame#WindowTitleBar[windowActive="false"]', APP_QSS)
         self.assertIn('QFrame#NavPanel[windowActive="false"]', APP_QSS)
         self.assertIn("background-color: #DCFCE7", APP_QSS)
-        self.assertIn("qlineargradient", APP_QSS)
+        self.assertIn("background-color: #F7F5F2", APP_QSS)
+        self.assertIn("border-top-left-radius: 12px", APP_QSS)
 
 
 if __name__ == "__main__":

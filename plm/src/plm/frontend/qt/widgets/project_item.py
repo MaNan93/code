@@ -44,7 +44,7 @@ class ProjectItemWidget(QtWidgets.QWidget):
         self.header.setContextMenuPolicy(QtCore.Qt.CustomContextMenu)
         self.header.customContextMenuRequested.connect(self.show_context_menu)
         header_layout = QtWidgets.QHBoxLayout(self.header)
-        header_layout.setContentsMargins(12, 0, 6, 0)
+        header_layout.setContentsMargins(7, 0, 6, 0)
         header_layout.setSpacing(0)
         self.folder_icon = QtWidgets.QLabel()
         self.folder_icon.setObjectName("ProjectFolderIcon")

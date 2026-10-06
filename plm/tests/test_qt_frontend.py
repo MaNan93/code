@@ -215,7 +215,7 @@ class QtFrontendLayoutTests(unittest.TestCase):
         self.assertEqual(first_project.folder_icon.size(), QtCore.QSize(18, 18))
         self.assertEqual(
             first_project.header.layout().contentsMargins(),
-            QtCore.QMargins(12, 0, 6, 0),
+            QtCore.QMargins(7, 0, 6, 0),
         )
         self.assertEqual(
             first_project.header.layout().itemAt(1).spacerItem().sizeHint().width(), 8
@@ -336,7 +336,7 @@ class QtFrontendLayoutTests(unittest.TestCase):
             )
         self.assertEqual(
             first_project.header.layout().contentsMargins(),
-            QtCore.QMargins(12, 0, 6, 0),
+            QtCore.QMargins(7, 0, 6, 0),
         )
 
         nav_buttons = (
@@ -351,7 +351,7 @@ class QtFrontendLayoutTests(unittest.TestCase):
         )
         self.assertEqual(
             first_project.folder_icon.mapTo(nav, QtCore.QPoint()).x(),
-            24,
+            19,
         )
         icon_pixmaps = (
             nav.new_chat_btn.icon().pixmap(ICON_SIZE, ICON_SIZE),
@@ -905,7 +905,7 @@ class QtFrontendLayoutTests(unittest.TestCase):
         self.assertIn('QFrame#WindowTitleBar[windowActive="false"]', APP_QSS)
         self.assertIn('QFrame#NavPanel[windowActive="false"]', APP_QSS)
         self.assertIn("background-color: #DCFCE7", APP_QSS)
-        self.assertIn("background-color: #F7F5F2", APP_QSS)
+        self.assertIn("background-color: #F1F5F9", APP_QSS)
         self.assertIn("border-top-left-radius: 12px", APP_QSS)
 
 

@@ -629,6 +629,10 @@ class QtFrontendLayoutTests(unittest.TestCase):
         panel = page.artifacts_panel
         self.assertIsInstance(panel, ArtifactsPanel)
         self.assertIs(panel.parent(), page.config_area)
+        self.assertFalse(panel.isVisible())
+        shown = QtTest.QSignalSpy(page._artifacts_animation.finished)
+        page.toggle_artifacts()
+        self.assertTrue(shown.wait(1000))
         self.assertEqual(panel.geometry().right(), page.config_area.rect().right())
         self.assertEqual(page.tabs.maximumWidth(), QtWidgets.QWIDGETSIZE_MAX)
         self.assertEqual(len(panel.toolbar_buttons), 9)
@@ -659,6 +663,11 @@ class QtFrontendLayoutTests(unittest.TestCase):
 
     def test_artifacts_drag_visibility_and_maximize(self):
         page = self.window.config_page
+        self.assertFalse(page.artifacts_panel.isVisible())
+        shown = QtTest.QSignalSpy(page._artifacts_animation.finished)
+        page.toggle_artifacts()
+        self.assertTrue(page.artifacts_panel.isVisible())
+        self.assertTrue(shown.wait(1000))
         original_width = page.artifacts_panel.width()
         page.artifacts_panel.widthRequested.emit(original_width + 60)
         self.assertEqual(page.artifacts_panel.width(), original_width + 60)
@@ -671,10 +680,6 @@ class QtFrontendLayoutTests(unittest.TestCase):
         page.toggle_artifacts()
         self.assertTrue(hidden.wait(1000))
         self.assertFalse(page.artifacts_panel.isVisible())
-        shown = QtTest.QSignalSpy(page._artifacts_animation.finished)
-        page.toggle_artifacts()
-        self.assertTrue(page.artifacts_panel.isVisible())
-        self.assertTrue(shown.wait(1000))
         self.assertEqual(page._artifacts_animation.duration(), 200)
 
     def test_artifact_file_selection_and_copy_path(self):

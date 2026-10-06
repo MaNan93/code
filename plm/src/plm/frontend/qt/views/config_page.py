@@ -134,21 +134,12 @@ class ConfigHeader(QtWidgets.QFrame):
 
 
 class ConfigTabPage(QtWidgets.QWidget):
-    def __init__(self, title, description, editor, fill_editor=False, parent=None):
+    def __init__(self, editor, fill_editor=False, parent=None):
         super().__init__(parent)
         self.setObjectName("ConfigTabPage")
         root = QtWidgets.QVBoxLayout(self)
         root.setContentsMargins(SPACING_LG, SPACING_LG, SPACING_LG, SPACING_LG)
         root.setSpacing(0)
-        heading = QtWidgets.QLabel(title)
-        heading.setObjectName("ConfigTitle")
-        root.addWidget(heading)
-        root.addSpacing(8)
-        description_label = QtWidgets.QLabel(description)
-        description_label.setObjectName("ConfigDescription")
-        description_label.setWordWrap(True)
-        root.addWidget(description_label)
-        root.addSpacing(20)
 
         scroll = QtWidgets.QScrollArea()
         scroll.setObjectName("ConfigScroll")
@@ -217,14 +208,14 @@ class ConfigPage(QtWidgets.QFrame):
                        self.generation_editor):
             editor.changed.connect(self._mark_dirty)
         self.generation_editor.generateRequested.connect(self.generateRequested.emit)
-        for tab_name, title, description, editor, fill_editor in (
-            ("Controller", "Controller Configuration", "配置控制器 ID、名称和最大 Lane 宽度。", self.controllers_editor, True),
-            ("LaneMapping", "Lane Mapping Configuration", "配置物理 Lane 与控制器 Lane 的映射关系。", self.mapping_editor, True),
-            ("Signals", "PIPE Signals", "配置 PIPE 信号、方向、位宽与安全值。", self.signals_editor, True),
-            ("Generation", "Generation Settings", "选择生成参数并生成匹配的 RTL 和 Testbench。", self.generation_editor, False),
+        for tab_name, editor, fill_editor in (
+            ("Controller", self.controllers_editor, True),
+            ("LaneMapping", self.mapping_editor, True),
+            ("Signals", self.signals_editor, True),
+            ("Generation", self.generation_editor, False),
         ):
             self.tabs.addTab(
-                ConfigTabPage(title, description, editor, fill_editor=fill_editor), tab_name
+                ConfigTabPage(editor, fill_editor=fill_editor), tab_name
             )
         config_layout.addWidget(self.tabs, 1)
         root.addWidget(self.config_area, 1)
@@ -247,9 +238,8 @@ class ConfigPage(QtWidgets.QFrame):
             lambda _index: self.artifacts_panel.raise_()
             if self.artifacts_panel.isVisible() else None
         )
-        self.artifacts_panel.show()
+        self.artifacts_panel.hide()
         self.config_area.installEventFilter(self)
-        QtCore.QTimer.singleShot(0, self.reposition_artifacts)
 
     def update_title(self, project_name):
         self.header.title_label.setText(project_name)

@@ -3,7 +3,7 @@ import os
 import tempfile
 from pathlib import Path
 from unittest.mock import patch
-from PyQt5 import QtCore, QtWidgets
+from PyQt5 import QtCore, QtTest, QtWidgets
 from plm.core.workspace import scaffold_default_content
 from plm.frontend.qt.controllers import AppController
 from plm.frontend.qt.main_window import MainWindow
@@ -174,6 +174,9 @@ with tempfile.TemporaryDirectory(prefix="plm-ui-") as td:
         w.view_stack.currentWidget().menu_buttons[idx].click(); shot(w,f"05-docs-{name}")
     w._close_secondary_page()
 
+    w.config_page.toggle_artifacts()
+    QtTest.QTest.qWait(w.config_page._artifacts_animation.duration() + 20)
+    assert artifacts.isVisible()
     artifacts.show_search()
     search_layout=artifacts.search_bar.layout()
     assert search_layout.spacing() == 8

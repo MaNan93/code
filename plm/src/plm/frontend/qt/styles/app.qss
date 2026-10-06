@@ -346,8 +346,6 @@ QPushButton#ArtifactsToolButton::menu-indicator { image: none; width: 0; height:
 QWidget#ConfigArea, QScrollArea#ConfigScroll, QWidget#ConfigScrollContent { background: $bg_main; border: none; }
 QTabWidget#ConfigTabs::pane { border: none; background: transparent; }
 QWidget#ConfigTabPage { background: transparent; border: none; }
-QLabel#ConfigTitle { color: $text_main; font-size: $font_size_lg; font-weight: bold; }
-QLabel#ConfigDescription { color: $text_sub; font-size: $font_size_body; }
 QTableWidget#ConfigDataTable {
     background-color: transparent;
     alternate-background-color: transparent;

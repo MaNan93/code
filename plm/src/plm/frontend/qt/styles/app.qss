@@ -67,12 +67,12 @@ QComboBox QAbstractItemView {
     padding: $spacing_xs;
 }
 
-QFrame#Card, QWidget#Card, QFrame#ProjectHoverCard {
+QFrame#Card, QWidget#Card, QFrame#HoverCardSurface {
     background-color: $bg_surface;
     border: 1px solid $border;
     border-radius: $radius_card;
 }
-QFrame#ProjectHoverCard { margin: 4px; }
+QFrame#ProjectHoverCard { background: transparent; border: none; }
 
 QTableWidget {
     background-color: $bg_surface;
@@ -320,8 +320,10 @@ QFrame#LogPanel {
     background-color: $bg_surface;
     border: none;
     border-top: 1px solid $border;
+    border-top-left-radius: $radius_card;
+    border-top-right-radius: $radius_card;
 }
-QFrame#LogHeader { background-color: $bg_surface; border: none; }
+QFrame#LogHeader { background: transparent; border: none; }
 QLabel#LogTabTitle { color: $text_main; font-size: $font_size_body; font-weight: bold; }
 QPlainTextEdit#LogOutput {
     background-color: $bg_surface;

@@ -1,6 +1,7 @@
 """Project details popup used by the navigation project list."""
 
 from pathlib import Path
+from math import ceil
 
 from PyQt5 import QtCore, QtGui, QtWidgets
 from plm.frontend.qt.styles.tokens import SHADOW_LG, TEXT_MAIN, TEXT_MUTED, TEXT_SUB
@@ -44,14 +45,30 @@ class HoverCard(QtWidgets.QFrame):
     pointerLeft = QtCore.pyqtSignal()
 
     def __init__(self, parent=None):
-        super().__init__(parent, QtCore.Qt.ToolTip | QtCore.Qt.FramelessWindowHint)
+        super().__init__(parent, QtCore.Qt.ToolTip | QtCore.Qt.FramelessWindowHint | QtCore.Qt.NoDropShadowWindowHint)
         self.setAttribute(QtCore.Qt.WA_TranslucentBackground)
         self.setObjectName("ProjectHoverCard")
         self.setFixedWidth(260)
-        apply_drop_shadow(self, shadow=SHADOW_LG)
         self.project_path = None
 
-        root = QtWidgets.QVBoxLayout(self)
+        window_layout = QtWidgets.QVBoxLayout(self)
+        window_layout.setSpacing(0)
+        self.surface = QtWidgets.QFrame(self)
+        self.surface.setObjectName("HoverCardSurface")
+        effect = apply_drop_shadow(self.surface, shadow=SHADOW_LG)
+        # Keep the effect's complete update region inside the layered window.
+        # Applying it to the top-level widget produces negative dirty rects
+        # rejected by UpdateLayeredWindowIndirect on Windows.
+        source = QtCore.QRectF(0, 0, 1, 1)
+        shadow_bounds = effect.boundingRectFor(source)
+        window_layout.setContentsMargins(
+            ceil(max(0, source.left() - shadow_bounds.left())),
+            ceil(max(0, source.top() - shadow_bounds.top())),
+            ceil(max(0, shadow_bounds.right() - source.right())),
+            ceil(max(0, shadow_bounds.bottom() - source.bottom())),
+        )
+        window_layout.addWidget(self.surface)
+        root = QtWidgets.QVBoxLayout(self.surface)
         root.setContentsMargins(16, 12, 16, 12)
         root.setSpacing(0)
 

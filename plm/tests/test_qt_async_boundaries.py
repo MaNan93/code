@@ -131,7 +131,7 @@ class AsyncBoundaryTests(unittest.TestCase):
         wait_for_idle(self.app)
         page = window.config_page
         bottom = page.mapTo(window, page.rect().bottomRight()).y() + 1
-        self.assertEqual(window.height() - bottom, 5)
+        self.assertEqual(window.height() - bottom, window.SHADOW_MARGIN + 5)
         window.toggle_log()
         wait_for_idle(self.app)
         page_bottom = page.mapTo(window, page.rect().bottomRight()).y() + 1
@@ -139,9 +139,24 @@ class AsyncBoundaryTests(unittest.TestCase):
         self.assertEqual(log_top - page_bottom, 2)
         for panel in (page, window.log_panel):
             right = panel.mapTo(window, panel.rect().bottomRight()).x() + 1
-            self.assertEqual(window.width() - right, 5)
+            self.assertEqual(window.width() - right, window.SHADOW_MARGIN + 5)
             self.assertTrue(panel.mask().isEmpty())
         self.assertEqual(page.CORNER_RADII, window.log_panel.CORNER_RADII)
+
+    def test_window_shadow_margin_and_resize_handles_follow_shell_state(self):
+        window = self.window
+        self.assertTrue(window.window_backdrop.shadow_enabled)
+        self.assertEqual(window.window_shell.x(), window.SHADOW_MARGIN)
+        self.assertEqual(window._resize_handles["left"].x(), window.window_shell.x())
+        window.showMaximized()
+        wait_for_idle(self.app)
+        self.assertFalse(window.window_backdrop.shadow_enabled)
+        self.assertEqual(window.window_shell.geometry(), window.window_backdrop.rect())
+        self.assertTrue(all(not h.isVisible() for h in window._resize_handles.values()))
+        window.showNormal()
+        wait_for_idle(self.app)
+        self.assertTrue(window.window_backdrop.shadow_enabled)
+        self.assertEqual(window.window_shell.x(), window.SHADOW_MARGIN)
 
     def test_oversized_preview_is_bounded_and_disables_copy(self):
         file = self.root / "oversized.sv"

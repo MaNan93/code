@@ -9,7 +9,6 @@ from plm.frontend.qt.styles.tokens import (
     BG_SIDEBAR,
     BG_SIDEBAR_INACTIVE,
     BG_SURFACE,
-    BORDER,
     FONT_SIZE_BODY,
     ICON_SIZE,
     scale_content_size,
@@ -21,6 +20,41 @@ from plm.frontend.qt.views.log_panel import LogPanel
 from plm.frontend.qt.widgets.common import ContentIconStyle, load_lucide_icon
 
 __all__ = ["MainWindow"]
+
+
+class WindowBackdrop(QtWidgets.QWidget):
+    """Paint only the outer shadow without filtering child widgets."""
+
+    SHADOW_MARGIN = 12
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setObjectName("WindowBackdrop")
+        self.shadow_enabled = True
+
+    def paintEvent(self, event):
+        painter = QtGui.QPainter(self)
+        painter.setCompositionMode(QtGui.QPainter.CompositionMode_Source)
+        painter.fillRect(self.rect(), QtCore.Qt.transparent)
+        painter.setCompositionMode(QtGui.QPainter.CompositionMode_SourceOver)
+        if not self.shadow_enabled:
+            painter.end()
+            return
+        painter.setRenderHint(QtGui.QPainter.Antialiasing)
+        margin = self.SHADOW_MARGIN
+        rect = QtCore.QRectF(self.rect()).adjusted(margin, margin, -margin, -margin)
+        rect.translate(0, 2)
+        # Soft overlapping fills avoid nested graphics effects on text/previews.
+        color = QtGui.QColor(TEXT_SUB)
+        color.setAlpha(3)
+        for spread in range(margin, 0, -1):
+            path = QtGui.QPainterPath()
+            path.addRoundedRect(
+                rect.adjusted(-spread, -spread, spread, spread),
+                WindowShell.RADIUS + spread, WindowShell.RADIUS + spread,
+            )
+            painter.fillPath(path, color)
+        painter.end()
 
 
 class WindowShell(QtWidgets.QWidget):
@@ -45,12 +79,8 @@ class WindowShell(QtWidgets.QWidget):
         else:
             # No QRegion mask: retain the partially transparent edge pixels.
             path = QtGui.QPainterPath()
-            path.addRoundedRect(
-                rect.adjusted(0.5, 0.5, -0.5, -0.5), self.RADIUS, self.RADIUS
-            )
+            path.addRoundedRect(rect, self.RADIUS, self.RADIUS)
             painter.fillPath(path, QtGui.QColor(color))
-            painter.setPen(QtGui.QPen(QtGui.QColor(BORDER), 1.0))
-            painter.drawPath(path)
         painter.end()
 
 
@@ -260,6 +290,8 @@ class WindowResizeHandle(QtWidgets.QWidget):
 class MainWindow(QtWidgets.QMainWindow):
     """Frameless window with full-width chrome and routed body content."""
 
+    SHADOW_MARGIN = WindowBackdrop.SHADOW_MARGIN
+
     def __init__(self):
         super().__init__()
         self.setWindowFlags(self.windowFlags() | QtCore.Qt.FramelessWindowHint)
@@ -286,6 +318,11 @@ class MainWindow(QtWidgets.QMainWindow):
         self._activation_connected = False
 
         self.window_shell = WindowShell(self)
+        self.window_backdrop = WindowBackdrop(self)
+        self._backdrop_layout = QtWidgets.QVBoxLayout(self.window_backdrop)
+        self._backdrop_layout.setContentsMargins(*([self.SHADOW_MARGIN] * 4))
+        self._backdrop_layout.setSpacing(0)
+        self._backdrop_layout.addWidget(self.window_shell)
         shell_layout = QtWidgets.QVBoxLayout(self.window_shell)
         shell_layout.setContentsMargins(0, 0, 0, 0)
         shell_layout.setSpacing(0)
@@ -332,7 +369,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.view_stack.setCurrentWidget(self.main_container)
         body_layout.addWidget(self.view_stack, 1)
         shell_layout.addWidget(self.body_container, 1)
-        self.setCentralWidget(self.window_shell)
+        self.setCentralWidget(self.window_backdrop)
         self._create_resize_handles()
 
         QtCore.QTimer.singleShot(0, self._apply_initial_sizes)
@@ -380,7 +417,9 @@ class MainWindow(QtWidgets.QMainWindow):
     def _update_resize_handles(self):
         border = 6
         corner = 10
-        width, height = self.width(), self.height()
+        shell_rect = self.window_shell.geometry()
+        origin = self.window_shell.mapTo(self, QtCore.QPoint())
+        width, height = shell_rect.width(), shell_rect.height()
         geometries = {
             "left": (0, corner, border, max(0, height - 2 * corner)),
             "right": (width - border, corner, border, max(0, height - 2 * corner)),
@@ -393,7 +432,8 @@ class MainWindow(QtWidgets.QMainWindow):
         }
         visible = not self.isMaximized() and not self.isFullScreen()
         for name, handle in self._resize_handles.items():
-            handle.setGeometry(*geometries[name])
+            x, y, w, h = geometries[name]
+            handle.setGeometry(origin.x() + x, origin.y() + y, w, h)
             handle.setVisible(visible)
             if visible:
                 handle.raise_()
@@ -464,6 +504,11 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def _sync_window_frame_state(self):
         maximized = self.isMaximized() or self.isFullScreen()
+        margin = 0 if maximized else self.SHADOW_MARGIN
+        self._backdrop_layout.setContentsMargins(margin, margin, margin, margin)
+        self._backdrop_layout.activate()
+        self.window_backdrop.shadow_enabled = not maximized
+        self.window_backdrop.update()
         self.window_shell.setProperty("maximized", "true" if maximized else "false")
         self.window_shell.style().unpolish(self.window_shell)
         self.window_shell.style().polish(self.window_shell)

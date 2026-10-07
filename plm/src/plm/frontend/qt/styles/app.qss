@@ -8,6 +8,10 @@ QWidget {
 QWidget:disabled { color: $text_muted; }
 QLabel { background: transparent; }
 QMainWindow { background-color: transparent; }
+QWidget#WindowBackdrop {
+    background-color: transparent;
+    border: none;
+}
 QWidget#WindowShell {
     background-color: transparent;
     border: none;

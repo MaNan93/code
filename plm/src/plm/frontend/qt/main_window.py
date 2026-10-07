@@ -374,7 +374,6 @@ class MainWindow(QtWidgets.QMainWindow):
 
         self.view_stack = QtWidgets.QStackedWidget(self.body_container)
         self.view_stack.setObjectName("ViewStack")
-        # Each workspace panel reserves its own shadow clearance.
         self.view_stack.setContentsMargins(0, 0, 0, 0)
         self.view_stack.addWidget(self.main_container)
         self.view_stack.setCurrentWidget(self.main_container)

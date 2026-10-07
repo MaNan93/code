@@ -24,7 +24,7 @@ class ArtifactFileDelegate(QtWidgets.QStyledItemDelegate):
 
 
 class ArtifactFileTree(QtWidgets.QTreeWidget):
-    """Fit expanded rows while allowing the parent layout to shrink the tree."""
+    """Measure expanded rows for the screen-bounded file popup."""
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -109,9 +109,7 @@ class ArtifactsPanel(
         toolbar_layout.setSpacing(8)
         self.toolbar_buttons = []
         self.path_button = ArtifactPathButton()
-        self.tree_button = self.path_button
         self.path_label = self.path_button.path_label
-        self.file_selector = self.path_button
         self.toolbar_buttons.append(self.path_button)
         toolbar_layout.addWidget(self.path_button, 1)
         for name, icon, tooltip in (
@@ -225,9 +223,7 @@ class ArtifactsPanel(
 
         self.search_input.textChanged.connect(self._search_changed)
         self.search_input.returnPressed.connect(self.find_text)
-        self.tree_button.setCheckable(True)
-        self.tree_button.setChecked(False)
-        self.tree_button.toggled.connect(self._set_tree_visible)
+        self.path_button.toggled.connect(self._set_tree_visible)
         self.diff_button.setCheckable(True)
         self.diff_button.toggled.connect(self._load_selected)
 

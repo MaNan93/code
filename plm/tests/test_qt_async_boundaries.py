@@ -125,23 +125,28 @@ class AsyncBoundaryTests(unittest.TestCase):
         self.assertEqual(page.controllers_editor.table.item(0, 1).text(), "saved_snapshot")
         self.assertFalse(page.dirty)
 
-    def test_canvas_shadows_have_clearance_and_panels_stay_aligned(self):
+    def test_shadow_free_canvases_have_no_clearance_and_panels_stay_aligned(self):
         window = self.window
         window.hide_log()
         wait_for_idle(self.app)
         page = window.config_page
         bottom = page.mapTo(window, page.rect().bottomRight()).y() + 1
-        self.assertEqual(window.height() - bottom, window.SHADOW_MARGIN + page.SHADOW_MARGIN)
+        self.assertEqual(window.height() - bottom, window.SHADOW_MARGIN)
+        margins = window.content_splitter.contentsMargins()
+        self.assertEqual((margins.left(), margins.top(), margins.right(), margins.bottom()),
+                         (0, 0, 0, 0))
         window.toggle_log()
         wait_for_idle(self.app)
         page_bottom = page.mapTo(window, page.rect().bottomRight()).y() + 1
         log_top = window.log_panel.mapTo(window, QtCore.QPoint()).y()
-        self.assertEqual(log_top - page_bottom, page.SHADOW_MARGIN)
+        self.assertEqual(log_top - page_bottom, window.content_splitter.handleWidth())
+        self.assertEqual(window.content_splitter.handleWidth(), 4)
         for panel in (page, window.log_panel):
             right = panel.mapTo(window, panel.rect().bottomRight()).x() + 1
-            self.assertEqual(window.width() - right, window.SHADOW_MARGIN + page.SHADOW_MARGIN)
+            self.assertEqual(window.width() - right, window.SHADOW_MARGIN)
             self.assertTrue(panel.mask().isEmpty())
-            self.assertEqual(panel.graphicsEffect().offset(), QtCore.QPointF(0, 0))
+            self.assertIsNone(panel.graphicsEffect())
+        self.assertIsNone(page.artifacts_panel.graphicsEffect())
         self.assertEqual(page.x(), window.log_panel.x())
         self.assertEqual(page.CORNER_RADII, window.log_panel.CORNER_RADII)
 

@@ -63,9 +63,9 @@ class ArtifactInteractions:
             self.file_popup.hide()
 
     def _on_tree_popup_dismissed(self):
-        self.tree_button.blockSignals(True)
-        self.tree_button.setChecked(False)
-        self.tree_button.blockSignals(False)
+        self.path_button.blockSignals(True)
+        self.path_button.setChecked(False)
+        self.path_button.blockSignals(False)
 
     def _apply_toolbar_density(self, width):
         # File tree and window controls stay reachable; other actions overflow.
@@ -75,7 +75,7 @@ class ArtifactInteractions:
         self.search_button.setVisible(width >= 360)
         self.copy_path_button.setVisible(width >= 410)
         self.diff_button.setVisible(width >= 460)
-        self.tree_button.show()
+        self.path_button.show()
         self.maximize_button.show()
         self._sync_overflow_menu()
 
@@ -162,9 +162,9 @@ class ArtifactInteractions:
     def eventFilter(self, watched, event):
         if event.type() == QtCore.QEvent.MouseButtonPress and self.file_tree.isVisible():
             if watched is self.preview.viewport():
-                self.tree_button.setChecked(False)
+                self.path_button.setChecked(False)
             elif watched is self.file_tree.viewport() and self.file_tree.itemAt(event.pos()) is None:
-                self.tree_button.setChecked(False)
+                self.path_button.setChecked(False)
         return super().eventFilter(watched, event)
 
     def copy_path(self):

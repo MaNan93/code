@@ -516,8 +516,9 @@ class QtWorkflowTests(unittest.TestCase):
             "输出已是最新",
             window.config_page.generation_editor.status_label.text(),
         )
-        self.assertNotIn("输出已是最新", panel.status.text())
-        self.assertIn("行", panel.status.text())
+        self.assertEqual(panel.status.text(), "输出已是最新")
+        self.assertIn("行", panel.file_progress.text())
+        self.assertIn("列", panel.editor_metadata.toolTip())
         files = self.workspaces.output_files(controller.current_project)
         stamps = {path: path.stat().st_mtime_ns for path in files}
         controller.generate_current()

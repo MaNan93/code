@@ -4,10 +4,9 @@ from pathlib import Path
 
 from PyQt5 import QtCore, QtWidgets
 
-from plm.frontend.qt.styles.tokens import DANGER, TEXT_SUB
+from plm.frontend.qt.styles.tokens import DANGER, ICON_SIZE_SM, TEXT_SUB
 from plm.frontend.qt.widgets.common import (
     ICON_SIZE,
-    ICON_SIZE_SM,
     PROJECT_ROOT,
     StyledMenu,
     load_lucide_icon,
@@ -19,8 +18,6 @@ from plm.frontend.qt.widgets.common import (
 class ProjectItemWidget(QtWidgets.QWidget):
     """Single-line selectable project row with semantic interaction signals."""
 
-    hoverEntered = QtCore.pyqtSignal(object)
-    hoverLeft = QtCore.pyqtSignal(object)
     pinRequested = QtCore.pyqtSignal(object)
     renameRequested = QtCore.pyqtSignal(object)
     renameCommitted = QtCore.pyqtSignal(object, str)
@@ -127,14 +124,11 @@ class ProjectItemWidget(QtWidgets.QWidget):
                 self.archive_btn.show()
                 self.open_folder_btn.show()
                 self.more_btn.show()
-                if not self._renaming:
-                    self.hoverEntered.emit(self)
             elif event.type() == QtCore.QEvent.Leave:
                 if not self._renaming:
                     self.archive_btn.hide()
                     self.open_folder_btn.hide()
                     self.more_btn.hide()
-                self.hoverLeft.emit(self)
             elif (
                 event.type() == QtCore.QEvent.MouseButtonDblClick
                 and event.button() == QtCore.Qt.LeftButton

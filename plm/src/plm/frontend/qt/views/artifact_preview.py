@@ -117,7 +117,7 @@ class ArtifactPreview:
         self.preview.line_numbers.setVisible(self._readable)
         for button in (self.open_editor_button, self.copy_path_button):
             button.setEnabled(self.current_path is not None)
-        self.tree_button.setEnabled(bool(self.selection.files))
+        self.path_button.setEnabled(bool(self.selection.files))
         self.search_button.setEnabled(self._readable)
         if self._readable and self.search_input.text():
             self._search_changed()

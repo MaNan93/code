@@ -48,8 +48,6 @@ SPACING_LG = 16
 SPACING_XL = 24
 
 SHADOW_SM = {"blur_radius": 4, "offset": (0, 1), "rgba": (0, 0, 0, 20)}
-SHADOW_MD = {"blur_radius": 8, "offset": (0, 2), "rgba": (0, 0, 0, 30)}
-SHADOW_LG = {"blur_radius": 12, "offset": (0, 4), "rgba": (0, 0, 0, 50)}
 
 QSS_TOKENS = {
     "primary": PRIMARY,

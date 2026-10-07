@@ -19,7 +19,7 @@ class ArtifactFiles:
         root = Path(root).resolve() if root is not None else None
         files = [Path(value).resolve() for value in files]
         if root != self.workspace_root or not files:
-            self.tree_button.setChecked(False)
+            self.path_button.setChecked(False)
         self.selection.set_files(files, keep_current=root == self.workspace_root)
         files = self.selection.files
         if root == self.workspace_root:
@@ -112,7 +112,7 @@ class ArtifactFiles:
             item.setExpanded(not item.isExpanded())
             return
         if self.select_file(value):
-            self.tree_button.setChecked(False)
+            self.path_button.setChecked(False)
 
     def _select_tree_path(self):
         item = self._tree_items.get(self.current_path)

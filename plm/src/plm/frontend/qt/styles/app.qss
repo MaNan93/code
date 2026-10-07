@@ -125,12 +125,6 @@ QComboBox QAbstractItemView {
     padding: $spacing_xs;
 }
 
-QFrame#Card, QWidget#Card {
-    background-color: $bg_surface;
-    border: 1px solid $border;
-    border-radius: $radius_card;
-}
-
 QTableWidget {
     background-color: $bg_surface;
     alternate-background-color: $bg_surface;
@@ -351,7 +345,6 @@ QPushButton#HeaderButton:pressed { background-color: $border; }
 QPushButton#ArtifactsToolButton:checked { background-color: $primary_light; }
 QPushButton#ArtifactsToolButton::menu-indicator { image: none; width: 0; height: 0; }
 QWidget#ConfigArea, QScrollArea#ConfigScroll, QWidget#ConfigScrollContent { background: $bg_main; border: none; }
-QTabWidget#ConfigTabs::pane { border: none; background: transparent; }
 QWidget#ConfigTabPage { background: transparent; border: none; }
 QTableWidget#ConfigDataTable {
     background-color: transparent;

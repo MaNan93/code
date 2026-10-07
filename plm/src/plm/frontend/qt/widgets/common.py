@@ -10,7 +10,7 @@ from PyQt5 import QtCore, QtGui, QtSvg, QtWidgets
 
 from plm.core.paths import PLM_ROOT
 from plm.frontend.qt.styles.tokens import (
-    BG_MAIN, BORDER, ICON_SIZE, ICON_SIZE_SM, RADIUS_CARD, SHADOW_SM, TEXT_SUB,
+    BG_MAIN, BORDER, ICON_SIZE, RADIUS_CARD, SHADOW_SM, TEXT_SUB,
     scale_content_size,
 )
 

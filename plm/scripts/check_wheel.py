@@ -10,6 +10,7 @@ from pathlib import Path
 import subprocess
 import sys
 import tempfile
+from zipfile import ZipFile
 
 
 CHECK = r'''
@@ -17,6 +18,8 @@ from pathlib import Path
 import sys
 import tempfile
 from unittest.mock import patch
+sys.path.insert(0, sys.argv[2])
+from qt_smoke_support import wait_for_idle
 import plm
 from PyQt5 import QtCore, QtWidgets
 from plm.core.paths import DOCS_DIR, PLM_ROOT
@@ -35,6 +38,10 @@ assert (PLM_ROOT / 'frontend/qt/widgets/lanegrid.py').is_file()
 assert (PLM_ROOT / 'frontend/qt/widgets/tables.py').is_file()
 app = QtWidgets.QApplication([])
 app.setStyle('Fusion')
+for name in ('critical', 'information', 'question', 'warning'):
+    patcher = patch.object(QtWidgets.QMessageBox, name,
+                           side_effect=AssertionError(f'Unexpected QMessageBox.{name}'))
+    patcher.start()
 with tempfile.TemporaryDirectory(prefix='plm wheel smoke ') as temporary:
     root = Path(temporary).resolve()
     config = root / 'project with spaces'
@@ -44,10 +51,11 @@ with tempfile.TemporaryDirectory(prefix='plm wheel smoke ') as temporary:
     with patch('plm.frontend.qt.main_window.AppController', return_value=controller):
         window = MainWindow()
     window.show()
-    app.processEvents()
+    wait_for_idle(app)
     assert controller.current_project is None
     with patch.object(QtWidgets.QFileDialog, 'getExistingDirectory', return_value=str(config)):
         controller.open_project()
+    wait_for_idle(app)
     assert controller.current_project.config_dir == config/'config'
     for arch in ('original_pipe', 'serdes'):
         for dpr in (False, True):
@@ -55,6 +63,7 @@ with tempfile.TemporaryDirectory(prefix='plm wheel smoke ') as temporary:
             page.generation_editor.arch.setCurrentText(arch)
             page.generation_editor.dpr.setChecked(dpr)
             controller.generate_current()
+            wait_for_idle(app)
             assert controller.generation_state == 'up_to_date', controller.generation_state
             top = (config/'rtl/src/pipe_lane_mapper.sv').read_text(encoding='utf-8')
             assert 'endmodule' in top
@@ -85,13 +94,27 @@ def main():
     wheel = args.wheel.resolve()
     if not wheel.is_file():
         parser.error(f"wheel not found: {wheel}")
+    source = Path(__file__).resolve().parents[1] / "src/plm/frontend/qt"
+    expected = {
+        "plm/frontend/qt/" + path.relative_to(source).as_posix()
+        for path in source.rglob("*")
+        if path.is_file() and path.suffix in {".py", ".svg", ".png", ".qss"}
+    }
+    with ZipFile(wheel) as archive:
+        actual = {name for name in archive.namelist() if name.startswith("plm/frontend/qt/")}
+    if actual != expected:
+        raise AssertionError(
+            f"Wheel frontend files differ from source: missing={sorted(expected - actual)}, "
+            f"extra={sorted(actual - expected)}. Clean the build directory and rebuild."
+        )
     with tempfile.TemporaryDirectory(prefix="plm wheel check ") as temporary:
         root = Path(temporary)
         target = root / "installed"
         subprocess.run(["uv", "pip", "install", "--no-deps", "--target", str(target), str(wheel)], check=True)
         env = dict(os.environ, PYTHONPATH=str(target), QT_QPA_PLATFORM="offscreen")
         subprocess.run([sys.executable, "-m", "plm.cli.main", "--help"], cwd=root, env=env, check=True)
-        subprocess.run([sys.executable, "-c", CHECK, str(target)], cwd=root, env=env, check=True)
+        subprocess.run([sys.executable, "-X", "faulthandler", "-c", CHECK, str(target),
+                        str(Path(__file__).resolve().parent)], cwd=root, env=env, check=True)
 
 
 if __name__ == "__main__":

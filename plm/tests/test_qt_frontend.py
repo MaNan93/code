@@ -329,7 +329,7 @@ class QtFrontendLayoutTests(unittest.TestCase):
         self.assertFalse(hasattr(nav.project_list, "hover_card"))
         self.assertEqual(first_project.open_folder_btn.size(), QtCore.QSize(28, 28))
         self.assertTrue(first_project.open_folder_btn.isHidden())
-        for icon_name in ("folder", "folder-open", "pin", "external-link"):
+        for icon_name in ("folder", "folder-open", "pin"):
             self.assertTrue((LUCIDE_ICON_DIR / f"{icon_name}.svg").is_file())
         expected_configs = {"bifurcate", "dpr", "finegrain", "maxpclk", "quad"}
         self.assertTrue(expected_configs.issubset(project_names))
@@ -859,7 +859,7 @@ class QtFrontendLayoutTests(unittest.TestCase):
 
         self.assertEqual(panel.content_layout.spacing(), 12)
         self.assertIsInstance(panel.preview, QtWidgets.QPlainTextEdit)
-        self.assertIs(panel.file_selector.parent(), toolbar)
+        self.assertIs(panel.path_button.parent(), toolbar)
 
     def test_artifact_toolbar_and_gutter_have_light_structural_surfaces(self):
         page = self.window.config_page
@@ -1239,13 +1239,10 @@ class QtFrontendLayoutTests(unittest.TestCase):
             "folder-open",
             "pin",
             "pencil",
-            "external-link",
             "refresh-cw",
-            "braces",
             "git-compare",
             "search",
             "link",
-            "file",
             "file-x",
             "more-horizontal",
             "maximize",
@@ -1255,7 +1252,7 @@ class QtFrontendLayoutTests(unittest.TestCase):
             "copy",
             "chevron-down",
         )
-        self.assertEqual(len(icon_names), 31)
+        self.assertEqual(len(icon_names), 28)
         self.assertEqual(
             {path.stem for path in LUCIDE_ICON_DIR.glob("*.svg")},
             set(icon_names),

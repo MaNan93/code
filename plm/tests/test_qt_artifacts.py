@@ -66,7 +66,7 @@ class ArtifactPreviewTests(unittest.TestCase):
         self.assertIn("<b", label.text())
         self.assertNotIn(str(self.root), label.text())
         self.assertGreater(label.x(), self.panel.path_button.arrow.geometry().right())
-        self.assertFalse(self.panel.tree_button.icon().pixmap(22, 22).mask().isNull())
+        self.assertFalse(self.panel.path_button.icon().pixmap(22, 22).mask().isNull())
         QtTest.QTest.mouseClick(self.panel.path_button, QtCore.Qt.LeftButton)
         self.assertTrue(self.panel.file_tree.isVisible())
         self.panel.select_file(two)
@@ -286,7 +286,7 @@ class ArtifactPreviewTests(unittest.TestCase):
         wait_for_idle(self.app)
         preview_geometry = QtCore.QRect(self.panel.preview.geometry())
 
-        self.panel.tree_button.click()
+        self.panel.path_button.click()
         wait_for_idle(self.app)
         wait_for_idle(self.app)
         self.assertTrue(self.panel.file_tree.isVisible())
@@ -346,7 +346,7 @@ class ArtifactPreviewTests(unittest.TestCase):
         self.panel._apply_toolbar_density(320)
         self.assertFalse(self.panel.open_editor_button.isVisible())
         self.assertFalse(self.panel.search_button.isVisible())
-        self.assertTrue(self.panel.tree_button.isVisible())
+        self.assertTrue(self.panel.path_button.isVisible())
         self.assertTrue(self.panel.more_button.isVisible())
         self.assertTrue(self.panel.maximize_button.isVisible())
         labels = [action.text() for action in self.panel.more_menu.actions() if action.isVisible()]
@@ -434,7 +434,7 @@ class ArtifactPreviewTests(unittest.TestCase):
             self.panel.open_editor_button.click()
             wait_for_idle(self.app)
             popen.assert_called_once_with([str(editor), str(path)])
-        self.panel.tree_button.click()
+        self.panel.path_button.click()
         self.assertTrue(self.panel.file_tree.isVisible())
         refresh = QtTest.QSignalSpy(self.panel.refreshRequested)
         maximize = QtTest.QSignalSpy(self.panel.maximizeRequested)
@@ -455,7 +455,7 @@ class ArtifactPreviewTests(unittest.TestCase):
         path = self.file("rtl/one.sv", "module one;\nendmodule\n")
         self.panel.set_files([path], self.root)
         wait_for_idle(self.app)
-        self.panel.tree_button.click()
+        self.panel.path_button.click()
         wait_for_idle(self.app)
         wait_for_idle(self.app)
         self.assertTrue(self.panel.file_tree.isVisible())
@@ -472,7 +472,7 @@ class ArtifactPreviewTests(unittest.TestCase):
             QtCore.Qt.NoModifier,
         )
         self.panel.eventFilter(viewport, event)
-        self.assertFalse(self.panel.tree_button.isChecked())
+        self.assertFalse(self.panel.path_button.isChecked())
         self.assertFalse(self.panel.file_tree.isVisible())
 
 

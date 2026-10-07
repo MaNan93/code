@@ -11,6 +11,8 @@ from plm.frontend.qt.services import SettingsStore
 from plm.frontend.qt.views.new_project_dialog import NewProjectDialog
 from plm.frontend.qt.widgets.common import StyledMenu
 from plm.frontend.qt.widgets.lanegrid import LaneGrid
+from plm.frontend.qt.styles.tokens import FONT_FAMILY, ICON_SIZE
+from qt_smoke_support import wait_for_idle
 
 OUT=Path(os.environ.get("PLM_SCREENSHOT_DIR","ui-screenshots")).resolve()
 OUT.mkdir(parents=True,exist_ok=True)
@@ -45,15 +47,15 @@ with tempfile.TemporaryDirectory(prefix="plm-ui-") as td:
     controller=AppController(settings_store=store)
     with patch("plm.frontend.qt.main_window.AppController",return_value=controller):
         w=MainWindow()
-    w.resize(1400,900); w.show(); app.processEvents()
+    w.resize(1400,900); w.show(); wait_for_idle(app)
 
     # Visual review uses the fixed font baseline and CJK fallback stack.
     stylesheet=app.styleSheet()
-    assert 'font-family: "Inter", "Microsoft YaHei UI", "PingFang SC", "Noto Sans CJK SC", "SimHei", "SimSun", sans-serif;' in stylesheet
+    assert f'font-family: {FONT_FAMILY};' in stylesheet
 
     with patch.object(QtWidgets.QFileDialog,"getExistingDirectory",return_value=str(project)):
         controller.open_project()
-    app.processEvents()
+    wait_for_idle(app)
     assert w.config_page.controllers_editor.table.rowCount() > 0, "controllers did not load"
     assert w.config_page.controllers_editor.table.item(0, 1).text() == "CtrlA", "controller text did not load"
     assert not w.config_page.controllers_editor.table.verticalHeader().isVisible(), "Controller row header is visible"
@@ -108,6 +110,7 @@ with tempfile.TemporaryDirectory(prefix="plm-ui-") as td:
     w.config_page.generation_editor.arch.setCurrentText("original_pipe")
     w.config_page.generation_editor.sel_mode.setCurrentText("sync")
     controller.generate_current()
+    wait_for_idle(app)
     assert controller.generation_state == "up_to_date", controller.generation_state
     artifacts=w.config_page.artifacts_panel
     assert artifacts.selection.files, "artifacts did not load"
@@ -133,8 +136,8 @@ with tempfile.TemporaryDirectory(prefix="plm-ui-") as td:
     cancel_button=button_box.button(QtWidgets.QDialogButtonBox.Cancel)
     assert dlg.location.text() == os.path.expanduser("~/plm-projects")
     assert create_button.text() == "创建项目" and cancel_button.text() == "取消"
-    assert create_button.iconSize() == QtCore.QSize(18,18)
-    assert cancel_button.iconSize() == QtCore.QSize(18,18)
+    assert create_button.iconSize() == QtCore.QSize(ICON_SIZE,ICON_SIZE)
+    assert cancel_button.iconSize() == QtCore.QSize(ICON_SIZE,ICON_SIZE)
     assert not create_button.icon().isNull() and not cancel_button.icon().isNull()
     dlg.show(); shot(dlg,"03-new-project"); dlg.close()
 
@@ -193,8 +196,9 @@ with tempfile.TemporaryDirectory(prefix="plm-ui-") as td:
     files=list(artifacts.selection.files)
     relative=selected_path.relative_to(project).as_posix()
     artifacts.set_files(files,project,statuses={relative:"Modified"})
+    wait_for_idle(app)
     artifacts.diff_button.setChecked(True)
-    app.processEvents()
+    wait_for_idle(app)
     assert artifacts.diff_button.isEnabled()
     assert artifacts.preview.toPlainText().startswith("--- previous/")
     shot(w,"08-artifacts-diff")

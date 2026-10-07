@@ -7,31 +7,49 @@ generators: plm.core.generator.rtl and plm.core.generator.tb.
 """
 
 import csv
+import copy
+from dataclasses import dataclass
 import io
 from pathlib import Path
 import re
 
 
 _SV_IDENTIFIER_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_$]*$")
-_SV_KEYWORDS = {
-    "always", "always_comb", "always_ff", "always_latch", "and", "assign",
-    "automatic", "begin", "bit", "case", "class", "clocking", "const",
-    "default", "disable", "do", "else", "end", "endcase", "endclass",
-    "endfunction", "endgenerate", "endmodule", "endpackage", "endtask",
-    "enum", "event", "for", "force", "foreach", "forever", "fork",
-    "function", "generate", "genvar", "if", "import", "inout", "input",
-    "int", "integer", "interface", "logic", "localparam", "module",
-    "or", "output", "package", "parameter", "program", "property",
-    "reg", "release", "repeat", "return", "signed", "static", "struct",
-    "task", "time", "typedef", "union", "unsigned", "var", "wait",
-    "while", "wire",
-}
+# SystemVerilog keywords; spelling is case-sensitive, as in the language.
+_SV_KEYWORDS = frozenset("""
+    accept_on alias always always_comb always_ff always_latch and assert assign
+    assume automatic before begin bind bins binsof bit break buf bufif0 bufif1
+    byte case casex casez cell chandle checker class clocking cmos config const
+    constraint context continue cover covergroup coverpoint cross deassign
+    default defparam design disable dist do edge else end endcase endchecker
+    endclass endclocking endconfig endfunction endgenerate endgroup endinterface
+    endmodule endpackage endprimitive endprogram endproperty endsequence
+    endspecify endtable endtask enum event eventually expect export extends
+    extern final first_match for force foreach forever fork forkjoin function
+    generate genvar global highz0 highz1 if iff ifnone ignore_bins illegal_bins
+    implements implies import incdir include initial inout input inside instance
+    int integer interconnect interface intersect join join_any join_none large
+    let liblist library local localparam logic longint macromodule matches medium
+    modport module nand negedge nettype new nexttime nmos nor noshowcancelled not
+    notif0 notif1 null or output package packed parameter pmos posedge primitive
+    priority program property protected pull0 pull1 pulldown pullup
+    pulsestyle_ondetect pulsestyle_onevent pure rand randc randcase randsequence
+    rcmos real realtime ref reg reject_on release repeat restrict return rnmos
+    rpmos rtran rtranif0 rtranif1 s_always s_eventually s_nexttime s_until
+    s_until_with scalared sequence shortint shortreal showcancelled signed small
+    soft solve specify specparam static string strong strong0 strong1 struct super
+    supply0 supply1 sync_accept_on sync_reject_on table tagged task this throughout
+    time timeprecision timeunit tran tranif0 tranif1 tri tri0 tri1 triand trior
+    trireg type typedef union unique unique0 unsigned until until_with untyped use
+    uwire var vectored virtual void wait wait_order wand weak weak0 weak1 while
+    wildcard wire with within wor xnor xor
+""".split())
 
 
 def is_sv_identifier(value):
     """Return whether value is a legal, non-keyword SystemVerilog identifier."""
     text = str(value or "")
-    return bool(_SV_IDENTIFIER_RE.fullmatch(text)) and text.lower() not in _SV_KEYWORDS
+    return bool(_SV_IDENTIFIER_RE.fullmatch(text)) and text not in _SV_KEYWORDS
 
 
 def _require_sv_identifier(value, what):
@@ -208,6 +226,18 @@ class LaneGroup:
         return self.cands.index(ctrl_id)
 
 
+@dataclass(frozen=True)
+class TopologyIndexes:
+    """Derived facts for one mapping snapshot, including invalid controller IDs."""
+
+    groups: object
+    lane_groups: object
+    pclk_sources: object
+    pclk_candidates: object
+    widths: object
+    minimum_widths: object
+
+
 # ---------------------------------------------------------------- parsing
 
 
@@ -329,6 +359,11 @@ class Config:
                 out.append(s)
         if not out:
             raise SystemExit(f"{path}: no signals defined")
+        for direction in ("mac2phy", "phy2mac"):
+            if not any(signal.direction == direction for signal in out):
+                raise SystemExit(
+                    f"{path}: direction {direction} requires at least one signal"
+                )
         return out
 
     # -- lane_mapping.csv
@@ -431,10 +466,45 @@ class Config:
         return groups
 
     def group_of_lane(self, lane):
-        for g in self.groups:
-            if lane in g.lanes:
-                return g
-        raise KeyError(lane)
+        return self.topology_indexes().lane_groups[lane]
+
+    def topology_indexes(self):
+        """Rebuild derived facts from the current mutable Config.
+
+        Config's public tables support editor mutations, so ordinary Configs
+        never retain a topology cache between operations. Validation and reports
+        each share one index within their operation; GenerationPlan owns a
+        detached snapshot and reuses its index for that generation's lifetime.
+        """
+        groups = self._build_groups()
+        self.groups = groups
+        self.num_ctrl = max(self.controllers) + 1
+        lane_groups = {lane: group for group in groups for lane in group.lanes}
+        sources = {cid: dict.fromkeys(self.modes) for cid in self.controllers}
+        widths = {cid: dict.fromkeys(self.modes, 0) for cid in self.controllers}
+        for mode in self.modes:
+            for lane in range(self.lane_count):
+                cid, _ = self.mapping[mode][lane]
+                # Undefined IDs remain in mapping/groups for validation to
+                # diagnose, but must not create fictitious controller clocks.
+                if cid in sources:
+                    if sources[cid][mode] is None:
+                        sources[cid][mode] = lane
+                    widths[cid][mode] += 1
+        candidates = {
+            cid: sorted({lane for lane in per.values() if lane is not None})
+            for cid, per in sources.items()
+        }
+        minimum_widths = {}
+        for cid, per in widths.items():
+            active_widths = [width for width in per.values() if width]
+            if active_widths:
+                minimum_widths[cid] = min(active_widths)
+        return TopologyIndexes(groups, lane_groups, sources, candidates, widths, minimum_widths)
+
+    def snapshot(self):
+        """Detach generation inputs from the editor's mutable configuration."""
+        return copy.deepcopy(self)
 
     # ------------------------------------------------------------ pclk
 
@@ -448,18 +518,10 @@ class Config:
         never select nothing, or the lane enables hanging off that domain
         would stall.
         """
-        res = {}
-        for cid in self.controllers:
-            per = {}
-            for m in self.modes:
-                owned = [lane_idx for lane_idx in range(self.lane_count) if self.mapping[m][lane_idx][0] == cid]
-                per[m] = min(owned) if owned else None
-            res[cid] = per
-        return res
+        return self.topology_indexes().pclk_sources
 
     def ctrl_pclk_cands(self):
-        src = self.ctrl_pclk_src()
-        return {cid: sorted({v for v in p.values() if v is not None}) for cid, p in src.items()}
+        return self.topology_indexes().pclk_candidates
 
     def _min_granularity(self):
         """For each controller, the minimum width across every mode where
@@ -472,22 +534,75 @@ class Config:
         doesn't appear in the result (handled separately by the zombie
         check).
         """
-        gran = {}
-        for cid in self.controllers:
-            widths = []
-            for m in self.modes:
-                w = sum(1 for lane_idx in range(self.lane_count) if self.mapping[m][lane_idx][0] == cid)
-                if w > 0:
-                    widths.append(w)
-            if widths:
-                gran[cid] = min(widths)
-        return gran
+        return self.topology_indexes().minimum_widths
 
     # ------------------------------------------------------------ validation
 
-    def validate(self):
+    def generated_name_errors(self, pclk_mode="pclk_as_phy_output", dpr=False):
+        """Check names after flattening, including fixed ports and internal nets.
+
+        Each diagnostic carries (message, table, row, column) so the editor
+        can highlight the input that introduced a collision.
+        """
+        phy_input = pclk_mode == "pclk_as_phy_input"
+        clocks = ("rx_clk", "phy_pclk") if phy_input else ("phy_pclk_out", "phy_pclk_in")
+        top = dict.fromkeys((
+            "mode", "phy_rst_n", "phy_mac2phy", "phy_phy2mac", "ctrl_rst_n",
+            "sel_tgt", "dec_tgt", "u_sel_gen", "u_clk_mux", "u_rst_mux",
+            "u_data_m2p", "u_data_p2m", *clocks,
+        ), "a reserved port or net")
+        if not phy_input:
+            top["ctrl_pclk"] = "a reserved net"
+        wrapper = dict.fromkeys((
+            "mode", "phy_rst_n", "w_phy_mac2phy", "w_phy_phy2mac",
+            "u_pipe_lane_mapper", *clocks,
+        ), "a reserved port or net")
+        if dpr:
+            for name in ("v_lane_mask", "dpr_rst_n", "dpr_pclk", "dpr_mac2phy", "dpr_phy2mac"):
+                top[name] = "a DPR port"
+            for name in ("v_lane_mask", "dpr_rst_n", "dpr_pclk", "w_dpr_mac2phy", "w_dpr_phy2mac"):
+                wrapper[name] = "a DPR port or net"
+            if phy_input:
+                top["dpr_rx_clk"] = wrapper["dpr_rx_clk"] = "a DPR port"
+        errors = {}
+
+        def add(scope, module, name, table, row, column):
+            if name in scope:
+                errors.setdefault((table, row, column), (
+                    f"generated identifier {name!r} in {module} collides with {scope[name]}",
+                    table, row, column,
+                ))
+            else:
+                scope[name] = f"{table} row {row + 1} ({column})"
+
+        for row, signal in enumerate(self.signals):
+            add(wrapper, "pipe_lane_mapper_connection", f"phy_{signal.name}",
+                "signals", row, "signal_name")
+            if dpr:
+                add(wrapper, "pipe_lane_mapper_connection", f"dpr_{signal.name}",
+                    "signals", row, "signal_name")
+        for row, controller in enumerate(self.controllers.values()):
+            suffixes = ("rst_n", "mac2phy", "phy2mac", "pclk")
+            if phy_input:
+                suffixes += ("rx_clk",)
+            for suffix in suffixes:
+                add(top, "pipe_lane_mapper", f"{controller.lname}_{suffix}",
+                    "controllers", row, "ctrl_name")
+            for suffix in (("rst_n", "pclk", "rx_clk") if phy_input else ("rst_n", "pclk")):
+                add(wrapper, "pipe_lane_mapper_connection", f"{controller.lname}_{suffix}",
+                    "controllers", row, "ctrl_name")
+            for suffix in ("mac2phy", "phy2mac"):
+                add(wrapper, "pipe_lane_mapper_connection", f"w_{controller.lname}_{suffix}",
+                    "controllers", row, "ctrl_name")
+            for index, signal in enumerate(self.signals):
+                add(wrapper, "pipe_lane_mapper_connection", f"{controller.lname}_{signal.name}",
+                    "signals", index, "signal_name")
+        return list(errors.values())
+
+    def validate(self, *, _topology=None):
         err = []
-        cp = self.ctrl_pclk_src()
+        topology = _topology if _topology is not None else self.topology_indexes()
+        cp = topology.pclk_sources
 
         # The mode port is declared with width $clog2(NM), where
         # NM is the count of distinct modes. If the mode values
@@ -552,7 +667,7 @@ class Config:
         for m in self.modes:
             for lane_idx in range(self.lane_count):
                 cid, cl = self.mapping[m][lane_idx]
-                g = self.group_of_lane(lane_idx)
+                g = topology.lane_groups[lane_idx]
                 lane_groups_of.setdefault((cid, cl), {})[g.gid] = lane_idx
         for (cid, cl), gs in sorted(lane_groups_of.items()):
             if len(gs) > 1:
@@ -620,7 +735,7 @@ class Config:
         # preserve continuity of operation, it just adds complexity for no
         # real benefit. So multiple candidates are simply disallowed here,
         # pushing the constraint forward to generation time.
-        cands = self.ctrl_pclk_cands()
+        cands = topology.pclk_candidates
         for cid, cs in cands.items():
             if len(cs) > 1:
                 err.append(
@@ -643,7 +758,7 @@ class Config:
         # Example: an x16 PHY with a minimum granularity of 2 lanes ideally
         # supports 8 controllers; more or fewer than 8 both violate this
         # design constraint.
-        gran = self._min_granularity()
+        gran = topology.minimum_widths
         if gran:
             g_min = min(gran.values())
             if self.lane_count % g_min != 0:
@@ -671,9 +786,10 @@ class Config:
 
     # ------------------------------------------------------------ report
 
-    def report(self):
+    def report(self, *, _topology=None):
         L = []
-        cp, cc = self.ctrl_pclk_src(), self.ctrl_pclk_cands()
+        topology = _topology if _topology is not None else self.topology_indexes()
+        cp, cc = topology.pclk_sources, topology.pclk_candidates
 
         L.append(
             "Lane groups (lanes with an identical owner sequence are grouped "
@@ -684,7 +800,7 @@ class Config:
         L.append(hdr)
         L.append("  " + "-" * (len(hdr) - 2))
         nnov = 0
-        for g in self.groups:
+        for g in topology.groups:
             rng = f"{g.lanes[0]}~{g.lanes[-1]}" if len(g.lanes) > 1 else f"{g.lanes[0]}"
             owners = "  ".join(f"{self.controllers[g.owners[m]].name:<5}" for m in self.modes)
             kind = "direct" if g.is_direct else f"{g.n}-way NOV"
@@ -692,7 +808,7 @@ class Config:
                 nnov += 1
             L.append(f"  G{g.gid}  lane{rng:<8}  {owners}  -> {kind}")
         L.append("")
-        L.append(f"  {len(self.groups)} groups total, {nnov} need NOV")
+        L.append(f"  {len(topology.groups)} groups total, {nnov} need NOV")
         L.append("")
 
         L.append(
@@ -731,8 +847,8 @@ class Config:
             for b in self.modes:
                 if a == b:
                     continue
-                chg = [g.gid for g in self.groups if g.owners[a] != g.owners[b]]
-                keep = [g.gid for g in self.groups if g.gid not in chg]
+                chg = [g.gid for g in topology.groups if g.owners[a] != g.owners[b]]
+                keep = [g.gid for g in topology.groups if g.owners[a] == g.owners[b]]
                 L.append(
                     f"  mode {a} -> {b}: switches "
                     f"{['G%d' % x for x in chg] if chg else 'none'}, "

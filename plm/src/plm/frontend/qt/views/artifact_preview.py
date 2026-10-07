@@ -21,21 +21,33 @@ class ArtifactPreview:
     def _read_contents(files):
         contents = {}
         errors = {}
-        total = 0
         for value in files:
             path = Path(value).resolve()
             try:
                 # [REFACTORED]: Bounded reads also protect against a growing file.
                 with path.open("rb") as stream:
                     data = stream.read(MAX_PREVIEW_BYTES + 1)
-                if len(data) > MAX_PREVIEW_BYTES or total + len(data) > MAX_PREVIEW_CACHE_BYTES:
+                if len(data) > MAX_PREVIEW_BYTES:
                     errors[str(path)] = "文件过大，请在外部编辑器中打开（预览上限 200KB）。"
                     continue
                 contents[str(path)] = data.decode("utf-8")
-                total += len(data)
             except (OSError, UnicodeError) as error:
                 errors[str(path)] = str(error)
         return contents, errors
+
+    def _cache_content(self, key, text):
+        """Keep current and previous preview versions in one bounded LRU."""
+        token = ("current", key)
+        self._content_cache_bytes -= self._content_lru.pop(token, 0)
+        self._current_contents[key] = text
+        size = len(text.encode("utf-8"))
+        self._content_lru[token] = size
+        self._content_cache_bytes += size
+        while self._content_cache_bytes > MAX_PREVIEW_CACHE_BYTES:
+            (version, oldest), size = self._content_lru.popitem(last=False)
+            contents = self._current_contents if version == "current" else self._previous_contents
+            contents.pop(oldest, None)
+            self._content_cache_bytes -= size
 
     def _diff_available(self):
         if self.current_path is None:
@@ -48,6 +60,8 @@ class ArtifactPreview:
         )
 
     def _load_selected(self, *_):
+        self._ensure_selected_contents()
+        self.tasks.cancel_latest("artifact-diff")
         self._preview_revision += 1
         preview_revision = self._preview_revision
         self.empty_state.setVisible(self.current_path is None)
@@ -87,17 +101,28 @@ class ArtifactPreview:
                     current = text
                     self.preview.setPlaceholderText("正在计算差异…")
 
-                    def compute_diff(_progress):
-                        return "".join(difflib.unified_diff(
+                    def compute_diff(progress):
+                        progress.check_cancelled()
+                        chunks = []
+                        for chunk in difflib.unified_diff(
                             previous.splitlines(keepends=True), current.splitlines(keepends=True),
                             fromfile=f"previous/{relative}", tofile=f"current/{relative}",
-                        ))
+                        ):
+                            progress.check_cancelled()
+                            chunks.append(chunk)
+                        return "".join(chunks)
 
                     def show_diff(diff):
                         if preview_revision == self._preview_revision:
                             self.preview.setPlainText(diff)
+                            self._update_editor_status()
+                            if self.search_input.text():
+                                self._search_changed()
 
-                    self.tasks.submit(compute_diff, show_diff, lambda error: show_diff(str(error)))
+                    self.tasks.submit_latest(
+                        "artifact-diff", compute_diff, show_diff,
+                        lambda error: show_diff(str(error)),
+                    )
                     text = ""
                 self.preview.setPlainText(text)
                 self.preview.moveCursor(QtGui.QTextCursor.Start)

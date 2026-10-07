@@ -336,7 +336,9 @@ def _export_rtl_into(plan, out_dir, *, display_out=None):
     # sibling common/ directory. .sv files go through format_sv() too,
     # same as generated files -- otherwise their formatting only ever
     # reflects whoever hand-edited them last, same problem format_sv()
-    # exists to solve for the generated files.
+    # exists to solve for the generated files. Only these config-independent
+    # modules opt into its bounded cache; generated text is still formatted
+    # on each export.
     for f in COMMON_DIR.iterdir():
         if f.is_file():
             if f.suffix == ".sv":
@@ -346,6 +348,7 @@ def _export_rtl_into(plan, out_dir, *, display_out=None):
                         f.read_text(encoding="utf-8"),
                         options.verible_path,
                         options.verible_flags,
+                        cache=True,
                     ),
                 )
             else:
@@ -373,7 +376,7 @@ def _export_rtl_into(plan, out_dir, *, display_out=None):
             plan, options.pclk_mode, options.sel_mode, options.dpr
         ),
         src / "pipe_lane_mapper_connection.sv": rtl.gen_connection(
-            plan, options.pclk_mode, options.dpr
+            plan, options.pclk_mode, options.dpr, sel_mode=options.sel_mode
         ),
         out_dir / "flist.f": rtl.gen_filelist(plan),
     }

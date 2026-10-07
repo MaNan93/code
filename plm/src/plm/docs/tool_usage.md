@@ -266,6 +266,10 @@ ctrl_id,ctrl_name,max_width
 | `ctrl_name` | controller 名字，生成的信号名会用它的小写形式做前缀（如 `CtrlA` → `ctrla_mac2phy`） |
 | `max_width` | 这个 controller 真实支持的最大 lane 数（它在 RTL 上的端口数组按这个宽度声明，不做统一 padding） |
 
+名称必须是合法的 SystemVerilog 标识符，不能使用关键字。生成时还会检查展开后的
+端口和内部信号是否重名；例如 `PHY`、`CTRL` 会与固定信号冲突，启用 DPR 时
+`DPR` 也会冲突。诊断会指出引入冲突的名称。
+
 ### 2.2 `lane_mapping.csv`：每个 mode 下每条 PHY lane 分给哪个 controller 的哪条 lane
 
 ```csv
@@ -299,6 +303,10 @@ phy_mac_messagebus,perlane,phy2mac,8,0x50,0x50
 | `width` | 信号位宽 |
 | `safe_state` | 该信号在"没有 owner"时应呈现的值（`pipe_lane_data_mux.safe()` 的取值）。整数字面量，支持 `int(x, 0)` 认得的写法：十进制、`0x..`、`0b..` |
 | `tie_off` | p2m 方向没分到 PHY lane 的那条 controller lane 应该 tie 成什么。要么是字面量 `lane0`（意为"跟随最低编号 lane 的值"），要么是整数字面量（同 `safe_state` 的格式），必须落在 `[0, 2^width)` 范围内 |
+
+两个方向各需要至少一个信号。`signal_name` 不能使用 SystemVerilog 关键字，
+也不能使展开后的端口重名，例如 `pclk`、`rst_n`。与架构或 DPR 有关的名称冲突
+会按实际生成选项检查。
 
 `safe_state` 与 `tie_off` 是两个方向各自独立生效的机制，不需要
 （也不应该假设）两者取值一致：前者用于 Group 的无 owner 空窗，后者用于
@@ -350,6 +358,10 @@ plm generate --config <SET> [其它参数]
 | `--verible-path PATH` | 自动搜索 | SystemVerilog 格式化器 |
 | `--verible-flags JSON` | 内置默认值 | 覆盖 Verible 参数 |
 | `--quiet` | 关闭 | 不打印拓扑报告 |
+
+同一进程内重复生成时，公共模块会复用成功的 Verible 格式化结果，缓存按
+源码、格式化器二进制和有效参数区分，并限制为 32 条、8MiB。使用包装脚本
+时不启用此缓存；可通过 `--verible-path` 或 Qt 设置直接指定格式化器可执行文件。
 
 两种 `pclk-mode` 的区别：
 

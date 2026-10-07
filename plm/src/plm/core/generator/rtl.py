@@ -1569,7 +1569,7 @@ def gen_top(cfg, pclk_mode="pclk_as_phy_output", sel_mode="sync", dpr=False):
     return "\n".join(L) + "\n"
 
 
-def gen_connection(cfg, pclk_mode="pclk_as_phy_output", dpr=False):
+def gen_connection(cfg, pclk_mode="pclk_as_phy_output", dpr=False, sel_mode="sync"):
     """pipe_lane_mapper_connection.sv: a pure struct<->flat bridge around
     pipe_lane_mapper. The mapper's two packed-struct-array ports per side
     (PHY, and one per controller) become individual flat ports here, one
@@ -1609,7 +1609,8 @@ def gen_connection(cfg, pclk_mode="pclk_as_phy_output", dpr=False):
     L.append("module pipe_lane_mapper_connection #(")
     L.append(f"    parameter int NL = {LC},")
     L.append(f"    parameter int NC = {NC},")
-    L.append("    parameter bit SEL_SYNC = 1'b1")
+    sync_lit = "1'b1" if sel_mode == "sync" else "1'b0"
+    L.append(f"    parameter bit SEL_SYNC = {sync_lit}")
     L.append(") (")
     if phy_input_mode:
         L.append(f"    input logic [{mode_width(nm)-1}:0] mode,")

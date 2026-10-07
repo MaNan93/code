@@ -1,5 +1,6 @@
 """Generated-file drawer construction and public signals."""
 
+from collections import OrderedDict
 from PyQt5 import QtCore, QtGui, QtWidgets
 from plm.frontend.qt.models.artifacts import ArtifactSelection
 from plm.frontend.qt.models.preferences import DEFAULT_EDITOR
@@ -76,10 +77,13 @@ class ArtifactsPanel(
         self._file_statuses = {}
         self._current_contents = {}
         self._previous_contents = {}
+        self._content_lru = OrderedDict()
+        self._content_cache_bytes = 0
         self._file_errors = {}
         self._files_revision = 0
         self._preview_revision = 0
         self._loading_contents = False
+        self._loading_path = None
         self.tasks = TaskRunner(self)
         self.is_maximized = False
         self._resize_origin_x = None

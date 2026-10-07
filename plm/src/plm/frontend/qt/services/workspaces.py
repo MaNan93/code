@@ -2,9 +2,10 @@
 
 from contextlib import redirect_stdout
 from io import StringIO
+import os
 from pathlib import Path
 
-from plm.core.exporter import output_set_matches_plan
+from plm.core.exporter import MANIFEST_NAME, output_set_matches_plan, read_manifests
 from plm.core.gen_flags import GenerationOptions
 from plm.core.service import generate
 from plm.core.validation import load_generation_plan, load_generation_plan_from_payload
@@ -54,6 +55,14 @@ class WorkspaceService:
             raise ValueError(f"配置 CSV 不完整：{project.config_dir}")
         return payload
 
+    def load_with_signature(self, project):
+        """Accept a load only while the files remain at the same revision."""
+        before = self.signature(project)
+        payload = self.load(project)
+        if self.signature(project) != before:
+            raise ValueError("配置文件在加载期间被外部修改，请重新打开项目。")
+        return payload, before
+
     def validate(self, payload):
         return load_generation_plan_from_payload(payload, self._options(payload))
 
@@ -86,8 +95,39 @@ class WorkspaceService:
         return "up_to_date" if current else "out_of_date"
 
     def output_files(self, project):
-        root = self._root(project)
-        return sorted(
-            path for folder in (root / "rtl", root / "tb")
-            if folder.is_dir() for path in folder.rglob("*") if path.is_file()
+        root = self._root(project).resolve()
+        folders = {kind: (root / kind).resolve() for kind in ("rtl", "tb")}
+        safe_manifests = all(
+            folder.is_relative_to(root)
+            and (folder / MANIFEST_NAME).resolve().is_relative_to(folder)
+            for folder in folders.values()
         )
+        manifests = read_manifests(root) if safe_manifests else {}
+        files = []
+        for kind in ("rtl", "tb"):
+            folder = folders[kind]
+            if not folder.is_relative_to(root) or not folder.is_dir():
+                continue
+            if manifests:
+                for name in (MANIFEST_NAME, *manifests[kind]["files"]):
+                    path = (folder / name).resolve()
+                    if path.is_relative_to(folder) and path.is_file():
+                        files.append(path)
+                continue
+            # Legacy outputs have no manifest. Prune simulator trees before walking.
+            for directory, directories, names in os.walk(folder, followlinks=False):
+                directories[:] = [
+                    name for name in directories
+                    if name not in {"csrc", "obj_dir", "DVEfiles", "verdiLog"}
+                    and not name.endswith(".daidir")
+                ]
+                for name in names:
+                    path = Path(directory) / name
+                    if name in {"simv", "simv.exe"} or path.suffix.lower() in {
+                        ".fsdb", ".vcd", ".vpd", ".o", ".obj", ".dll", ".exe",
+                    }:
+                        continue
+                    resolved = path.resolve()
+                    if resolved.is_relative_to(folder) and resolved.is_file():
+                        files.append(resolved)
+        return sorted(files)

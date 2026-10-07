@@ -22,39 +22,88 @@ class ArtifactFiles:
             self.path_button.setChecked(False)
         self.selection.set_files(files, keep_current=root == self.workspace_root)
         files = self.selection.files
+        self.tasks.cancel_latest("artifact-read")
+        self.tasks.cancel_latest("artifact-diff")
         if root == self.workspace_root:
-            self._previous_contents = dict(self._current_contents)
+            listed = {str(path) for path in files}
+            # An unfinished refresh has no current content yet. Retain the
+            # last successful preview until the replacement read completes.
+            cached = {**self._previous_contents, **self._current_contents}
+            previous = {}
+            for _version, key in self._content_lru:
+                if key in listed:
+                    previous.pop(key, None)
+                    previous[key] = cached[key]
+            self._previous_contents = previous
         else:
             self._previous_contents = {}
         self._current_contents = {}
+        self._content_lru.clear()
+        self._content_cache_bytes = 0
+        for key, text in self._previous_contents.items():
+            size = len(text.encode("utf-8"))
+            self._content_lru[("previous", key)] = size
+            self._content_cache_bytes += size
         self._file_errors = {}
         self._files_revision += 1
-        revision = self._files_revision
-        self._loading_contents = bool(files)
+        self._loading_contents = False
+        self._loading_path = None
         self._file_statuses = dict(statuses or {})
         self.workspace_root = root
 
         self._rebuild_tree(files, root)
         self._load_selected()
-        if not files:
+
+    def _ensure_selected_contents(self):
+        path = self.current_path
+        key = str(path)
+        if key in self._previous_contents:
+            self._content_lru.move_to_end(("previous", key))
+        if path is None or key in self._current_contents or key in self._file_errors:
+            if self._loading_path is not None:
+                self.tasks.cancel_latest("artifact-read")
+            self._loading_path = None
+            self._loading_contents = False
+            if key in self._current_contents:
+                self._content_lru.move_to_end(("current", key))
             return
+        if self._loading_path == path:
+            return
+        revision = self._files_revision
+        self._loading_path = path
+        self._loading_contents = True
+
+        def is_current():
+            return revision == self._files_revision and path == self.current_path
 
         def finished(result):
-            if revision != self._files_revision:
+            if not is_current():
                 return
-            self._current_contents, self._file_errors = result
+            contents, errors = result
+            if key in contents:
+                self._cache_content(key, contents[key])
+            self._file_errors.update(errors)
+            self._loading_path = None
             self._loading_contents = False
             self._load_selected()
 
         def failed(error):
-            if revision != self._files_revision:
+            if not is_current():
                 return
+            self._loading_path = None
             self._loading_contents = False
-            self._file_errors = {str(path): str(error) for path in files}
+            self._file_errors[key] = str(error)
             self._load_selected()
 
         read_contents = self._read_contents
-        self.tasks.submit(lambda _progress: read_contents(files), finished, failed)
+
+        def read(progress):
+            progress.check_cancelled()
+            result = read_contents([path])
+            progress.check_cancelled()
+            return result
+
+        self.tasks.submit_latest("artifact-read", read, finished, failed)
 
     @property
     def current_path(self):

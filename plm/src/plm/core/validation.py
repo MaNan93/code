@@ -164,7 +164,17 @@ def load_validated_config(config_dir):
         files = _read_config_snapshot(config_dir)
     except OSError as error:
         raise ValidationError(_format_issues(config_dir, error)) from error
-    return _load_validated_config(config_dir, files)
+    config = _load_validated_config(config_dir, files)
+    # This entry point has no architecture/DPR options. Reject only names
+    # that collide in both clock architectures; generation checks the rest.
+    input_coordinates = {error[1:] for error in config.generated_name_errors("pclk_as_phy_input")}
+    name_issues = [
+        ValidationIssue("topology", *error)
+        for error in config.generated_name_errors() if error[1:] in input_coordinates
+    ]
+    if name_issues:
+        raise ValidationError(name_issues)
+    return config
 
 
 def load_generation_plan(config_dir, options):
@@ -193,6 +203,12 @@ def _build_generation_plan(config, options, files):
     option_issues = [ValidationIssue("generation", message) for message in options.errors()]
     if option_issues:
         raise ValidationError(option_issues)
+    name_issues = [
+        ValidationIssue("generation", *error)
+        for error in config.generated_name_errors(options.pclk_mode, options.dpr)
+    ]
+    if name_issues:
+        raise ValidationError(name_issues)
     try:
         return GenerationPlan.build(config, options, validated=True, config_files=files)
     except (OSError, UnicodeError, ValueError) as error:

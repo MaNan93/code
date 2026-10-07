@@ -18,3 +18,15 @@ def wait_for_idle(app, timeout=10):
             return
         QtTest.QTest.qWait(5)
     raise AssertionError("GUI background work did not finish before the smoke-test timeout")
+
+
+def dispose_window(app, window):
+    """Finish queued work before releasing the smoke test's native resources."""
+    wait_for_idle(app)
+    if hasattr(window, "config_page"):
+        window.config_page.mark_saved()
+    window.close()
+    window.deleteLater()
+    QtCore.QCoreApplication.sendPostedEvents(None, QtCore.QEvent.DeferredDelete)
+    QtCore.QThreadPool.globalInstance().waitForDone(10000)
+    app.processEvents()

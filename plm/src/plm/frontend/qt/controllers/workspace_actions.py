@@ -245,6 +245,7 @@ class WorkspaceActions:
 
     def refresh_artifacts(self):
         if self.current_project is None:
+            self.tasks.cancel_latest("artifact-scan")
             self.config_page.artifacts_panel.set_files([])
             self.validate_current()
             return
@@ -255,8 +256,14 @@ class WorkspaceActions:
             if project == self.current_project:
                 self.config_page.artifacts_panel.set_files(files, project.config_dir.parent)
 
-        self.tasks.submit(
-            lambda _progress: service.output_files(project), finished,
+        def scan(progress):
+            progress.check_cancelled()
+            files = service.output_files(project)
+            progress.check_cancelled()
+            return files
+
+        self.tasks.submit_latest(
+            "artifact-scan", scan, finished,
             lambda error: self.log_panel.append_log(f"扫描产物失败：{error}"),
         )
         self.validate_current()

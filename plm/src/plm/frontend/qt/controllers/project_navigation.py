@@ -166,7 +166,7 @@ class ProjectNavigation:
                 self.nav.project_list.select_project(self.current_name, emit_signal=False)
 
         self.tasks.submit(
-            lambda _progress: (service.load(project), service.signature(project)), finished, failed
+            lambda _progress: service.load_with_signature(project), finished, failed
         )
 
     def _show_empty_project(self):

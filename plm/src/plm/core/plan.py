@@ -70,6 +70,8 @@ class GenerationPlan:
     It intentionally presents the Config read API as properties so existing
     pure generator functions can consume a plan without duplicating topology
     derivation or carrying a second representation of the same design.
+    Build detaches the source Config; edit that source and build a new plan
+    for a new generation. The plan's copied inputs are one generation snapshot.
     """
 
     config: object
@@ -79,12 +81,18 @@ class GenerationPlan:
     formatter: object
     pclk_sources: object
     pclk_candidates: object
+    topology: object
 
     @classmethod
     def build(cls, config, options, *, validated=False, config_files=None):
+        config = config.snapshot()
+        topology = config.topology_indexes()
         if not validated:
             options.validated()
-            topology_errors = config.validate()
+            topology_errors = config.validate(_topology=topology)
+            topology_errors.extend(
+                error[0] for error in config.generated_name_errors(options.pclk_mode, options.dpr)
+            )
             if topology_errors:
                 raise ValueError("\n".join(topology_errors))
         return cls(
@@ -93,8 +101,9 @@ class GenerationPlan:
             config_hash=_config_hash(config.dir, config_files),
             generator_fingerprint=_generator_fingerprint(),
             formatter=formatter_identity(options.verible_path, options.verible_flags),
-            pclk_sources=config.ctrl_pclk_src(),
-            pclk_candidates=config.ctrl_pclk_cands(),
+            pclk_sources=topology.pclk_sources,
+            pclk_candidates=topology.pclk_candidates,
+            topology=topology,
         )
 
     @property
@@ -137,7 +146,7 @@ class GenerationPlan:
         return self.config.groups
 
     def group_of_lane(self, lane):
-        return self.config.group_of_lane(lane)
+        return self.topology.lane_groups[lane]
 
     def ctrl_pclk_src(self):
         return self.pclk_sources
@@ -146,7 +155,7 @@ class GenerationPlan:
         return self.pclk_candidates
 
     def report(self):
-        return self.config.report()
+        return self.config.report(_topology=self.topology)
 
     def manifest_base(self):
         return {

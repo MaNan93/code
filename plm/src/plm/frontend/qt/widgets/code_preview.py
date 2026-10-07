@@ -38,6 +38,7 @@ class VerilogHighlighter(QtGui.QSyntaxHighlighter):
         r"'[01xXzZ]|\b\d[\d_]*(?:\.\d[\d_]*)?(?:[eE][+-]?\d+)?\b)"
         r'|(?P<word>\b[A-Za-z_][A-Za-z0-9_$]*\b)', re.DOTALL
     )
+    PORT_CONTEXT = re.compile(r";|\b(?:input|output|inout)\b")
 
     def __init__(self, document):
         super().__init__(document)
@@ -58,50 +59,71 @@ class VerilogHighlighter(QtGui.QSyntaxHighlighter):
             self.formats[name] = fmt
 
     def set_enabled(self, enabled):
+        if self.enabled == enabled:
+            return
         self.enabled = enabled
         self.rehighlight()
 
-    def _format(self, text, start, end, kind):
-        # QTextDocument positions count UTF-16 code units, including non-ASCII comments.
-        offset = len(text[:start].encode("utf-16-le")) // 2
-        length = len(text[start:end].encode("utf-16-le")) // 2
+    @staticmethod
+    def _utf16_offsets(text):
+        # Most RTL is ASCII, so Python and QTextDocument positions already agree.
+        if text.isascii():
+            return None
+        # Compute positions once per block rather than encoding every token prefix.
+        offsets = [0]
+        position = 0
+        for character in text:
+            position += 2 if ord(character) > 0xFFFF else 1
+            offsets.append(position)
+        return offsets
+
+    def _format(self, offsets, start, end, kind):
+        # QTextDocument positions count UTF-16 code units, including emoji.
+        offset = start if offsets is None else offsets[start]
+        length = end - start if offsets is None else offsets[end] - offset
         self.setFormat(offset, length, self.formats[kind])
 
     def highlightBlock(self, text):
         self.setCurrentBlockState(0)
         if not self.enabled:
             return
+        offsets = self._utf16_offsets(text)
         start = 0
         if self.previousBlockState() == 1:
             end = text.find("*/")
             if end < 0:
-                self._format(text, 0, len(text), "comment")
+                self._format(offsets, 0, len(text), "comment")
                 self.setCurrentBlockState(1)
                 return
             start = end + 2
-            self._format(text, 0, start, "comment")
+            self._format(offsets, 0, start, "comment")
+        # Preserve the existing block-local, semicolon-delimited port context while
+        # scanning it once, including context before an already-open comment ends.
+        context_events = self.PORT_CONTEXT.finditer(text)
+        context_event = next(context_events, None)
+        in_port_statement = False
         for match in self.TOKENS.finditer(text, start):
             kind = match.lastgroup
             if kind == "word":
                 if match.group() in self.KEYWORDS:
                     kind = "keyword"
-                elif self._is_port_identifier(text, match.start()):
-                    kind = "port"
                 else:
-                    continue
-            self._format(text, match.start(), match.end(), kind)
+                    while (
+                        context_event is not None
+                        and context_event.end() <= match.start()
+                    ):
+                        in_port_statement = context_event.group() != ";"
+                        context_event = next(context_events, None)
+                    if not in_port_statement:
+                        continue
+                    kind = "port"
+            self._format(offsets, match.start(), match.end(), kind)
             if (
                 kind == "comment"
                 and match.group().startswith("/*")
                 and not match.group().endswith("*/")
             ):
                 self.setCurrentBlockState(1)
-
-    @staticmethod
-    def _is_port_identifier(text, position):
-        prefix = text[:position]
-        statement = prefix.rsplit(";", 1)[-1]
-        return re.search(r"\b(?:input|output|inout)\b", statement) is not None
 
 
 class LineNumberArea(QtWidgets.QWidget):

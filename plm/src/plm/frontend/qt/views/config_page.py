@@ -161,6 +161,7 @@ class ConfigPage(RoundedCanvasFrame):
     """Region 2 with an absolute-positioned Region 5 overlay."""
 
     MAX_HISTORY = 50
+    BORDER_WIDTH = 0.0  # Let the white canvas meet the gray underlay directly.
 
     logToggleRequested = QtCore.pyqtSignal()
     dirtyChanged = QtCore.pyqtSignal(bool)

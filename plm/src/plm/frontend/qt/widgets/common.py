@@ -61,20 +61,23 @@ def rounded_widget_path(rect, radii):
 
 
 class RoundedCanvasFrame(QtWidgets.QFrame):
-    """Shared antialiased white canvas with a light one-pixel border."""
+    """Antialiased white canvas with an optional light border."""
 
     CORNER_RADII = (12, 8, 8, 8)
+    BORDER_WIDTH = 1.0
 
     def paintEvent(self, event):
         painter = QtGui.QPainter(self)
         painter.setRenderHint(QtGui.QPainter.Antialiasing)
+        inset = self.BORDER_WIDTH / 2
         path = rounded_widget_path(
-            QtCore.QRectF(self.rect()).adjusted(0.5, 0.5, -0.5, -0.5),
+            QtCore.QRectF(self.rect()).adjusted(inset, inset, -inset, -inset),
             self.CORNER_RADII,
         )
         painter.fillPath(path, QtGui.QColor(BG_MAIN))
-        painter.setPen(QtGui.QPen(QtGui.QColor(BORDER), 1.0))
-        painter.drawPath(path)
+        if self.BORDER_WIDTH:
+            painter.setPen(QtGui.QPen(QtGui.QColor(BORDER), self.BORDER_WIDTH))
+            painter.drawPath(path)
         painter.end()
 
 

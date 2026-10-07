@@ -18,9 +18,11 @@ TEXT_MUTED = "#94A3B8"
 DANGER = "#EF4444"
 SUCCESS = "#10B981"
 
-FONT_FAMILY = ('"Inter", "Microsoft YaHei UI", "PingFang SC", '
+FONT_UI_PRIMARY = "Segoe UI"
+FONT_CODE_PRIMARY = "Consolas"
+FONT_FAMILY = ('"Segoe UI", "Microsoft YaHei UI", "PingFang SC", '
                '"Noto Sans CJK SC", "SimHei", "SimSun", sans-serif')
-FONT_MONO = '"JetBrains Mono", "Consolas", "Courier New", monospace'
+FONT_MONO = '"Consolas", "SF Mono", "Menlo", "Liberation Mono", "Courier New", monospace'
 UI_CONTENT_SCALE = 1.2
 
 

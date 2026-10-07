@@ -10,6 +10,7 @@ from plm.frontend.qt.styles.tokens import (
     BG_SIDEBAR_INACTIVE,
     BG_SURFACE,
     FONT_SIZE_BODY,
+    FONT_UI_PRIMARY,
     ICON_SIZE,
     scale_content_size,
     PRIMARY,
@@ -300,7 +301,7 @@ class MainWindow(QtWidgets.QMainWindow):
         install_exception_handler()
         self.controller = AppController()
         app = QtWidgets.QApplication.instance()
-        font = QtGui.QFont("Inter")
+        font = QtGui.QFont(FONT_UI_PRIMARY)
         font.setPixelSize(FONT_SIZE_BODY)
         font.setStyleStrategy(QtGui.QFont.PreferAntialias)
         font.setHintingPreference(QtGui.QFont.PreferFullHinting)

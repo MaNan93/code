@@ -5,7 +5,7 @@ import re
 from PyQt5 import QtCore, QtGui, QtWidgets
 from plm.frontend.qt.widgets.common import StyledMenu
 from plm.frontend.qt.styles.tokens import (
-    BG_SIDEBAR_INACTIVE, BORDER, TEXT_MUTED, scale_content_size,
+    BG_SIDEBAR_INACTIVE, BORDER, FONT_CODE_PRIMARY, TEXT_MUTED, scale_content_size,
 )
 
 
@@ -122,7 +122,7 @@ class CodePreview(QtWidgets.QPlainTextEdit):
         self.setObjectName("ArtifactCodePreview")
         self.setReadOnly(True)
         self.setLineWrapMode(QtWidgets.QPlainTextEdit.NoWrap)
-        font = QtGui.QFont("JetBrains Mono")
+        font = QtGui.QFont(FONT_CODE_PRIMARY)
         font.setStyleHint(QtGui.QFont.Monospace)
         font.setPointSize(scale_content_size(10))
         self.setFont(font)

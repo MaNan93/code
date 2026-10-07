@@ -4,7 +4,7 @@ import unicodedata
 from PyQt5 import QtCore, QtGui, QtWidgets
 from plm.frontend.qt.services.tasks import TaskRunner
 from plm.frontend.qt.styles.tokens import (
-    BG_SUBTLE, BORDER, TEXT_MAIN, TEXT_MUTED, scale_content_size,
+    BG_SUBTLE, BORDER, FONT_CODE_PRIMARY, TEXT_MAIN, TEXT_MUTED, scale_content_size,
 )
 from .secondary_page import SecondaryPage
 DOCS_DIR = Path(__file__).resolve().parents[3] / "docs"
@@ -190,7 +190,7 @@ class DocumentationPage(SecondaryPage):
             if block_format.property(QtGui.QTextFormat.BlockCodeFence):
                 cursor.select(QtGui.QTextCursor.BlockUnderCursor)
                 code_format = QtGui.QTextCharFormat()
-                code_format.setFontFamilies(["JetBrains Mono", "Consolas", "Courier New", "monospace"])
+                code_format.setFontFamilies([FONT_CODE_PRIMARY, "Courier New", "monospace"])
                 code_format.setProperty(QtGui.QTextFormat.FontPixelSize, 13)
                 cursor.setCharFormat(code_format)
                 cursor.setBlockCharFormat(code_format)

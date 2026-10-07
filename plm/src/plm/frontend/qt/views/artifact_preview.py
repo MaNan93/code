@@ -110,10 +110,10 @@ class ArtifactPreview:
         self._update_status()
         self._update_highlighting()
         self.preview.line_numbers.setVisible(self._readable)
-        for index in (0, 2, 5):
-            self.toolbar_buttons[index].setEnabled(self.current_path is not None)
-        self.toolbar_buttons[4].setEnabled(self._readable)
-        self.copy_content_action.setEnabled(self._readable)
+        for button in (self.open_editor_button, self.copy_path_button):
+            button.setEnabled(self.current_path is not None)
+        self.tree_button.setEnabled(bool(self.selection.files))
+        self.search_button.setEnabled(self._readable)
         if self._readable and self.search_input.text():
             self._search_changed()
         self._select_tree_path()
@@ -146,5 +146,4 @@ class ArtifactPreview:
             and self.current_path.suffix.lower() in (".v", ".sv", ".vh", ".svh")
         )
         enabled = self._readable and is_verilog and not self.diff_button.isChecked()
-        self.highlight_button.setEnabled(self._readable and is_verilog)
-        self.preview.highlighter.set_enabled(enabled and self.highlight_button.isChecked())
+        self.preview.highlighter.set_enabled(enabled)

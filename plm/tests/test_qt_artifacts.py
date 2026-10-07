@@ -10,6 +10,7 @@ from qt_test_support import wait_for_idle
 from PyQt5 import QtCore, QtGui, QtTest, QtWidgets
 
 from plm.frontend.qt.views.artifacts_panel import ArtifactsPanel
+from plm.frontend.qt.widgets.common import StyledMenu
 from plm.frontend.qt.widgets.code_preview import (
     CodePreview,
     SYNTAX_COMMENT,
@@ -60,10 +61,28 @@ class ArtifactPreviewTests(unittest.TestCase):
         editor.moveCursor(QtGui.QTextCursor.End)
         QtTest.QTest.keyClicks(editor, "unexpected_edit")
         self.assertEqual(editor.toPlainText(), text)
-        self.panel.copy_contents()
+        editor.selectAll()
+        editor.copy()
         self.assertEqual(QtWidgets.QApplication.clipboard().text(), text)
         self.panel.copy_path()
         self.assertEqual(QtWidgets.QApplication.clipboard().text(), str(path))
+
+    def test_preview_context_menu_has_no_native_frame_and_preserves_copy(self):
+        preview = self.panel.preview
+        preview.setPlainText("module example; endmodule")
+        menu = preview.createStandardContextMenu()
+        self.assertIsInstance(menu, StyledMenu)
+        self.assertTrue(menu.windowFlags() & QtCore.Qt.FramelessWindowHint)
+        self.assertTrue(menu.windowFlags() & QtCore.Qt.NoDropShadowWindowHint)
+        actions = [action for action in menu.actions() if not action.isSeparator()]
+        self.assertFalse(actions[0].isEnabled())
+        actions[-1].trigger()
+        self.assertTrue(preview.textCursor().hasSelection())
+        selected_menu = preview.createStandardContextMenu()
+        copy = next(action for action in selected_menu.actions() if not action.isSeparator())
+        self.assertTrue(copy.isEnabled())
+        copy.trigger()
+        self.assertEqual(QtWidgets.QApplication.clipboard().text(), preview.toPlainText())
 
     def test_refresh_retains_selected_file_and_project_switch_clears_it(self):
         one = self.file("rtl/one.sv", "module one; endmodule")
@@ -85,8 +104,8 @@ class ArtifactPreviewTests(unittest.TestCase):
         wait_for_idle(self.app)
         self.assertIsNone(self.panel.current_path)
         self.assertFalse(self.panel.preview.toPlainText())
-        self.assertFalse(self.panel.copy_content_action.isEnabled())
-        self.assertFalse(self.panel.toolbar_buttons[2].isEnabled())
+        self.assertFalse(self.panel.search_button.isEnabled())
+        self.assertFalse(self.panel.open_editor_button.isEnabled())
 
     def test_missing_binary_and_empty_files_do_not_keep_old_text(self):
         valid = self.file("good.sv", "module good; endmodule")
@@ -101,14 +120,14 @@ class ArtifactPreviewTests(unittest.TestCase):
             wait_for_idle(self.app)
             self.assertFalse(self.panel.preview.toPlainText())
             self.assertIn("无法预览", self.panel.status.text())
-            self.assertFalse(self.panel.copy_content_action.isEnabled())
+            self.assertFalse(self.panel.search_button.isEnabled())
             self.panel.select_file(valid)
             wait_for_idle(self.app)
             self.assertEqual(self.panel.preview.toPlainText(), valid.read_text())
         self.panel.set_files([empty], self.root)
         wait_for_idle(self.app)
         self.assertFalse(self.panel.preview.toPlainText())
-        self.assertTrue(self.panel.copy_content_action.isEnabled())
+        self.assertTrue(self.panel.search_button.isEnabled())
         self.assertIn("0 行", self.panel.status.text())
 
     def test_search_wraps_both_directions_and_reports_no_match(self):
@@ -214,24 +233,25 @@ class ArtifactPreviewTests(unittest.TestCase):
 
     def test_toolbar_compacts_without_losing_more_actions(self):
         self.panel._apply_toolbar_density(320)
-        self.assertFalse(self.panel.toolbar_buttons[2].isVisible())
-        self.assertFalse(self.panel.toolbar_buttons[4].isVisible())
-        self.assertTrue(self.panel.toolbar_buttons[6].isVisible())
-        self.assertTrue(self.panel.toolbar_buttons[7].isVisible())
-        self.assertTrue(self.panel.toolbar_buttons[8].isVisible())
+        self.assertFalse(self.panel.open_editor_button.isVisible())
+        self.assertFalse(self.panel.search_button.isVisible())
+        self.assertTrue(self.panel.tree_button.isVisible())
+        self.assertTrue(self.panel.more_button.isVisible())
+        self.assertTrue(self.panel.maximize_button.isVisible())
         labels = [action.text() for action in self.panel.more_menu.actions() if action.isVisible()]
         self.assertIn("在编辑器中打开", labels)
         self.assertIn("搜索当前文件", labels)
         self.assertNotIn("显示/隐藏文件树", labels)
         self.assertNotIn("刷新文件", labels)
         self.panel._apply_toolbar_density(700)
-        self.assertTrue(self.panel.toolbar_buttons[2].isVisible())
-        self.assertTrue(self.panel.toolbar_buttons[4].isVisible())
+        self.assertTrue(self.panel.open_editor_button.isVisible())
+        self.assertTrue(self.panel.search_button.isVisible())
         self.assertTrue(self.panel.diff_button.isVisible())
         labels = [action.text() for action in self.panel.more_menu.actions() if action.isVisible()]
-        self.assertEqual(labels, ["复制文件内容"])
+        self.assertEqual(labels, [])
+        self.assertFalse(self.panel.more_button.isVisible())
 
-    def test_overflow_actions_follow_button_enabled_and_toggle_states(self):
+    def test_overflow_actions_follow_button_enabled_states(self):
         self.panel._apply_toolbar_density(320)
         self.panel.more_menu.aboutToShow.emit()
         actions = {action.text(): action for action in self.panel.more_menu.actions()}
@@ -241,14 +261,13 @@ class ArtifactPreviewTests(unittest.TestCase):
         wait_for_idle(self.app)
         self.panel.more_menu.aboutToShow.emit()
         self.assertTrue(actions["搜索当前文件"].isEnabled())
-        highlight = actions["切换 Verilog 高亮"]
-        self.assertEqual(highlight.isChecked(), self.panel.highlight_button.isChecked())
-        highlight.trigger()
-        self.assertFalse(self.panel.highlight_button.isChecked())
+        self.assertNotIn("切换 Verilog 高亮", actions)
+        self.assertNotIn("打开输出文件夹", actions)
+        self.assertNotIn("复制文件内容", actions)
         actions["搜索当前文件"].trigger()
         self.assertTrue(self.panel.search_bar.isVisible())
 
-    def test_verilog_highlight_multiline_comments_strings_and_toggle(self):
+    def test_verilog_highlight_multiline_comments_strings_and_automatic_file_detection(self):
         editor = CodePreview()
         self.addCleanup(self._dispose_widget, editor)
         editor.setPlainText('/* module\nendmodule */ module x; // endmodule\n"// /*" assign x = 8\'hFF;')
@@ -289,12 +308,10 @@ class ArtifactPreviewTests(unittest.TestCase):
         self.panel.select_file(verilog)
         wait_for_idle(self.app)
         self.assertTrue(self.panel.preview.highlighter.enabled)
-        self.panel.highlight_button.click()
-        wait_for_idle(self.app)
-        self.assertFalse(self.panel.preview.highlighter.enabled)
+        self.assertFalse(hasattr(self.panel, "highlight_button"))
         self.panel.set_files([verilog], self.root)
         wait_for_idle(self.app)
-        self.assertFalse(self.panel.preview.highlighter.enabled)
+        self.assertTrue(self.panel.preview.highlighter.enabled)
 
     def test_toolbar_routes_to_selected_output_and_signals(self):
         path = self.file("rtl/source.sv", "module source; endmodule")
@@ -303,18 +320,16 @@ class ArtifactPreviewTests(unittest.TestCase):
         self.panel.set_files([path], self.root)
         wait_for_idle(self.app)
         with patch("subprocess.Popen") as popen:
-            self.panel.toolbar_buttons[2].click()
+            self.panel.open_editor_button.click()
             wait_for_idle(self.app)
             popen.assert_called_once_with([str(editor), str(path)])
-        with patch("plm.frontend.qt.views.artifact_interactions.open_in_file_manager", return_value=True) as opened:
-            self.panel.toolbar_buttons[0].click()
-            wait_for_idle(self.app)
-            opened.assert_called_once_with(path.parent)
+        self.panel.tree_button.click()
+        self.assertTrue(self.panel.file_tree.isVisible())
         refresh = QtTest.QSignalSpy(self.panel.refreshRequested)
         maximize = QtTest.QSignalSpy(self.panel.maximizeRequested)
-        self.panel.toolbar_buttons[1].click()
+        self.panel.refresh_button.click()
         wait_for_idle(self.app)
-        self.panel.toolbar_buttons[8].click()
+        self.panel.maximize_button.click()
         wait_for_idle(self.app)
         self.assertEqual(len(refresh), 1)
         self.assertEqual(len(maximize), 1)

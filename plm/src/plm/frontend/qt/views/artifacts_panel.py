@@ -64,23 +64,20 @@ class ArtifactsPanel(
         toolbar_layout.setContentsMargins(16, 0, 16, 0)
         toolbar_layout.setSpacing(8)
         self.toolbar_buttons = []
-        # Keep the original 0..8 public toolbar list stable. Diff is a new
-        # control, but is intentionally separate from that compatibility list.
-        for index, (icon, tooltip) in enumerate((
-            ("folder", "打开输出文件夹"),
-            ("refresh-cw", "刷新文件"),
-            ("square-pen", "在编辑器中打开"),
-            ("braces", "Verilog 语法高亮"),
-            ("search", "搜索文件内容 (Ctrl+F)"),
-            ("link", "复制文件路径"),
-            ("file", "显示/隐藏文件树"),
-            ("more-horizontal", "更多"),
-            ("maximize", "展开"),
-        )):
+        for name, icon, tooltip in (
+            ("tree_button", "folder", "显示/隐藏文件树"),
+            ("refresh_button", "refresh-cw", "刷新文件"),
+            ("open_editor_button", "square-pen", "在编辑器中打开"),
+            ("search_button", "search", "搜索文件内容 (Ctrl+F)"),
+            ("copy_path_button", "link", "复制文件路径"),
+            ("more_button", "more-horizontal", "更多"),
+            ("maximize_button", "maximize", "展开"),
+        ):
             button = make_icon_button(icon, tooltip, "ArtifactsToolButton", 28, ICON_SIZE)
+            setattr(self, name, button)
             toolbar_layout.addWidget(button)
             self.toolbar_buttons.append(button)
-            if index == 0:
+            if name == "tree_button":
                 toolbar_layout.addStretch(1)
         self.diff_button = make_icon_button(
             "git-compare", "显示与上一次预览的差异", "ArtifactsToolButton", 28, ICON_SIZE
@@ -162,46 +159,35 @@ class ArtifactsPanel(
 
         self.search_input.textChanged.connect(self._search_changed)
         self.search_input.returnPressed.connect(self.find_text)
-        self.highlight_button = self.toolbar_buttons[3]
-        self.highlight_button.setCheckable(True)
-        self.highlight_button.setChecked(True)
-        self.highlight_button.toggled.connect(self._update_highlighting)
-        self.tree_button = self.toolbar_buttons[6]
         self.tree_button.setCheckable(True)
         self.tree_button.setChecked(False)
         self.tree_button.toggled.connect(self._set_tree_visible)
         self.diff_button.setCheckable(True)
         self.diff_button.toggled.connect(self._load_selected)
 
-        for index, callback in (
-            (0, self.open_folder),
-            (1, self.refreshRequested.emit),
-            (2, self.open_in_editor),
-            (4, self.show_search),
-            (5, self.copy_path),
-            (8, self.maximizeRequested.emit),
+        for button, callback in (
+            (self.refresh_button, self.refreshRequested.emit),
+            (self.open_editor_button, self.open_in_editor),
+            (self.search_button, self.show_search),
+            (self.copy_path_button, self.copy_path),
+            (self.maximize_button, self.maximizeRequested.emit),
         ):
-            self.toolbar_buttons[index].clicked.connect(callback)
+            button.clicked.connect(callback)
 
         self.more_menu = StyledMenu(self)
         self._overflow_actions = []
         for label, button in (
-            ("打开输出文件夹", self.toolbar_buttons[0]),
-            ("刷新文件", self.toolbar_buttons[1]),
-            ("在编辑器中打开", self.toolbar_buttons[2]),
-            ("搜索当前文件", self.toolbar_buttons[4]),
-            ("复制文件路径", self.toolbar_buttons[5]),
-            ("显示/隐藏文件树", self.tree_button),
-            ("切换 Verilog 高亮", self.highlight_button),
+            ("刷新文件", self.refresh_button),
+            ("在编辑器中打开", self.open_editor_button),
+            ("搜索当前文件", self.search_button),
+            ("复制文件路径", self.copy_path_button),
             ("显示/隐藏差异", self.diff_button),
         ):
             action = self.more_menu.addAction(label, button.click)
             action.setCheckable(button.isCheckable())
             self._overflow_actions.append((action, button))
-        self._overflow_separator = self.more_menu.addSeparator()
-        self.copy_content_action = self.more_menu.addAction("复制文件内容", self.copy_contents)
         self.more_menu.aboutToShow.connect(self._sync_overflow_menu)
-        self.toolbar_buttons[7].setMenu(self.more_menu)
+        self.more_button.setMenu(self.more_menu)
         for key, callback in (
             ("Ctrl+F", self.show_search),
             ("F3", self.find_text),

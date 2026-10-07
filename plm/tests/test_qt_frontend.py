@@ -741,7 +741,7 @@ class QtFrontendLayoutTests(unittest.TestCase):
         self.assertEqual(panel.geometry().top(), 0)
         self.assertEqual(panel.height(), page.height())
         self.assertEqual(page.tabs.maximumWidth(), QtWidgets.QWIDGETSIZE_MAX)
-        self.assertEqual(len(panel.toolbar_buttons), 9)
+        self.assertEqual(len(panel.toolbar_buttons), 7)
         toolbar = panel.findChild(QtWidgets.QWidget, "ArtifactsToolbar")
         toolbar_margins = toolbar.layout().contentsMargins()
         self.assertEqual(

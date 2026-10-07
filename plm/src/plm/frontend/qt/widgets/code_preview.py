@@ -3,6 +3,7 @@
 import re
 
 from PyQt5 import QtCore, QtGui, QtWidgets
+from plm.frontend.qt.widgets.common import StyledMenu
 from plm.frontend.qt.styles.tokens import (
     BG_SURFACE, BORDER, TEXT_MUTED, scale_content_size,
 )
@@ -129,6 +130,24 @@ class CodePreview(QtWidgets.QPlainTextEdit):
         self.blockCountChanged.connect(self.update_line_number_width)
         self.updateRequest.connect(self.update_line_number_area)
         self.update_line_number_width()
+
+    def createStandardContextMenu(self, position=None):
+        native_menu = (super().createStandardContextMenu() if position is None
+                       else super().createStandardContextMenu(position))
+        menu = StyledMenu(self)
+        for action in native_menu.actions():
+            action.setParent(menu)
+            menu.addAction(action)
+        native_menu.deleteLater()
+        return menu
+
+    def contextMenuEvent(self, event):
+        menu = self.createStandardContextMenu(event.pos())
+        try:
+            menu.exec_(event.globalPos())
+        finally:
+            menu.deleteLater()
+        event.accept()
 
     def line_number_width(self):
         digits = len(str(self.blockCount()))

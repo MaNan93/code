@@ -168,7 +168,7 @@ class AsyncBoundaryTests(unittest.TestCase):
         wait_for_idle(self.app)
         self.assertFalse(panel.preview.toPlainText())
         self.assertIn("200KB", panel.preview.placeholderText())
-        self.assertFalse(panel.copy_content_action.isEnabled())
+        self.assertFalse(panel.search_button.isEnabled())
 
     def test_preview_ignores_result_from_an_old_workspace(self):
         started, release = threading.Event(), threading.Event()

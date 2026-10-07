@@ -4,7 +4,6 @@ import shutil
 import subprocess
 from pathlib import Path
 from PyQt5 import QtCore, QtGui, QtWidgets
-from plm.frontend.qt.widgets.common import open_in_file_manager
 
 
 class ArtifactInteractions:
@@ -55,18 +54,15 @@ class ArtifactInteractions:
         self.file_tree.setVisible(visible)
 
     def _apply_toolbar_density(self, width):
-        # Keep file tree, More and maximize always reachable. Less critical
-        # controls collapse into More before they can overlap at narrow widths.
+        # File tree and window controls stay reachable; other actions overflow.
         width = int(width)
-        self.toolbar_buttons[0].setVisible(width >= 280)
-        self.toolbar_buttons[1].setVisible(width >= 320)
-        self.highlight_button.setVisible(width >= 360)
-        self.toolbar_buttons[2].setVisible(width >= 420)
-        self.toolbar_buttons[4].setVisible(width >= 420)
-        self.toolbar_buttons[5].setVisible(width >= 470)
-        self.diff_button.setVisible(width >= 520)
-        for index in (6, 7, 8):
-            self.toolbar_buttons[index].show()
+        self.refresh_button.setVisible(width >= 280)
+        self.open_editor_button.setVisible(width >= 360)
+        self.search_button.setVisible(width >= 360)
+        self.copy_path_button.setVisible(width >= 410)
+        self.diff_button.setVisible(width >= 460)
+        self.tree_button.show()
+        self.maximize_button.show()
         self._sync_overflow_menu()
 
     def _sync_overflow_menu(self):
@@ -78,7 +74,7 @@ class ArtifactInteractions:
             if action.isCheckable():
                 action.setChecked(button.isChecked())
             has_overflow |= hidden
-        self._overflow_separator.setVisible(has_overflow)
+        self.more_button.setVisible(has_overflow)
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
@@ -146,14 +142,6 @@ class ArtifactInteractions:
     def copy_path(self):
         if self.current_path is not None:
             QtWidgets.QApplication.clipboard().setText(str(self.current_path))
-
-    def copy_contents(self):
-        if self._readable:
-            QtWidgets.QApplication.clipboard().setText(self.preview.toPlainText())
-
-    def open_folder(self):
-        if self.current_path is not None and not open_in_file_manager(self.current_path.parent):
-            QtWidgets.QMessageBox.warning(self, "无法打开文件夹", str(self.current_path.parent))
 
     def open_in_editor(self):
         if self.current_path is None:

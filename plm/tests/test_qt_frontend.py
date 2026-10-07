@@ -12,7 +12,7 @@ from PyQt5 import QtCore, QtGui, QtTest, QtWidgets
 
 from plm.frontend.qt.controllers import AppController
 from plm.frontend.qt.services import ProjectService, SettingsStore
-from plm.frontend.qt.styles.tokens import scale_content_size
+from plm.frontend.qt.styles.tokens import PRIMARY_LIGHT, TEXT_MAIN, scale_content_size
 from plm.frontend.qt.models import ProjectInfo
 from plm.frontend.qt.main_window import MainWindow
 from plm.frontend.qt.styles import APP_QSS
@@ -722,6 +722,8 @@ class QtFrontendLayoutTests(unittest.TestCase):
         tabs = self.window.config_page.tabs
         bar = tabs.tabBar()
         page = self.window.config_page
+        self.assertFalse(bar.drawBase())
+        self.assertEqual(bar.elideMode(), QtCore.Qt.ElideNone)
         self.assertEqual(
             bar.mapTo(page, QtCore.QPoint()).x(),
             page.header.title_label.mapTo(page, QtCore.QPoint()).x(),
@@ -742,6 +744,9 @@ class QtFrontendLayoutTests(unittest.TestCase):
                     QtWidgets.QStyle.SE_TabBarTabText, option, bar,
                 )
                 self.assertGreaterEqual(text_rect.width(), width)
+                self.assertGreaterEqual(
+                    text_rect.height(), QtGui.QFontMetrics(font).height() + 4,
+                )
             self.assertLessEqual(bar.tabRect(tabs.count() - 1).right(), bar.width() - 1)
 
     def test_controller_card_alignment_and_context_insertion_undo(self):
@@ -774,6 +779,34 @@ class QtFrontendLayoutTests(unittest.TestCase):
         wait_for_idle(self.app)
         self.assertEqual(table.rowCount(), 15)
         self.assertGreater(table.verticalScrollBar().maximum(), 0)
+
+    def test_selected_table_cells_use_dark_text_on_blue_for_both_row_colors(self):
+        table = self.window.config_page.signals_editor.table
+        table.ensurePolished()
+
+        class RecordingPainter(QtGui.QPainter):
+            def drawText(self, *args):
+                self.text_color = self.pen().color().name()
+                return super().drawText(*args)
+
+        for row in (0, 1):
+            option = QtWidgets.QStyleOptionViewItem()
+            option.initFrom(table)
+            option.widget = table
+            option.rect = QtCore.QRect(0, 0, 400, 48)
+            option.state |= QtWidgets.QStyle.State_Selected | QtWidgets.QStyle.State_Active
+            option.palette.setColor(QtGui.QPalette.HighlightedText, QtCore.Qt.white)
+            if row:
+                option.features |= QtWidgets.QStyleOptionViewItem.Alternate
+            image = QtGui.QImage(400, 48, QtGui.QImage.Format_ARGB32)
+            image.fill(QtCore.Qt.transparent)
+            painter = RecordingPainter(image)
+            try:
+                table.itemDelegate().paint(painter, option, table.model().index(row, 0))
+                self.assertEqual(painter.text_color, TEXT_MAIN.lower())
+            finally:
+                painter.end()
+            self.assertEqual(image.pixelColor(397, 24).name(), PRIMARY_LIGHT.lower())
 
     def test_artifacts_drag_visibility_and_maximize(self):
         page = self.window.config_page

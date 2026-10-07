@@ -8,7 +8,7 @@ Controller IDs remain editable and retain their values after reordering.
 from PyQt5 import QtCore, QtGui, QtWidgets, sip
 
 from plm.frontend.qt.widgets.common import StyledMenu
-from plm.frontend.qt.styles.tokens import DANGER, PRIMARY
+from plm.frontend.qt.styles.tokens import DANGER, PRIMARY, TEXT_MAIN
 
 
 
@@ -160,9 +160,10 @@ class _PaddedItemDelegate(QtWidgets.QStyledItemDelegate):
 
         text_rect = option.rect.adjusted(self.HORIZONTAL_PADDING, 0, -self.HORIZONTAL_PADDING, 0)
         selected = bool(option.state & QtWidgets.QStyle.State_Selected)
-        role = QtGui.QPalette.HighlightedText if selected else QtGui.QPalette.Text
         painter.save()
-        painter.setPen(styled.palette.color(role))
+        # Native HighlightedText is white even when QSS uses a pale selection.
+        painter.setPen(QtGui.QColor(TEXT_MAIN) if selected
+                       else styled.palette.color(QtGui.QPalette.Text))
         text = option.fontMetrics.elidedText(text, styled.textElideMode, max(0, text_rect.width()))
         painter.drawText(text_rect, styled.displayAlignment | QtCore.Qt.AlignVCenter, text)
         painter.restore()

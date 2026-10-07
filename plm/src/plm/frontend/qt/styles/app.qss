@@ -349,8 +349,14 @@ QWidget#ConfigTabPage { background: transparent; border: none; }
 QTableWidget#ConfigDataTable {
     background-color: transparent;
     alternate-background-color: transparent;
+    selection-background-color: $primary_light;
+    selection-color: $text_main;
 }
 QTableWidget#ConfigDataTable::item:alternate { background-color: $bg_sidebar; }
+QTableWidget#ConfigDataTable::item:selected {
+    background-color: $primary_light;
+    color: $text_main;
+}
 QTableWidget#ConfigDataTable::item:hover:!selected { background-color: $bg_subtle; }
 QFrame#ConfigTableCard {
     background-color: $bg_surface;

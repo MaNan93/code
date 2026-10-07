@@ -110,9 +110,9 @@ class _LaneCellDelegate(QtWidgets.QStyledItemDelegate):
             style.drawControl(QtWidgets.QStyle.CE_ItemViewItem, styled, painter, styled.widget)
             text_rect = option.rect.adjusted(12, 0, -12, 0)
             selected = bool(option.state & QtWidgets.QStyle.State_Selected)
-            role = QtGui.QPalette.HighlightedText if selected else QtGui.QPalette.Text
             painter.save()
-            painter.setPen(styled.palette.color(role))
+            painter.setPen(QtGui.QColor(TEXT_MAIN) if selected
+                           else styled.palette.color(QtGui.QPalette.Text))
             painter.drawText(
                 text_rect,
                 styled.displayAlignment | QtCore.Qt.AlignVCenter,
@@ -350,6 +350,8 @@ class LaneGrid(QtWidgets.QWidget):
             | QtWidgets.QAbstractItemView.EditKeyPressed
         )
         row_header = self.table.verticalHeader()
+        row_header.setDefaultSectionSize(int(38 * _ui_scale()))
+        row_header.setMinimumSectionSize(int(34 * _ui_scale()))
         row_header.hide()
         self.table.rowMoveRequested.connect(self._on_row_drop)
         row_header.setContextMenuPolicy(QtCore.Qt.CustomContextMenu)

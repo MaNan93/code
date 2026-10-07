@@ -664,7 +664,7 @@ class QtFrontendLayoutTests(unittest.TestCase):
         )
         for index in range(tabs.count()):
             scroll = tabs.widget(index).findChild(QtWidgets.QScrollArea, "ConfigScroll")
-            if index in (0, 2):
+            if index in (0, 1, 2):
                 self.assertIsNone(scroll)
                 continue
             self.assertIsNotNone(scroll)
@@ -680,6 +680,23 @@ class QtFrontendLayoutTests(unittest.TestCase):
         last_cell = table.visualRect(table.model().index(table.rowCount() - 1, 0))
         self.assertTrue(table.viewport().rect().intersects(last_cell))
         self.assertLessEqual(last_cell.bottom(), table.viewport().rect().bottom())
+
+    def test_lane_mapping_shares_table_card_and_preserves_overflow_access(self):
+        page = self.window.config_page
+        page.tabs.setCurrentIndex(1)
+        editor = page.mapping_editor
+        self.assertEqual(editor.table_card.objectName(), "ConfigTableCard")
+        editor.lane_count.setValue(32)
+        wait_for_idle(self.app)
+        self.assertGreater(editor.table.horizontalScrollBar().maximum(), 0)
+        editor.table.horizontalScrollBar().setValue(editor.table.horizontalScrollBar().maximum())
+        last_lane = editor.table.visualRect(editor.table.model().index(0, 32))
+        self.assertTrue(editor.table.viewport().rect().intersects(last_lane))
+        editor.lane_count.setValue(2)
+        wait_for_idle(self.app)
+        self.assertEqual(editor.table.horizontalScrollBarPolicy(), QtCore.Qt.ScrollBarAlwaysOff)
+        self.assertEqual(editor.table.rowHeight(0), page.controllers_editor.table.rowHeight(0))
+        page.mark_saved()  # Discard this test's lane-count changes before closing.
 
     def test_log_auto_scroll_clear_and_splitter_toggle(self):
         log_panel = self.window.log_panel

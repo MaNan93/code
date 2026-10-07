@@ -169,7 +169,7 @@ class ConfigTabPage(QtWidgets.QWidget):
         root.setContentsMargins(SPACING_LG, SPACING_LG, SPACING_LG, SPACING_LG)
         root.setSpacing(0)
 
-        if isinstance(editor, CsvTableEditor) and not editor.mapping:
+        if isinstance(editor, CsvTableEditor):
             # CSV tables own their scrolling and keep the header visible.
             root.addWidget(editor, 1)
             return

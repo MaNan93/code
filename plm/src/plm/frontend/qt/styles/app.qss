@@ -382,7 +382,12 @@ QLabel#ConfigProjectStatus[dirty="true"] {
     background-color: #FEF3C7;
     color: #B45309;
 }
-QTableWidget#laneGrid { background-color: transparent; }
+QTableWidget#laneGrid {
+    background-color: $bg_surface;
+    selection-background-color: $primary_light;
+    selection-color: $text_main;
+    border: none;
+}
 
 QFrame#ArtifactsPanel {
     background-color: $bg_surface;

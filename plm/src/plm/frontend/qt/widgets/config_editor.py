@@ -75,7 +75,7 @@ class CsvTableEditor(QtWidgets.QWidget):
             self.table = self.editor.table
             self.editor.set_columns(self.lane_count.value())
             self.editor.changed.connect(self.changed.emit)
-            layout.addWidget(self.editor, 1)
+            self._setup_table_card(layout)
             return
 
         specs = []
@@ -106,6 +106,10 @@ class CsvTableEditor(QtWidgets.QWidget):
         )
         self.table = self.editor.table
         self.editor.changed.connect(self.changed.emit)
+        self._setup_table_card(layout)
+
+    def _setup_table_card(self, layout):
+        """Use one card and height policy for both CSV tables and the lane grid."""
         self.table.setMouseTracking(True)
         self.table_card = QtWidgets.QFrame()
         self.table_card.setObjectName("ConfigTableCard")
@@ -119,6 +123,7 @@ class CsvTableEditor(QtWidgets.QWidget):
         self.table.model().rowsRemoved.connect(self._update_table_height)
         self.table.verticalHeader().sectionResized.connect(self._update_table_height)
         self.table.horizontalHeader().geometriesChanged.connect(self._update_table_height)
+        self.table.horizontalScrollBar().rangeChanged.connect(self._update_table_height)
         self._update_table_height()
 
     def _update_table_height(self, *_args):
@@ -129,6 +134,8 @@ class CsvTableEditor(QtWidgets.QWidget):
             body_height = self.table.verticalHeader().defaultSectionSize()
         height = self.table.horizontalHeader().height() + body_height
         height += 2 * self.table.frameWidth()
+        if self.table.horizontalScrollBar().maximum() > 0:
+            height += self.table.horizontalScrollBar().sizeHint().height()
         # Allow the table to shrink with its page; its own scrollbar handles overflow.
         self.table.setProperty("contentHeight", height)
         self.table.setMaximumHeight(height)

@@ -513,9 +513,10 @@ class MainWindow(QtWidgets.QMainWindow):
     def toggle_log(self):
         sizes = self.content_splitter.sizes()
         total = sum(sizes)
-        if sizes[1] > 0:
+        if self.log_panel.isVisible() and sizes[1] > 0:
             self.hide_log()
         else:
+            self.log_panel.show()
             self.content_splitter.setStretchFactor(1, 1)
             bottom = max(140, int(total * 0.25))
             self.content_splitter.setSizes([max(1, total - bottom), bottom])
@@ -523,10 +524,10 @@ class MainWindow(QtWidgets.QMainWindow):
     def hide_log(self):
         sizes = self.content_splitter.sizes()
         self.content_splitter.setStretchFactor(1, 0)
-        if sizes[1] <= 0:
-            return
-        self._log_sizes = sizes
-        self.content_splitter.setSizes([sum(sizes), 0])
+        if sizes[1] > 0:
+            self._log_sizes = sizes
+        # Collapsing to height zero leaves the splitter handle in the layout.
+        self.log_panel.hide()
     def on_save(self):
         self.controller.hide_project_menu()
         self.nav_panel.set_active(None)

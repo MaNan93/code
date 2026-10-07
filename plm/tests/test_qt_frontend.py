@@ -123,7 +123,7 @@ class QtFrontendLayoutTests(unittest.TestCase):
         self.assertEqual(self.window.content_splitter.orientation(), QtCore.Qt.Vertical)
         self.assertEqual(self.window.nav_panel.minimumWidth(), 260)
         self.assertEqual(self.window.nav_panel.maximumWidth(), 260)
-        self.assertEqual(self.window.content_splitter.handleWidth(), 2)
+        self.assertEqual(self.window.content_splitter.handleWidth(), 4)
         self.assertIsInstance(self.window.log_panel, LogPanel)
         self.assertEqual(
             self.window.nav_panel.collapse_btn.iconSize(),

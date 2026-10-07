@@ -624,6 +624,12 @@ class QtFrontendLayoutTests(unittest.TestCase):
             self.assertIn("在资源管理器中打开", actions)
             self.assertIn("归档", actions)
             self.assertIn("删除", actions)
+            menu.ensurePolished()
+            longest_text = "在资源管理器中打开"
+            text_width = menu.fontMetrics().horizontalAdvance(longest_text)
+            icon_width = menu.style().pixelMetric(QtWidgets.QStyle.PM_SmallIconSize)
+            self.assertGreaterEqual(menu.sizeHint().width(), text_width + icon_width + 32)
+            self.assertEqual(menu.maximumWidth(), QtWidgets.QWIDGETSIZE_MAX)
 
             actions["置顶"].trigger()
             wait_for_idle(self.app)

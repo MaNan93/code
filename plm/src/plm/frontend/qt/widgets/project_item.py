@@ -161,7 +161,6 @@ class ProjectItemWidget(QtWidgets.QWidget):
 
     def build_more_menu(self):
         menu = StyledMenu(self)
-        menu.setFixedWidth(180)
         pin_action = menu.addAction(
             load_lucide_icon("pin", TEXT_SUB, ICON_SIZE), "置顶"
         )

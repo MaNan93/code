@@ -655,7 +655,7 @@ class QtFrontendLayoutTests(unittest.TestCase):
             menu.deleteLater()
             widget.deleteLater()
 
-    def test_tabs_and_scrollable_configuration_pages(self):
+    def test_table_pages_use_internal_scrolling_only(self):
         tabs = self.window.config_page.tabs
         self.assertEqual(tabs.count(), 4)
         self.assertEqual(
@@ -664,8 +664,22 @@ class QtFrontendLayoutTests(unittest.TestCase):
         )
         for index in range(tabs.count()):
             scroll = tabs.widget(index).findChild(QtWidgets.QScrollArea, "ConfigScroll")
+            if index in (0, 2):
+                self.assertIsNone(scroll)
+                continue
             self.assertIsNotNone(scroll)
             self.assertTrue(scroll.widgetResizable())
+        tabs.setCurrentIndex(2)
+        self.window.resize(960, 640)
+        wait_for_idle(self.app)
+        table = self.window.config_page.signals_editor.table
+        header_top = table.horizontalHeader().mapTo(tabs, QtCore.QPoint()).y()
+        table.verticalScrollBar().setValue(table.verticalScrollBar().maximum())
+        wait_for_idle(self.app)
+        self.assertEqual(table.horizontalHeader().mapTo(tabs, QtCore.QPoint()).y(), header_top)
+        last_cell = table.visualRect(table.model().index(table.rowCount() - 1, 0))
+        self.assertTrue(table.viewport().rect().intersects(last_cell))
+        self.assertLessEqual(last_cell.bottom(), table.viewport().rect().bottom())
 
     def test_log_auto_scroll_clear_and_splitter_toggle(self):
         log_panel = self.window.log_panel

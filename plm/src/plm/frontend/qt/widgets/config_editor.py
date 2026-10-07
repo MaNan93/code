@@ -129,7 +129,10 @@ class CsvTableEditor(QtWidgets.QWidget):
             body_height = self.table.verticalHeader().defaultSectionSize()
         height = self.table.horizontalHeader().height() + body_height
         height += 2 * self.table.frameWidth()
-        self.table.setFixedHeight(height)
+        # Allow the table to shrink with its page; its own scrollbar handles overflow.
+        self.table.setProperty("contentHeight", height)
+        self.table.setMaximumHeight(height)
+        self.table.updateGeometry()
 
     @property
     def controllers(self):

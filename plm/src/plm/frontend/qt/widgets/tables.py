@@ -44,6 +44,13 @@ class RowDragTable(QtWidgets.QTableWidget):
         self.viewport().setAcceptDrops(True)
         self.setDropIndicatorShown(False)
 
+    def sizeHint(self):
+        size = super().sizeHint()
+        content_height = self.property("contentHeight")
+        if content_height is not None:
+            size.setHeight(int(content_height))
+        return size
+
     def mousePressEvent(self, event):
         index = self.indexAt(event.pos())
         super().mousePressEvent(event)

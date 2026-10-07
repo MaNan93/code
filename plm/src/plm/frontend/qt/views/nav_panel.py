@@ -210,6 +210,7 @@ class NavPanel(QtWidgets.QFrame):
         button = QtWidgets.QPushButton(text)
         button.setToolTip(text)
         button.setObjectName("NavActionButton")
+        button.setFocusPolicy(QtCore.Qt.StrongFocus)
         button.setIcon(load_lucide_icon(icon_name, align_visible_left=True))
         button.setIconSize(QtCore.QSize(ICON_SIZE, ICON_SIZE))
         button.setCursor(QtCore.Qt.PointingHandCursor)

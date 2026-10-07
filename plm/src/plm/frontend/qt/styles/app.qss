@@ -286,6 +286,12 @@ QPushButton#ProjectMoreBtn:hover {
     background-color: $bg_subtle;
     border: none;
 }
+QPushButton#NavActionButton:hover, QPushButton#NavActionButton:focus {
+    background-color: $border;
+}
+QPushButton#NavActionButton:pressed {
+    background-color: $border_hover;
+}
 QPushButton#ProjectButton[selected="true"], QPushButton#NavFooterButton[selected="true"] {
     background-color: $primary_light;
     color: $primary;
@@ -590,10 +596,10 @@ QLabel#NewProjectDialogSubtitle {
 }
 QDialogButtonBox { background: transparent; }
 QToolTip {
-    background-color: $bg_surface;
-    color: $text_main;
-    border: 1px solid $border;
-    border-radius: 6px;
-    padding: 5px 8px;
+    background-color: #202123;
+    color: #FFFFFF;
+    border: none;
+    border-radius: 10px;
+    padding: 6px 10px;
     font-size: 12px;
 }

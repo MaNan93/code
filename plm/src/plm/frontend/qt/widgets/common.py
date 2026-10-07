@@ -17,8 +17,8 @@ PROJECT_ROOT = PLM_ROOT
 ICON_SIZE = 18
 
 
-def rounded_widget_region(rect, radii):
-    """Clip child backgrounds at rounded corners without painting outlines."""
+def rounded_widget_path(rect, radii):
+    """Build a vector outline with independent corner radii."""
     area = QtCore.QRectF(rect)
     limit = min(area.width(), area.height()) / 2
     tl, tr, br, bl = (min(radius, limit) for radius in radii)
@@ -38,7 +38,7 @@ def rounded_widget_region(rect, radii):
     if tl:
         path.arcTo(left, top, 2 * tl, 2 * tl, 180, -90)
     path.closeSubpath()
-    return QtGui.QRegion(path.toFillPolygon().toPolygon())
+    return path
 
 
 @lru_cache(maxsize=256)

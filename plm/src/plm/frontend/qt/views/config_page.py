@@ -1,9 +1,9 @@
 from PyQt5 import QtCore, QtGui, QtWidgets
-from plm.frontend.qt.widgets.common import make_icon_button, rounded_widget_region
+from plm.frontend.qt.widgets.common import make_icon_button, rounded_widget_path
 from plm.frontend.qt.widgets.config_editor import CsvTableEditor, GenerationEditor
 from plm.frontend.qt.views.artifacts_panel import ArtifactsPanel
 from plm.frontend.qt.styles.tokens import (
-    SPACING_LG, SPACING_MD,
+    BG_MAIN, BORDER, SPACING_LG, SPACING_MD,
 )
 
 
@@ -161,6 +161,7 @@ class ConfigPage(QtWidgets.QFrame):
     """Region 2 with an absolute-positioned Region 5 overlay."""
 
     MAX_HISTORY = 50
+    CORNER_RADII = (12, 8, 8, 8)
 
     logToggleRequested = QtCore.pyqtSignal()
     dirtyChanged = QtCore.pyqtSignal(bool)
@@ -170,7 +171,6 @@ class ConfigPage(QtWidgets.QFrame):
     def __init__(self, parent=None, editor_path_provider=None):
         super().__init__(parent)
         self.setObjectName("ConfigPage")
-        self.setAttribute(QtCore.Qt.WA_StyledBackground, True)
         self.dirty = False
         self.validation_issues = ()
         self._first_error = None
@@ -182,7 +182,8 @@ class ConfigPage(QtWidgets.QFrame):
         self.artifacts_maximized = False
 
         root = QtWidgets.QVBoxLayout(self)
-        root.setContentsMargins(0, 0, 0, 0)
+        # Keep opaque content above the bottom corner arcs; no binary mask.
+        root.setContentsMargins(1, 1, 1, self.CORNER_RADII[2])
         root.setSpacing(0)
         self.header = ConfigHeader()
         self.header.logToggleRequested.connect(self.logToggleRequested.emit)
@@ -364,9 +365,17 @@ class ConfigPage(QtWidgets.QFrame):
             self.reposition_artifacts()
         return super().eventFilter(watched, event)
 
-    def resizeEvent(self, event):
-        super().resizeEvent(event)
-        self.setMask(rounded_widget_region(self.rect(), (12, 8, 8, 8)))
+    def paintEvent(self, event):
+        painter = QtGui.QPainter(self)
+        painter.setRenderHint(QtGui.QPainter.Antialiasing)
+        path = rounded_widget_path(
+            QtCore.QRectF(self.rect()).adjusted(0.5, 0.5, -0.5, -0.5),
+            self.CORNER_RADII,
+        )
+        painter.fillPath(path, QtGui.QColor(BG_MAIN))
+        painter.setPen(QtGui.QPen(QtGui.QColor(BORDER), 1.0))
+        painter.drawPath(path)
+        painter.end()
 
     def toggle_artifacts(self):
         target = self._artifacts_target_geometry()

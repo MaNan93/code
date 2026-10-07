@@ -298,16 +298,16 @@ QPushButton#HoverPinButton:hover, QPushButton#HoverOpenButton:hover { background
 
 QFrame#ConfigPage {
     background-color: $bg_main;
-    border: none;
     border: 1px solid $border;
-    border-radius: 12px;
+    border-radius: 0;
+    border-top-left-radius: 12px;
 }
 QFrame#ConfigHeader {
     background-color: $bg_surface;
     border: none;
     border-bottom: 1px solid $border;
+    border-radius: 0;
     border-top-left-radius: 11px;
-    border-top-right-radius: 11px;
 }
 QLabel#ConfigSessionTitle {
     color: $text_main;

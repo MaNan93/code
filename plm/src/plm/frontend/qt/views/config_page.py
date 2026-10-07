@@ -182,7 +182,7 @@ class ConfigPage(QtWidgets.QFrame):
         self.artifacts_maximized = False
 
         root = QtWidgets.QVBoxLayout(self)
-        root.setContentsMargins(0, 0, 0, 12)
+        root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(0)
         self.header = ConfigHeader()
         self.header.logToggleRequested.connect(self.logToggleRequested.emit)

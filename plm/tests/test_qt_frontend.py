@@ -388,6 +388,23 @@ class QtFrontendLayoutTests(unittest.TestCase):
         self.assertEqual(len(settings_spy), 1)
         self.assertEqual(len(docs_spy), 1)
 
+    def test_project_focus_feedback_preserves_active_project_highlight(self):
+        widget = self.window.nav_panel.project_list.project_widgets[-1]
+        self.window.activateWindow()
+        widget.set_selected(False)
+        widget.header.setFocus(QtCore.Qt.TabFocusReason)
+        wait_for_idle(self.app)
+        point = QtCore.QPoint(widget.header.width() - 8, widget.header.height() // 2)
+        self.assertEqual(widget.header.grab().toImage().pixelColor(point).name(), BORDER.lower())
+        widget.set_selected(True)
+        self.assertEqual(widget.header.grab().toImage().pixelColor(point).name(), PRIMARY_LIGHT.lower())
+        for button in (widget.archive_btn, widget.open_folder_btn, widget.more_btn):
+            button.show()
+            button.setFocus(QtCore.Qt.TabFocusReason)
+            self.app.processEvents()
+            pixel = QtCore.QPoint(button.width() // 2, 2)
+            self.assertEqual(button.grab().toImage().pixelColor(pixel).name(), BORDER.lower())
+
     def test_project_folder_button_follows_archive_and_opens_current_path(self):
         project_list = self.window.nav_panel.project_list
         widget = project_list.project_widgets[0]

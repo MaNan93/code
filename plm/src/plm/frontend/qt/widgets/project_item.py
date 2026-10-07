@@ -39,6 +39,7 @@ class ProjectItemWidget(QtWidgets.QWidget):
         root.setSpacing(2)
         self.header = QtWidgets.QPushButton()
         self.header.setObjectName("ProjectButton")
+        self.header.setFocusPolicy(QtCore.Qt.StrongFocus)
         self.header.setCursor(QtCore.Qt.PointingHandCursor)
         self.header.clicked.connect(self._header_clicked)
         self.header.setMouseTracking(True)

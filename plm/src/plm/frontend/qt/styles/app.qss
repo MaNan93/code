@@ -287,10 +287,16 @@ QPushButton#ProjectMoreBtn:hover {
     border: none;
 }
 QPushButton#NavActionButton:hover, QPushButton#NavActionButton:focus,
-QPushButton#NavFooterButton:hover, QPushButton#NavFooterButton:focus {
+QPushButton#NavFooterButton:hover, QPushButton#NavFooterButton:focus,
+QPushButton#ProjectButton:hover, QPushButton#ProjectButton:focus,
+QPushButton#ProjectArchiveBtn:hover, QPushButton#ProjectArchiveBtn:focus,
+QPushButton#ProjectOpenBtn:hover, QPushButton#ProjectOpenBtn:focus,
+QPushButton#ProjectMoreBtn:hover, QPushButton#ProjectMoreBtn:focus {
     background-color: $border;
 }
-QPushButton#NavActionButton:pressed, QPushButton#NavFooterButton:pressed {
+QPushButton#NavActionButton:pressed, QPushButton#NavFooterButton:pressed,
+QPushButton#ProjectButton:pressed, QPushButton#ProjectArchiveBtn:pressed,
+QPushButton#ProjectOpenBtn:pressed, QPushButton#ProjectMoreBtn:pressed {
     background-color: $border_hover;
 }
 QPushButton#ProjectButton[selected="true"], QPushButton#NavFooterButton[selected="true"] {

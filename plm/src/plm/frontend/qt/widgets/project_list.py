@@ -27,7 +27,7 @@ class ProjectList(QtWidgets.QListWidget):
         self.setSelectionMode(QtWidgets.QAbstractItemView.SingleSelection)
         self.setDefaultDropAction(QtCore.Qt.MoveAction)
         self.setHorizontalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOff)
-        self.setSpacing(SPACING_XS)
+        self.setSpacing(0)
         self.hover_card = HoverCard(self)
         self.hover_card.hide()
         self._pending_hover_widget = None
@@ -48,6 +48,8 @@ class ProjectList(QtWidgets.QListWidget):
             widget = ProjectItemWidget(
                 project.name, project_path=project.config_dir.parent
             )
+            # QListWidget spacing also indents icons; reserve only a bottom gap.
+            widget.layout().setContentsMargins(0, 0, 0, SPACING_XS)
             widget.hoverEntered.connect(self._schedule_hover_card)
             widget.hoverLeft.connect(self._project_hover_left)
             widget.pinRequested.connect(self.pin_project)

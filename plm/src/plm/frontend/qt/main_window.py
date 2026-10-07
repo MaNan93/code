@@ -351,6 +351,14 @@ class MainWindow(QtWidgets.QMainWindow):
         self.config_page = ConfigPage(
             editor_path_provider=self.controller.settings.editor_path
         )
+        self.log_toggle_button = self.config_page.take_log_button()
+        self.log_toggle_button.setFixedSize(32, 32)
+        title_layout = self.title_bar.layout()
+        button_index = title_layout.indexOf(self.nav_panel.collapse_btn) + 1
+        title_layout.insertSpacing(button_index, 8)
+        title_layout.insertWidget(
+            button_index + 1, self.log_toggle_button, 0, QtCore.Qt.AlignVCenter,
+        )
         self.log_panel = LogPanel()
         self.config_page.logToggleRequested.connect(self.toggle_log)
         self.log_panel.closeRequested.connect(self.hide_log)

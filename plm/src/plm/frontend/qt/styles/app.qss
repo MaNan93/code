@@ -365,6 +365,7 @@ QFrame#ConfigTableCard {
     border-radius: 8px;
 }
 QWidget#ConfigCsvEditor { background-color: transparent; }
+QWidget#ConfigPanelActions { background-color: transparent; border: none; }
 QFrame#ConfigTableCard QTableWidget#ConfigDataTable {
     background-color: $bg_surface;
     alternate-background-color: $bg_sidebar;

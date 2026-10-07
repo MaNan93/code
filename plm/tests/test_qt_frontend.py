@@ -115,7 +115,7 @@ class QtFrontendLayoutTests(unittest.TestCase):
             self.window.title_bar.close_btn.iconSize(), QtCore.QSize(scale_content_size(14), scale_content_size(14))
         )
         self.assertEqual(
-            self.window.config_page.header.log_btn.size(), QtCore.QSize(46, 48)
+            self.window.config_page.header.log_btn.size(), QtCore.QSize(32, 32)
         )
         self.assertEqual(
             self.window.config_page.header.artifacts_btn.size(), QtCore.QSize(46, 48)
@@ -347,7 +347,8 @@ class QtFrontendLayoutTests(unittest.TestCase):
         initial_count = project_list.count()
         self.assertGreater(initial_count, 0)
         for row, widget in enumerate(project_list.project_widgets):
-            self.assertEqual(project_list.item(row).sizeHint().height(), 36)
+            self.assertEqual(project_list.item(row).sizeHint().height(), 40)
+            self.assertEqual(widget.header.height(), 36)
             self.assertEqual(widget.layout().count(), 1)
             self.assertIs(widget.layout().itemAt(0).widget(), widget.header)
             self.assertFalse(widget.header.isCheckable())
@@ -397,6 +398,13 @@ class QtFrontendLayoutTests(unittest.TestCase):
             first_project.folder_icon.mapTo(nav, QtCore.QPoint()).x(),
             19,
         )
+        next_project = nav.project_list.project_widgets[1]
+        gap = (
+            next_project.header.mapTo(nav, QtCore.QPoint()).y()
+            - first_project.header.mapTo(nav, QtCore.QPoint()).y()
+            - first_project.header.height()
+        )
+        self.assertEqual(gap, 4)
         icon_pixmaps = (
             nav.new_chat_btn.icon().pixmap(ICON_SIZE, ICON_SIZE),
             nav.save_btn.icon().pixmap(ICON_SIZE, ICON_SIZE),
@@ -751,7 +759,7 @@ class QtFrontendLayoutTests(unittest.TestCase):
                 toolbar_margins.right(),
                 toolbar_margins.bottom(),
             ),
-            (16, 0, 16, 0),
+            (16, 0, 62, 0),
         )
         self.assertEqual(toolbar.layout().spacing(), 8)
         for button in panel.toolbar_buttons:
@@ -883,7 +891,13 @@ class QtFrontendLayoutTests(unittest.TestCase):
 
     def test_header_panel_buttons_stay_fixed_and_clickable_above_drawer(self):
         page = self.window.config_page
-        buttons = (page.header.log_btn, page.header.artifacts_btn)
+        buttons = (page.header.artifacts_btn,)
+        title_bar = self.window.title_bar
+        log_button = self.window.log_toggle_button
+        sidebar_button = self.window.nav_panel.collapse_btn
+        self.assertIs(log_button.parentWidget(), title_bar)
+        self.assertGreater(log_button.x(), sidebar_button.geometry().right())
+        self.assertEqual(log_button.geometry().center().y(), sidebar_button.geometry().center().y())
         positions = [button.mapTo(page, QtCore.QPoint()) for button in buttons]
         shown = QtTest.QSignalSpy(page._artifacts_animation.finished)
         page.header.artifacts_btn.click()
@@ -898,14 +912,24 @@ class QtFrontendLayoutTests(unittest.TestCase):
                 self.assertEqual(button.mapTo(page, QtCore.QPoint()), position)
                 point = button.mapTo(page, button.rect().center())
                 self.assertIs(page.childAt(point), button)
-            self.assertGreaterEqual(
-                page.artifacts_panel.toolbar.mapTo(page, QtCore.QPoint()).y(),
-                page.header.geometry().bottom() + 1,
-            )
+            action_y = page.header.artifacts_btn.mapTo(page, QtCore.QPoint(0, 24)).y()
+            for button in page.artifacts_panel.toolbar_buttons:
+                if button.isVisible():
+                    self.assertEqual(button.mapTo(page, QtCore.QPoint(0, 14)).y(), action_y)
+                    point = button.mapTo(page, button.rect().center())
+                    self.assertIs(page.childAt(point), button)
         hidden = QtTest.QSignalSpy(page._artifacts_animation.finished)
         QtTest.QTest.mouseClick(page.header.artifacts_btn, QtCore.Qt.LeftButton)
         self.assertTrue(hidden.wait(1000))
         self.assertFalse(page.artifacts_panel.isVisible())
+
+        log_visible = self.window.log_panel.isVisible()
+        log_button.click()
+        wait_for_idle(self.app)
+        self.assertNotEqual(self.window.log_panel.isVisible(), log_visible)
+        log_button.click()
+        wait_for_idle(self.app)
+        self.assertEqual(self.window.log_panel.isVisible(), log_visible)
 
     def test_artifact_file_selection_and_copy_path(self):
         panel = self.window.config_page.artifacts_panel

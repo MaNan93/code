@@ -124,8 +124,15 @@ class ConfigHeader(QtWidgets.QFrame):
         self.artifacts_btn.setFixedSize(46, self.height())
         self.log_btn.clicked.connect(self.logToggleRequested.emit)
         self.artifacts_btn.clicked.connect(self.artifactsToggleRequested.emit)
-        layout.addWidget(self.log_btn, 0, QtCore.Qt.AlignVCenter)
-        layout.addWidget(self.artifacts_btn, 0, QtCore.Qt.AlignVCenter)
+        self.panel_actions = QtWidgets.QWidget()
+        self.panel_actions.setObjectName("ConfigPanelActions")
+        self.panel_actions.setFixedSize(92, self.height())
+        actions_layout = QtWidgets.QHBoxLayout(self.panel_actions)
+        actions_layout.setContentsMargins(0, 0, 0, 0)
+        actions_layout.setSpacing(0)
+        actions_layout.addWidget(self.log_btn)
+        actions_layout.addWidget(self.artifacts_btn)
+        layout.addWidget(self.panel_actions, 0, QtCore.Qt.AlignVCenter)
 
     def set_dirty(self, dirty):
         self.status_badge.setText("已修改" if dirty else "未修改")
@@ -223,6 +230,10 @@ class ConfigPage(RoundedCanvasFrame):
         self.header.logToggleRequested.connect(self.logToggleRequested.emit)
         self.header.artifactsToggleRequested.connect(self.toggle_artifacts)
         root.addWidget(self.header)
+        self.header_actions = self.header.panel_actions
+        self.header.layout().removeWidget(self.header_actions)
+        self.header_actions.setParent(self)
+        self.header_actions.show()
         root.addSpacing(SPACING_MD)
 
         self.config_area = QtWidgets.QWidget()
@@ -261,11 +272,7 @@ class ConfigPage(RoundedCanvasFrame):
         )
         self.artifacts_panel.maximizeRequested.connect(self.toggle_artifacts_maximized)
         self.artifacts_panel.widthRequested.connect(self._on_artifacts_width_requested)
-        margins = self.artifacts_panel.layout().contentsMargins()
-        self.artifacts_panel.layout().setContentsMargins(
-            margins.left(), self.header.height() + root.contentsMargins().top(),
-            margins.right(), margins.bottom(),
-        )
+        self._configure_artifacts_toolbar()
         self._artifacts_animation = QtCore.QPropertyAnimation(
             self.artifacts_panel, b"geometry", self
         )
@@ -278,12 +285,41 @@ class ConfigPage(RoundedCanvasFrame):
         self.tabs.currentChanged.connect(self._raise_artifacts)
         self.artifacts_panel.hide()
         self.installEventFilter(self)
+        self.header.installEventFilter(self)
+
+    def take_log_button(self):
+        button = self.header.log_btn
+        self.header_actions.layout().removeWidget(button)
+        self.header_actions.setFixedWidth(self.header.artifacts_btn.width())
+        self._configure_artifacts_toolbar()
+        self._position_header_actions()
+        return button
+
+    def _configure_artifacts_toolbar(self):
+        panel = self.artifacts_panel
+        panel.ensurePolished()
+        margins = panel.layout().contentsMargins()
+        toolbar_top = max(0, self.layout().contentsMargins().top() - panel.frameWidth())
+        panel.layout().setContentsMargins(
+            margins.left(), toolbar_top,
+            margins.right(), margins.bottom(),
+        )
+        panel.toolbar.setFixedHeight(self.header.height())
+        panel.toolbar_layout.setContentsMargins(16, 0, 16 + self.header_actions.width(), 0)
+        panel.toolbar_reserved_width = self.header_actions.width()
+        panel._apply_toolbar_density(panel.width())
+
+    def _position_header_actions(self):
+        self.header_actions.move(
+            self.header.geometry().right() + 1 - self.header_actions.width(),
+            self.header.y(),
+        )
+        self.header_actions.raise_()
 
     def _raise_artifacts(self, *_args):
         if self.artifacts_panel.isVisible():
             self.artifacts_panel.raise_()
-        # Keep the original header actions accessible above the full-height drawer.
-        self.header.raise_()
+        self.header_actions.raise_()
 
     def update_title(self, project_name):
         self.header.title_label.setText(project_name)
@@ -404,8 +440,10 @@ class ConfigPage(RoundedCanvasFrame):
         }
 
     def eventFilter(self, watched, event):
-        if watched is self and event.type() == QtCore.QEvent.Resize:
-            self.reposition_artifacts()
+        if event.type() == QtCore.QEvent.Resize and watched in (self, self.header):
+            self._position_header_actions()
+            if watched is self:
+                self.reposition_artifacts()
         return super().eventFilter(watched, event)
 
     def toggle_artifacts(self):

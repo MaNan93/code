@@ -55,7 +55,7 @@ class ArtifactInteractions:
 
     def _apply_toolbar_density(self, width):
         # File tree and window controls stay reachable; other actions overflow.
-        width = int(width)
+        width = int(width) - getattr(self, "toolbar_reserved_width", 0)
         self.refresh_button.setVisible(width >= 280)
         self.open_editor_button.setVisible(width >= 360)
         self.search_button.setVisible(width >= 360)

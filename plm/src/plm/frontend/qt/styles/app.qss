@@ -253,7 +253,7 @@ QFrame#NavPanel {
 }
 QFrame#NavPanel > QWidget, QWidget#NavRow, QWidget#ProjectItem,
 QListWidget#ProjectList > QWidget { background: transparent; }
-QFrame#ProjectSectionSeparator {
+QFrame#NavPanel QFrame#ProjectSectionSeparator {
     background-color: $border;
     border: none;
     margin-left: 4px;

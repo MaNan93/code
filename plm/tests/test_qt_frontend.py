@@ -12,7 +12,7 @@ from PyQt5 import QtCore, QtGui, QtTest, QtWidgets
 
 from plm.frontend.qt.controllers import AppController
 from plm.frontend.qt.services import ProjectService, SettingsStore
-from plm.frontend.qt.styles.tokens import PRIMARY_LIGHT, TEXT_MAIN, scale_content_size
+from plm.frontend.qt.styles.tokens import BORDER, PRIMARY_LIGHT, TEXT_MAIN, scale_content_size
 from plm.frontend.qt.models import ProjectInfo
 from plm.frontend.qt.main_window import MainWindow
 from plm.frontend.qt.styles import APP_QSS
@@ -202,6 +202,18 @@ class QtFrontendLayoutTests(unittest.TestCase):
         self.assertEqual(nav.maximumWidth(), 260)
         self.assertEqual(nav.new_chat_btn.objectName(), "NavActionButton")
         self.assertEqual(nav.save_btn.objectName(), "NavActionButton")
+
+    def test_nav_separator_remains_visible_in_both_sidebar_states(self):
+        nav = self.window.nav_panel
+        for collapsed in (False, True):
+            if collapsed:
+                finished = QtTest.QSignalSpy(nav.animation_group.finished)
+                nav.toggle_collapse()
+                self.assertTrue(finished.wait(1000))
+            separator = nav.project_separator
+            self.assertTrue(separator.isVisible())
+            image = separator.grab().toImage()
+            self.assertEqual(image.pixelColor(image.width() // 2, 0).name(), BORDER.lower())
 
     def test_nav_width_stays_fixed_when_window_resizes(self):
         nav = self.window.nav_panel

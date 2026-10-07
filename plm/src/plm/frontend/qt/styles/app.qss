@@ -30,11 +30,9 @@ QWidget#WindowResizeHandle {
 QFrame#WindowTitleBar {
     background-color: $bg_sidebar;
     border: none;
-    border-bottom: 1px solid $border;
 }
 QFrame#WindowTitleBar[windowActive="false"] {
     background-color: $bg_sidebar_inactive;
-    border-bottom: 1px solid $border;
 }
 QLabel#WindowBrandLogo { background: transparent; }
 QLabel#WindowBrandName {
@@ -301,15 +299,15 @@ QPushButton#HoverPinButton:hover, QPushButton#HoverOpenButton:hover { background
 QFrame#ConfigPage {
     background-color: $bg_main;
     border: none;
-    border-left: 1px solid $border;
-    border-top: 1px solid $border;
-    border-top-left-radius: 12px;
+    border: 1px solid $border;
+    border-radius: 12px;
 }
 QFrame#ConfigHeader {
     background-color: $bg_surface;
     border: none;
     border-bottom: 1px solid $border;
     border-top-left-radius: 11px;
+    border-top-right-radius: 11px;
 }
 QLabel#ConfigSessionTitle {
     color: $text_main;

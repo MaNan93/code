@@ -2,6 +2,7 @@ from pathlib import Path
 import re
 import unicodedata
 from PyQt5 import QtCore, QtGui, QtWidgets
+from plm.frontend.qt.services.tasks import TaskRunner
 from plm.frontend.qt.styles.tokens import (
     BG_SUBTLE, BORDER, TEXT_MAIN, TEXT_MUTED,
 )
@@ -94,17 +95,28 @@ class DocumentationPage(SecondaryPage):
         return markdown if start is None else "\n".join(lines[start:])
 
     def _load_document(self, filename, section=None):
+        if not hasattr(self, "tasks"):
+            self.tasks = TaskRunner(self)
+            self._document_revision = 0
+        self._document_revision += 1
+        revision = self._document_revision
         path = DOCS_DIR / filename
-        try:
+
+        def read(_progress):
             markdown = path.read_text(encoding="utf-8")
-        except OSError as error:
-            self.doc_browser.setPlainText(f"无法读取文档：{path}\n\n{error}")
-            return
-        self.doc_browser.setMarkdown(
-            self._extract_markdown_section(markdown, section)
-        )
-        self._format_document()
-        self.doc_browser.verticalScrollBar().setValue(0)
+            return DocumentationPage._extract_markdown_section(markdown, section)
+
+        def finished(markdown):
+            if revision == self._document_revision:
+                self.doc_browser.setMarkdown(markdown)
+                self._format_document()
+                self.doc_browser.verticalScrollBar().setValue(0)
+
+        def failed(error):
+            if revision == self._document_revision:
+                self.doc_browser.setPlainText(f"无法读取文档：{path}\n\n{error}")
+
+        self.tasks.submit(read, finished, failed)
 
     def _format_document(self):
         document = self.doc_browser.document()

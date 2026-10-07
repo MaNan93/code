@@ -6,7 +6,6 @@ coloured pen cursor. Rows can be reordered directly or edited through the
 context menu.
 """
 
-import copy
 from functools import lru_cache
 
 from PyQt5 import QtCore, QtGui, QtWidgets
@@ -316,7 +315,7 @@ class LaneGrid(QtWidgets.QWidget):
         self._drag_active = False
         self._drag_anchor = None
         self._drag_current = None
-        self._drag_snapshot = None
+        self._paint_originals = {}
         self._hover_cell = None  # (row, lane) under the cursor, for pen preview
         self._pen_cursor = None  # cached QCursor for the active controller
         self._bg_color = BG_SURFACE  # card background, set from theme
@@ -647,7 +646,7 @@ class LaneGrid(QtWidgets.QWidget):
         self._drag_active = True
         self._drag_anchor = (r, lane_idx)
         self._drag_current = (r, lane_idx)
-        self._drag_snapshot = copy.deepcopy(self.data)
+        self._paint_originals = {}
         self._hover_cell = None  # suppress preview during drag
         # Called only after a drag starts or a single click is confirmed.
         self._paint_current_rect()
@@ -661,16 +660,22 @@ class LaneGrid(QtWidgets.QWidget):
 
     def _end_paint(self):
         self._drag_active = False
-        changed = self._drag_snapshot is not None and self.data != self._drag_snapshot
+        changed = any(
+            self.data[row].get(key, "") != original
+            for (row, key), original in self._paint_originals.items()
+        )
+        self._paint_originals.clear()
         # Refresh so the hover preview comes back after the stroke finishes
         self._refresh_cell_styles()
         if changed:
             self.changed.emit()
 
     def _paint_current_rect(self):
-        if self._drag_snapshot is None:
+        if not self._drag_active:
             return
-        self.data = copy.deepcopy(self._drag_snapshot)
+        # [REFACTORED]: Restore only cells touched by the preceding rectangle.
+        for (row, key), original in self._paint_originals.items():
+            self.data[row][key] = original
         r0, l0 = self._drag_anchor
         r1, l1 = self._drag_current
         row_lo, row_hi = min(r0, r1), max(r0, r1)
@@ -681,7 +686,9 @@ class LaneGrid(QtWidgets.QWidget):
                     continue
                 i = 0
                 for lane_idx in range(lane_lo, lane_hi + 1):
-                    self.data[r][f"lane{lane_idx}"] = f"{self.active_ctrl_id}-{i}"
+                    key = f"lane{lane_idx}"
+                    self._paint_originals.setdefault((r, key), self.data[r].get(key, ""))
+                    self.data[r][key] = f"{self.active_ctrl_id}-{i}"
                     i += 1
         self._sync_table_from_data()
 

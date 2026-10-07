@@ -1,35 +1,23 @@
-"""Generated-file tree and previews in the floating Artifacts panel."""
-
-import difflib
-import shutil
-import subprocess
-from pathlib import Path
+"""Generated-file drawer construction and public signals."""
 
 from PyQt5 import QtCore, QtGui, QtWidgets
-
 from plm.frontend.qt.models.artifacts import ArtifactSelection
 from plm.frontend.qt.models.preferences import DEFAULT_EDITOR
+from plm.frontend.qt.services.tasks import TaskRunner
 from plm.frontend.qt.widgets.code_preview import CodePreview
 from plm.frontend.qt.widgets.common import (
-    ICON_SIZE,
-    StatusBadge,
-    StyledMenu,
-    apply_drop_shadow,
-    load_lucide_icon,
-    make_icon_button,
-    open_in_file_manager,
+    ICON_SIZE, StatusBadge, StyledMenu, apply_drop_shadow,
+    load_lucide_icon, make_icon_button,
 )
-from plm.frontend.qt.styles.tokens import PRIMARY, SUCCESS, TEXT_MUTED
+from plm.frontend.qt.styles.tokens import TEXT_MUTED
+from .artifact_preview import ArtifactPreview
+from .artifact_files import ArtifactFiles
+from .artifact_interactions import ArtifactInteractions
 
 
-_STATUS_COLORS = {
-    "New": SUCCESS,
-    "Modified": PRIMARY,
-    "Unchanged": TEXT_MUTED,
-}
-
-
-class ArtifactsPanel(QtWidgets.QFrame):
+class ArtifactsPanel(
+    ArtifactPreview, ArtifactFiles, ArtifactInteractions, QtWidgets.QFrame
+):
     maximizeRequested = QtCore.pyqtSignal()
     refreshRequested = QtCore.pyqtSignal()
     widthRequested = QtCore.pyqtSignal(int)
@@ -50,6 +38,11 @@ class ArtifactsPanel(QtWidgets.QFrame):
         self._file_statuses = {}
         self._current_contents = {}
         self._previous_contents = {}
+        self._file_errors = {}
+        self._files_revision = 0
+        self._preview_revision = 0
+        self._loading_contents = False
+        self.tasks = TaskRunner(self)
         self.is_maximized = False
         self._resize_origin_x = None
         self._resize_origin_width = None
@@ -58,6 +51,7 @@ class ArtifactsPanel(QtWidgets.QFrame):
         apply_drop_shadow(self, offset=(-4, 0), blur_radius=16, alpha=36)
 
         root = QtWidgets.QVBoxLayout(self)
+        root.setSizeConstraint(QtWidgets.QLayout.SetNoConstraint)
         root.setContentsMargins(16, 0, 16, 16)
         root.setSpacing(12)
         toolbar = QtWidgets.QWidget()
@@ -205,349 +199,3 @@ class ArtifactsPanel(QtWidgets.QFrame):
         self.file_tree.viewport().installEventFilter(self)
         self.set_files([])
         self._apply_toolbar_density(self.width())
-
-    def _read_contents(self, files):
-        contents = {}
-        for value in files:
-            path = Path(value).resolve()
-            try:
-                contents[str(path)] = path.read_text(encoding="utf-8")
-            except (OSError, UnicodeError):
-                continue
-        return contents
-
-    def set_files(self, files, root=None, statuses=None):
-        root = Path(root).resolve() if root is not None else None
-        files = [Path(value).resolve() for value in files]
-        self.selection.set_files(files, keep_current=root == self.workspace_root)
-        files = self.selection.files
-        if root == self.workspace_root:
-            self._previous_contents = dict(self._current_contents)
-        else:
-            self._previous_contents = {}
-        self._current_contents = self._read_contents(files)
-        self._file_statuses = dict(statuses or {})
-        self.workspace_root = root
-
-        self._rebuild_tree(files, root)
-        self._load_selected()
-
-    @property
-    def current_path(self):
-        return self.selection.current_path
-
-    def select_file(self, path):
-        if not self.selection.select(path):
-            return False
-        self._load_selected()
-        return True
-
-    def _rebuild_tree(self, files, root):
-        self.file_tree.clear()
-        self._tree_items.clear()
-        nodes = {}
-        selected_item = None
-        for path in files:
-            try:
-                relative = path.relative_to(root) if root else Path(path.name)
-            except ValueError:
-                relative = Path(path.name)
-            parent = self.file_tree.invisibleRootItem()
-            parts = relative.parts
-            for index, part in enumerate(parts):
-                key = parts[: index + 1]
-                is_file = index == len(parts) - 1
-                if key in nodes:
-                    parent = nodes[key]
-                    continue
-                label = part
-                if is_file:
-                    status = self._file_statuses.get(relative.as_posix(), "")
-                    if status:
-                        label = f"{part}   {status}"
-                item = QtWidgets.QTreeWidgetItem(parent, [label])
-                nodes[key] = item
-                if is_file:
-                    self._tree_items[path] = item
-                    item.setData(0, QtCore.Qt.UserRole, str(path))
-                    item.setToolTip(0, str(relative))
-                    status = self._file_statuses.get(relative.as_posix(), "")
-                    if status in _STATUS_COLORS:
-                        item.setForeground(0, QtGui.QBrush(QtGui.QColor(_STATUS_COLORS[status])))
-                    if self.current_path == path:
-                        selected_item = item
-                parent = item
-        self.file_tree.expandAll()
-        if selected_item is not None:
-            self.file_tree.setCurrentItem(selected_item)
-
-    def _tree_item_clicked(self, item, _column):
-        value = item.data(0, QtCore.Qt.UserRole)
-        if not value:
-            item.setExpanded(not item.isExpanded())
-            return
-        if self.select_file(value):
-            self.tree_button.setChecked(False)
-
-    def _diff_available(self):
-        if self.current_path is None:
-            return False
-        key = str(self.current_path)
-        return (
-            key in self._previous_contents
-            and key in self._current_contents
-            and self._previous_contents[key] != self._current_contents[key]
-        )
-
-    def _load_selected(self, *_):
-        self.empty_state.setVisible(self.current_path is None)
-        self.preview.setVisible(self.current_path is not None)
-        self.preview.clear()
-        self._readable = False
-        self.search_status.clear()
-        self.preview.setToolTip(str(self.current_path or ""))
-        self._file_error = ""
-        text = ""
-        if self.current_path is None:
-            self.preview.setPlaceholderText("尚无生成文件")
-            self._file_status = "尚无生成文件"
-        else:
-            key = str(self.current_path)
-            text = self._current_contents.get(key, "")
-            if key not in self._current_contents:
-                try:
-                    text = self.current_path.read_text(encoding="utf-8")
-                except (OSError, UnicodeError) as error:
-                    self.preview.setPlaceholderText("无法预览该文件，请刷新或选择其他文件")
-                    self._file_status = "无法读取文件"
-                    self._file_error = str(error)
-                else:
-                    self._current_contents[key] = text
-                    self._readable = True
-            else:
-                self._readable = True
-            if self._readable:
-                self.preview.setPlaceholderText("文件为空")
-                if self.diff_button.isChecked() and self._diff_available():
-                    previous = self._previous_contents[key]
-                    relative = self.current_path.name
-                    if self.workspace_root is not None:
-                        try:
-                            relative = self.current_path.relative_to(self.workspace_root).as_posix()
-                        except ValueError:
-                            pass
-                    text = "".join(difflib.unified_diff(
-                        previous.splitlines(keepends=True),
-                        text.splitlines(keepends=True),
-                        fromfile=f"previous/{relative}",
-                        tofile=f"current/{relative}",
-                    ))
-                self.preview.setPlainText(text)
-                self.preview.moveCursor(QtGui.QTextCursor.Start)
-                self.preview.horizontalScrollBar().setValue(0)
-                self._file_status = (
-                    f"{self.selection.current_index + 1}/{len(self.selection.files)}"
-                    f" · {len(text.splitlines())} 行"
-                )
-        diff_available = self._diff_available()
-        self.diff_button.setEnabled(diff_available)
-        if not diff_available and self.diff_button.isChecked():
-            self.diff_button.blockSignals(True)
-            self.diff_button.setChecked(False)
-            self.diff_button.blockSignals(False)
-        self._update_status()
-        self._update_highlighting()
-        self.preview.line_numbers.setVisible(self._readable)
-        for index in (0, 2, 5):
-            self.toolbar_buttons[index].setEnabled(self.current_path is not None)
-        self.toolbar_buttons[4].setEnabled(self._readable)
-        self.copy_content_action.setEnabled(self._readable)
-        if self._readable and self.search_input.text():
-            self._search_changed()
-        self._select_tree_path()
-
-    def _select_tree_path(self):
-        item = self._tree_items.get(self.current_path)
-        if item is not None:
-            self.file_tree.setCurrentItem(item)
-
-    def set_output_state(self, state, text, detail=""):
-        self._output_state = state
-        self._output_text = text
-        self._output_detail = detail
-        self.status.setProperty("state", state)
-        self.status.style().unpolish(self.status)
-        self.status.style().polish(self.status)
-        self._update_status()
-
-    def _update_status(self):
-        parts = [self._file_status] if self.current_path is not None or not self._output_text else []
-        # "Up to date" already has a dedicated green status beside Generate.
-        # Keep the preview footer focused on file position/line count and only
-        # repeat generation state here when it needs attention.
-        show_output_state = self._output_text and not (
-            self._output_state == "up_to_date" and self.current_path is not None
-        )
-        if show_output_state:
-            parts.append(self._output_text)
-        self.status.setText(" · ".join(parts))
-        self.status.setToolTip("\n".join(part for part in (self._file_error, self._output_detail) if part))
-
-    def _update_highlighting(self, *_):
-        is_verilog = (
-            self.current_path is not None
-            and self.current_path.suffix.lower() in (".v", ".sv", ".vh", ".svh")
-        )
-        enabled = self._readable and is_verilog and not self.diff_button.isChecked()
-        self.highlight_button.setEnabled(self._readable and is_verilog)
-        self.preview.highlighter.set_enabled(enabled and self.highlight_button.isChecked())
-
-    def show_search(self):
-        if self._readable:
-            self.search_bar.show()
-            self.search_input.setFocus()
-            self.search_input.selectAll()
-
-    def hide_search(self):
-        self.search_bar.hide()
-        self.preview.setFocus()
-
-    def _search_changed(self, *_):
-        self.preview.moveCursor(QtGui.QTextCursor.Start)
-        self.find_text()
-
-    def find_text(self, backwards=False):
-        query = self.search_input.text()
-        if not query or not self._readable:
-            self.search_status.clear()
-            return False
-        if query.startswith(":"):
-            value = query[1:].strip()
-            if not value.isdigit() or int(value) < 1:
-                self.search_status.setText("无效行号")
-                return False
-            line = int(value)
-            block = self.preview.document().findBlockByNumber(line - 1)
-            if not block.isValid():
-                self.search_status.setText("行号超出范围")
-                return False
-            self.preview.setTextCursor(QtGui.QTextCursor(block))
-            self.preview.centerCursor()
-            self.search_status.setText(f"第 {line} 行")
-            return True
-        flags = QtGui.QTextDocument.FindBackward if backwards else QtGui.QTextDocument.FindFlags()
-        found = self.preview.find(query, flags)
-        if not found:
-            self.preview.moveCursor(QtGui.QTextCursor.End if backwards else QtGui.QTextCursor.Start)
-            found = self.preview.find(query, flags)
-        self.search_status.setText("" if found else "未找到")
-        return found
-
-    def _set_tree_visible(self, visible):
-        self.file_tree.setVisible(visible)
-
-    def _apply_toolbar_density(self, width):
-        # Keep file tree, More and maximize always reachable. Less critical
-        # controls collapse into More before they can overlap at narrow widths.
-        width = int(width)
-        self.toolbar_buttons[0].setVisible(width >= 280)
-        self.toolbar_buttons[1].setVisible(width >= 320)
-        self.highlight_button.setVisible(width >= 360)
-        self.toolbar_buttons[2].setVisible(width >= 420)
-        self.toolbar_buttons[4].setVisible(width >= 420)
-        self.toolbar_buttons[5].setVisible(width >= 470)
-        self.diff_button.setVisible(width >= 520)
-        for index in (6, 7, 8):
-            self.toolbar_buttons[index].show()
-
-    def resizeEvent(self, event):
-        super().resizeEvent(event)
-        self._apply_toolbar_density(event.size().width())
-
-    def set_maximized(self, maximized: bool):
-        self.is_maximized = bool(maximized)
-        if self.is_maximized:
-            self._resize_origin_x = None
-            self._resize_origin_width = None
-            self.unsetCursor()
-
-    def mousePressEvent(self, event):
-        if (
-            not self.is_maximized
-            and event.button() == QtCore.Qt.LeftButton
-            and event.pos().x() <= self.RESIZE_EDGE_WIDTH
-        ):
-            self._resize_origin_x = event.globalPos().x()
-            self._resize_origin_width = self.width()
-            self.setCursor(QtCore.Qt.SplitHCursor)
-            event.accept()
-            return
-        super().mousePressEvent(event)
-
-    def mouseMoveEvent(self, event):
-        if (
-            not self.is_maximized
-            and self._resize_origin_x is not None
-            and event.buttons() & QtCore.Qt.LeftButton
-        ):
-            delta = self._resize_origin_x - event.globalPos().x()
-            self.widthRequested.emit(self._resize_origin_width + delta)
-            event.accept()
-            return
-        if not self.is_maximized and event.pos().x() <= self.RESIZE_EDGE_WIDTH:
-            self.setCursor(QtCore.Qt.SplitHCursor)
-        else:
-            self.unsetCursor()
-        super().mouseMoveEvent(event)
-
-    def mouseReleaseEvent(self, event):
-        if event.button() == QtCore.Qt.LeftButton and self._resize_origin_x is not None:
-            self._resize_origin_x = None
-            self._resize_origin_width = None
-            if event.pos().x() > self.RESIZE_EDGE_WIDTH:
-                self.unsetCursor()
-            event.accept()
-            return
-        super().mouseReleaseEvent(event)
-
-    def leaveEvent(self, event):
-        if self._resize_origin_x is None:
-            self.unsetCursor()
-        super().leaveEvent(event)
-
-    def eventFilter(self, watched, event):
-        if event.type() == QtCore.QEvent.MouseButtonPress and self.file_tree.isVisible():
-            if watched is self.preview.viewport():
-                self.tree_button.setChecked(False)
-            elif watched is self.file_tree.viewport() and self.file_tree.itemAt(event.pos()) is None:
-                self.tree_button.setChecked(False)
-        return super().eventFilter(watched, event)
-
-    def copy_path(self):
-        if self.current_path is not None:
-            QtWidgets.QApplication.clipboard().setText(str(self.current_path))
-
-    def copy_contents(self):
-        if self._readable:
-            QtWidgets.QApplication.clipboard().setText(self.preview.toPlainText())
-
-    def open_folder(self):
-        if self.current_path is not None and not open_in_file_manager(self.current_path.parent):
-            QtWidgets.QMessageBox.warning(self, "无法打开文件夹", str(self.current_path.parent))
-
-    def open_in_editor(self):
-        if self.current_path is None:
-            return
-        if not self.current_path.is_file():
-            QtWidgets.QMessageBox.warning(self, "无法打开文件", "文件已不存在，请刷新文件列表。")
-            return
-        editor = self.editor_path_provider()
-        configured_path = Path(editor).expanduser()
-        executable = str(configured_path) if configured_path.is_file() else shutil.which(editor)
-        if executable is None:
-            QtWidgets.QMessageBox.warning(self, "无法打开编辑器", f"未找到 {editor}，请在设置中配置编辑器。")
-            return
-        try:
-            subprocess.Popen([executable, str(self.current_path)])
-        except OSError as error:
-            QtWidgets.QMessageBox.warning(self, "无法打开编辑器", str(error))

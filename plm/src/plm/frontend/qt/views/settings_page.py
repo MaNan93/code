@@ -6,6 +6,7 @@ from plm.core.verible import (
     VERIBLE_BOOL_PARAMS, VERIBLE_INT_PARAMS, VERIBLE_STR_PARAMS, find_verible,
 )
 from plm.frontend.qt.models.preferences import DEFAULT_EDITOR
+from plm.frontend.qt.services.tasks import TaskRunner
 from plm.frontend.qt.styles.tokens import SPACING_MD, SPACING_SM
 from .secondary_page import SecondaryPage
 
@@ -250,10 +251,17 @@ class SettingsPage(SecondaryPage):
             self.verible_path_edit.setText(path)
 
     def _detect_verible(self):
-        found = find_verible()
-        if found:
-            self.verible_path_edit.setText(found)
-        self.settings_status.setText("已检测到 Verible" if found else "未找到 Verible，可手动选择路径。")
+        if not hasattr(self, "tasks"):
+            self.tasks = TaskRunner(self)
+
+        def finished(found):
+            if found:
+                self.verible_path_edit.setText(found)
+            self.settings_status.setText("已检测到 Verible" if found else "未找到 Verible，可手动选择路径。")
+
+        self.settings_status.setText("正在检测 Verible…")
+        self.tasks.submit(lambda _progress: find_verible(), finished,
+                          lambda error: self.settings_status.setText(f"检测失败：{error}"))
 
     def _browse_editor(self):
         path, _selected_filter = QtWidgets.QFileDialog.getOpenFileName(

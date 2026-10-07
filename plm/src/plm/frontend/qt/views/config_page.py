@@ -1,5 +1,4 @@
 from PyQt5 import QtCore, QtGui, QtWidgets
-from copy import deepcopy
 from plm.frontend.qt.widgets.common import make_icon_button
 from plm.frontend.qt.widgets.config_editor import CsvTableEditor, GenerationEditor
 from plm.frontend.qt.views.artifacts_panel import ArtifactsPanel
@@ -183,7 +182,7 @@ class ConfigPage(QtWidgets.QFrame):
         self.artifacts_maximized = False
 
         root = QtWidgets.QVBoxLayout(self)
-        root.setContentsMargins(0, 0, 0, 0)
+        root.setContentsMargins(0, 0, 0, 12)
         root.setSpacing(0)
         self.header = ConfigHeader()
         self.header.logToggleRequested.connect(self.logToggleRequested.emit)
@@ -252,7 +251,7 @@ class ConfigPage(QtWidgets.QFrame):
         if self._history and payload == self._history[self._history_index]:
             return
         self._history = self._history[:self._history_index + 1]
-        self._history.append(deepcopy(payload))
+        self._history.append(payload)
         if len(self._history) > self.MAX_HISTORY:
             del self._history[:-self.MAX_HISTORY]
         self._history_index = len(self._history) - 1
@@ -264,7 +263,7 @@ class ConfigPage(QtWidgets.QFrame):
         self.dirtyChanged.emit(self.dirty)
 
     def mark_saved(self):
-        self._saved_content = deepcopy(self.content())
+        self._saved_content = self.content()
         self._update_dirty()
 
     def finish_editing(self):
@@ -298,7 +297,7 @@ class ConfigPage(QtWidgets.QFrame):
 
     def set_content(self, payload):
         self._load_content(payload)
-        self._history = [deepcopy(self.content())]
+        self._history = [self.content()]
         self._history_index = 0
         self.mark_saved()
         self.historyChanged.emit()
@@ -379,7 +378,7 @@ class ConfigPage(QtWidgets.QFrame):
                 self.artifacts_panel.geometry()
                 if reopening
                 else QtCore.QRect(
-                    self.config_area.width(), 0, target.width(), target.height()
+                    self.config_area.width(), 0, 0, target.height()
                 )
             )
             self._animate_artifacts(start, target, hide_after=False)
@@ -387,7 +386,7 @@ class ConfigPage(QtWidgets.QFrame):
         end = QtCore.QRect(
             self.config_area.width(),
             0,
-            self.artifacts_panel.width(),
+            0,
             self.config_area.height(),
         )
         self._animate_artifacts(

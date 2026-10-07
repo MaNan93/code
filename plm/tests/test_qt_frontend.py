@@ -140,7 +140,10 @@ class QtFrontendLayoutTests(unittest.TestCase):
     def test_nav_actions_show_visible_focus_and_pressed_backgrounds(self):
         nav = self.window.nav_panel
         self.window.activateWindow()
-        for button in (nav.new_chat_btn, nav.open_project_btn, nav.save_btn):
+        for button in (
+            nav.new_chat_btn, nav.open_project_btn, nav.save_btn,
+            nav.settings_btn, nav.docs_btn,
+        ):
             self.assertEqual(button.focusPolicy(), QtCore.Qt.StrongFocus)
             button.setFocus(QtCore.Qt.TabFocusReason)
             wait_for_idle(self.app)
@@ -150,6 +153,13 @@ class QtFrontendLayoutTests(unittest.TestCase):
             button.setDown(True)
             self.assertEqual(button.grab().toImage().pixelColor(point).name(), "#cbd5e1")
             button.setDown(False)
+        for button, page in ((nav.settings_btn, "settings"), (nav.docs_btn, "docs")):
+            nav.set_active(page)
+            button.setFocus(QtCore.Qt.TabFocusReason)
+            wait_for_idle(self.app)
+            point = QtCore.QPoint(button.width() - 12, button.height() // 2)
+            self.assertEqual(button.grab().toImage().pixelColor(point).name(), PRIMARY_LIGHT.lower())
+        nav.set_active(None)
 
     def test_nav_toggle_collapses_and_restores_sidebar(self):
         nav = self.window.nav_panel

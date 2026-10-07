@@ -286,10 +286,11 @@ QPushButton#ProjectMoreBtn:hover {
     background-color: $bg_subtle;
     border: none;
 }
-QPushButton#NavActionButton:hover, QPushButton#NavActionButton:focus {
+QPushButton#NavActionButton:hover, QPushButton#NavActionButton:focus,
+QPushButton#NavFooterButton:hover, QPushButton#NavFooterButton:focus {
     background-color: $border;
 }
-QPushButton#NavActionButton:pressed {
+QPushButton#NavActionButton:pressed, QPushButton#NavFooterButton:pressed {
     background-color: $border_hover;
 }
 QPushButton#ProjectButton[selected="true"], QPushButton#NavFooterButton[selected="true"] {

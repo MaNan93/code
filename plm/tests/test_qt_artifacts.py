@@ -72,6 +72,30 @@ class ArtifactPreviewTests(unittest.TestCase):
         self.assertEqual(label.text(), "")
         self.assertEqual(label.toolTip(), "")
 
+    def test_expanded_file_tree_fits_all_rows_and_scrolls_only_when_needed(self):
+        paths = [self.file(f"rtl/file_{i:02d}.sv", "module test; endmodule") for i in range(19)]
+        self.panel.resize(1000, 1100)
+        self.panel.set_files(paths, self.root)
+        wait_for_idle(self.app)
+        self.panel.tree_button.click()
+        wait_for_idle(self.app)
+        tree = self.panel.file_tree
+        self.assertGreater(tree.height(), 190)
+        self.assertEqual(tree.verticalScrollBar().maximum(), 0)
+        folder = tree.topLevelItem(0)
+        expanded_height = tree.height()
+        folder.setExpanded(False)
+        wait_for_idle(self.app)
+        self.assertLess(tree.height(), expanded_height)
+        folder.setExpanded(True)
+        self.panel.resize(1000, 300)
+        wait_for_idle(self.app)
+        self.assertGreater(tree.verticalScrollBar().maximum(), 0)
+        self.assertFalse(tree.geometry().intersects(self.panel.preview.geometry()))
+        self.panel.resize(1000, 1100)
+        wait_for_idle(self.app)
+        self.assertEqual(tree.verticalScrollBar().maximum(), 0)
+
     def test_complete_readonly_source_and_line_numbers(self):
         text = "module generated;\n" + "assign value = " + "0" * 250 + ";\n"
         text += "\n".join(f"// line {i}" for i in range(150)) + "\nendmodule\n"

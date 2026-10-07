@@ -15,6 +15,35 @@ from .artifact_files import ArtifactFiles
 from .artifact_interactions import ArtifactInteractions
 
 
+class ArtifactFileTree(QtWidgets.QTreeWidget):
+    """Fit expanded rows while allowing the parent layout to shrink the tree."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Preferred)
+        self.itemExpanded.connect(self.updateGeometry)
+        self.itemCollapsed.connect(self.updateGeometry)
+
+    def sizeHint(self):
+        size = super().sizeHint()
+        height = self.frameWidth() * 2
+        stack = [self.topLevelItem(i) for i in range(self.topLevelItemCount())]
+        while stack:
+            item = stack.pop()
+            if item.isHidden():
+                continue
+            height += self.sizeHintForIndex(self.indexFromItem(item)).height()
+            if item.isExpanded():
+                stack.extend(item.child(i) for i in range(item.childCount()))
+        if not self.horizontalScrollBar().isHidden():
+            height += self.horizontalScrollBar().sizeHint().height()
+        size.setHeight(height)
+        return size
+
+    def minimumSizeHint(self):
+        return QtCore.QSize(0, 0)
+
+
 class ArtifactPathLabel(QtWidgets.QLabel):
     """Keep the full path available without widening the drawer toolbar."""
 
@@ -113,11 +142,10 @@ class ArtifactsPanel(
         toolbar_layout.addWidget(self.diff_button)
         root.addWidget(toolbar)
 
-        self.file_tree = QtWidgets.QTreeWidget(self)
+        self.file_tree = ArtifactFileTree(self)
         self.file_tree.setObjectName("ArtifactFileTree")
         self.file_tree.setHeaderHidden(True)
         self.file_tree.setIndentation(16)
-        self.file_tree.setMaximumHeight(190)
         self.file_tree.itemClicked.connect(self._tree_item_clicked)
         root.addWidget(self.file_tree)
         self.file_tree.hide()

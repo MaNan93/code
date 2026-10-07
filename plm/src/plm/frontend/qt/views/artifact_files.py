@@ -100,6 +100,7 @@ class ArtifactFiles:
                         selected_item = item
                 parent = item
         self.file_tree.expandAll()
+        self.file_tree.updateGeometry()
         if selected_item is not None:
             self.file_tree.setCurrentItem(selected_item)
 

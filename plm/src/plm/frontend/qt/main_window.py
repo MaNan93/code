@@ -19,6 +19,7 @@ from plm.frontend.qt.styles.tokens import (
 from plm.frontend.qt.views.config_page import ConfigPage
 from plm.frontend.qt.views.log_panel import LogPanel
 from plm.frontend.qt.widgets.common import ContentIconStyle, load_lucide_icon
+from plm.frontend.qt.widgets.tooltip import install_tooltips
 
 __all__ = ["MainWindow"]
 
@@ -312,6 +313,7 @@ class MainWindow(QtWidgets.QMainWindow):
         if not isinstance(app.style(), ContentIconStyle):
             app.setStyle(ContentIconStyle(app.style().objectName()))
         app.setStyleSheet(APP_QSS)
+        install_tooltips(app)
         self.setWindowTitle("plmConsultant")
         self.resize(1400, 900)
         self.setMinimumSize(960, 640)

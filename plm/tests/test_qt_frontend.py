@@ -137,6 +137,31 @@ class QtFrontendLayoutTests(unittest.TestCase):
             QtCore.QSize(ICON_SIZE, ICON_SIZE),
         )
 
+    def test_tooltip_has_transparent_rounded_corners_and_preserves_focus(self):
+        button = self.window.nav_panel.save_btn
+        self.window.activateWindow()
+        button.setFocus()
+        self.app.processEvents()
+        controller = self.app._rounded_tooltips
+        point = button.rect().center()
+        event = QtGui.QHelpEvent(QtCore.QEvent.ToolTip, point, button.mapToGlobal(point))
+        self.app.sendEvent(button, event)
+        self.app.processEvents()
+        popup = controller.popup
+        self.assertTrue(popup.isVisible())
+        self.assertEqual(popup.label.text(), "保存")
+        self.assertTrue(button.hasFocus())
+        image = popup.grab().toImage()
+        self.assertEqual(image.pixelColor(0, 0).alpha(), 0)
+        self.assertEqual(image.pixelColor(image.width() - 1, image.height() - 1).alpha(), 0)
+        self.assertTrue(any(
+            0 < image.pixelColor(x, y).alpha() < 255
+            for x in range(10) for y in range(10)
+        ))
+        self.assertEqual(image.pixelColor(image.width() // 2, 2).name(), "#202123")
+        self.app.sendEvent(button, QtCore.QEvent(QtCore.QEvent.Leave))
+        self.assertFalse(popup.isVisible())
+
     def test_nav_actions_show_visible_focus_and_pressed_backgrounds(self):
         nav = self.window.nav_panel
         self.window.activateWindow()

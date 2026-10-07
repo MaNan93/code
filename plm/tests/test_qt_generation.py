@@ -10,6 +10,7 @@ import unittest
 from unittest.mock import patch
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+from qt_test_support import wait_for_idle
 from PyQt5 import QtCore, QtTest, QtWidgets
 
 from plm.core.validation import ValidationError
@@ -40,14 +41,16 @@ class GenerationIntegrationTests(unittest.TestCase):
         controller = AppController(ProjectService(self.root), self.store, self.service)
         with patch("plm.frontend.qt.main_window.AppController", return_value=controller):
             window = MainWindow()
+            wait_for_idle(self.app)
         window.show()
-        self.app.processEvents()
+        wait_for_idle(self.app)
         self.addCleanup(lambda: (window.config_page.mark_saved(), window.close()))
         return controller, window
 
     def test_formatter_flags_none_empty_and_custom_round_trip(self):
         for flags in (None, {}, {"column_limit": "88", "indentation_spaces": "0"}):
             self.store.save_preferences({"verible_path": "tool with spaces/formatter.exe", "verible_flags": flags})
+            wait_for_idle(self.app)
             reloaded = SettingsStore(QtCore.QSettings(str(self.root / "settings.ini"), QtCore.QSettings.IniFormat))
             self.assertEqual(reloaded.formatter_preferences()["verible_flags"], flags)
             page = SettingsPage(preferences=reloaded.preferences())
@@ -67,13 +70,16 @@ class GenerationIntegrationTests(unittest.TestCase):
         spy = QtTest.QSignalSpy(page.preferencesSaved)
         page._flag_controls["column_limit"].setText("invalid")
         page.save_settings_btn.click()
+        wait_for_idle(self.app)
         self.assertEqual(len(spy), 0)
         self.assertIn("column_limit", page.settings_status.text())
         page._flag_controls["column_limit"].setText("96")
         page.save_settings_btn.click()
+        wait_for_idle(self.app)
         self.assertEqual(spy[0][0]["verible_flags"]["column_limit"], "96")
         with patch("plm.frontend.qt.views.settings_page.find_verible", return_value="C:/tools with spaces/verible.exe"):
             page._detect_verible()
+            wait_for_idle(self.app)
         self.assertEqual(page.verible_path_edit.text(), "C:/tools with spaces/verible.exe")
 
     def test_formatter_settings_reach_subprocess_and_invalidate_outputs(self):
@@ -81,6 +87,7 @@ class GenerationIntegrationTests(unittest.TestCase):
         executable.parent.mkdir()
         executable.write_bytes(b"mock formatter binary")
         self.store.save_preferences({"verible_path": str(executable), "verible_flags": {"column_limit": "88"}})
+        wait_for_idle(self.app)
         controller, window = self.window()
         calls = []
         def formatter(args, **kwargs):
@@ -88,6 +95,7 @@ class GenerationIntegrationTests(unittest.TestCase):
             return subprocess.CompletedProcess(args, 0, stdout=kwargs["input"], stderr=b"")
         with patch("plm.core.verible.subprocess.run", side_effect=formatter):
             controller.generate_current()
+            wait_for_idle(self.app)
         self.assertEqual(controller.generation_state, "up_to_date")
         self.assertTrue(calls)
         for args, kwargs in calls:
@@ -95,10 +103,12 @@ class GenerationIntegrationTests(unittest.TestCase):
             self.assertIsInstance(kwargs["input"], bytes)
             self.assertNotIn("shell", kwargs)
         controller.save_preferences({**self.store.preferences(), "verible_flags": {"column_limit": "96"}})
+        wait_for_idle(self.app)
         self.assertFalse(window.config_page.dirty)
         self.assertEqual(controller.generation_state, "out_of_date")
         with patch("plm.core.verible.subprocess.run", side_effect=formatter):
             controller.generate_current()
+            wait_for_idle(self.app)
         self.assertEqual(controller.generation_state, "up_to_date")
         self.assertIn("--column_limit=96", calls[-1][0])
         manifest = json.loads((controller.current_project.config_dir.parent / "rtl/manifest.json").read_text())
@@ -107,8 +117,10 @@ class GenerationIntegrationTests(unittest.TestCase):
 
     def test_missing_explicit_formatter_keeps_valid_generation_and_logs_fallback(self):
         self.store.save_preferences({"verible_path": str(self.root / "missing.exe"), "verible_flags": {}})
+        wait_for_idle(self.app)
         controller, window = self.window()
         controller.generate_current()
+        wait_for_idle(self.app)
         self.assertEqual(controller.generation_state, "up_to_date")
         self.assertIn("Verible 不可用", window.log_panel.output.toPlainText())
 
@@ -117,6 +129,7 @@ class GenerationIntegrationTests(unittest.TestCase):
         page = window.config_page
         page.generation_editor.sel_mode.setCurrentText("comb")
         page.generation_editor.dpr.setChecked(True)
+        wait_for_idle(self.app)
         self.assertEqual(page.generation_editor.sel_mode.currentText(), "sync")
         self.assertFalse(page.generation_editor.sel_mode.isEnabled())
         page.undo()
@@ -140,7 +153,9 @@ class GenerationIntegrationTests(unittest.TestCase):
                 with self.subTest(arch=arch, dpr=dpr):
                     editor.arch.setCurrentText(arch)
                     editor.dpr.setChecked(dpr)
+                    wait_for_idle(self.app)
                     controller.generate_current()
+                    wait_for_idle(self.app)
                     self.assertEqual(controller.generation_state, "up_to_date")
                     top = (controller.current_project.config_dir.parent / "rtl/src/pipe_lane_mapper.sv").read_text()
                     self.assertEqual(bool(re.search(r"\binput\s+logic\s+dpr_pclk\s*,", top)), arch == "serdes" and dpr)

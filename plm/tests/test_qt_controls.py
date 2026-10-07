@@ -9,6 +9,7 @@ from unittest.mock import patch
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
+from qt_test_support import wait_for_idle
 from PyQt5 import QtCore, QtTest, QtWidgets
 
 from plm.frontend.qt.controllers import AppController
@@ -40,9 +41,10 @@ class QtControlLogicTests(unittest.TestCase):
         )
         with patch("plm.frontend.qt.main_window.AppController", return_value=controller):
             self.window = MainWindow()
+            wait_for_idle(self.app)
         self.controller = controller
         self.window.show()
-        self.app.processEvents()
+        wait_for_idle(self.app)
         self.addCleanup(self._close_window)
 
     def _close_window(self):
@@ -51,15 +53,7 @@ class QtControlLogicTests(unittest.TestCase):
         self.window.close()
         self.window.deleteLater()
         QtCore.QCoreApplication.sendPostedEvents(None, QtCore.QEvent.DeferredDelete)
-        self.app.processEvents()
-
-    def _project_menu_actions(self):
-        self.window.nav_panel.new_chat_btn.click()
-        self.app.processEvents()
-        return [
-            action for action in self.controller.project_menu.actions()
-            if not action.isSeparator()
-        ]
+        wait_for_idle(self.app)
 
     @staticmethod
     def _menu_class_selecting(label):
@@ -76,17 +70,21 @@ class QtControlLogicTests(unittest.TestCase):
         self.assertFalse(page.artifacts_panel.isVisible())
         shown = QtTest.QSignalSpy(page._artifacts_animation.finished)
         page.header.artifacts_btn.click()
+        wait_for_idle(self.app)
         self.assertTrue(page.artifacts_panel.isVisible())
         self.assertTrue(shown.wait(1000))
         hidden = QtTest.QSignalSpy(page._artifacts_animation.finished)
         page.header.artifacts_btn.click()
+        wait_for_idle(self.app)
         self.assertTrue(hidden.wait(1000))
         self.assertFalse(page.artifacts_panel.isVisible())
 
         self.assertGreater(self.window.content_splitter.sizes()[1], 0)
         page.header.log_btn.click()
+        wait_for_idle(self.app)
         self.assertEqual(self.window.content_splitter.sizes()[1], 0)
         page.header.log_btn.click()
+        wait_for_idle(self.app)
         self.assertGreater(self.window.content_splitter.sizes()[1], 0)
 
     def test_log_clear_and_close_buttons_execute_actions(self):
@@ -97,22 +95,26 @@ class QtControlLogicTests(unittest.TestCase):
         self.assertEqual(panel.status_label.text(), "生成完成：3 个文件")
 
         panel.clear_btn.click()
+        wait_for_idle(self.app)
         self.assertEqual(panel.output.toPlainText(), "")
         self.assertEqual(panel.status_label.text(), "")
         self.assertFalse(panel.status_bar.isVisible())
 
         self.assertGreater(self.window.content_splitter.sizes()[1], 0)
         panel.close_btn.click()
+        wait_for_idle(self.app)
         self.assertEqual(self.window.content_splitter.sizes()[1], 0)
 
     def test_settings_save_and_auto_detect_are_wired(self):
         self.window.nav_panel.settings_btn.click()
-        self.app.processEvents()
+        wait_for_idle(self.app)
+        wait_for_idle(self.app)
         page = self.window.view_stack.currentWidget()
         self.assertIsInstance(page, SettingsPage)
 
         page.editor_path_edit.setText("custom-editor")
         page.save_settings_btn.click()
+        wait_for_idle(self.app)
         self.assertEqual(
             self.store.preferences()["editor_path"], "custom-editor"
         )
@@ -126,41 +128,30 @@ class QtControlLogicTests(unittest.TestCase):
             return_value="/tools/verible-verilog-format",
         ):
             detect.click()
+            wait_for_idle(self.app)
         self.assertEqual(
             page.verible_path_edit.text(), "/tools/verible-verilog-format"
         )
 
-    def test_project_menu_button_exposes_new_open_and_reload(self):
-        actions = self._project_menu_actions()
-        self.assertEqual(
-            [a.text() for a in actions],
-            ["新建项目", "打开项目…", "重新加载当前项目"],
-        )
-        self.assertTrue(actions[-1].isEnabled())
-        self.controller.hide_project_menu()
+    def test_new_project_button_opens_creation_dialog_directly(self):
+        with patch("plm.frontend.qt.controllers.project_navigation.NewProjectDialog") as dialog:
+            dialog.return_value.exec_.return_value = QtWidgets.QDialog.Rejected
+            self.window.nav_panel.new_chat_btn.click()
+        dialog.assert_called_once()
+        self.assertFalse(hasattr(self.controller, "project_menu"))
+        self.assertFalse(hasattr(self.controller, "reload_current"))
 
-    def test_project_menu_open_action_opens_selected_workspace(self):
+    def test_open_project_button_opens_selected_workspace(self):
         external = self.root / "external/opened"
         shutil.copytree(PROJECT_ROOT / "test/bifurcate/config", external / "config")
-        actions = self._project_menu_actions()
-        open_action = next(action for action in actions if action.text() == "打开项目…")
         with patch.object(
             QtWidgets.QFileDialog, "getExistingDirectory", return_value=str(external)
         ):
-            open_action.trigger()
+            self.window.nav_panel.open_project_btn.click()
+            wait_for_idle(self.app)
         self.assertEqual(self.controller.current_project.config_dir, external / "config")
         self.assertEqual(self.window.config_page.header.title_label.text(), "opened")
         self.assertIn(external / "config", self.controller.projects.external_dirs)
-
-    def test_project_menu_disables_reload_without_active_project(self):
-        self.controller.archive_project("demo")
-        self.assertIsNone(self.controller.current_project)
-        actions = self._project_menu_actions()
-        reload_action = next(
-            action for action in actions if action.text() == "重新加载当前项目"
-        )
-        self.assertFalse(reload_action.isEnabled())
-        self.controller.hide_project_menu()
 
     def test_project_context_menu_has_no_redundant_clear_action(self):
         widget = self.window.nav_panel.project_list.project_widgets[0]
@@ -173,6 +164,7 @@ class QtControlLogicTests(unittest.TestCase):
             ["置顶", "重命名", "在资源管理器中打开", "归档", "删除"],
         )
         next(action for action in actions if action.text() == "置顶").trigger()
+        wait_for_idle(self.app)
         self.assertEqual(len(pin), 1)
         self.assertIs(pin[0][0], widget)
         menu.close()
@@ -183,6 +175,7 @@ class QtControlLogicTests(unittest.TestCase):
         header.enter_edit_mode()
         header.title_edit.setText("renamed")
         header.save_title()
+        wait_for_idle(self.app)
         self.assertEqual(self.controller.current_name, "renamed")
         self.assertEqual(
             self.controller.current_project.config_dir,

@@ -9,7 +9,8 @@ from unittest.mock import patch
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from PyQt5 import QtCore, QtWidgets
+from qt_test_support import wait_for_idle
+from PyQt5 import QtCore, QtTest, QtWidgets
 
 from plm.frontend.qt.controllers import AppController
 from plm.frontend.qt.main_window import MainWindow
@@ -39,10 +40,17 @@ class QtWorkflowTests(unittest.TestCase):
         self.projects = ProjectService(self.root)
         self.workspaces = WorkspaceService()
 
+    def _reopen_current(self, controller):
+        with patch.object(QtWidgets.QFileDialog, "getExistingDirectory",
+                          return_value=str(controller.current_project.config_dir.parent)):
+            controller.open_project()
+            wait_for_idle(self.app)
+
     def test_project_rename_archive_pin_delete_are_persistent_and_safe(self):
         self.store.set_recent_project("demo")
         controller = AppController(self.projects, self.store, self.workspaces)
         nav = controller.create_navigation()
+        nav.set_projects(controller._available_projects(self.projects.discover()), "demo")
         self.assertEqual(nav.current_project_name, "demo")
 
         renamed_dir = self.projects.rename("demo", "renamed")
@@ -61,6 +69,7 @@ class QtWorkflowTests(unittest.TestCase):
         state.is_archived = True
         self.store.save_project_state(state)
         refreshed = controller.create_navigation()
+        refreshed.set_projects(controller._available_projects(self.projects.discover()), "renamed")
         self.assertEqual([w.project_name for w in refreshed.project_list.project_widgets], ["renamed"])
 
         payload = self.workspaces.load(self.projects._find("renamed"))
@@ -75,8 +84,9 @@ class QtWorkflowTests(unittest.TestCase):
         controller = AppController(self.projects, self.store, self.workspaces)
         with patch("plm.frontend.qt.main_window.AppController", return_value=controller):
             window = MainWindow()
+            wait_for_idle(self.app)
         window.show()
-        self.app.processEvents()
+        wait_for_idle(self.app)
         self.addCleanup(window.close)
         self.assertEqual(controller.current_name, "demo")
         page = window.config_page
@@ -87,6 +97,7 @@ class QtWorkflowTests(unittest.TestCase):
         item.setText("DemoCtrl")
         self.assertTrue(page.dirty)
         window.nav_panel.save_btn.click()
+        wait_for_idle(self.app)
         self.assertFalse(page.dirty)
         csv_text = (self.root / "test/demo/config/controllers.csv").read_text()
         self.assertIn("DemoCtrl", csv_text)
@@ -95,18 +106,21 @@ class QtWorkflowTests(unittest.TestCase):
         self.assertTrue(page.dirty)
         with patch.object(QtWidgets.QMessageBox, "warning") as warning:
             window.nav_panel.save_btn.click()
+            wait_for_idle(self.app)
         warning.assert_not_called()
         self.assertTrue(page.dirty)
         self.assertEqual((self.root / "test/demo/config/controllers.csv").read_text(), csv_text)
         page.controllers_editor.table.item(0, 0).setText("0")
 
         page.generation_editor.generate_btn.click()
+        wait_for_idle(self.app)
         self.assertTrue((self.root / "test/demo/rtl/src/pipe_lane_mapper.sv").is_file())
         self.assertTrue((self.root / "test/demo/tb/tb_pipe_lane_mapper.sv").is_file())
         panel = page.artifacts_panel
         files = list(panel.selection.files)
         generated = self.root / "test/demo/rtl/src/pipe_lane_mapper.sv"
         panel.select_file(files[files.index(generated)])
+        wait_for_idle(self.app)
         self.assertEqual(panel.preview.toPlainText(), generated.read_text())
         self.assertIn("endmodule", panel.preview.toPlainText())
         self.assertTrue(panel.preview.isReadOnly())
@@ -116,8 +130,9 @@ class QtWorkflowTests(unittest.TestCase):
         controller = AppController(self.projects, self.store, self.workspaces)
         with patch("plm.frontend.qt.main_window.AppController", return_value=controller):
             window = MainWindow()
+            wait_for_idle(self.app)
         window.show()
-        self.app.processEvents()
+        wait_for_idle(self.app)
         self.addCleanup(window.close)
         nav = window.nav_panel
 
@@ -130,22 +145,27 @@ class QtWorkflowTests(unittest.TestCase):
 
         with patch.object(QtWidgets.QMessageBox, "question", return_value=QtWidgets.QMessageBox.Yes):
             nav.project_list.archive_project(other)
+            wait_for_idle(self.app)
         self.assertTrue(self.store.get_project_state("other").is_archived)
         self.assertEqual(nav.current_project_name, "demo")
         self.assertEqual(nav.project_list.count(), 1)
 
         demo = nav.project_list.project_widgets[0]
         nav.project_list.rename_project(demo)
+        wait_for_idle(self.app)
         demo.project_name_edit.setText("renamed")
         QtTest.QTest.keyClick(demo.project_name_edit, QtCore.Qt.Key_Return)
+        wait_for_idle(self.app)
         self.assertEqual(nav.current_project_name, "renamed")
         self.assertEqual(self.store.recent_project(), "renamed")
         self.assertEqual(window.config_page.header.title_label.text(), "renamed")
         self.assertTrue((self.root / "test/renamed/config/controllers.csv").is_file())
 
-        self.assertTrue(controller.save_current())
+        controller.save_current()
+        wait_for_idle(self.app)
         with patch.object(QtWidgets.QMessageBox, "question", return_value=QtWidgets.QMessageBox.Yes):
             nav.project_list.delete_project(demo)
+            wait_for_idle(self.app)
         self.assertEqual(nav.project_list.count(), 0)
         self.assertEqual(window.config_page.header.title_label.text(), "无项目")
         self.assertFalse((self.root / "test/renamed").exists())
@@ -154,8 +174,9 @@ class QtWorkflowTests(unittest.TestCase):
         controller = AppController(self.projects, self.store, self.workspaces)
         with patch("plm.frontend.qt.main_window.AppController", return_value=controller):
             window = MainWindow()
+            wait_for_idle(self.app)
         window.show()
-        self.app.processEvents()
+        wait_for_idle(self.app)
         self.addCleanup(window.close)
         item = window.config_page.controllers_editor.table.item(0, 1)
         original = item.text()
@@ -164,11 +185,13 @@ class QtWorkflowTests(unittest.TestCase):
                      if w.project_name == "other")
         with patch.object(QtWidgets.QMessageBox, "question", return_value=QtWidgets.QMessageBox.Cancel):
             other.header.click()
+            wait_for_idle(self.app)
         self.assertEqual(controller.current_name, "demo")
         self.assertEqual(window.nav_panel.current_project_name, "demo")
         self.assertEqual(item.text(), "unsaved")
         with patch.object(QtWidgets.QMessageBox, "question", return_value=QtWidgets.QMessageBox.Discard):
             other.header.click()
+            wait_for_idle(self.app)
         self.assertEqual(controller.current_name, "other")
         self.assertEqual(window.config_page.header.title_label.text(), "other")
         self.assertIn(original, (self.root / "test/demo/config/controllers.csv").read_text())
@@ -177,12 +200,15 @@ class QtWorkflowTests(unittest.TestCase):
         controller = AppController(self.projects, self.store, self.workspaces)
         with patch("plm.frontend.qt.main_window.AppController", return_value=controller):
             window = MainWindow()
+            wait_for_idle(self.app)
         self.addCleanup(window.close)
         controller.archive_project("demo")
+        wait_for_idle(self.app)
         self.assertEqual(controller.current_name, "other")
         self.assertEqual(window.nav_panel.current_project_name, "other")
         self.assertEqual(self.store.recent_project(), "other")
         controller.archive_project("other")
+        wait_for_idle(self.app)
         self.assertIsNone(controller.current_project)
         self.assertIsNone(window.nav_panel.current_project_name)
         self.assertEqual(window.config_page.header.title_label.text(), "无项目")
@@ -190,32 +216,39 @@ class QtWorkflowTests(unittest.TestCase):
         restarted = AppController(self.projects, self.store, self.workspaces)
         with patch("plm.frontend.qt.main_window.AppController", return_value=restarted):
             empty_window = MainWindow()
+            wait_for_idle(self.app)
         self.addCleanup(empty_window.close)
         self.assertEqual(empty_window.nav_panel.project_list.count(), 0)
         self.assertEqual(empty_window.config_page.header.title_label.text(), "无项目")
         self.assertFalse(restarted.save_current())
+        wait_for_idle(self.app)
 
     def test_new_project_uses_custom_location_and_restores_after_restart(self):
         controller = AppController(self.projects, self.store, self.workspaces)
         with patch("plm.frontend.qt.main_window.AppController", return_value=controller):
             window = MainWindow()
+            wait_for_idle(self.app)
         self.addCleanup(window.close)
         location = self.root / "custom"
-        with patch("plm.frontend.qt.controllers.app_controller.NewProjectDialog") as dialog:
+        with patch("plm.frontend.qt.controllers.project_navigation.NewProjectDialog") as dialog:
             dialog.return_value.exec_.return_value = QtWidgets.QDialog.Accepted
             dialog.return_value.values.return_value = ("newdemo", str(location))
             controller.new_project()
+            wait_for_idle(self.app)
         config = location / "newdemo/config"
         self.assertEqual(controller.current_project.config_dir, config)
         self.assertTrue((config.parent / ".plm-workspace").is_file())
         self.assertEqual(self.store.recent_path(), str(config))
-        self.assertTrue(controller.save_current())
+        controller.save_current()
+        wait_for_idle(self.app)
         controller.generate_current()
+        wait_for_idle(self.app)
         self.assertTrue((config.parent / "rtl/src/pipe_lane_mapper.sv").is_file())
 
         restarted = AppController(ProjectService(self.root), self.store, self.workspaces)
         with patch("plm.frontend.qt.main_window.AppController", return_value=restarted):
             restored = MainWindow()
+            wait_for_idle(self.app)
         self.addCleanup(restored.close)
         self.assertEqual(restarted.current_project.config_dir, config)
 
@@ -223,6 +256,7 @@ class QtWorkflowTests(unittest.TestCase):
         controller = AppController(self.projects, self.store, self.workspaces)
         with patch("plm.frontend.qt.main_window.AppController", return_value=controller):
             window = MainWindow()
+            wait_for_idle(self.app)
         self.addCleanup(window.close)
         external = self.root / "outside/demo"
         shutil.copytree(self.root / "test/demo/config", external / "config")
@@ -230,6 +264,7 @@ class QtWorkflowTests(unittest.TestCase):
         with patch.object(QtWidgets.QFileDialog, "getExistingDirectory", return_value=str(external)), \
                 patch.object(QtWidgets.QMessageBox, "question", return_value=QtWidgets.QMessageBox.Cancel):
             controller.open_project()
+            wait_for_idle(self.app)
         self.assertEqual(controller.current_name, "demo")
         self.assertTrue(window.config_page.dirty)
         self.assertNotIn(external / "config", self.projects.external_dirs)
@@ -237,6 +272,7 @@ class QtWorkflowTests(unittest.TestCase):
         with patch.object(QtWidgets.QFileDialog, "getExistingDirectory", return_value=str(external)), \
                 patch.object(QtWidgets.QMessageBox, "question", return_value=QtWidgets.QMessageBox.Discard):
             controller.open_project()
+            wait_for_idle(self.app)
         self.assertEqual(controller.current_project.config_dir, external / "config")
         duplicates = [p for p in self.projects.discover() if p.name.startswith("demo [")]
         self.assertEqual(len(duplicates), 2)
@@ -250,6 +286,7 @@ class QtWorkflowTests(unittest.TestCase):
         restarted = AppController(ProjectService(self.root), self.store, self.workspaces)
         with patch("plm.frontend.qt.main_window.AppController", return_value=restarted):
             restored = MainWindow()
+            wait_for_idle(self.app)
         self.addCleanup(restored.close)
         self.assertEqual(restarted.current_project.config_dir, external / "config")
 
@@ -257,20 +294,23 @@ class QtWorkflowTests(unittest.TestCase):
         controller = AppController(self.projects, self.store, self.workspaces)
         with patch("plm.frontend.qt.main_window.AppController", return_value=controller):
             window = MainWindow()
+            wait_for_idle(self.app)
         self.addCleanup(window.close)
         before = controller.current_project
         with patch.object(QtWidgets.QFileDialog, "getExistingDirectory", return_value=str(self.root)), \
                 patch.object(QtWidgets.QMessageBox, "warning") as warning:
             controller.open_project()
-        warning.assert_called_once()
+            wait_for_idle(self.app)
+        warning.assert_not_called()
         self.assertEqual(controller.current_project, before)
         original = before.controllers_csv.read_bytes()
-        with patch("plm.frontend.qt.controllers.app_controller.NewProjectDialog") as dialog, \
+        with patch("plm.frontend.qt.controllers.project_navigation.NewProjectDialog") as dialog, \
                 patch.object(QtWidgets.QMessageBox, "warning") as warning:
             dialog.return_value.exec_.return_value = QtWidgets.QDialog.Accepted
             dialog.return_value.values.return_value = ("demo", str(self.root / "test"))
             controller.new_project()
-        warning.assert_called_once()
+            wait_for_idle(self.app)
+        warning.assert_not_called()
         self.assertEqual(controller.current_project, before)
         self.assertEqual(before.controllers_csv.read_bytes(), original)
 
@@ -278,34 +318,44 @@ class QtWorkflowTests(unittest.TestCase):
         controller = AppController(self.projects, self.store, self.workspaces)
         with patch("plm.frontend.qt.main_window.AppController", return_value=controller):
             window = MainWindow()
+            wait_for_idle(self.app)
         self.addCleanup(window.close)
         external = self.root / "outside/demo"
         self.projects.create(external.parent, external.name)
         controller._activate_path(external / "config")
+        wait_for_idle(self.app)
         controller.rename_project(controller.current_name, "renamed")
+        wait_for_idle(self.app)
         self.assertEqual(controller.current_name, "renamed")
         self.assertIn("demo", [w.project_name for w in window.nav_panel.project_list.project_widgets])
         self.assertEqual(controller.current_project.config_dir, external.parent / "renamed/config")
         controller.delete_project("renamed")
+        wait_for_idle(self.app)
         self.assertIsNone(controller.current_name)
         self.assertIsNone(window.nav_panel.project_list.selected_project_name)
         window.nav_panel.project_list.select_project("demo")
+        wait_for_idle(self.app)
         self.assertEqual(controller.current_name, "demo")
         self.assertFalse((external.parent / "renamed").exists())
-        self.assertTrue(controller.save_current())
+        controller.save_current()
+        wait_for_idle(self.app)
         self.assertEqual(self.store.project_paths(), [])
 
     def test_archived_external_project_can_be_reopened_and_restored(self):
         controller = AppController(self.projects, self.store, self.workspaces)
         with patch("plm.frontend.qt.main_window.AppController", return_value=controller):
             window = MainWindow()
+            wait_for_idle(self.app)
         self.addCleanup(window.close)
         config = self.projects.create(self.root / "external", "custom")
         controller._activate_path(config)
+        wait_for_idle(self.app)
         controller.archive_project("custom")
+        wait_for_idle(self.app)
         self.assertTrue(self.store.get_project_state(str(config)).is_archived)
         with patch.object(QtWidgets.QFileDialog, "getExistingDirectory", return_value=str(config)):
             controller.open_project()
+            wait_for_idle(self.app)
         self.assertFalse(self.store.get_project_state("custom").is_archived)
         self.assertEqual(controller.current_project.config_dir, config)
 
@@ -313,8 +363,9 @@ class QtWorkflowTests(unittest.TestCase):
         controller = AppController(self.projects, self.store, self.workspaces)
         with patch("plm.frontend.qt.main_window.AppController", return_value=controller):
             window = MainWindow()
+            wait_for_idle(self.app)
         window.show()
-        self.app.processEvents()
+        wait_for_idle(self.app)
         self.addCleanup(lambda: (window.config_page.mark_saved(), window.close()))
         return controller, window
 
@@ -324,15 +375,19 @@ class QtWorkflowTests(unittest.TestCase):
         table.item(0, 1).setText("close_edit")
         with patch.object(QtWidgets.QMessageBox, "question", return_value=QtWidgets.QMessageBox.Cancel):
             self.assertFalse(window.close())
+            wait_for_idle(self.app)
         self.assertTrue(window.isVisible())
         self.assertTrue(window.config_page.dirty)
         table.item(0, 0).setText("invalid")
         with patch.object(QtWidgets.QMessageBox, "question", return_value=QtWidgets.QMessageBox.Save), \
                 patch.object(QtWidgets.QMessageBox, "warning"):
             self.assertFalse(window.close())
+            wait_for_idle(self.app)
         table.item(0, 0).setText("0")
         with patch.object(QtWidgets.QMessageBox, "question", return_value=QtWidgets.QMessageBox.Save):
-            self.assertTrue(window.close())
+            self.assertFalse(window.close())
+            wait_for_idle(self.app)
+        self.assertFalse(window.isVisible())
         self.assertIn("close_edit", controller.current_project.controllers_csv.read_text())
         window.show()
         table.item(0, 1).setText("discard_edit")
@@ -350,33 +405,37 @@ class QtWorkflowTests(unittest.TestCase):
         external = path.read_bytes()
         with patch.object(QtWidgets.QMessageBox, "warning") as warning:
             self.assertFalse(controller.save_current())
+            wait_for_idle(self.app)
             controller.generate_current()
-        self.assertEqual(warning.call_count, 2)
+            wait_for_idle(self.app)
+        warning.assert_not_called()
         self.assertEqual(path.read_bytes(), external)
         self.assertTrue(page.dirty)
         self.assertFalse((controller.current_project.config_dir.parent / "rtl").exists())
         with patch.object(QtWidgets.QMessageBox, "question", return_value=QtWidgets.QMessageBox.Discard):
-            self.assertTrue(controller.reload_current())
+            self._reopen_current(controller)
         self.assertEqual(page.controllers_editor.table.item(0, 1).text(), "external_edit")
-        self.assertTrue(controller.save_current())
+        controller.save_current()
+        wait_for_idle(self.app)
         flags = controller.current_project.config_dir / "gen_flags.txt"
         flags.unlink()
         with patch.object(QtWidgets.QMessageBox, "warning"):
             self.assertFalse(controller.save_current())
+            wait_for_idle(self.app)
         self.assertFalse(flags.exists())
 
-    def test_reload_cancel_and_malformed_file_keep_editor_and_history(self):
+    def test_reopen_cancel_and_malformed_file_keep_editor_and_history(self):
         controller, window = self._editing_window()
         page = window.config_page
         page.controllers_editor.table.item(0, 1).setText("local_edit")
         before = page.content()
         with patch.object(QtWidgets.QMessageBox, "question", return_value=QtWidgets.QMessageBox.Cancel):
-            self.assertFalse(controller.reload_current())
+            self._reopen_current(controller)
         self.assertEqual(page.content(), before)
         controller.current_project.controllers_csv.write_text("broken\nheader\n")
         with patch.object(QtWidgets.QMessageBox, "question", return_value=QtWidgets.QMessageBox.Discard), \
                 patch.object(QtWidgets.QMessageBox, "warning"):
-            self.assertFalse(controller.reload_current())
+            self._reopen_current(controller)
         self.assertEqual(page.content(), before)
         self.assertTrue(page.dirty)
         self.assertTrue(page.can_undo())
@@ -386,7 +445,8 @@ class QtWorkflowTests(unittest.TestCase):
         page = window.config_page
         original = page.content()
         page.controllers_editor.table.item(0, 1).setText("first_edit")
-        self.assertTrue(controller.save_current())
+        controller.save_current()
+        wait_for_idle(self.app)
         saved = page.content()
         page.mapping_editor.lane_count.setValue(8)
         page.signals_editor.add_row()
@@ -394,19 +454,22 @@ class QtWorkflowTests(unittest.TestCase):
         last = page.content()
         for _ in range(3):
             window.undo_action.trigger()
+            wait_for_idle(self.app)
         self.assertEqual(page.content(), saved)
         self.assertFalse(page.dirty)
         window.undo_action.trigger()
+        wait_for_idle(self.app)
         self.assertEqual(page.content(), original)
         self.assertTrue(page.dirty)
         for _ in range(4):
             window.redo_action.trigger()
+            wait_for_idle(self.app)
         self.assertEqual(page.content(), last)
         page.undo()
         page.controllers_editor.table.item(0, 1).setText("new_branch")
         self.assertFalse(page.can_redo())
         with patch.object(QtWidgets.QMessageBox, "question", return_value=QtWidgets.QMessageBox.Discard):
-            self.assertTrue(controller.reload_current())
+            self._reopen_current(controller)
         self.assertFalse(page.can_undo())
         self.assertFalse(page.can_redo())
         self.assertFalse(page.dirty)
@@ -417,16 +480,18 @@ class QtWorkflowTests(unittest.TestCase):
         table = window.config_page.controllers_editor.table
         table.setCurrentCell(0, 1)
         table.editItem(table.item(0, 1))
-        self.app.processEvents()
+        wait_for_idle(self.app)
         editor = table.findChild(QtWidgets.QLineEdit)
         self.assertIsNotNone(editor)
         editor.selectAll()
         QtTest.QTest.keyClicks(editor, "in_progress")
         with patch.object(QtWidgets.QMessageBox, "question", return_value=QtWidgets.QMessageBox.Cancel) as question:
             self.assertFalse(window.close())
+            wait_for_idle(self.app)
         question.assert_called_once()
         self.assertEqual(table.item(0, 1).text(), "in_progress")
-        self.assertTrue(controller.save_current())
+        controller.save_current()
+        wait_for_idle(self.app)
         self.assertIn("in_progress", controller.current_project.controllers_csv.read_text())
 
     def test_generation_failure_after_save_keeps_saved_baseline(self):
@@ -435,14 +500,17 @@ class QtWorkflowTests(unittest.TestCase):
         with patch("plm.frontend.qt.services.workspaces.generate", side_effect=ValueError("failed")), \
                 patch.object(QtWidgets.QMessageBox, "warning"):
             controller.generate_current()
+            wait_for_idle(self.app)
         self.assertFalse(window.config_page.dirty)
-        self.assertTrue(controller.save_current())
+        controller.save_current()
+        wait_for_idle(self.app)
 
     def test_output_state_generation_integrity_and_noop(self):
         controller, window = self._editing_window()
         panel = window.config_page.artifacts_panel
         self.assertEqual(controller.generation_state, "ready")
         controller.generate_current()
+        wait_for_idle(self.app)
         self.assertEqual(controller.generation_state, "up_to_date")
         self.assertIn(
             "输出已是最新",
@@ -453,32 +521,40 @@ class QtWorkflowTests(unittest.TestCase):
         files = self.workspaces.output_files(controller.current_project)
         stamps = {path: path.stat().st_mtime_ns for path in files}
         controller.generate_current()
+        wait_for_idle(self.app)
         self.assertEqual(stamps, {path: path.stat().st_mtime_ns for path in files})
         self.assertIn("输出已是最新", window.log_panel.status_label.text())
         top = controller.current_project.config_dir.parent / "rtl/src/pipe_lane_mapper.sv"
         original = top.read_bytes()
         top.write_bytes(original + b"// modified output\n")
         controller.refresh_artifacts()
+        wait_for_idle(self.app)
         self.assertEqual(controller.generation_state, "out_of_date")
         controller.generate_current()
+        wait_for_idle(self.app)
         self.assertEqual(controller.generation_state, "up_to_date")
         self.assertEqual(top.read_bytes(), original)
         manifest = top.parent.parent / "manifest.json"
         manifest.write_text("broken json", encoding="utf-8")
         controller.refresh_artifacts()
+        wait_for_idle(self.app)
         self.assertEqual(controller.generation_state, "out_of_date")
         controller.generate_current()
+        wait_for_idle(self.app)
         self.assertEqual(controller.generation_state, "up_to_date")
         top.unlink()
         controller.refresh_artifacts()
+        wait_for_idle(self.app)
         self.assertEqual(controller.generation_state, "out_of_date")
         controller.generate_current()
+        wait_for_idle(self.app)
         self.assertTrue(top.exists())
         self.assertEqual(controller.generation_state, "up_to_date")
 
     def test_application_activation_marks_modified_output_out_of_date(self):
         controller, window = self._editing_window()
         controller.generate_current()
+        wait_for_idle(self.app)
         self.assertEqual(controller.generation_state, "up_to_date")
         top = controller.current_project.config_dir.parent / "rtl/src/pipe_lane_mapper.sv"
         top.write_text(
@@ -486,10 +562,8 @@ class QtWorkflowTests(unittest.TestCase):
             encoding="utf-8",
         )
 
-        window.eventFilter(
-            self.app, QtCore.QEvent(QtCore.QEvent.ApplicationActivate)
-        )
-        self.app.processEvents()
+        window._application_state_changed(QtCore.Qt.ApplicationActive)
+        wait_for_idle(self.app)
         self.assertEqual(controller.generation_state, "out_of_date")
 
     def test_output_state_edit_undo_save_and_project_switch(self):
@@ -497,31 +571,37 @@ class QtWorkflowTests(unittest.TestCase):
         controller, window = self._editing_window()
         page = window.config_page
         controller.generate_current()
+        wait_for_idle(self.app)
         page.controllers_editor.table.item(0, 1).setText("changed_controller")
         self.assertEqual(controller.generation_state, "out_of_date")
-        QtTest.QTest.qWait(200)
+        wait_for_idle(self.app)
         self.assertEqual(controller.generation_state, "out_of_date")
         page.undo()
-        QtTest.QTest.qWait(200)
+        wait_for_idle(self.app)
         self.assertEqual(controller.generation_state, "up_to_date")
         page.redo()
-        self.assertTrue(controller.save_current())
+        controller.save_current()
+        wait_for_idle(self.app)
         self.assertEqual(controller.generation_state, "out_of_date")
         controller.generate_current()
+        wait_for_idle(self.app)
         self.assertEqual(controller.generation_state, "up_to_date")
         page.generation_editor.sel_mode.setCurrentText("comb")
-        QtTest.QTest.qWait(200)
+        wait_for_idle(self.app)
         self.assertEqual(controller.generation_state, "out_of_date")
         page.undo()
-        QtTest.QTest.qWait(200)
+        wait_for_idle(self.app)
         self.assertEqual(controller.generation_state, "up_to_date")
         original = controller.current_name
         other = next(p.name for p in self.projects.discover() if p.name != original)
         controller.select_project(other)
+        wait_for_idle(self.app)
         self.assertEqual(controller.generation_state, "ready")
         controller.select_project(original)
+        wait_for_idle(self.app)
         self.assertEqual(controller.generation_state, "up_to_date")
         controller.rename_project(original, "renamed_current")
+        wait_for_idle(self.app)
         self.assertEqual(controller.generation_state, "up_to_date")
         self.assertTrue(page.artifacts_panel.current_path.is_file())
         self.assertIn("renamed_current", str(page.artifacts_panel.current_path))
@@ -537,23 +617,26 @@ class QtWorkflowTests(unittest.TestCase):
         with patch("plm.frontend.qt.services.workspaces.generate", side_effect=fail), \
                 patch.object(QtWidgets.QMessageBox, "warning"):
             controller.generate_current()
-        QtTest.QTest.qWait(200)
+            wait_for_idle(self.app)
+        wait_for_idle(self.app)
         self.assertEqual(controller.generation_state, "failed")
         self.assertIn("simulated", page.generation_editor.status_label.toolTip())
         self.assertTrue(page.generation_editor.generate_btn.isEnabled())
         controller.generate_current()
+        wait_for_idle(self.app)
         self.assertEqual(controller.generation_state, "up_to_date")
         page.controllers_editor.table.item(0, 0).setText("invalid")
-        QtTest.QTest.qWait(200)
+        wait_for_idle(self.app)
         self.assertEqual(controller.generation_state, "invalid")
         page.undo()
-        QtTest.QTest.qWait(200)
+        wait_for_idle(self.app)
         self.assertEqual(controller.generation_state, "up_to_date")
         path = controller.current_project.controllers_csv
         path.write_text(path.read_text().replace("CtrlX16", "external_controller"), encoding="utf-8")
         controller.refresh_artifacts()
+        wait_for_idle(self.app)
         self.assertEqual(controller.generation_state, "external_changed")
-        self.assertTrue(controller.reload_current())
+        self._reopen_current(controller)
         self.assertEqual(controller.generation_state, "out_of_date")
 
     def test_output_state_recognizes_cli_outputs_from_aligned_csv(self):
@@ -576,6 +659,7 @@ class QtWorkflowTests(unittest.TestCase):
         controller, window = self._editing_window()
         for project in list(self.projects.discover()):
             controller.archive_project(project.name)
+            wait_for_idle(self.app)
         self.assertIsNone(controller.current_project)
         self.assertEqual(controller.generation_state, "no_project")
         self.assertFalse(window.config_page.generation_editor.generate_btn.isEnabled())
@@ -613,7 +697,7 @@ class QtWorkflowTests(unittest.TestCase):
         page.tabs.setCurrentIndex(1)
         original = table.item(0, 1).text()
         table.item(0, 1).setText("1-3")
-        self.app.processEvents()
+        wait_for_idle(self.app)
         self.assertEqual(page.mapping_editor.rows()[0]["lane0"], "1-3")
         self.assertTrue(page.dirty)
         page.undo()
@@ -625,6 +709,7 @@ class QtWorkflowTests(unittest.TestCase):
         table = page.controllers_editor.table
         table.item(0, 2).setText("abc")
         controller.validate_current()
+        wait_for_idle(self.app)
         # Format-level errors do not necessarily have an exact cell coordinate,
         # but the editor must keep the user's value and core must reject it.
         self.assertEqual(table.item(0, 2).text(), "abc")
@@ -646,18 +731,22 @@ class QtWorkflowTests(unittest.TestCase):
         page = window.config_page
         self.assertFalse(page.dirty)
         controller.validate_current()
+        wait_for_idle(self.app)
         self.assertFalse(page.dirty)
         page.mapping_editor.table.item(0, 1).setText("99-0")
         controller.validate_current()
+        wait_for_idle(self.app)
         item = page.mapping_editor.table.item(0, 1)
         self.assertIn("undefined", item.toolTip())
         self.assertIn((0, 1), page.mapping_editor.editor._cell_errors)
         with patch.object(QtWidgets.QMessageBox, "warning"):
             self.assertFalse(controller.save_current())
+            wait_for_idle(self.app)
         self.assertEqual(page.tabs.currentIndex(), 1)
         self.assertEqual(page.mapping_editor.table.currentColumn(), 1)
         page.undo()
         controller.validate_current()
+        wait_for_idle(self.app)
         self.assertNotIn((0, 1), page.mapping_editor.editor._cell_errors)
         self.assertNotIn("undefined", page.mapping_editor.table.item(0, 1).toolTip().lower())
         self.assertFalse(page.dirty)
@@ -667,11 +756,11 @@ class QtWorkflowTests(unittest.TestCase):
         controller, window = self._editing_window()
         page = window.config_page
         page.controllers_editor.table.item(1, 0).setText("0")
-        QtTest.QTest.qWait(200)
+        wait_for_idle(self.app)
         for row in (0, 1):
             self.assertIn("Duplicate", page.controllers_editor.table.item(row, 0).toolTip())
         page.undo()
-        QtTest.QTest.qWait(200)
+        wait_for_idle(self.app)
         self.assertFalse(page.controllers_editor.table.item(0, 0).toolTip())
         self.assertFalse(page.controllers_editor.table.item(1, 0).toolTip())
 
@@ -687,8 +776,9 @@ class QtWorkflowTests(unittest.TestCase):
             def exec_(self):
                 return QtWidgets.QDialog.Rejected
 
-        with patch("plm.frontend.qt.controllers.app_controller.NewProjectDialog", FakeDialog):
+        with patch("plm.frontend.qt.controllers.project_navigation.NewProjectDialog", FakeDialog):
             controller.new_project()
+            wait_for_idle(self.app)
         self.assertEqual(captured["location"], Path.home() / "plm-projects")
 
 

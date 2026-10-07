@@ -27,6 +27,7 @@ class AppController(WorkspaceActions, ProjectNavigation, ProjectActions):
         self._save_running = False
         self._after_save = None
         self._load_revision = 0
+        self._load_running = False
         self._project_operation_running = False
         self._initial_project_paths = self.settings.project_paths()
         self._discovered_projects = []

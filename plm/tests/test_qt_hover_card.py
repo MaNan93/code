@@ -5,6 +5,7 @@ import unittest
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
+from qt_test_support import wait_for_idle
 from PyQt5 import QtCore, QtWidgets
 from plm.frontend.qt.styles import APP_QSS
 from plm.frontend.qt.widgets.hover_card import HoverCard
@@ -23,7 +24,7 @@ class HoverCardRenderingTests(unittest.TestCase):
         self.card.move(-10000, -10000)
         self.card.adjustSize()
         self.card.show()
-        self.app.processEvents()
+        wait_for_idle(self.app)
 
     def tearDown(self):
         self.card.close()
@@ -59,7 +60,7 @@ class HoverCardRenderingTests(unittest.TestCase):
                 self.card.move(-10000, -10000 + 36 * index)
                 self.card.show()
                 self.card.update()
-                self.app.processEvents()
+                wait_for_idle(self.app)
         finally:
             QtCore.qInstallMessageHandler(previous_handler)
         self.assertFalse([message for message in messages if "UpdateLayeredWindowIndirect" in message])

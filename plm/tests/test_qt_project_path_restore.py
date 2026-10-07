@@ -6,6 +6,7 @@ from unittest.mock import patch
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
+from qt_test_support import wait_for_idle
 from PyQt5 import QtWidgets
 
 from plm.frontend.qt.models import ProjectInfo
@@ -39,6 +40,7 @@ class ProjectPathRestoreTests(unittest.TestCase):
             ) as reveal:
                 actions = {action.text(): action for action in widget.build_more_menu().actions()}
                 actions["在资源管理器中打开"].trigger()
+                wait_for_idle(self.app)
                 reveal.assert_called_once_with(root)
 
             renamed_root = Path(directory).resolve() / "renamed"

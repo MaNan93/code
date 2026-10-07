@@ -262,8 +262,8 @@ class ConfigPage(RoundedCanvasFrame):
         self.dirty = self.content() != self._saved_content
         self.dirtyChanged.emit(self.dirty)
 
-    def mark_saved(self):
-        self._saved_content = self.content()
+    def mark_saved(self, payload=None):
+        self._saved_content = self.content() if payload is None else payload
         self._update_dirty()
 
     def finish_editing(self):

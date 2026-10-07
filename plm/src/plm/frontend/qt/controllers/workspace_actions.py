@@ -6,6 +6,15 @@ from pathlib import Path
 from plm.core.validation import ValidationError, ValidationIssue
 
 
+class SavedGenerationError(Exception):
+    """Keep the successful save checkpoint when later generation fails."""
+
+    def __init__(self, error, signature):
+        super().__init__(str(error))
+        self.error = error
+        self.signature = signature
+
+
 class WorkspaceActions:
     """GUI orchestration; filesystem work runs through TaskRunner."""
 
@@ -24,7 +33,8 @@ class WorkspaceActions:
             self.config_page.set_validation_issues(())
             self._set_output_state("no_project")
             return
-        if self._validation_running or self._generation_running:
+        if (self._validation_running or self._generation_running or self._save_running
+                or self._load_running or self._project_operation_running):
             self.validation_timer.start()
             return
         project = self.current_project
@@ -83,7 +93,8 @@ class WorkspaceActions:
             self.config_page.focus_first_error()
 
     def save_current(self):
-        if self.current_project is None or self._save_running or self._generation_running:
+        if (self.current_project is None or self._save_running or self._generation_running
+                or self._load_running or self._project_operation_running):
             return False
         self.config_page.finish_editing()
         project = self.current_project
@@ -113,8 +124,7 @@ class WorkspaceActions:
                 return
             self._saved_signature = signature
             self._validation_revision += 1
-            if self.config_page.content() == payload:
-                self.config_page.mark_saved()
+            self.config_page.mark_saved(payload)
             self.validate_current()
             self.log_panel.append_log(f"已保存配置：{self.current_name}")
             if continuation and not self.config_page.dirty:
@@ -155,7 +165,8 @@ class WorkspaceActions:
         return statuses
 
     def generate_current(self):
-        if self.current_project is None or self._generation_running or self._save_running:
+        if (self.current_project is None or self._generation_running or self._save_running
+                or self._load_running or self._project_operation_running):
             return
         self.config_page.finish_editing()
         project = self.current_project
@@ -175,12 +186,24 @@ class WorkspaceActions:
                 raise ValueError("配置文件已被外部修改，请通过“打开项目”重新打开。")
             before = self._artifact_signature(service.output_files(project), root)
             progress(10, "正在生成")
-            result, files, report = service.generate(
-                project, payload, progress=lambda phase: progress(50, str(phase))
-            )
-            after = self._artifact_signature(files, root)
-            progress(100, "生成完成")
-            return result, files, report, self._artifact_statuses(before, after), service.signature(project)
+            saved = None
+
+            def on_saved():
+                nonlocal saved
+                saved = service.signature(project)
+
+            try:
+                result, files, report = service.generate(
+                    project, payload, progress=lambda phase: progress(50, str(phase)),
+                    on_saved=on_saved,
+                )
+                after = self._artifact_signature(files, root)
+                progress(100, "生成完成")
+                return result, files, report, self._artifact_statuses(before, after), service.signature(project)
+            except Exception as error:
+                if saved is not None:
+                    raise SavedGenerationError(error, saved) from error
+                raise
 
         def unlock():
             self._generation_running = False
@@ -189,6 +212,11 @@ class WorkspaceActions:
 
         def failed(error):
             unlock()
+            if isinstance(error, SavedGenerationError):
+                self._saved_signature = error.signature
+                self._validation_revision += 1
+                self.config_page.mark_saved(payload)
+                error = error.error
             self._generation_failure = str(error)
             self._show_validation_error(error)
             self.refresh_artifacts()
@@ -201,8 +229,7 @@ class WorkspaceActions:
             result, files, report, statuses, saved = data
             self._saved_signature = saved
             self._validation_revision += 1
-            if self.config_page.content() == payload:
-                self.config_page.mark_saved()
+            self.config_page.mark_saved(payload)
             self.config_page.artifacts_panel.set_files(files, root, statuses=statuses)
             self.validate_current()
             if report.strip():

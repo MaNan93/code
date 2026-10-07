@@ -7,6 +7,9 @@ class ProjectActions:
     """GUI orchestration; filesystem work runs through TaskRunner."""
 
     def archive_project(self, name):
+        if (self._generation_running or self._save_running
+                or self._load_running or self._project_operation_running):
+            return
         self.config_page.finish_editing()
         if self.current_name == name and self.config_page.dirty:
             self._after_save = lambda: self.archive_project(name)
@@ -25,7 +28,8 @@ class ProjectActions:
 
     def delete_project(self, name):
         preferred = self.current_project.config_dir if self.current_project and self.current_name != name else None
-        if self._generation_running or self._save_running:
+        if (self._generation_running or self._save_running
+                or self._load_running or self._project_operation_running):
             return
         self._project_io(
             lambda: self.projects.delete(name),
@@ -87,7 +91,8 @@ class ProjectActions:
         self.rename_project(self.current_name, new_name)
 
     def rename_project(self, old_name, new_name):
-        if self._generation_running or self._save_running:
+        if (self._generation_running or self._save_running
+                or self._load_running or self._project_operation_running):
             return
         state = self.settings.get_project_state(old_name)
         self._project_io(

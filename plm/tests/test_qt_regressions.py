@@ -10,6 +10,7 @@ from unittest.mock import patch
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
+from qt_test_support import wait_for_idle
 from PyQt5 import QtCore, QtGui, QtTest, QtWidgets, sip
 from plm.core.workspace import scaffold_default_content
 from plm.frontend.qt.controllers import AppController
@@ -39,8 +40,9 @@ class QtRegressionTests(unittest.TestCase):
         self.controller = AppController(ProjectService(self.root), settings)
         with patch("plm.frontend.qt.main_window.AppController", return_value=self.controller):
             self.window = MainWindow()
+            wait_for_idle(self.app)
         self.window.show()
-        self.app.processEvents()
+        wait_for_idle(self.app)
         self.addCleanup(self.dispose)
 
     def dispose(self):
@@ -55,6 +57,7 @@ class QtRegressionTests(unittest.TestCase):
         before = self.controller.current_project.controllers_csv.read_bytes()
         with patch.object(QtWidgets.QMessageBox, "warning") as warning:
             self.window.nav_panel.save_btn.click()
+            wait_for_idle(self.app)
         warning.assert_not_called()
         self.assertTrue(page.validation_issues)
         self.assertTrue(page.dirty)
@@ -69,6 +72,7 @@ class QtRegressionTests(unittest.TestCase):
         self.assertFalse(nav.settings_btn.property("selected"))
         self.assertTrue(nav.docs_btn.property("selected"))
         self.window.view_stack.currentWidget().back_btn.click()
+        wait_for_idle(self.app)
         self.assertIs(self.window.view_stack.currentWidget(), self.window.main_container)
         self.assertFalse(nav.docs_btn.property("selected"))
         self.window.on_open_settings()
@@ -86,7 +90,7 @@ class QtRegressionTests(unittest.TestCase):
         page._select_section(0)
         saved = QtTest.QSignalSpy(page.preferencesSaved)
         page._save_settings()
-        self.app.processEvents()
+        wait_for_idle(self.app)
         self.assertTrue(page.menu_buttons[1].property("selected"))
         self.assertTrue(control.hasFocus())
         self.assertEqual(control.selectedText(), "-1")
@@ -113,7 +117,7 @@ class QtRegressionTests(unittest.TestCase):
         font = QtGui.QFont(page.font())
         font.setPixelSize(20)
         page.setFont(font)
-        self.app.processEvents()
+        wait_for_idle(self.app)
         header = page.flag_table.horizontalHeader()
         self.assertEqual(header.sectionResizeMode(1), QtWidgets.QHeaderView.ResizeToContents)
         for control in page._flag_controls.values():
@@ -164,6 +168,7 @@ class QtRegressionTests(unittest.TestCase):
                 patch.object(self.controller.projects, "discover", return_value=[]), \
                 patch.object(self.controller.settings, "remove_project_state") as remove:
             self.controller.rename_project(before.name, "renamed")
+            wait_for_idle(self.app)
         remove.assert_not_called()
         self.assertIs(self.controller.current_project, before)
 
@@ -187,6 +192,7 @@ class QtRegressionTests(unittest.TestCase):
         projects = self.window.nav_panel.project_list
         signals = QtTest.QSignalSpy(projects.projectSelected)
         self.assertIsNone(projects.select_project(""))
+        wait_for_idle(self.app)
         self.assertEqual(len(signals), 0)
         self.assertIsNone(projects.selected_project_name)
         self.assertTrue(all(not item.header.property("selected") for item in projects.project_widgets))
@@ -231,7 +237,7 @@ print("event loop survived")
         grid.set_rows([{"mode": "0", "lane0": "0-1", "lane1": "0-0"}])
         grid.resize(500, 250)
         grid.show()
-        self.app.processEvents()
+        wait_for_idle(self.app)
         self.addCleanup(grid.close)
         self.addCleanup(grid.deleteLater)
         return grid
@@ -290,33 +296,32 @@ print("event loop survived")
     def test_many_lanes_keep_readable_widths_and_scroll_horizontally(self):
         grid = self.lane_grid()
         grid.set_columns(32)
-        self.app.processEvents()
+        wait_for_idle(self.app)
         self.assertEqual(grid.table.horizontalScrollBarPolicy(), QtCore.Qt.ScrollBarAsNeeded)
         self.assertGreater(grid.table.horizontalScrollBar().maximum(), 0)
         self.assertGreaterEqual(grid.table.columnWidth(1), grid.table.fontMetrics().horizontalAdvance("31"))
         grid.set_columns(2)
-        self.app.processEvents()
+        wait_for_idle(self.app)
         self.assertEqual(grid.table.horizontalScrollBarPolicy(), QtCore.Qt.ScrollBarAlwaysOff)
 
     def test_hidden_log_stays_hidden_during_resize_and_can_be_reopened(self):
         self.window.hide_log()
         for width, height in ((1100, 700), (1500, 1000)):
             self.window.resize(width, height)
-            self.app.processEvents()
+            wait_for_idle(self.app)
             self.assertEqual(self.window.content_splitter.sizes()[1], 0)
         self.window.toggle_log()
         self.assertGreater(self.window.content_splitter.sizes()[1], 0)
 
-    def test_external_change_warning_cannot_reenter_and_always_releases_guard(self):
+    def test_external_change_validation_is_debounced_without_modal_warning(self):
         controller = self.controller
         controller.current_project.controllers_csv.write_text("externally modified", encoding="utf-8")
-        def reenter(*args):
-            self.assertFalse(controller._check_external_changes())
-        with patch.object(QtWidgets.QMessageBox, "warning", side_effect=reenter) as warning:
-            self.assertFalse(controller._check_external_changes())
-        warning.assert_called_once()
-        self.assertFalse(controller._checking_external)
-        with patch.object(QtWidgets.QMessageBox, "warning", side_effect=RuntimeError("dialog failed")):
-            with self.assertRaises(RuntimeError):
-                controller._check_external_changes()
-        self.assertFalse(controller._checking_external)
+        with patch.object(QtWidgets.QMessageBox, "warning") as warning:
+            controller.validate_current()
+            controller.validate_current()
+            self.assertTrue(controller._validation_running)
+            self.assertEqual(len(controller.tasks._tasks), 1)
+            wait_for_idle(self.app)
+        warning.assert_not_called()
+        self.assertEqual(controller.generation_state, "external_changed")
+        self.assertFalse(controller._validation_running)

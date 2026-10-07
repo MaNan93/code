@@ -28,7 +28,8 @@ class ProjectNavigation:
         return NavPanel()
 
     def confirm_switch(self, on_saved=None):
-        if self._generation_running or self._save_running or self._project_operation_running:
+        if (self._generation_running or self._save_running
+                or self._project_operation_running or self._load_running):
             self.log_panel.append_log("保存或生成仍在进行，请等待完成后切换或关闭。")
             return False
         self.config_page.finish_editing()
@@ -135,11 +136,15 @@ class ProjectNavigation:
         self._load_revision += 1
         revision = self._load_revision
         service = self._worker_service()
+        self._load_running = True
+        self.nav.setEnabled(False)
         self.config_page.tabs.setEnabled(False)
 
         def finished(data):
             if revision != self._load_revision:
                 return
+            self._load_running = False
+            self.nav.setEnabled(True)
             self.config_page.tabs.setEnabled(True)
             payload, signature = data
             self.current_name = name
@@ -154,6 +159,8 @@ class ProjectNavigation:
 
         def failed(error):
             if revision == self._load_revision:
+                self._load_running = False
+                self.nav.setEnabled(True)
                 self.config_page.tabs.setEnabled(True)
                 self.log_panel.append_log(f"加载项目失败：{error}")
                 self.nav.project_list.select_project(self.current_name, emit_signal=False)

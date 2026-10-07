@@ -6,6 +6,7 @@ from unittest.mock import patch
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
+from qt_test_support import wait_for_idle
 from PyQt5 import QtCore, QtGui, QtTest, QtWidgets
 
 from plm.frontend.qt.views.artifacts_panel import ArtifactsPanel
@@ -37,7 +38,7 @@ class ArtifactPreviewTests(unittest.TestCase):
         widget.close()
         widget.deleteLater()
         self.app.sendPostedEvents(None, QtCore.QEvent.DeferredDelete)
-        self.app.processEvents()
+        wait_for_idle(self.app)
 
     def file(self, name, text):
         path = self.root / name
@@ -50,7 +51,8 @@ class ArtifactPreviewTests(unittest.TestCase):
         text += "\n".join(f"// line {i}" for i in range(150)) + "\nendmodule\n"
         path = self.file("rtl/generated.sv", text)
         self.panel.set_files([path], self.root)
-        self.app.processEvents()
+        wait_for_idle(self.app)
+        wait_for_idle(self.app)
         editor = self.panel.preview
         self.assertEqual(editor.toPlainText(), text)
         self.assertGreater(editor.horizontalScrollBar().maximum(), 0)
@@ -67,15 +69,20 @@ class ArtifactPreviewTests(unittest.TestCase):
         one = self.file("rtl/one.sv", "module one; endmodule")
         two = self.file("tb/two.sv", "module two; endmodule")
         self.panel.set_files([one, two], self.root)
+        wait_for_idle(self.app)
         self.panel.select_file(two)
+        wait_for_idle(self.app)
         two.write_text("module refreshed; endmodule", encoding="utf-8")
         self.panel.set_files([one, two], self.root)
+        wait_for_idle(self.app)
         self.assertEqual(self.panel.current_path, two)
         self.assertIn("refreshed", self.panel.preview.toPlainText())
         self.assertEqual(self.panel.current_path.relative_to(self.root), Path("tb") / "two.sv")
         self.panel.set_files([one], self.root)
+        wait_for_idle(self.app)
         self.assertEqual(self.panel.current_path, one)
         self.panel.set_files([], self.root / "other")
+        wait_for_idle(self.app)
         self.assertIsNone(self.panel.current_path)
         self.assertFalse(self.panel.preview.toPlainText())
         self.assertFalse(self.panel.copy_content_action.isEnabled())
@@ -89,13 +96,17 @@ class ArtifactPreviewTests(unittest.TestCase):
         empty = self.file("empty.sv", "")
         for path in (missing, binary):
             self.panel.set_files([valid, path], self.root)
+            wait_for_idle(self.app)
             self.panel.select_file(path)
+            wait_for_idle(self.app)
             self.assertFalse(self.panel.preview.toPlainText())
-            self.assertIn("无法读取", self.panel.status.text())
+            self.assertIn("无法预览", self.panel.status.text())
             self.assertFalse(self.panel.copy_content_action.isEnabled())
             self.panel.select_file(valid)
+            wait_for_idle(self.app)
             self.assertEqual(self.panel.preview.toPlainText(), valid.read_text())
         self.panel.set_files([empty], self.root)
+        wait_for_idle(self.app)
         self.assertFalse(self.panel.preview.toPlainText())
         self.assertTrue(self.panel.copy_content_action.isEnabled())
         self.assertIn("0 行", self.panel.status.text())
@@ -103,6 +114,7 @@ class ArtifactPreviewTests(unittest.TestCase):
     def test_search_wraps_both_directions_and_reports_no_match(self):
         path = self.file("search.sv", "module match;\n// middle\nendmodule // match")
         self.panel.set_files([path], self.root)
+        wait_for_idle(self.app)
         self.panel.show_search()
         self.assertTrue(self.panel.search_bar.isVisible())
         self.panel.search_input.setText("match")
@@ -122,7 +134,7 @@ class ArtifactPreviewTests(unittest.TestCase):
         self.assertFalse(self.panel.search_status.text())
         self.panel.activateWindow()
         self.panel.search_input.setFocus()
-        self.app.processEvents()
+        wait_for_idle(self.app)
         QtTest.QTest.keyClick(self.panel.search_input, QtCore.Qt.Key_Escape)
         self.assertFalse(self.panel.search_bar.isVisible())
         QtTest.QTest.keyClick(self.panel.preview, QtCore.Qt.Key_F, QtCore.Qt.ControlModifier)
@@ -137,13 +149,15 @@ class ArtifactPreviewTests(unittest.TestCase):
         one = self.file("rtl/one.sv", "module one;\nendmodule\n")
         two = self.file("tb/two.sv", "module two;\nendmodule\n")
         self.panel.set_files([one, two], self.root)
+        wait_for_idle(self.app)
         self.panel.resize(420, 630)
         self.panel.show()
-        self.app.processEvents()
+        wait_for_idle(self.app)
         preview_geometry = QtCore.QRect(self.panel.preview.geometry())
 
         self.panel.tree_button.click()
-        self.app.processEvents()
+        wait_for_idle(self.app)
+        wait_for_idle(self.app)
         self.assertTrue(self.panel.file_tree.isVisible())
         self.assertIs(self.panel.file_tree.parent(), self.panel)
         self.assertLess(self.panel.preview.height(), preview_geometry.height())
@@ -165,6 +179,7 @@ class ArtifactPreviewTests(unittest.TestCase):
     def test_search_supports_line_jump(self):
         path = self.file("jump.sv", "line1\nline2\nline3\nline4\n")
         self.panel.set_files([path], self.root)
+        wait_for_idle(self.app)
         self.panel.show_search()
         self.panel.search_input.setText(":3")
         self.assertEqual(self.panel.preview.textCursor().blockNumber(), 2)
@@ -178,19 +193,23 @@ class ArtifactPreviewTests(unittest.TestCase):
             "module one;\nassign value = 1'b0;\nendmodule\n",
         )
         self.panel.set_files([path], self.root)
+        wait_for_idle(self.app)
         current = "module one;\nassign value = 1'b1;\nendmodule\n"
         path.write_text(current, encoding="utf-8")
         self.panel.set_files(
             [path], self.root, statuses={"rtl/one.sv": "Modified"}
         )
+        wait_for_idle(self.app)
         self.assertTrue(self.panel.diff_button.isEnabled())
         self.panel.diff_button.click()
+        wait_for_idle(self.app)
         diff = self.panel.preview.toPlainText()
         self.assertIn("--- previous/rtl/one.sv", diff)
         self.assertIn("+++ current/rtl/one.sv", diff)
         self.assertIn("-assign value = 1'b0;", diff)
         self.assertIn("+assign value = 1'b1;", diff)
         self.panel.diff_button.click()
+        wait_for_idle(self.app)
         self.assertEqual(self.panel.preview.toPlainText(), current)
 
     def test_toolbar_compacts_without_losing_more_actions(self):
@@ -245,12 +264,16 @@ class ArtifactPreviewTests(unittest.TestCase):
         path = self.file("text.txt", "module ordinary_text; endmodule")
         verilog = self.file("rtl.sv", "module rtl; endmodule")
         self.panel.set_files([path, verilog], self.root)
+        wait_for_idle(self.app)
         self.assertFalse(self.panel.preview.highlighter.enabled)
         self.panel.select_file(verilog)
+        wait_for_idle(self.app)
         self.assertTrue(self.panel.preview.highlighter.enabled)
         self.panel.highlight_button.click()
+        wait_for_idle(self.app)
         self.assertFalse(self.panel.preview.highlighter.enabled)
         self.panel.set_files([verilog], self.root)
+        wait_for_idle(self.app)
         self.assertFalse(self.panel.preview.highlighter.enabled)
 
     def test_toolbar_routes_to_selected_output_and_signals(self):
@@ -258,29 +281,37 @@ class ArtifactPreviewTests(unittest.TestCase):
         editor = self.file("custom-editor", "editor")
         self.panel.editor_path_provider = lambda: str(editor)
         self.panel.set_files([path], self.root)
+        wait_for_idle(self.app)
         with patch("subprocess.Popen") as popen:
             self.panel.toolbar_buttons[2].click()
+            wait_for_idle(self.app)
             popen.assert_called_once_with([str(editor), str(path)])
-        with patch("plm.frontend.qt.views.artifacts_panel.open_in_file_manager", return_value=True) as opened:
+        with patch("plm.frontend.qt.views.artifact_interactions.open_in_file_manager", return_value=True) as opened:
             self.panel.toolbar_buttons[0].click()
+            wait_for_idle(self.app)
             opened.assert_called_once_with(path.parent)
         refresh = QtTest.QSignalSpy(self.panel.refreshRequested)
         maximize = QtTest.QSignalSpy(self.panel.maximizeRequested)
         self.panel.toolbar_buttons[1].click()
+        wait_for_idle(self.app)
         self.panel.toolbar_buttons[8].click()
+        wait_for_idle(self.app)
         self.assertEqual(len(refresh), 1)
         self.assertEqual(len(maximize), 1)
         path.unlink()
         with patch.object(QtWidgets.QMessageBox, "warning") as warning, patch("subprocess.Popen") as popen:
             self.panel.open_in_editor()
+            wait_for_idle(self.app)
             warning.assert_called_once()
             popen.assert_not_called()
 
     def test_file_tree_blank_click_closes_overlay(self):
         path = self.file("rtl/one.sv", "module one;\nendmodule\n")
         self.panel.set_files([path], self.root)
+        wait_for_idle(self.app)
         self.panel.tree_button.click()
-        self.app.processEvents()
+        wait_for_idle(self.app)
+        wait_for_idle(self.app)
         self.assertTrue(self.panel.file_tree.isVisible())
 
         viewport = self.panel.file_tree.viewport()

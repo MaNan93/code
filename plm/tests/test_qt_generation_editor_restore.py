@@ -3,6 +3,7 @@ import unittest
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
+from qt_test_support import wait_for_idle
 from PyQt5 import QtWidgets
 
 from plm.frontend.qt.widgets.config_editor import GenerationEditor
@@ -16,7 +17,7 @@ class GenerationEditorRestoreTests(unittest.TestCase):
     def tearDown(self):
         for widget in self.app.topLevelWidgets():
             widget.deleteLater()
-        self.app.processEvents()
+        wait_for_idle(self.app)
 
     def test_unknown_loaded_values_are_preserved_until_user_corrects_them(self):
         editor = GenerationEditor()

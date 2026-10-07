@@ -305,7 +305,12 @@ class ConfigPage(RoundedCanvasFrame):
             margins.right(), margins.bottom(),
         )
         panel.toolbar.setFixedHeight(self.header.height())
-        panel.toolbar_layout.setContentsMargins(16, 0, 16 + self.header_actions.width(), 0)
+        # Account for the drawer's existing inset instead of adding it twice.
+        right_inset = max(
+            0, self.header_actions.width() + panel.toolbar_layout.spacing()
+            - margins.right(),
+        )
+        panel.toolbar_layout.setContentsMargins(16, 0, right_inset, 0)
         panel.toolbar_reserved_width = self.header_actions.width()
         panel._apply_toolbar_density(panel.width())
 

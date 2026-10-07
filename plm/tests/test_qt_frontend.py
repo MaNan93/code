@@ -759,7 +759,7 @@ class QtFrontendLayoutTests(unittest.TestCase):
                 toolbar_margins.right(),
                 toolbar_margins.bottom(),
             ),
-            (16, 0, 62, 0),
+            (16, 0, 38, 0),
         )
         self.assertEqual(toolbar.layout().spacing(), 8)
         for button in panel.toolbar_buttons:
@@ -913,6 +913,12 @@ class QtFrontendLayoutTests(unittest.TestCase):
                 point = button.mapTo(page, button.rect().center())
                 self.assertIs(page.childAt(point), button)
             action_y = page.header.artifacts_btn.mapTo(page, QtCore.QPoint(0, 24)).y()
+            last_button = page.artifacts_panel.diff_button
+            if not last_button.isVisible():
+                last_button = page.artifacts_panel.maximize_button
+            last_right = last_button.mapTo(page, QtCore.QPoint(last_button.width(), 0)).x()
+            toggle_left = page.header.artifacts_btn.mapTo(page, QtCore.QPoint()).x()
+            self.assertEqual(toggle_left - last_right, 8)
             for button in page.artifacts_panel.toolbar_buttons:
                 if button.isVisible():
                     self.assertEqual(button.mapTo(page, QtCore.QPoint(0, 14)).y(), action_y)

@@ -9,18 +9,18 @@ QWidget:disabled { color: $text_muted; }
 QLabel { background: transparent; }
 QMainWindow { background-color: transparent; }
 QWidget#WindowShell {
-    background-color: $bg_sidebar;
-    border: 1px solid $border;
-    border-radius: 12px;
+    background-color: transparent;
+    border: none;
+    border-radius: 0;
 }
 QWidget#WindowShell[maximized="true"] {
-    background-color: $bg_sidebar;
+    background-color: transparent;
     border: none;
     border-radius: 0;
 }
 QWidget#BodyContainer, QStackedWidget#ViewStack,
 QWidget#MainContainer, QSplitter#ContentSplitter {
-    background-color: $bg_sidebar;
+    background-color: transparent;
     border: none;
 }
 QWidget#WindowResizeHandle {
@@ -28,17 +28,9 @@ QWidget#WindowResizeHandle {
     border: none;
 }
 QFrame#WindowTitleBar {
-    background-color: $bg_sidebar;
+    background-color: transparent;
     border: none;
-    border-top-left-radius: 12px;
-    border-top-right-radius: 12px;
-}
-QWidget#WindowShell[maximized="true"] QFrame#WindowTitleBar {
-    border-top-left-radius: 0;
-    border-top-right-radius: 0;
-}
-QFrame#WindowTitleBar[windowActive="false"] {
-    background-color: $bg_sidebar_inactive;
+    border-radius: 0;
 }
 QLabel#WindowBrandLogo { background: transparent; }
 QLabel#WindowBrandName {
@@ -244,15 +236,9 @@ QSplitter::handle { background-color: transparent; }
 QSplitter::handle:vertical { height: 1px; }
 
 QFrame#NavPanel {
-    background-color: $bg_sidebar;
+    background-color: transparent;
     border: none;
-    border-bottom-left-radius: 12px;
-}
-QWidget#WindowShell[maximized="true"] QFrame#NavPanel {
-    border-bottom-left-radius: 0;
-}
-QFrame#NavPanel[windowActive="false"] {
-    background-color: $bg_sidebar_inactive;
+    border-radius: 0;
 }
 QFrame#NavPanel > QWidget, QWidget#NavRow, QWidget#ProjectItem,
 QListWidget#ProjectList > QWidget { background: transparent; }

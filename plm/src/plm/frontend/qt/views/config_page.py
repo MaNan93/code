@@ -309,7 +309,7 @@ class ConfigPage(RoundedCanvasFrame):
             0, self.header_actions.width() + panel.toolbar_layout.spacing()
             - margins.right(),
         )
-        panel.toolbar_layout.setContentsMargins(16, 0, right_inset, 0)
+        panel.toolbar_layout.setContentsMargins(0, 0, right_inset, 0)
         panel.toolbar_reserved_width = self.header_actions.width()
         panel._apply_toolbar_density(panel.width())
 

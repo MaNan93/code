@@ -462,9 +462,16 @@ QTreeWidget#ArtifactFileTree {
     border-radius: $radius_control;
     outline: none;
     padding: $spacing_xs;
+    selection-background-color: $primary_light;
+    selection-color: $text_main;
 }
 QTreeWidget#ArtifactFileTree::item { min-height: 28px; border-radius: $radius_chip; }
-QTreeWidget#ArtifactFileTree::item:selected { background: $primary_light; color: $primary; }
+QTreeWidget#ArtifactFileTree::item:hover:!selected { background: $bg_sidebar_inactive; }
+QTreeWidget#ArtifactFileTree::item:selected {
+    background: $primary_light;
+    color: $text_main;
+}
+QTreeWidget#ArtifactFileTree::branch:selected { background: $primary_light; }
 QLabel#ArtifactEmptyText {
     color: $text_muted;
     font-size: $font_size_body;

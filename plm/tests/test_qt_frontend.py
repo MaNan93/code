@@ -766,9 +766,13 @@ class QtFrontendLayoutTests(unittest.TestCase):
                 toolbar_margins.right(),
                 toolbar_margins.bottom(),
             ),
-            (16, 0, 38, 0),
+            (0, 0, 38, 0),
         )
         self.assertEqual(toolbar.layout().spacing(), 8)
+        self.assertEqual(
+            panel.path_button.mapTo(panel, QtCore.QPoint()).x(),
+            panel.toolbar.mapTo(panel, QtCore.QPoint()).x(),
+        )
         for button in panel.toolbar_buttons:
             self.assertEqual(button.height(), 28)
             if button is not panel.path_button:

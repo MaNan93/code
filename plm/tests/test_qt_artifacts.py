@@ -11,6 +11,8 @@ from PyQt5 import QtCore, QtGui, QtTest, QtWidgets
 
 from plm.frontend.qt.views.artifacts_panel import ArtifactsPanel
 from plm.frontend.qt.views.artifact_chrome import ArtifactMetadataLabel
+from plm.frontend.qt.styles import APP_QSS
+from plm.frontend.qt.styles.tokens import PRIMARY_LIGHT
 from plm.frontend.qt.widgets.common import StyledMenu
 from plm.frontend.qt.widgets.code_preview import (
     CodePreview,
@@ -56,6 +58,10 @@ class ArtifactPreviewTests(unittest.TestCase):
         self.panel.set_files([one, two], self.root)
         wait_for_idle(self.app)
         label = self.panel.path_label
+        self.assertEqual(
+            self.panel.path_button.mapTo(self.panel, QtCore.QPoint()).x(),
+            self.panel.preview.mapTo(self.panel, QtCore.QPoint()).x(),
+        )
         self.assertEqual(label.display_path, "rtl / first.sv")
         self.assertIn("<b", label.text())
         self.assertNotIn(str(self.root), label.text())
@@ -142,6 +148,20 @@ class ArtifactPreviewTests(unittest.TestCase):
         self.assertEqual(QtWidgets.QApplication.clipboard().text(), text)
         self.panel.copy_path()
         self.assertEqual(QtWidgets.QApplication.clipboard().text(), str(path))
+
+    def test_selected_file_indent_matches_row_background(self):
+        self.panel.setStyleSheet(APP_QSS)
+        path = self.file("rtl/common/selected.sv", "module selected; endmodule")
+        self.panel.set_files([path], self.root)
+        wait_for_idle(self.app)
+        self.panel.path_button.click()
+        wait_for_idle(self.app)
+        tree = self.panel.file_tree
+        item = tree.currentItem()
+        rect = tree.visualItemRect(item)
+        image = tree.viewport().grab().toImage()
+        self.assertEqual(image.pixelColor(2, rect.center().y()).name(), PRIMARY_LIGHT.lower())
+        self.assertEqual(image.pixelColor(image.width() - 10, rect.center().y()).name(), PRIMARY_LIGHT.lower())
 
     def test_narrow_metadata_keeps_line_and_column_prefix(self):
         label = ArtifactMetadataLabel(self.panel)

@@ -16,11 +16,19 @@ from .artifact_files import ArtifactFiles
 from .artifact_interactions import ArtifactInteractions
 
 
+class ArtifactFileDelegate(QtWidgets.QStyledItemDelegate):
+    def paint(self, painter, option, index):
+        option = QtWidgets.QStyleOptionViewItem(option)
+        option.state &= ~QtWidgets.QStyle.State_HasFocus
+        super().paint(painter, option, index)
+
+
 class ArtifactFileTree(QtWidgets.QTreeWidget):
     """Fit expanded rows while allowing the parent layout to shrink the tree."""
 
     def __init__(self, parent=None):
         super().__init__(parent)
+        self.setItemDelegate(ArtifactFileDelegate(self))
         self.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Preferred)
         self.itemExpanded.connect(self.updateGeometry)
         self.itemCollapsed.connect(self.updateGeometry)
@@ -97,7 +105,7 @@ class ArtifactsPanel(
         toolbar.setFixedHeight(40)
         toolbar_layout = QtWidgets.QHBoxLayout(toolbar)
         self.toolbar_layout = toolbar_layout
-        toolbar_layout.setContentsMargins(16, 0, 16, 0)
+        toolbar_layout.setContentsMargins(0, 0, 16, 0)
         toolbar_layout.setSpacing(8)
         self.toolbar_buttons = []
         self.path_button = ArtifactPathButton()

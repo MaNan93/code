@@ -729,6 +729,12 @@ class QtFrontendLayoutTests(unittest.TestCase):
                 font.setBold(True)
                 width = QtGui.QFontMetrics(font).horizontalAdvance(tabs.tabText(index))
                 self.assertGreaterEqual(bar.tabRect(index).width(), width + 32)
+                option = QtWidgets.QStyleOptionTab()
+                bar.initStyleOption(option, index)
+                text_rect = bar.style().subElementRect(
+                    QtWidgets.QStyle.SE_TabBarTabText, option, bar,
+                )
+                self.assertGreaterEqual(text_rect.width(), width)
             self.assertLessEqual(bar.tabRect(tabs.count() - 1).right(), bar.width() - 1)
 
     def test_controller_card_alignment_and_context_insertion_undo(self):

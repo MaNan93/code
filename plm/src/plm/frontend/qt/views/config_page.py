@@ -12,8 +12,8 @@ from plm.frontend.qt.styles.tokens import (
 class ConfigTabBar(QtWidgets.QTabBar):
     """Keep the full label visible when the selected tab becomes bold."""
 
-    TEXT_HORIZONTAL_SPACE = 36
-    TEXT_VERTICAL_SPACE = 12
+    TEXT_HORIZONTAL_SPACE = 44  # 32px padding, 8px gap, 4px glyph allowance.
+    TEXT_VERTICAL_SPACE = 18  # 16px padding and the 2px indicator.
 
     def tabSizeHint(self, index):
         self.ensurePolished()

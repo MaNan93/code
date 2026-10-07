@@ -187,27 +187,31 @@ QMenu::separator {
 
 QTabWidget::pane { border: none; background: transparent; }
 QTabWidget#ConfigTabs QTabBar {
-    background-color: $bg_subtle;
-    border-radius: $radius_control;
-    padding: 3px;
+    background: transparent;
+    border: none;
+    padding: 0;
+    margin: 0;
 }
 QTabWidget#ConfigTabs QTabBar::tab {
     background: transparent;
     color: $text_sub;
-    padding: 6px 16px;
+    padding: 8px 16px;
+    margin-right: 8px;
     border: none;
-    border-radius: $radius_chip;
+    border-bottom: 2px solid transparent;
+    border-radius: 0;
     font-size: $font_size_body;
     font-weight: 500;
 }
 QTabWidget#ConfigTabs QTabBar::tab:selected {
-    background-color: $bg_surface;
-    color: $text_main;
+    background: transparent;
+    color: $primary;
     font-weight: 600;
+    border-bottom: 2px solid $primary;
 }
 QTabWidget#ConfigTabs QTabBar::tab:hover:!selected {
-    background-color: rgba(203, 213, 225, 72);
     color: $text_main;
+    border-bottom: 2px solid $border_hover;
 }
 
 QScrollBar:vertical {

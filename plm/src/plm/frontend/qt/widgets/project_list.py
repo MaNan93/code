@@ -6,6 +6,7 @@ from typing import Iterable
 from PyQt5 import QtCore, QtWidgets
 
 from plm.frontend.qt.models import ProjectInfo
+from plm.frontend.qt.styles.tokens import SPACING_XS
 from plm.frontend.qt.widgets.hover_card import HoverCard
 from plm.frontend.qt.widgets.project_item import ProjectItemWidget
 
@@ -26,6 +27,7 @@ class ProjectList(QtWidgets.QListWidget):
         self.setSelectionMode(QtWidgets.QAbstractItemView.SingleSelection)
         self.setDefaultDropAction(QtCore.Qt.MoveAction)
         self.setHorizontalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOff)
+        self.setSpacing(SPACING_XS)
         self.hover_card = HoverCard(self)
         self.hover_card.hide()
         self._pending_hover_widget = None

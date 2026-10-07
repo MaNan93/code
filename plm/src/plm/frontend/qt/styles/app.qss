@@ -250,6 +250,8 @@ QListWidget#ProjectList > QWidget { background: transparent; }
 QFrame#ProjectSectionSeparator {
     background-color: $border;
     border: none;
+    margin-left: 4px;
+    margin-right: 4px;
 }
 QListWidget#ProjectList {
     background: transparent;

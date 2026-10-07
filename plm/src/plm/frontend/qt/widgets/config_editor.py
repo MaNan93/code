@@ -114,12 +114,11 @@ class CsvTableEditor(QtWidgets.QWidget):
         card_layout.setSpacing(0)
         card_layout.addWidget(self.editor)
         layout.addWidget(self.table_card)
-        self.add_row_btn = QtWidgets.QPushButton(
-            "+ 添加控制器" if "ctrl_id" in self._keys else "+ 添加信号"
-        )
-        self.add_row_btn.setObjectName("ConfigAddRowButton")
-        self.add_row_btn.clicked.connect(self.add_row)
-        layout.addWidget(self.add_row_btn)
+        if "ctrl_id" not in self._keys:
+            self.add_row_btn = QtWidgets.QPushButton("+ 添加信号")
+            self.add_row_btn.setObjectName("ConfigAddRowButton")
+            self.add_row_btn.clicked.connect(self.add_row)
+            layout.addWidget(self.add_row_btn)
         layout.addStretch(1)
         self.table.model().rowsInserted.connect(self._update_table_height)
         self.table.model().rowsRemoved.connect(self._update_table_height)

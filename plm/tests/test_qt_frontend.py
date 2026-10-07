@@ -731,7 +731,7 @@ class QtFrontendLayoutTests(unittest.TestCase):
                 self.assertGreaterEqual(bar.tabRect(index).width(), width + 32)
             self.assertLessEqual(bar.tabRect(tabs.count() - 1).right(), bar.width() - 1)
 
-    def test_controller_card_add_action_alignment_and_undo(self):
+    def test_controller_card_alignment_and_context_insertion_undo(self):
         page = self.window.config_page
         editor = page.controllers_editor
         table = editor.table
@@ -742,7 +742,8 @@ class QtFrontendLayoutTests(unittest.TestCase):
         self.assertEqual(table.horizontalHeaderItem(1).textAlignment(),
                          int(QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter))
         original_height = table.height()
-        editor.add_row_btn.click()
+        self.assertFalse(hasattr(editor, "add_row_btn"))
+        editor.add_row()
         wait_for_idle(self.app)
         self.assertEqual(table.rowCount(), original_count + 1)
         self.assertGreater(table.height(), original_height)

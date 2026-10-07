@@ -7,7 +7,6 @@ from PyQt5 import QtCore, QtWidgets
 
 from plm.frontend.qt.models import ProjectInfo
 from plm.frontend.qt.styles.tokens import SPACING_XS
-from plm.frontend.qt.widgets.hover_card import HoverCard
 from plm.frontend.qt.widgets.project_item import ProjectItemWidget
 
 
@@ -28,19 +27,6 @@ class ProjectList(QtWidgets.QListWidget):
         self.setDefaultDropAction(QtCore.Qt.MoveAction)
         self.setHorizontalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOff)
         self.setSpacing(0)
-        self.hover_card = HoverCard(self)
-        self.hover_card.hide()
-        self._pending_hover_widget = None
-        self._hover_timer = QtCore.QTimer(self)
-        self._hover_timer.setSingleShot(True)
-        self._hover_timer.setInterval(400)
-        self._hover_timer.timeout.connect(self._show_hover_card)
-        self._hide_timer = QtCore.QTimer(self)
-        self._hide_timer.setSingleShot(True)
-        self._hide_timer.setInterval(150)
-        self._hide_timer.timeout.connect(self.hover_card.hide)
-        self.hover_card.pointerEntered.connect(self._hide_timer.stop)
-        self.hover_card.pointerLeft.connect(self._schedule_hover_card_hide)
         self.project_widgets = []
         self.selected_project_name = None
         for project in projects:
@@ -50,8 +36,6 @@ class ProjectList(QtWidgets.QListWidget):
             )
             # QListWidget spacing also indents icons; reserve only a bottom gap.
             widget.layout().setContentsMargins(0, 0, 0, SPACING_XS)
-            widget.hoverEntered.connect(self._schedule_hover_card)
-            widget.hoverLeft.connect(self._project_hover_left)
             widget.pinRequested.connect(self.pin_project)
             widget.renameRequested.connect(self.rename_project)
             widget.renameCommitted.connect(self._commit_rename)
@@ -118,10 +102,6 @@ class ProjectList(QtWidgets.QListWidget):
         self.select_project(self.selected_project_name, emit_signal=False)
 
     def rename_project(self, widget):
-        self._hover_timer.stop()
-        self._hide_timer.stop()
-        self._pending_hover_widget = None
-        self.hover_card.hide()
         widget.begin_rename()
 
     def _commit_rename(self, widget, new_name):
@@ -137,8 +117,6 @@ class ProjectList(QtWidgets.QListWidget):
         if self.selected_project_name == old_name:
             self.selected_project_name = new_name
             self.projectSelected.emit(new_name)
-        if self.hover_card.isVisible():
-            self.hover_card.set_project(new_name, widget.project_path)
 
     def archive_project(self, widget):
         message = (
@@ -181,10 +159,6 @@ class ProjectList(QtWidgets.QListWidget):
         row, item = self._item_for_widget(widget)
         if item is None:
             return
-        self._hover_timer.stop()
-        self._hide_timer.stop()
-        self.hover_card.hide()
-        self._pending_hover_widget = None
         was_selected = widget.project_name == self.selected_project_name
         self.removeItemWidget(item)
         self.takeItem(row)
@@ -194,41 +168,6 @@ class ProjectList(QtWidgets.QListWidget):
             self.selected_project_name = None
             if self.project_widgets:
                 self.select_project(self.project_widgets[0].project_name)
-
-    def _schedule_hover_card(self, widget):
-        if widget.project_name_edit.isVisible():
-            return
-        self._hide_timer.stop()
-        self.hover_card.hide()
-        self._pending_hover_widget = widget
-        self._hover_timer.start()
-
-    def _project_hover_left(self, widget):
-        if self._pending_hover_widget is widget:
-            self._hover_timer.stop()
-            self._pending_hover_widget = None
-        self._schedule_hover_card_hide()
-
-    def _schedule_hover_card_hide(self):
-        self._hide_timer.start()
-
-    def _show_hover_card(self):
-        widget = self._pending_hover_widget
-        if widget is None or widget.project_name_edit.isVisible() or not widget.header.underMouse():
-            return
-        self.hover_card.set_project(widget.project_name, widget.project_path)
-        self.hover_card.adjustSize()
-        position = widget.header.mapToGlobal(
-            QtCore.QPoint(widget.header.width() + 8, 0)
-        )
-        screen = QtWidgets.QApplication.screenAt(position)
-        if screen is not None:
-            available = screen.availableGeometry()
-            position.setX(min(position.x(), available.right() - self.hover_card.width()))
-            position.setY(min(position.y(), available.bottom() - self.hover_card.height()))
-        self.hover_card.move(position)
-        self.hover_card.show()
-        self.hover_card.raise_()
 
     def _resize_item(self, item, widget):
         item.setSizeHint(widget.sizeHint())

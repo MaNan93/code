@@ -125,12 +125,11 @@ QComboBox QAbstractItemView {
     padding: $spacing_xs;
 }
 
-QFrame#Card, QWidget#Card, QFrame#HoverCardSurface {
+QFrame#Card, QWidget#Card {
     background-color: $bg_surface;
     border: 1px solid $border;
     border-radius: $radius_card;
 }
-QFrame#ProjectHoverCard { background: transparent; border: none; }
 
 QTableWidget {
     background-color: $bg_surface;
@@ -282,6 +281,7 @@ QPushButton#ProjectButton { padding: 0 $spacing_md; }
 QPushButton#NavActionButton:hover, QPushButton#NavFooterButton:hover,
 QPushButton#ProjectButton:hover,
 QPushButton#NavCollapseButton:hover, QPushButton#ProjectArchiveBtn:hover,
+QPushButton#ProjectOpenBtn:hover,
 QPushButton#ProjectMoreBtn:hover {
     background-color: $bg_subtle;
     border: none;
@@ -305,18 +305,10 @@ QPushButton#NavCollapseButton {
     min-width: 32px; max-width: 32px; min-height: 32px; max-height: 32px;
     background: transparent; border: none; border-radius: $radius_control; padding: 0;
 }
-QPushButton#ProjectArchiveBtn, QPushButton#ProjectMoreBtn {
+QPushButton#ProjectArchiveBtn, QPushButton#ProjectOpenBtn, QPushButton#ProjectMoreBtn {
     min-width: 28px; max-width: 28px; min-height: 28px; max-height: 28px;
     background: transparent; border: none; border-radius: $radius_chip; padding: 0;
 }
-QLabel#HoverProjectName { color: $text_main; font-size: $font_size_body; font-weight: bold; }
-QLabel#HoverProjectPath { color: $text_sub; font-size: $font_size_sm; }
-QFrame#HoverCardDivider { background-color: $border; border: none; }
-QPushButton#HoverPinButton, QPushButton#HoverOpenButton {
-    background: transparent; border: none; border-radius: $radius_chip; padding: 0;
-}
-QPushButton#HoverPinButton:hover, QPushButton#HoverOpenButton:hover { background: $bg_subtle; }
-
 QFrame#ConfigPage {
     background-color: transparent;
     border: none;

@@ -59,6 +59,9 @@ class ProjectItemWidget(QtWidgets.QWidget):
         self.folder_icon.setAttribute(QtCore.Qt.WA_TransparentForMouseEvents)
         self.project_name_label = QtWidgets.QLabel(self.project_name)
         self.project_name_label.setObjectName("ProjectName")
+        self.project_name_label.setSizePolicy(
+            QtWidgets.QSizePolicy.Ignored, QtWidgets.QSizePolicy.Preferred
+        )
         self.project_name_label.setAttribute(QtCore.Qt.WA_TransparentForMouseEvents)
         self.project_name_edit = QtWidgets.QLineEdit()
         self.project_name_edit.setObjectName("ProjectNameEditor")
@@ -76,6 +79,10 @@ class ProjectItemWidget(QtWidgets.QWidget):
         self.archive_btn = make_icon_button(
             "archive", "归档项目", "ProjectArchiveBtn", 24, ICON_SIZE_SM
         )
+        self.open_folder_btn = make_icon_button(
+            "folder-open", "打开项目文件夹", "ProjectOpenBtn", 24, ICON_SIZE_SM
+        )
+        self.open_folder_btn.clicked.connect(self.open_folder)
         self.more_btn = make_icon_button(
             "more-horizontal", "更多操作", "ProjectMoreBtn", 24, ICON_SIZE_SM
         )
@@ -84,8 +91,11 @@ class ProjectItemWidget(QtWidgets.QWidget):
         )
         self.more_btn.clicked.connect(self.show_more_menu)
         self.archive_btn.hide()
+        self.open_folder_btn.hide()
         self.more_btn.hide()
         header_layout.addWidget(self.archive_btn)
+        header_layout.addSpacing(4)
+        header_layout.addWidget(self.open_folder_btn)
         header_layout.addSpacing(4)
         header_layout.addWidget(self.more_btn)
         root.addWidget(self.header)
@@ -93,6 +103,9 @@ class ProjectItemWidget(QtWidgets.QWidget):
 
     def _header_clicked(self, _checked=False):
         self.projectSelected.emit(self.project_name)
+
+    def open_folder(self):
+        open_in_file_manager(self.project_path)
 
     def set_selected(self, selected):
         self.header.setProperty("selected", selected)
@@ -111,12 +124,14 @@ class ProjectItemWidget(QtWidgets.QWidget):
         if watched is self.header:
             if event.type() == QtCore.QEvent.Enter:
                 self.archive_btn.show()
+                self.open_folder_btn.show()
                 self.more_btn.show()
                 if not self._renaming:
                     self.hoverEntered.emit(self)
             elif event.type() == QtCore.QEvent.Leave:
                 if not self._renaming:
                     self.archive_btn.hide()
+                    self.open_folder_btn.hide()
                     self.more_btn.hide()
                 self.hoverLeft.emit(self)
             elif (
@@ -132,6 +147,7 @@ class ProjectItemWidget(QtWidgets.QWidget):
         self.project_name_edit.setText(self.project_path.name)
         self.project_name_label.hide()
         self.archive_btn.show()
+        self.open_folder_btn.show()
         self.more_btn.show()
         self.project_name_edit.show()
         self.project_name_edit.setFocus(QtCore.Qt.OtherFocusReason)
@@ -145,6 +161,7 @@ class ProjectItemWidget(QtWidgets.QWidget):
         self.project_name_edit.hide()
         self.project_name_label.show()
         self.archive_btn.setVisible(self.header.underMouse())
+        self.open_folder_btn.setVisible(self.header.underMouse())
         self.more_btn.setVisible(self.header.underMouse())
         if not cancel and new_name and new_name != self.project_path.name:
             self.renameCommitted.emit(self, new_name)
@@ -183,7 +200,7 @@ class ProjectItemWidget(QtWidgets.QWidget):
         pin_action.triggered.connect(lambda: self.pinRequested.emit(self))
         rename_action.triggered.connect(menu.close)
         rename_action.triggered.connect(lambda: self.renameRequested.emit(self))
-        open_action.triggered.connect(lambda: open_in_file_manager(self.project_path))
+        open_action.triggered.connect(self.open_folder)
         archive_action.triggered.connect(lambda: self.archiveRequested.emit(self))
         delete_action.triggered.connect(lambda: self.deleteRequested.emit(self))
         return menu

@@ -326,12 +326,9 @@ class QtFrontendLayoutTests(unittest.TestCase):
         self.assertEqual(first_project.more_btn.size(), QtCore.QSize(28, 28))
         self.assertTrue(first_project.archive_btn.isHidden())
         self.assertTrue(first_project.more_btn.isHidden())
-        hover_card = nav.project_list.hover_card
-        self.assertEqual(hover_card.width(), 260)
-        self.assertEqual(nav.project_list._hover_timer.interval(), 400)
-        hover_card.set_project(first_project.project_name, first_project.project_path)
-        self.assertEqual(hover_card.name_label.text(), first_project.project_name)
-        self.assertEqual(hover_card.project_path, first_project.project_path)
+        self.assertFalse(hasattr(nav.project_list, "hover_card"))
+        self.assertEqual(first_project.open_folder_btn.size(), QtCore.QSize(28, 28))
+        self.assertTrue(first_project.open_folder_btn.isHidden())
         for icon_name in ("folder", "folder-open", "pin", "external-link"):
             self.assertTrue((LUCIDE_ICON_DIR / f"{icon_name}.svg").is_file())
         expected_configs = {"bifurcate", "dpr", "finegrain", "maxpclk", "quad"}
@@ -391,15 +388,30 @@ class QtFrontendLayoutTests(unittest.TestCase):
         self.assertEqual(len(settings_spy), 1)
         self.assertEqual(len(docs_spy), 1)
 
+    def test_project_folder_button_follows_archive_and_opens_current_path(self):
+        project_list = self.window.nav_panel.project_list
+        widget = project_list.project_widgets[0]
+        self.app.sendEvent(widget.header, QtCore.QEvent(QtCore.QEvent.Enter))
+        self.app.processEvents()
+        self.assertTrue(widget.open_folder_btn.isVisible())
+        self.assertGreater(widget.open_folder_btn.x(), widget.archive_btn.geometry().right())
+        self.assertLess(widget.open_folder_btn.geometry().right(), widget.more_btn.x())
+        selected = QtTest.QSignalSpy(widget.projectSelected)
+        with patch("plm.frontend.qt.widgets.project_item.open_in_file_manager") as open_folder:
+            widget.open_folder_btn.click()
+            open_folder.assert_called_once_with(widget.project_path)
+        self.assertEqual(len(selected), 0)
+        self.app.sendEvent(widget.header, QtCore.QEvent(QtCore.QEvent.Leave))
+        self.assertTrue(widget.open_folder_btn.isHidden())
+        self.assertFalse(hasattr(project_list, "hover_card"))
+        self.assertFalse(hasattr(project_list, "_hover_timer"))
+
     def test_project_list_is_flat_and_project_click_does_not_expand(self):
         project_list = self.window.nav_panel.project_list
         self.assertEqual(
             ProjectList.__module__, "plm.frontend.qt.widgets.project_list"
         )
-        self.assertEqual(
-            project_list.hover_card.__class__.__module__,
-            "plm.frontend.qt.widgets.hover_card",
-        )
+        self.assertFalse(hasattr(project_list, "hover_card"))
         initial_count = project_list.count()
         self.assertGreater(initial_count, 0)
         for row, widget in enumerate(project_list.project_widgets):

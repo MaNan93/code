@@ -10,6 +10,7 @@ from qt_test_support import wait_for_idle
 from PyQt5 import QtCore, QtGui, QtTest, QtWidgets
 
 from plm.frontend.qt.views.artifacts_panel import ArtifactsPanel
+from plm.frontend.qt.views.artifact_chrome import ArtifactMetadataLabel
 from plm.frontend.qt.widgets.common import StyledMenu
 from plm.frontend.qt.widgets.code_preview import (
     CodePreview,
@@ -63,10 +64,12 @@ class ArtifactPreviewTests(unittest.TestCase):
         QtTest.QTest.mouseClick(label, QtCore.Qt.LeftButton)
         self.assertTrue(self.panel.file_tree.isVisible())
         self.panel.select_file(two)
-        self.assertEqual(label.toolTip(), str(two))
+        self.assertEqual(label.toolTip(), "")
+        self.assertEqual(label.accessibleName(), str(two))
         self.panel.resize(400, 630)
         wait_for_idle(self.app)
-        self.assertEqual(label.toolTip(), str(two))
+        self.assertEqual(label.toolTip(), "")
+        self.assertEqual(self.panel.preview.toolTip(), "")
         self.assertIn("\u2026", label.display_path)
         self.assertTrue(self.panel.maximize_button.isVisible())
         self.panel.set_files([], self.root)
@@ -107,12 +110,13 @@ class ArtifactPreviewTests(unittest.TestCase):
         self.panel.set_output_state("out_of_date", "输出已过期")
         self.assertEqual(self.panel.footer.height(), 28)
         self.assertEqual(self.panel.status.text(), "输出已过期")
-        self.assertEqual(self.panel.file_progress.text(), "1/1")
+        self.assertEqual(self.panel.file_progress.text(), "1/1 · 2 行")
         cursor = self.panel.preview.textCursor()
         cursor.setPosition(len("module example;\n") + 3)
         self.panel.preview.setTextCursor(cursor)
-        metadata = self.panel.editor_metadata.text()
+        metadata = self.panel.editor_metadata.toolTip()
         self.assertIn("行 2，列 4", metadata)
+        self.assertTrue(metadata.startswith("行 2，列 4 · "))
         self.assertIn("SystemVerilog · UTF-8 · CRLF · RO", metadata)
         self.assertEqual(len(self.panel.toolbar_separators), 2)
         self.panel.resize(1000, 630)
@@ -138,6 +142,22 @@ class ArtifactPreviewTests(unittest.TestCase):
         self.assertEqual(QtWidgets.QApplication.clipboard().text(), text)
         self.panel.copy_path()
         self.assertEqual(QtWidgets.QApplication.clipboard().text(), str(path))
+
+    def test_narrow_metadata_keeps_line_and_column_prefix(self):
+        label = ArtifactMetadataLabel(self.panel)
+        font = QtGui.QFont(label.font())
+        font.setPixelSize(12)
+        label.setFont(font)
+        label.resize(180, 24)
+        label.show()
+        details = "行 43，列 1 · SystemVerilog · UTF-8 · LF · RO"
+        label.set_metadata(details)
+        self.assertTrue(label.text().startswith("行 43，列 1"))
+        self.assertTrue(label.text().endswith("\u2026"))
+        self.assertEqual(label.toolTip(), details)
+        label.set_metadata("")
+        self.assertEqual(label.text(), "")
+        self.assertEqual(label.toolTip(), "")
 
     def test_preview_context_menu_has_no_native_frame_and_preserves_copy(self):
         preview = self.panel.preview
@@ -200,7 +220,7 @@ class ArtifactPreviewTests(unittest.TestCase):
         wait_for_idle(self.app)
         self.assertFalse(self.panel.preview.toPlainText())
         self.assertTrue(self.panel.search_button.isEnabled())
-        self.assertIn("0 行", self.panel.editor_metadata.text())
+        self.assertIn("0 行", self.panel.file_progress.text())
 
     def test_search_wraps_both_directions_and_reports_no_match(self):
         path = self.file("search.sv", "module match;\n// middle\nendmodule // match")

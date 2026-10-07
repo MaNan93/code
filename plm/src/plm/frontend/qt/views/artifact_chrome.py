@@ -7,6 +7,31 @@ from PyQt5 import QtCore, QtGui, QtWidgets
 from plm.frontend.qt.styles.tokens import TEXT_MAIN, TEXT_SUB
 
 
+class ArtifactMetadataLabel(QtWidgets.QLabel):
+    """Preserve the line/column prefix when a narrow drawer truncates details."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._metadata = ""
+        self.setMinimumWidth(0)
+        self.setSizePolicy(QtWidgets.QSizePolicy.Ignored, QtWidgets.QSizePolicy.Preferred)
+        self.setAlignment(QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter)
+
+    def set_metadata(self, text):
+        self._metadata = text
+        self.setToolTip(text)
+        self._update_text()
+
+    def _update_text(self):
+        self.setText(self.fontMetrics().elidedText(
+            self._metadata, QtCore.Qt.ElideRight, self.contentsRect().width()
+        ))
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self._update_text()
+
+
 class ArtifactPathLabel(QtWidgets.QLabel):
     clicked = QtCore.pyqtSignal()
 
@@ -33,7 +58,7 @@ class ArtifactPathLabel(QtWidgets.QLabel):
                 self._directory = " / ".join(relative.parts[:-1])
             except ValueError:
                 self._directory = "…"
-        self.setToolTip(self._full_path)
+        self.setToolTip("")
         self.setAccessibleName(self._full_path)
         self._update_text()
 

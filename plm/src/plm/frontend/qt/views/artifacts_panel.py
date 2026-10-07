@@ -10,7 +10,7 @@ from plm.frontend.qt.widgets.common import (
     load_lucide_icon, make_icon_button,
 )
 from plm.frontend.qt.styles.tokens import TEXT_MUTED, scale_content_size
-from .artifact_chrome import ArtifactFileSelector, ArtifactPathLabel
+from .artifact_chrome import ArtifactFileSelector, ArtifactMetadataLabel, ArtifactPathLabel
 from .artifact_preview import ArtifactPreview
 from .artifact_files import ArtifactFiles
 from .artifact_interactions import ArtifactInteractions
@@ -94,6 +94,7 @@ class ArtifactsPanel(
         toolbar = QtWidgets.QWidget()
         self.toolbar = toolbar
         toolbar.setObjectName("ArtifactsToolbar")
+        toolbar.setAttribute(QtCore.Qt.WA_StyledBackground, True)
         toolbar.setFixedHeight(40)
         toolbar_layout = QtWidgets.QHBoxLayout(toolbar)
         self.toolbar_layout = toolbar_layout
@@ -205,11 +206,8 @@ class ArtifactsPanel(
         self.file_progress.setObjectName("ArtifactFileProgress")
         status_row.addWidget(self.file_progress)
         status_row.addStretch(1)
-        self.editor_metadata = QtWidgets.QLabel()
+        self.editor_metadata = ArtifactMetadataLabel()
         self.editor_metadata.setObjectName("ArtifactEditorMetadata")
-        self.editor_metadata.setMinimumWidth(0)
-        self.editor_metadata.setSizePolicy(QtWidgets.QSizePolicy.Ignored, QtWidgets.QSizePolicy.Preferred)
-        self.editor_metadata.setAlignment(QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter)
         status_row.addWidget(self.editor_metadata, 1)
         outer.addWidget(self.footer)
         self.preview.cursorPositionChanged.connect(self._update_editor_status)

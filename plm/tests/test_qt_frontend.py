@@ -770,6 +770,21 @@ class QtFrontendLayoutTests(unittest.TestCase):
         self.assertIsInstance(panel.preview, QtWidgets.QPlainTextEdit)
         self.assertIs(panel.file_selector.parent(), toolbar)
 
+    def test_artifact_toolbar_and_gutter_have_light_structural_surfaces(self):
+        page = self.window.config_page
+        shown = QtTest.QSignalSpy(page._artifacts_animation.finished)
+        page.toggle_artifacts()
+        self.assertTrue(shown.wait(1000))
+        toolbar = page.artifacts_panel.toolbar
+        self.assertTrue(toolbar.testAttribute(QtCore.Qt.WA_StyledBackground))
+        image = toolbar.grab().toImage()
+        self.assertEqual(image.pixelColor(image.width() // 2, 2).name(), "#f8fafc")
+        self.assertEqual(image.pixelColor(image.width() // 2, image.height() - 1).name(), BORDER.lower())
+        gutter = page.artifacts_panel.preview.line_numbers
+        gutter_image = gutter.grab().toImage()
+        self.assertEqual(gutter_image.pixelColor(2, 2).name(), "#f8fafc")
+        self.assertEqual(gutter_image.pixelColor(gutter.width() - 1, 2).name(), BORDER.lower())
+
     def test_config_header_has_twelve_pixel_gap_before_tabs(self):
         page = self.window.config_page
         gap = page.config_area.geometry().top() - (page.header.geometry().bottom() + 1)

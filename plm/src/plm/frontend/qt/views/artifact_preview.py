@@ -55,7 +55,7 @@ class ArtifactPreview:
         self.preview.clear()
         self._readable = False
         self.search_status.clear()
-        self.preview.setToolTip(str(self.current_path or ""))
+        self.preview.setToolTip("")
         self.path_label.set_path(self.current_path, self.workspace_root)
         self._file_error = ""
         text = ""
@@ -140,6 +140,8 @@ class ArtifactPreview:
         self.status.setVisible(bool(text))
         self.file_progress.setText(
             f"{self.selection.current_index + 1}/{len(self.selection.files)}"
+            + (f" · {len(self._current_contents.get(str(self.current_path), '').splitlines())} 行"
+               if self._readable else "")
             if self.current_path is not None else ""
         )
         self.status.setToolTip("\n".join(part for part in (self._file_error, self._output_detail) if part))
@@ -147,7 +149,7 @@ class ArtifactPreview:
 
     def _update_editor_status(self):
         if not self._readable or self.current_path is None:
-            self.editor_metadata.clear()
+            self.editor_metadata.set_metadata("")
             return
         cursor = self.preview.textCursor()
         text = self._current_contents.get(str(self.current_path), "")
@@ -158,11 +160,10 @@ class ArtifactPreview:
         if self.diff_button.isChecked() and self._diff_available():
             language = "Diff"
         metadata = (
-            f"{len(text.splitlines())} 行 · 行 {cursor.blockNumber() + 1}，"
+            f"行 {cursor.blockNumber() + 1}，"
             f"列 {cursor.positionInBlock() + 1} · {language} · UTF-8 · {newlines} · RO"
         )
-        self.editor_metadata.setText(metadata)
-        self.editor_metadata.setToolTip(metadata)
+        self.editor_metadata.set_metadata(metadata)
 
     def _update_highlighting(self, *_):
         is_verilog = (

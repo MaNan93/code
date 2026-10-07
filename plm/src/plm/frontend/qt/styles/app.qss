@@ -396,8 +396,21 @@ QFrame#ArtifactsPanel {
     border: 1px solid $border;
     border-radius: $radius_card;
 }
-QWidget#ArtifactsToolbar, QWidget#ArtifactSearchBar { background: transparent; }
-QLabel#ArtifactPath { color: $text_sub; background: transparent; border: none; }
+QWidget#ArtifactSearchBar { background: transparent; }
+QWidget#ArtifactsToolbar {
+    background-color: $bg_sidebar_inactive;
+    border: none;
+    border-bottom: 1px solid $border;
+}
+QLabel#ArtifactPath {
+    color: $text_header;
+    background: transparent;
+    border: none;
+    font-size: 13px;
+    padding: 2px 6px;
+}
+QPushButton#ArtifactsToolButton { border-radius: 6px; padding: 0; }
+QPushButton#ArtifactsToolButton:hover { background-color: $border; }
 QWidget#ArtifactContent { background: transparent; border: none; }
 QFrame#ArtifactFileSelector { background: transparent; border: none; border-radius: 6px; }
 QFrame#ArtifactFileSelector[hovered="true"] { background-color: $bg_subtle; }
@@ -459,7 +472,7 @@ QPlainTextEdit#LogOutput {
     font-size: $font_size_sm;
 }
 QFrame#LogStatusBar {
-    background: $bg_subtle;
+    background: $bg_sidebar_inactive;
     border: none;
     border-top: 1px solid $border;
 }
@@ -556,10 +569,10 @@ QLabel#NewProjectDialogSubtitle {
 }
 QDialogButtonBox { background: transparent; }
 QToolTip {
-    background-color: $text_main;
-    color: $bg_surface;
-    border: none;
-    border-radius: $radius_chip;
-    padding: $spacing_xs $spacing_sm;
-    font-size: $font_size_sm;
+    background-color: $bg_surface;
+    color: $text_main;
+    border: 1px solid $border;
+    border-radius: 6px;
+    padding: 5px 8px;
+    font-size: 12px;
 }

@@ -1,6 +1,6 @@
 from PyQt5 import QtCore, QtGui, QtWidgets
 from plm.frontend.qt.widgets.common import (
-    ICON_SIZE, RoundedCanvasFrame, apply_drop_shadow, make_icon_button,
+    ICON_SIZE, RoundedCanvasFrame, make_icon_button,
 )
 from plm.frontend.qt.widgets.config_editor import CsvTableEditor, GenerationEditor
 from plm.frontend.qt.views.artifacts_panel import ArtifactsPanel
@@ -173,7 +173,7 @@ class ConfigPage(RoundedCanvasFrame):
     def __init__(self, parent=None, editor_path_provider=None):
         super().__init__(parent)
         self.setObjectName("ConfigPage")
-        apply_drop_shadow(self, offset=(-2, 0), blur_radius=12, alpha=24)
+        self.apply_canvas_shadow()
         self.dirty = False
         self.validation_issues = ()
         self._first_error = None

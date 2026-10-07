@@ -1,6 +1,6 @@
 from PyQt5 import QtCore, QtWidgets
 from plm.frontend.qt.widgets.common import (
-    ICON_SIZE, RoundedCanvasFrame, apply_drop_shadow, make_icon_button,
+    ICON_SIZE, RoundedCanvasFrame, make_icon_button,
 )
 
 
@@ -14,7 +14,7 @@ class LogPanel(RoundedCanvasFrame):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setObjectName("LogPanel")
-        apply_drop_shadow(self, offset=(-2, 0), blur_radius=12, alpha=24)
+        self.apply_canvas_shadow()
         root = QtWidgets.QVBoxLayout(self)
         root.setContentsMargins(1, 1, 1, self.CORNER_RADII[2])
         root.setSpacing(0)

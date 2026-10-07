@@ -125,22 +125,24 @@ class AsyncBoundaryTests(unittest.TestCase):
         self.assertEqual(page.controllers_editor.table.item(0, 1).text(), "saved_snapshot")
         self.assertFalse(page.dirty)
 
-    def test_hidden_log_removes_handle_and_visible_panels_have_two_pixel_gap(self):
+    def test_canvas_shadows_have_clearance_and_panels_stay_aligned(self):
         window = self.window
         window.hide_log()
         wait_for_idle(self.app)
         page = window.config_page
         bottom = page.mapTo(window, page.rect().bottomRight()).y() + 1
-        self.assertEqual(window.height() - bottom, window.SHADOW_MARGIN + 5)
+        self.assertEqual(window.height() - bottom, window.SHADOW_MARGIN + page.SHADOW_MARGIN)
         window.toggle_log()
         wait_for_idle(self.app)
         page_bottom = page.mapTo(window, page.rect().bottomRight()).y() + 1
         log_top = window.log_panel.mapTo(window, QtCore.QPoint()).y()
-        self.assertEqual(log_top - page_bottom, 2)
+        self.assertEqual(log_top - page_bottom, page.SHADOW_MARGIN)
         for panel in (page, window.log_panel):
             right = panel.mapTo(window, panel.rect().bottomRight()).x() + 1
-            self.assertEqual(window.width() - right, window.SHADOW_MARGIN + 5)
+            self.assertEqual(window.width() - right, window.SHADOW_MARGIN + page.SHADOW_MARGIN)
             self.assertTrue(panel.mask().isEmpty())
+            self.assertEqual(panel.graphicsEffect().offset(), QtCore.QPointF(0, 0))
+        self.assertEqual(page.x(), window.log_panel.x())
         self.assertEqual(page.CORNER_RADII, window.log_panel.CORNER_RADII)
 
     def test_window_shadow_margin_and_resize_handles_follow_shell_state(self):

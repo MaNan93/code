@@ -17,7 +17,7 @@ from plm.frontend.qt.styles.tokens import (
 )
 from plm.frontend.qt.views.config_page import ConfigPage
 from plm.frontend.qt.views.log_panel import LogPanel
-from plm.frontend.qt.widgets.common import ContentIconStyle, RoundedCanvasFrame, load_lucide_icon
+from plm.frontend.qt.widgets.common import ContentIconStyle, load_lucide_icon
 
 __all__ = ["MainWindow"]
 
@@ -341,12 +341,8 @@ class MainWindow(QtWidgets.QMainWindow):
 
         self.content_splitter = QtWidgets.QSplitter(QtCore.Qt.Vertical)
         self.content_splitter.setObjectName("ContentSplitter")
-        # Keep the full shadow inside the splitter's clipping boundary.
-        shadow_margin = RoundedCanvasFrame.SHADOW_MARGIN
-        self.content_splitter.setContentsMargins(
-            shadow_margin, shadow_margin, shadow_margin, shadow_margin,
-        )
-        self.content_splitter.setHandleWidth(shadow_margin)
+        self.content_splitter.setContentsMargins(0, 0, 0, 0)
+        self.content_splitter.setHandleWidth(4)
         self.content_splitter.setChildrenCollapsible(True)
         self.config_page = ConfigPage(
             editor_path_provider=self.controller.settings.editor_path

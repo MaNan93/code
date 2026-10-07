@@ -6,7 +6,7 @@ from plm.frontend.qt.models.preferences import DEFAULT_EDITOR
 from plm.frontend.qt.services.tasks import TaskRunner
 from plm.frontend.qt.widgets.code_preview import CodePreview
 from plm.frontend.qt.widgets.common import (
-    ICON_SIZE, StatusBadge, StyledMenu, apply_drop_shadow,
+    ICON_SIZE, StatusBadge, StyledMenu,
     load_lucide_icon, make_icon_button,
 )
 from plm.frontend.qt.styles.tokens import TEXT_MUTED, scale_content_size
@@ -78,7 +78,6 @@ class ArtifactsPanel(
         self._resize_origin_width = None
         self.setObjectName("ArtifactsPanel")
         self.setMouseTracking(True)
-        apply_drop_shadow(self, offset=(-4, 0), blur_radius=16, alpha=36)
 
         outer = QtWidgets.QVBoxLayout(self)
         outer.setSizeConstraint(QtWidgets.QLayout.SetNoConstraint)

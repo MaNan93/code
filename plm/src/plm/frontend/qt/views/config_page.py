@@ -211,7 +211,6 @@ class ConfigPage(RoundedCanvasFrame):
     def __init__(self, parent=None, editor_path_provider=None):
         super().__init__(parent)
         self.setObjectName("ConfigPage")
-        self.apply_canvas_shadow()
         self.dirty = False
         self.validation_issues = ()
         self._first_error = None

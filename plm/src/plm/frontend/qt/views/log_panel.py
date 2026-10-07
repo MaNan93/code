@@ -14,7 +14,6 @@ class LogPanel(RoundedCanvasFrame):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setObjectName("LogPanel")
-        self.apply_canvas_shadow()
         root = QtWidgets.QVBoxLayout(self)
         root.setContentsMargins(1, 1, 1, self.CORNER_RADII[2])
         root.setSpacing(0)

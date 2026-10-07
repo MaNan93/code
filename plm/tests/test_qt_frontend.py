@@ -123,7 +123,14 @@ class QtFrontendLayoutTests(unittest.TestCase):
         self.assertEqual(self.window.content_splitter.orientation(), QtCore.Qt.Vertical)
         self.assertEqual(self.window.nav_panel.minimumWidth(), 260)
         self.assertEqual(self.window.nav_panel.maximumWidth(), 260)
-        self.assertEqual(self.window.content_splitter.handleWidth(), 6)
+        self.assertEqual(self.window.content_splitter.handleWidth(), 4)
+        self.assertEqual(self.window.content_splitter.contentsMargins(), QtCore.QMargins())
+        for panel in (
+            self.window.config_page,
+            self.window.log_panel,
+            self.window.config_page.artifacts_panel,
+        ):
+            self.assertIsNone(panel.graphicsEffect())
         self.assertIsInstance(self.window.log_panel, LogPanel)
         self.assertEqual(
             self.window.nav_panel.collapse_btn.iconSize(),

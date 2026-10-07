@@ -11,12 +11,14 @@ from plm.frontend.qt.styles.tokens import (
     BG_SURFACE,
     BORDER,
     FONT_SIZE_BODY,
+    ICON_SIZE,
+    scale_content_size,
     PRIMARY,
     TEXT_SUB,
 )
 from plm.frontend.qt.views.config_page import ConfigPage
 from plm.frontend.qt.views.log_panel import LogPanel
-from plm.frontend.qt.widgets.common import load_lucide_icon
+from plm.frontend.qt.widgets.common import ContentIconStyle, load_lucide_icon
 
 __all__ = ["MainWindow"]
 
@@ -71,9 +73,9 @@ class WindowTitleBar(QtWidgets.QFrame):
         self.logo_label = QtWidgets.QLabel()
         self.logo_label.setObjectName("WindowBrandLogo")
         self.logo_label.setPixmap(
-            load_lucide_icon("layout-dashboard", PRIMARY, 18).pixmap(18, 18)
+            load_lucide_icon("layout-dashboard", PRIMARY, ICON_SIZE).pixmap(ICON_SIZE, ICON_SIZE)
         )
-        self.logo_label.setFixedSize(18, 18)
+        self.logo_label.setFixedSize(ICON_SIZE, ICON_SIZE)
         self.logo_label.setAttribute(QtCore.Qt.WA_TransparentForMouseEvents)
         layout.addWidget(self.logo_label, 0, QtCore.Qt.AlignVCenter)
         layout.addSpacing(8)
@@ -163,7 +165,8 @@ class WindowControlButton(QtWidgets.QPushButton):
         super().__init__(parent)
         self._role = role
         self._restored_icon = False
-        self._icon_name, self._icon_size = self.ICONS[role]
+        self._icon_name, base_size = self.ICONS[role]
+        self._icon_size = scale_content_size(base_size)
         self.setObjectName("WindowControlButton")
         self.setProperty("role", role)
         self.setFixedSize(46, WindowTitleBar.HEIGHT)
@@ -272,6 +275,8 @@ class MainWindow(QtWidgets.QMainWindow):
         palette = app.palette()
         palette.setColor(QtGui.QPalette.Window, QtGui.QColor(BG_SURFACE))
         app.setPalette(palette)
+        if not isinstance(app.style(), ContentIconStyle):
+            app.setStyle(ContentIconStyle(app.style().objectName()))
         app.setStyleSheet(APP_QSS)
         self.setWindowTitle("plmConsultant")
         self.resize(1400, 900)
@@ -298,7 +303,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
         self.content_splitter = QtWidgets.QSplitter(QtCore.Qt.Vertical)
         self.content_splitter.setObjectName("ContentSplitter")
-        self.content_splitter.setHandleWidth(1)
+        self.content_splitter.setHandleWidth(5)
         self.content_splitter.setChildrenCollapsible(True)
         self.config_page = ConfigPage(
             editor_path_provider=self.controller.settings.editor_path

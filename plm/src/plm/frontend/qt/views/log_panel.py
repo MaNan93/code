@@ -1,8 +1,8 @@
 from PyQt5 import QtCore, QtWidgets
-from plm.frontend.qt.widgets.common import ICON_SIZE, make_icon_button
+from plm.frontend.qt.widgets.common import ICON_SIZE, RoundedCanvasFrame, make_icon_button
 
 
-class LogPanel(QtWidgets.QFrame):
+class LogPanel(RoundedCanvasFrame):
     """Region 4: output tab, clear action, and auto-scrolling log."""
 
     closeRequested = QtCore.pyqtSignal()
@@ -11,7 +11,7 @@ class LogPanel(QtWidgets.QFrame):
         super().__init__(parent)
         self.setObjectName("LogPanel")
         root = QtWidgets.QVBoxLayout(self)
-        root.setContentsMargins(0, 0, 0, 0)
+        root.setContentsMargins(1, 1, 1, self.CORNER_RADII[2])
         root.setSpacing(0)
         header = QtWidgets.QFrame()
         header.setObjectName("LogHeader")

@@ -35,7 +35,7 @@ QFrame#WindowTitleBar {
 QLabel#WindowBrandLogo { background: transparent; }
 QLabel#WindowBrandName {
     color: $text_main;
-    font-size: 13px;
+    font-size: $font_size_body;
     font-weight: bold;
     background: transparent;
 }
@@ -193,7 +193,7 @@ QTabWidget#ConfigTabs QTabBar::tab {
     padding: 6px 16px;
     border: none;
     border-radius: $radius_chip;
-    font-size: 13px;
+    font-size: $font_size_body;
     font-weight: 500;
 }
 QTabWidget#ConfigTabs QTabBar::tab:selected {
@@ -234,6 +234,7 @@ QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal { width: 0; }
 
 QSplitter::handle { background-color: transparent; }
 QSplitter::handle:vertical { height: 1px; }
+QSplitter#ContentSplitter::handle:vertical { height: 5px; }
 
 QFrame#NavPanel {
     background-color: transparent;
@@ -378,9 +379,8 @@ QLabel#ArtifactEmptyText {
 }
 
 QFrame#LogPanel {
-    background-color: $bg_surface;
+    background-color: transparent;
     border: none;
-    border-top: 1px solid $border;
     border-radius: 0;
 }
 QFrame#LogHeader { background: transparent; border: none; }

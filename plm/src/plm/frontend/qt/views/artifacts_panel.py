@@ -9,7 +9,7 @@ from plm.frontend.qt.widgets.common import (
     ICON_SIZE, StatusBadge, StyledMenu, apply_drop_shadow,
     load_lucide_icon, make_icon_button,
 )
-from plm.frontend.qt.styles.tokens import TEXT_MUTED
+from plm.frontend.qt.styles.tokens import TEXT_MUTED, scale_content_size
 from .artifact_preview import ArtifactPreview
 from .artifact_files import ArtifactFiles
 from .artifact_interactions import ArtifactInteractions
@@ -128,7 +128,10 @@ class ArtifactsPanel(
         empty_layout.addSpacing(52)
         empty_icon = QtWidgets.QLabel()
         empty_icon.setAlignment(QtCore.Qt.AlignCenter)
-        empty_icon.setPixmap(load_lucide_icon("file-x", TEXT_MUTED, 48).pixmap(48, 48))
+        empty_size = scale_content_size(48)
+        empty_icon.setPixmap(
+            load_lucide_icon("file-x", TEXT_MUTED, empty_size).pixmap(empty_size, empty_size)
+        )
         empty_layout.addWidget(empty_icon)
         self.empty_text = QtWidgets.QLabel("暂无生成文件")
         self.empty_text.setObjectName("ArtifactEmptyText")

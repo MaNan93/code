@@ -9,12 +9,31 @@ from pathlib import Path
 from PyQt5 import QtCore, QtGui, QtSvg, QtWidgets
 
 from plm.core.paths import PLM_ROOT
-from plm.frontend.qt.styles.tokens import RADIUS_CARD, SHADOW_SM, TEXT_SUB
+from plm.frontend.qt.styles.tokens import (
+    BG_MAIN, BORDER, ICON_SIZE, ICON_SIZE_SM, RADIUS_CARD, SHADOW_SM, TEXT_SUB,
+    scale_content_size,
+)
 
 LUCIDE_ICON_DIR = Path(__file__).resolve().parents[1] / "assets" / "icons"
 APP_ICON_PATH = Path(__file__).resolve().parents[1] / "assets" / "app_icon.svg"
 PROJECT_ROOT = PLM_ROOT
-ICON_SIZE = 18
+
+
+class ContentIconStyle(QtWidgets.QProxyStyle):
+    """Scale native menu and dialog icons alongside explicit Lucide sizes."""
+
+    ICON_METRICS = {
+        QtWidgets.QStyle.PM_SmallIconSize,
+        QtWidgets.QStyle.PM_LargeIconSize,
+        QtWidgets.QStyle.PM_ButtonIconSize,
+        QtWidgets.QStyle.PM_TabBarIconSize,
+        QtWidgets.QStyle.PM_ToolBarIconSize,
+        QtWidgets.QStyle.PM_MessageBoxIconSize,
+    }
+
+    def pixelMetric(self, metric, option=None, widget=None):
+        size = super().pixelMetric(metric, option, widget)
+        return scale_content_size(size) if metric in self.ICON_METRICS else size
 
 
 def rounded_widget_path(rect, radii):
@@ -39,6 +58,24 @@ def rounded_widget_path(rect, radii):
         path.arcTo(left, top, 2 * tl, 2 * tl, 180, -90)
     path.closeSubpath()
     return path
+
+
+class RoundedCanvasFrame(QtWidgets.QFrame):
+    """Shared antialiased white canvas with a light one-pixel border."""
+
+    CORNER_RADII = (12, 8, 8, 8)
+
+    def paintEvent(self, event):
+        painter = QtGui.QPainter(self)
+        painter.setRenderHint(QtGui.QPainter.Antialiasing)
+        path = rounded_widget_path(
+            QtCore.QRectF(self.rect()).adjusted(0.5, 0.5, -0.5, -0.5),
+            self.CORNER_RADII,
+        )
+        painter.fillPath(path, QtGui.QColor(BG_MAIN))
+        painter.setPen(QtGui.QPen(QtGui.QColor(BORDER), 1.0))
+        painter.drawPath(path)
+        painter.end()
 
 
 @lru_cache(maxsize=256)

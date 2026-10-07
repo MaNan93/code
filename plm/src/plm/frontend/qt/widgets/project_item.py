@@ -7,6 +7,7 @@ from PyQt5 import QtCore, QtWidgets
 from plm.frontend.qt.styles.tokens import DANGER, TEXT_SUB
 from plm.frontend.qt.widgets.common import (
     ICON_SIZE,
+    ICON_SIZE_SM,
     PROJECT_ROOT,
     StyledMenu,
     load_lucide_icon,
@@ -73,10 +74,10 @@ class ProjectItemWidget(QtWidgets.QWidget):
         header_layout.addWidget(self.project_name_label, 1)
         header_layout.addWidget(self.project_name_edit, 1, QtCore.Qt.AlignVCenter)
         self.archive_btn = make_icon_button(
-            "archive", "归档项目", "ProjectArchiveBtn", 24, 16
+            "archive", "归档项目", "ProjectArchiveBtn", 24, ICON_SIZE_SM
         )
         self.more_btn = make_icon_button(
-            "more-horizontal", "更多操作", "ProjectMoreBtn", 24, 16
+            "more-horizontal", "更多操作", "ProjectMoreBtn", 24, ICON_SIZE_SM
         )
         self.archive_btn.clicked.connect(
             lambda: self.archiveRequested.emit(self)
@@ -162,22 +163,22 @@ class ProjectItemWidget(QtWidgets.QWidget):
         menu = StyledMenu(self)
         menu.setFixedWidth(180)
         pin_action = menu.addAction(
-            load_lucide_icon("pin", TEXT_SUB, 18), "置顶"
+            load_lucide_icon("pin", TEXT_SUB, ICON_SIZE), "置顶"
         )
         rename_action = menu.addAction(
-            load_lucide_icon("pencil", TEXT_SUB, 18), "重命名"
+            load_lucide_icon("pencil", TEXT_SUB, ICON_SIZE), "重命名"
         )
         menu.addSeparator()
         open_action = menu.addAction(
-            load_lucide_icon("folder-open", TEXT_SUB, 18),
+            load_lucide_icon("folder-open", TEXT_SUB, ICON_SIZE),
             "在资源管理器中打开",
         )
         menu.addSeparator()
         archive_action = menu.addAction(
-            load_lucide_icon("archive", TEXT_SUB, 18), "归档"
+            load_lucide_icon("archive", TEXT_SUB, ICON_SIZE), "归档"
         )
         delete_action = menu.addAction(
-            load_lucide_icon("trash-2", DANGER, 18), "删除"
+            load_lucide_icon("trash-2", DANGER, ICON_SIZE), "删除"
         )
 
         pin_action.triggered.connect(lambda: self.pinRequested.emit(self))

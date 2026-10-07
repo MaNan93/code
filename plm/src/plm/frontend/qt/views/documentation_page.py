@@ -4,7 +4,7 @@ import unicodedata
 from PyQt5 import QtCore, QtGui, QtWidgets
 from plm.frontend.qt.services.tasks import TaskRunner
 from plm.frontend.qt.styles.tokens import (
-    BG_SUBTLE, BORDER, TEXT_MAIN, TEXT_MUTED,
+    BG_SUBTLE, BORDER, TEXT_MAIN, TEXT_MUTED, scale_content_size,
 )
 from .secondary_page import SecondaryPage
 DOCS_DIR = Path(__file__).resolve().parents[3] / "docs"
@@ -28,13 +28,18 @@ class DocumentationPage(SecondaryPage):
         self.doc_browser.setSearchPaths([str(DOCS_DIR)])
         self.doc_browser.setVerticalScrollBarPolicy(QtCore.Qt.ScrollBarAsNeeded)
         doc_css = """
-        h1 {{ color: {text_main}; font-size: 16px; font-weight: 600; margin: 16px 0 8px 0; }}
-        h2, h3 {{ color: {text_main}; font-size: 14px; font-weight: 600; margin: 12px 0 6px 0; }}
-        p {{ color: {text_main}; font-size: 13px; line-height: 160%; margin: 4px 0 10px 0; }}
+        h1 {{ color: {text_main}; font-size: {heading_size}px; font-weight: 600; margin: 16px 0 8px 0; }}
+        h2, h3 {{ color: {text_main}; font-size: {subheading_size}px; font-weight: 600; margin: 12px 0 6px 0; }}
+        p {{ color: {text_main}; font-size: {body_size}px; line-height: 160%; margin: 4px 0 10px 0; }}
         table {{ border-collapse: collapse; border: 1px solid {border}; border-radius: 6px; }}
-        th {{ background-color: {bg_subtle}; color: {text_main}; font-size: 13px; font-weight: 600; padding: 8px 12px; border-bottom: 1px solid {border}; }}
-        td {{ color: {text_main}; font-size: 13px; font-weight: 400; padding: 8px 12px; }}
-        """.format(text_main=TEXT_MAIN, border=BORDER, bg_subtle=BG_SUBTLE)
+        th {{ background-color: {bg_subtle}; color: {text_main}; font-size: {body_size}px; font-weight: 600; padding: 8px 12px; border-bottom: 1px solid {border}; }}
+        td {{ color: {text_main}; font-size: {body_size}px; font-weight: 400; padding: 8px 12px; }}
+        """.format(
+            text_main=TEXT_MAIN, border=BORDER, bg_subtle=BG_SUBTLE,
+            heading_size=scale_content_size(16),
+            subheading_size=scale_content_size(14),
+            body_size=scale_content_size(13),
+        )
         self.doc_browser.document().setDefaultStyleSheet(doc_css)
         layout.addWidget(self.doc_browser, 1)
         return content

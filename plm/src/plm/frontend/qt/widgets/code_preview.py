@@ -4,7 +4,7 @@ import re
 
 from PyQt5 import QtCore, QtGui, QtWidgets
 from plm.frontend.qt.styles.tokens import (
-    BG_SURFACE, BORDER, TEXT_MUTED,
+    BG_SURFACE, BORDER, TEXT_MUTED, scale_content_size,
 )
 
 
@@ -122,7 +122,7 @@ class CodePreview(QtWidgets.QPlainTextEdit):
         self.setLineWrapMode(QtWidgets.QPlainTextEdit.NoWrap)
         font = QtGui.QFont("JetBrains Mono")
         font.setStyleHint(QtGui.QFont.Monospace)
-        font.setPointSize(10)
+        font.setPointSize(scale_content_size(10))
         self.setFont(font)
         self.line_numbers = LineNumberArea(self)
         self.highlighter = VerilogHighlighter(self.document())

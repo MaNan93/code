@@ -4,7 +4,7 @@ from pathlib import Path
 from math import ceil
 
 from PyQt5 import QtCore, QtGui, QtWidgets
-from plm.frontend.qt.styles.tokens import SHADOW_LG, TEXT_MAIN, TEXT_MUTED, TEXT_SUB
+from plm.frontend.qt.styles.tokens import scale_content_size, SHADOW_LG, TEXT_MAIN, TEXT_MUTED, TEXT_SUB
 
 from plm.frontend.qt.widgets.common import (
     ICON_SIZE,
@@ -22,6 +22,7 @@ class HoverIconButton(QtWidgets.QPushButton):
         self.icon_name = icon_name
         self.normal_color = normal_color
         self.hover_color = hover_color
+        size = scale_content_size(size)
         self.icon_size = size
         self.setIconSize(QtCore.QSize(size, size))
         self._set_icon_color(normal_color)

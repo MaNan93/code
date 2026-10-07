@@ -21,9 +21,19 @@ SUCCESS = "#10B981"
 FONT_FAMILY = ('"Inter", "Microsoft YaHei UI", "PingFang SC", '
                '"Noto Sans CJK SC", "SimHei", "SimSun", sans-serif')
 FONT_MONO = '"JetBrains Mono", "Consolas", "Courier New", monospace'
-FONT_SIZE_BODY = 13
-FONT_SIZE_SM = 12
-FONT_SIZE_LG = 15
+UI_CONTENT_SCALE = 1.2
+
+
+def scale_content_size(size):
+    """Scale fonts and glyphs without changing the window's layout grid."""
+    return round(size * UI_CONTENT_SCALE)
+
+
+FONT_SIZE_BODY = scale_content_size(13)
+FONT_SIZE_SM = scale_content_size(12)
+FONT_SIZE_LG = scale_content_size(15)
+ICON_SIZE = scale_content_size(18)
+ICON_SIZE_SM = scale_content_size(16)
 
 RADIUS_CHIP = 6
 RADIUS_CONTROL = 8

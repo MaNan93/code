@@ -4,7 +4,7 @@ import os
 
 from PyQt5 import QtCore, QtWidgets
 
-from plm.frontend.qt.widgets.common import load_lucide_icon
+from plm.frontend.qt.widgets.common import ICON_SIZE, load_lucide_icon
 from plm.frontend.qt.styles.tokens import BG_SURFACE, SPACING_MD, SPACING_XL, TEXT_MAIN
 
 
@@ -62,12 +62,12 @@ class NewProjectDialog(QtWidgets.QDialog):
         create_button = buttons.button(QtWidgets.QDialogButtonBox.Ok)
         create_button.setText("创建项目")
         create_button.setObjectName("PrimaryBtn")
-        create_button.setIcon(load_lucide_icon("rocket", BG_SURFACE, 18))
-        create_button.setIconSize(QtCore.QSize(18, 18))
+        create_button.setIcon(load_lucide_icon("rocket", BG_SURFACE, ICON_SIZE))
+        create_button.setIconSize(QtCore.QSize(ICON_SIZE, ICON_SIZE))
         cancel_button = buttons.button(QtWidgets.QDialogButtonBox.Cancel)
         cancel_button.setText("取消")
-        cancel_button.setIcon(load_lucide_icon("x", TEXT_MAIN, 18))
-        cancel_button.setIconSize(QtCore.QSize(18, 18))
+        cancel_button.setIcon(load_lucide_icon("x", TEXT_MAIN, ICON_SIZE))
+        cancel_button.setIconSize(QtCore.QSize(ICON_SIZE, ICON_SIZE))
         root.addWidget(buttons)
 
     def browse(self):

@@ -1,5 +1,5 @@
 from PyQt5 import QtCore, QtGui, QtWidgets
-from plm.frontend.qt.widgets.common import make_icon_button
+from plm.frontend.qt.widgets.common import ICON_SIZE, make_icon_button
 from plm.frontend.qt.styles.tokens import SPACING_LG, SPACING_SM, SPACING_XL, TEXT_MAIN
 
 
@@ -49,7 +49,7 @@ class SecondaryPage(QtWidgets.QFrame):
         header_layout.setContentsMargins(SPACING_LG, 0, SPACING_LG, 0)
         header_layout.setSpacing(SPACING_SM)
         self.back_btn = make_icon_button(
-            "arrow-left", "返回", "SecondaryBackButton", 32, 18, TEXT_MAIN
+            "arrow-left", "返回", "SecondaryBackButton", 32, ICON_SIZE, TEXT_MAIN
         )
         self.back_btn.clicked.connect(self.closeRequested.emit)
         header_layout.addWidget(self.back_btn)

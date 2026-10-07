@@ -1,9 +1,9 @@
 from PyQt5 import QtCore, QtGui, QtWidgets
-from plm.frontend.qt.widgets.common import make_icon_button, rounded_widget_path
+from plm.frontend.qt.widgets.common import ICON_SIZE, RoundedCanvasFrame, make_icon_button
 from plm.frontend.qt.widgets.config_editor import CsvTableEditor, GenerationEditor
 from plm.frontend.qt.views.artifacts_panel import ArtifactsPanel
 from plm.frontend.qt.styles.tokens import (
-    BG_MAIN, BORDER, SPACING_LG, SPACING_MD,
+    SPACING_LG, SPACING_MD,
 )
 
 
@@ -93,10 +93,10 @@ class ConfigHeader(QtWidgets.QFrame):
         layout.addWidget(self.title_edit, 0, QtCore.Qt.AlignVCenter)
         layout.addStretch(1)
         self.log_btn = make_icon_button(
-            "panel-bottom", "显示/隐藏输出面板", "HeaderButton", 46, 18
+            "panel-bottom", "显示/隐藏输出面板", "HeaderButton", 46, ICON_SIZE
         )
         self.artifacts_btn = make_icon_button(
-            "panel-right", "显示/隐藏 Artifacts", "HeaderButton", 46, 18
+            "panel-right", "显示/隐藏 Artifacts", "HeaderButton", 46, ICON_SIZE
         )
         self.log_btn.setFixedSize(46, self.height())
         self.artifacts_btn.setFixedSize(46, self.height())
@@ -157,11 +157,10 @@ class ConfigTabPage(QtWidgets.QWidget):
         root.addWidget(scroll, 1)
 
 
-class ConfigPage(QtWidgets.QFrame):
+class ConfigPage(RoundedCanvasFrame):
     """Region 2 with an absolute-positioned Region 5 overlay."""
 
     MAX_HISTORY = 50
-    CORNER_RADII = (12, 8, 8, 8)
 
     logToggleRequested = QtCore.pyqtSignal()
     dirtyChanged = QtCore.pyqtSignal(bool)
@@ -364,18 +363,6 @@ class ConfigPage(QtWidgets.QFrame):
         if watched is self.config_area and event.type() == QtCore.QEvent.Resize:
             self.reposition_artifacts()
         return super().eventFilter(watched, event)
-
-    def paintEvent(self, event):
-        painter = QtGui.QPainter(self)
-        painter.setRenderHint(QtGui.QPainter.Antialiasing)
-        path = rounded_widget_path(
-            QtCore.QRectF(self.rect()).adjusted(0.5, 0.5, -0.5, -0.5),
-            self.CORNER_RADII,
-        )
-        painter.fillPath(path, QtGui.QColor(BG_MAIN))
-        painter.setPen(QtGui.QPen(QtGui.QColor(BORDER), 1.0))
-        painter.drawPath(path)
-        painter.end()
 
     def toggle_artifacts(self):
         target = self._artifacts_target_geometry()

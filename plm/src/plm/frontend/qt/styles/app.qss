@@ -242,11 +242,9 @@ QFrame#NavPanel {
 }
 QFrame#NavPanel > QWidget, QWidget#NavRow, QWidget#ProjectItem,
 QListWidget#ProjectList > QWidget { background: transparent; }
-QLabel#ProjectSectionTitle {
-    color: $text_muted;
-    font-size: $font_size_sm;
-    font-weight: bold;
-    padding: $spacing_xs 7px;
+QFrame#ProjectSectionSeparator {
+    background-color: $border;
+    border: none;
 }
 QListWidget#ProjectList {
     background: transparent;

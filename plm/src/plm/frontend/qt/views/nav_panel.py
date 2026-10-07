@@ -75,9 +75,10 @@ class NavPanel(QtWidgets.QFrame):
         root.addWidget(self.save_row)
         root.addSpacing(4)
 
-        self.project_title = QtWidgets.QLabel("项目")
-        self.project_title.setObjectName("ProjectSectionTitle")
-        root.addWidget(self.project_title)
+        self.project_separator = QtWidgets.QFrame()
+        self.project_separator.setObjectName("ProjectSectionSeparator")
+        self.project_separator.setFixedHeight(1)
+        root.addWidget(self.project_separator)
         config_projects = tuple(projects)
         self.project_list = ProjectList(config_projects)
         self.project_list.projectArchived.connect(self._project_archived)
@@ -178,7 +179,6 @@ class NavPanel(QtWidgets.QFrame):
         self.settings_btn.setText("Settings" if visible else "")
         self.docs_btn.setText("Docs" if visible else "")
 
-        self.project_title.setText("项目" if visible else "")
         self.project_list.setVisible(visible)
         self.collapsed_projects.setVisible(not visible)
 

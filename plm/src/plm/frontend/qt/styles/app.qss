@@ -371,18 +371,6 @@ QFrame#ConfigTableCard QTableWidget#ConfigDataTable {
 }
 QFrame#ConfigTableCard QHeaderView::section:first { border-top-left-radius: 7px; }
 QFrame#ConfigTableCard QHeaderView::section:last { border-top-right-radius: 7px; }
-QPushButton#ConfigAddRowButton {
-    background-color: $bg_surface;
-    color: $text_sub;
-    border: 1px dashed $border;
-    border-radius: 8px;
-    padding: 8px;
-}
-QPushButton#ConfigAddRowButton:hover {
-    color: $primary;
-    background-color: $primary_light;
-    border-color: $primary;
-}
 QLabel#ConfigProjectStatus {
     background-color: $bg_subtle;
     color: $text_sub;

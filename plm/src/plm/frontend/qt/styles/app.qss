@@ -346,7 +346,8 @@ QPushButton#SecondaryBackButton {
 QPushButton#HeaderButton:hover, QPushButton#ArtifactsToolButton:hover,
 QPushButton#LogClearButton:hover, QPushButton#LogCloseBtn:hover,
 QPushButton#SecondaryBackButton:hover { background-color: $bg_subtle; }
-QPushButton#HeaderButton { border-radius: 0; }
+QPushButton#HeaderButton:focus { background-color: $bg_subtle; }
+QPushButton#HeaderButton:pressed { background-color: $border; }
 QPushButton#ArtifactsToolButton:checked { background-color: $primary_light; }
 QPushButton#ArtifactsToolButton::menu-indicator { image: none; width: 0; height: 0; }
 QWidget#ConfigArea, QScrollArea#ConfigScroll, QWidget#ConfigScrollContent { background: $bg_main; border: none; }

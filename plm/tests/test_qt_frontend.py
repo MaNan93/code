@@ -995,6 +995,21 @@ class QtFrontendLayoutTests(unittest.TestCase):
         self.assertFalse(page.artifacts_panel.isVisible())
         self.assertEqual(page._artifacts_animation.duration(), 200)
 
+    def test_header_panel_button_feedback_has_rounded_corners(self):
+        button = self.window.config_page.header.artifacts_btn
+        self.window.activateWindow()
+        button.setFocus(QtCore.Qt.TabFocusReason)
+        wait_for_idle(self.app)
+        self.assertTrue(button.hasFocus())
+        image = button.grab().toImage()
+        self.assertEqual(image.pixelColor(2, button.height() // 2).name(), "#f1f5f9")
+        self.assertNotEqual(image.pixelColor(0, 0), image.pixelColor(2, button.height() // 2))
+        button.setDown(True)
+        image = button.grab().toImage()
+        self.assertEqual(image.pixelColor(2, button.height() // 2).name(), "#e2e8f0")
+        self.assertNotEqual(image.pixelColor(0, 0), image.pixelColor(2, button.height() // 2))
+        button.setDown(False)
+
     def test_header_panel_buttons_stay_fixed_and_clickable_above_drawer(self):
         page = self.window.config_page
         buttons = (page.header.artifacts_btn,)

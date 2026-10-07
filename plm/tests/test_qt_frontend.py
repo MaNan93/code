@@ -721,6 +721,11 @@ class QtFrontendLayoutTests(unittest.TestCase):
     def test_config_tabs_fit_scaled_labels_including_generation(self):
         tabs = self.window.config_page.tabs
         bar = tabs.tabBar()
+        page = self.window.config_page
+        self.assertEqual(
+            bar.mapTo(page, QtCore.QPoint()).x(),
+            page.header.title_label.mapTo(page, QtCore.QPoint()).x(),
+        )
         for selected in range(tabs.count()):
             tabs.setCurrentIndex(selected)
             wait_for_idle(self.app)
@@ -728,7 +733,9 @@ class QtFrontendLayoutTests(unittest.TestCase):
                 font = QtGui.QFont(bar.font())
                 font.setBold(True)
                 width = QtGui.QFontMetrics(font).horizontalAdvance(tabs.tabText(index))
-                self.assertGreaterEqual(bar.tabRect(index).width(), width + 32)
+                self.assertGreaterEqual(
+                    bar.tabRect(index).width(), width + (16 if index == 0 else 32),
+                )
                 option = QtWidgets.QStyleOptionTab()
                 bar.initStyleOption(option, index)
                 text_rect = bar.style().subElementRect(

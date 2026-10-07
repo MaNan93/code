@@ -186,6 +186,7 @@ QMenu::separator {
 }
 
 QTabWidget::pane { border: none; background: transparent; }
+QTabWidget#ConfigTabs::tab-bar { left: $spacing_lg; }
 QTabWidget#ConfigTabs QTabBar {
     background: transparent;
     border: none;
@@ -209,6 +210,7 @@ QTabWidget#ConfigTabs QTabBar::tab:selected {
     font-weight: 600;
     border-bottom: 2px solid $primary;
 }
+QTabWidget#ConfigTabs QTabBar::tab:first { padding-left: 0; }
 QTabWidget#ConfigTabs QTabBar::tab:hover:!selected {
     color: $text_main;
     border-bottom: 2px solid $border_hover;

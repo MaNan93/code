@@ -12,7 +12,7 @@ from plm.frontend.qt.styles.tokens import (
 class ConfigTabBar(QtWidgets.QTabBar):
     """Keep the full label visible when the selected tab becomes bold."""
 
-    TEXT_HORIZONTAL_SPACE = 44  # 32px padding, 8px gap, 4px glyph allowance.
+    TEXT_HORIZONTAL_SPACE = 40  # 32px padding and the 8px gap.
     TEXT_VERTICAL_SPACE = 18  # 16px padding and the 2px indicator.
 
     def tabSizeHint(self, index):
@@ -24,8 +24,11 @@ class ConfigTabBar(QtWidgets.QTabBar):
         metrics = QtGui.QFontMetrics(font)
         text_width = max(metrics.horizontalAdvance(option.text),
                          metrics.boundingRect(option.text).width())
+        horizontal_space = self.TEXT_HORIZONTAL_SPACE
+        if index == 0:
+            horizontal_space -= SPACING_LG  # First label starts at the title baseline.
         size = QtCore.QSize(
-            text_width + self.TEXT_HORIZONTAL_SPACE,
+            text_width + horizontal_space,
             metrics.height() + self.TEXT_VERTICAL_SPACE,
         )
         return super().tabSizeHint(index).expandedTo(size)

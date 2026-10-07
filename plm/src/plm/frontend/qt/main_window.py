@@ -303,6 +303,8 @@ class MainWindow(QtWidgets.QMainWindow):
 
         self.content_splitter = QtWidgets.QSplitter(QtCore.Qt.Vertical)
         self.content_splitter.setObjectName("ContentSplitter")
+        # Reserve space inside the parent so the canvas shadow is not clipped.
+        self.content_splitter.setContentsMargins(6, 0, 0, 0)
         self.content_splitter.setHandleWidth(2)
         self.content_splitter.setChildrenCollapsible(True)
         self.config_page = ConfigPage(

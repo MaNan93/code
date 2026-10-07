@@ -298,9 +298,9 @@ class ConfigPage(RoundedCanvasFrame):
     def _configure_artifacts_toolbar(self):
         panel = self.artifacts_panel
         panel.ensurePolished()
-        margins = panel.layout().contentsMargins()
+        margins = panel.content_layout.contentsMargins()
         toolbar_top = max(0, self.layout().contentsMargins().top() - panel.frameWidth())
-        panel.layout().setContentsMargins(
+        panel.content_layout.setContentsMargins(
             margins.left(), toolbar_top,
             margins.right(), margins.bottom(),
         )

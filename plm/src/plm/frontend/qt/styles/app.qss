@@ -398,6 +398,21 @@ QFrame#ArtifactsPanel {
 }
 QWidget#ArtifactsToolbar, QWidget#ArtifactSearchBar { background: transparent; }
 QLabel#ArtifactPath { color: $text_sub; background: transparent; border: none; }
+QWidget#ArtifactContent { background: transparent; border: none; }
+QFrame#ArtifactFileSelector { background: transparent; border: none; border-radius: 6px; }
+QFrame#ArtifactFileSelector[hovered="true"] { background-color: $bg_subtle; }
+QFrame#ArtifactToolSeparator { background-color: $border; border: none; }
+QFrame#ArtifactFooter {
+    background-color: $bg_sidebar_inactive;
+    border: none;
+    border-top: 1px solid $border;
+    border-bottom-left-radius: 9px;
+    border-bottom-right-radius: 9px;
+}
+QFrame#ArtifactFooter QLabel { font-size: 12px; }
+QLabel#ArtifactFileProgress, QLabel#ArtifactEditorMetadata {
+    color: $text_sub; background: transparent; border: none;
+}
 QPlainTextEdit#ArtifactCodePreview {
     background-color: $bg_surface;
     color: $text_main;

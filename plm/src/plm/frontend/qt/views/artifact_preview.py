@@ -8,6 +8,10 @@ from PyQt5 import QtGui
 MAX_PREVIEW_BYTES = 200 * 1024
 
 MAX_PREVIEW_CACHE_BYTES = 8 * 1024 * 1024
+ARTIFACT_LANGUAGES = {
+    ".sv": "SystemVerilog", ".svh": "SystemVerilog",
+    ".v": "Verilog", ".vh": "Verilog", ".json": "JSON",
+}
 
 
 class ArtifactPreview:
@@ -52,7 +56,7 @@ class ArtifactPreview:
         self._readable = False
         self.search_status.clear()
         self.preview.setToolTip(str(self.current_path or ""))
-        self.path_label.set_path(self.current_path)
+        self.path_label.set_path(self.current_path, self.workspace_root)
         self._file_error = ""
         text = ""
         if self.current_path is None:
@@ -129,17 +133,36 @@ class ArtifactPreview:
         self._update_status()
 
     def _update_status(self):
-        parts = [self._file_status] if self.current_path is not None or not self._output_text else []
-        # "Up to date" already has a dedicated green status beside Generate.
-        # Keep the preview footer focused on file position/line count and only
-        # repeat generation state here when it needs attention.
-        show_output_state = self._output_text and not (
-            self._output_state == "up_to_date" and self.current_path is not None
+        text = self._output_text
+        if not self._readable and (self.current_path is not None or not text):
+            text = self._file_status
+        self.status.setText(text)
+        self.status.setVisible(bool(text))
+        self.file_progress.setText(
+            f"{self.selection.current_index + 1}/{len(self.selection.files)}"
+            if self.current_path is not None else ""
         )
-        if show_output_state:
-            parts.append(self._output_text)
-        self.status.setText(" · ".join(parts))
         self.status.setToolTip("\n".join(part for part in (self._file_error, self._output_detail) if part))
+        self._update_editor_status()
+
+    def _update_editor_status(self):
+        if not self._readable or self.current_path is None:
+            self.editor_metadata.clear()
+            return
+        cursor = self.preview.textCursor()
+        text = self._current_contents.get(str(self.current_path), "")
+        newlines = "CRLF" if "\r\n" in text else "LF"
+        if newlines == "CRLF" and "\n" in text.replace("\r\n", ""):
+            newlines = "Mixed"
+        language = ARTIFACT_LANGUAGES.get(self.current_path.suffix.lower(), "Plain Text")
+        if self.diff_button.isChecked() and self._diff_available():
+            language = "Diff"
+        metadata = (
+            f"{len(text.splitlines())} 行 · 行 {cursor.blockNumber() + 1}，"
+            f"列 {cursor.positionInBlock() + 1} · {language} · UTF-8 · {newlines} · RO"
+        )
+        self.editor_metadata.setText(metadata)
+        self.editor_metadata.setToolTip(metadata)
 
     def _update_highlighting(self, *_):
         is_verilog = (

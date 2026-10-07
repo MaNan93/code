@@ -75,6 +75,13 @@ class ArtifactInteractions:
                 action.setChecked(button.isChecked())
             has_overflow |= hidden
         self.more_button.setVisible(has_overflow)
+        self.toolbar_separators[0].setVisible(
+            (not self.search_button.isHidden() or not self.diff_button.isHidden())
+            and (not self.copy_path_button.isHidden() or not self.open_editor_button.isHidden())
+        )
+        self.toolbar_separators[1].setVisible(
+            not self.copy_path_button.isHidden() or not self.open_editor_button.isHidden()
+        )
 
     def resizeEvent(self, event):
         super().resizeEvent(event)

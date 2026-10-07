@@ -10,6 +10,7 @@ from plm.frontend.qt.widgets.common import (
     load_lucide_icon, make_icon_button,
 )
 from plm.frontend.qt.styles.tokens import TEXT_MUTED, scale_content_size
+from .artifact_chrome import ArtifactFileSelector, ArtifactPathLabel
 from .artifact_preview import ArtifactPreview
 from .artifact_files import ArtifactFiles
 from .artifact_interactions import ArtifactInteractions
@@ -42,34 +43,6 @@ class ArtifactFileTree(QtWidgets.QTreeWidget):
 
     def minimumSizeHint(self):
         return QtCore.QSize(0, 0)
-
-
-class ArtifactPathLabel(QtWidgets.QLabel):
-    """Keep the full path available without widening the drawer toolbar."""
-
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.setObjectName("ArtifactPath")
-        self._full_path = ""
-        self.setTextFormat(QtCore.Qt.PlainText)
-        self.setMinimumWidth(0)
-        self.setSizePolicy(QtWidgets.QSizePolicy.Ignored, QtWidgets.QSizePolicy.Preferred)
-        self.setAlignment(QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter)
-
-    def set_path(self, path):
-        self._full_path = str(path or "")
-        self.setToolTip(self._full_path)
-        self.setAccessibleName(self._full_path)
-        self._update_text()
-
-    def _update_text(self):
-        self.setText(self.fontMetrics().elidedText(
-            self._full_path, QtCore.Qt.ElideMiddle, self.contentsRect().width()
-        ))
-
-    def resizeEvent(self, event):
-        super().resizeEvent(event)
-        self._update_text()
 
 
 class ArtifactsPanel(
@@ -107,10 +80,17 @@ class ArtifactsPanel(
         self.setMouseTracking(True)
         apply_drop_shadow(self, offset=(-4, 0), blur_radius=16, alpha=36)
 
-        root = QtWidgets.QVBoxLayout(self)
-        root.setSizeConstraint(QtWidgets.QLayout.SetNoConstraint)
-        root.setContentsMargins(16, 0, 16, 16)
+        outer = QtWidgets.QVBoxLayout(self)
+        outer.setSizeConstraint(QtWidgets.QLayout.SetNoConstraint)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.setSpacing(0)
+        content = QtWidgets.QWidget()
+        content.setObjectName("ArtifactContent")
+        root = QtWidgets.QVBoxLayout(content)
+        self.content_layout = root
+        root.setContentsMargins(16, 0, 16, 8)
         root.setSpacing(12)
+        outer.addWidget(content, 1)
         toolbar = QtWidgets.QWidget()
         self.toolbar = toolbar
         toolbar.setObjectName("ArtifactsToolbar")
@@ -131,15 +111,28 @@ class ArtifactsPanel(
         ):
             button = make_icon_button(icon, tooltip, "ArtifactsToolButton", 28, ICON_SIZE)
             setattr(self, name, button)
-            toolbar_layout.addWidget(button)
             self.toolbar_buttons.append(button)
             if name == "tree_button":
                 self.path_label = ArtifactPathLabel()
-                toolbar_layout.addWidget(self.path_label, 1)
+                self.file_selector = ArtifactFileSelector(button, self.path_label)
+                toolbar_layout.addWidget(self.file_selector, 1)
         self.diff_button = make_icon_button(
             "git-compare", "显示与上一次预览的差异", "ArtifactsToolButton", 28, ICON_SIZE
         )
-        toolbar_layout.addWidget(self.diff_button)
+        self.toolbar_separators = []
+        for index, group in enumerate((
+            (self.search_button, self.diff_button),
+            (self.copy_path_button, self.open_editor_button),
+            (self.refresh_button, self.more_button, self.maximize_button),
+        )):
+            if index:
+                separator = QtWidgets.QFrame()
+                separator.setObjectName("ArtifactToolSeparator")
+                separator.setFixedSize(1, 16)
+                toolbar_layout.addWidget(separator, 0, QtCore.Qt.AlignVCenter)
+                self.toolbar_separators.append(separator)
+            for button in group:
+                toolbar_layout.addWidget(button)
         root.addWidget(toolbar)
 
         self.file_tree = ArtifactFileTree(self)
@@ -199,13 +192,28 @@ class ArtifactsPanel(
         root.addWidget(self.preview, 1)
         self.status = StatusBadge("尚无生成文件")
         self.status.setObjectName("ArtifactStatus")
-        status_row = QtWidgets.QHBoxLayout()
-        status_row.setContentsMargins(0, 0, 0, 0)
+        self.footer = QtWidgets.QFrame()
+        self.footer.setObjectName("ArtifactFooter")
+        self.footer.setFixedHeight(28)
+        status_row = QtWidgets.QHBoxLayout(self.footer)
+        status_row.setContentsMargins(12, 0, 12, 0)
+        status_row.setSpacing(8)
         status_row.addWidget(
             self.status, 0, QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter
         )
+        self.file_progress = QtWidgets.QLabel()
+        self.file_progress.setObjectName("ArtifactFileProgress")
+        status_row.addWidget(self.file_progress)
         status_row.addStretch(1)
-        root.addLayout(status_row)
+        self.editor_metadata = QtWidgets.QLabel()
+        self.editor_metadata.setObjectName("ArtifactEditorMetadata")
+        self.editor_metadata.setMinimumWidth(0)
+        self.editor_metadata.setSizePolicy(QtWidgets.QSizePolicy.Ignored, QtWidgets.QSizePolicy.Preferred)
+        self.editor_metadata.setAlignment(QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter)
+        status_row.addWidget(self.editor_metadata, 1)
+        outer.addWidget(self.footer)
+        self.preview.cursorPositionChanged.connect(self._update_editor_status)
+        self.preview.textChanged.connect(self._update_editor_status)
 
         self.search_input.textChanged.connect(self._search_changed)
         self.search_input.returnPressed.connect(self.find_text)

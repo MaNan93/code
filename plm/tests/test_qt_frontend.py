@@ -766,9 +766,9 @@ class QtFrontendLayoutTests(unittest.TestCase):
             self.assertEqual(button.size(), QtCore.QSize(28, 28))
             self.assertEqual(button.iconSize(), QtCore.QSize(ICON_SIZE, ICON_SIZE))
 
-        self.assertEqual(panel.layout().spacing(), 12)
+        self.assertEqual(panel.content_layout.spacing(), 12)
         self.assertIsInstance(panel.preview, QtWidgets.QPlainTextEdit)
-        self.assertFalse(hasattr(panel, "file_selector"))
+        self.assertIs(panel.file_selector.parent(), toolbar)
 
     def test_config_header_has_twelve_pixel_gap_before_tabs(self):
         page = self.window.config_page
@@ -913,9 +913,7 @@ class QtFrontendLayoutTests(unittest.TestCase):
                 point = button.mapTo(page, button.rect().center())
                 self.assertIs(page.childAt(point), button)
             action_y = page.header.artifacts_btn.mapTo(page, QtCore.QPoint(0, 24)).y()
-            last_button = page.artifacts_panel.diff_button
-            if not last_button.isVisible():
-                last_button = page.artifacts_panel.maximize_button
+            last_button = page.artifacts_panel.maximize_button
             last_right = last_button.mapTo(page, QtCore.QPoint(last_button.width(), 0)).x()
             toggle_left = page.header.artifacts_btn.mapTo(page, QtCore.QPoint()).x()
             self.assertEqual(toggle_left - last_right, 8)
@@ -1134,8 +1132,9 @@ class QtFrontendLayoutTests(unittest.TestCase):
             "minus",
             "square",
             "copy",
+            "chevron-down",
         )
-        self.assertEqual(len(icon_names), 30)
+        self.assertEqual(len(icon_names), 31)
         self.assertEqual(
             {path.stem for path in LUCIDE_ICON_DIR.glob("*.svg")},
             set(icon_names),

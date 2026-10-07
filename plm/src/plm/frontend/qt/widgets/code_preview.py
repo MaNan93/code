@@ -5,16 +5,17 @@ import re
 from PyQt5 import QtCore, QtGui, QtWidgets
 from plm.frontend.qt.widgets.common import StyledMenu
 from plm.frontend.qt.styles.tokens import (
-    BG_SURFACE, BORDER, TEXT_MUTED, scale_content_size,
+    BG_SIDEBAR_INACTIVE, BORDER, TEXT_MUTED, scale_content_size,
 )
 
 
 SYNTAX_COMMENT = "#6E7781"
-SYNTAX_KEYWORD = "#CF222E"
+SYNTAX_KEYWORD = "#0969DA"
 SYNTAX_PORT = "#0086B3"
 SYNTAX_NUMBER = "#986801"
 SYNTAX_STRING = "#0A3069"
 SYNTAX_DIRECTIVE = "#8250DF"
+LINE_NUMBER_PADDING = 12
 
 
 class VerilogHighlighter(QtGui.QSyntaxHighlighter):
@@ -151,7 +152,7 @@ class CodePreview(QtWidgets.QPlainTextEdit):
 
     def line_number_width(self):
         digits = len(str(self.blockCount()))
-        return 16 + self.fontMetrics().horizontalAdvance("9") * digits
+        return 8 + LINE_NUMBER_PADDING + self.fontMetrics().horizontalAdvance("9") * digits
 
     def update_line_number_width(self, *_):
         width = self.line_number_width()
@@ -179,7 +180,7 @@ class CodePreview(QtWidgets.QPlainTextEdit):
 
     def paint_line_numbers(self, event):
         painter = QtGui.QPainter(self.line_numbers)
-        painter.fillRect(event.rect(), QtGui.QColor(BG_SURFACE))
+        painter.fillRect(event.rect(), QtGui.QColor(BG_SIDEBAR_INACTIVE))
         painter.setPen(QtGui.QColor(BORDER))
         painter.drawLine(
             self.line_numbers.width() - 1,
@@ -198,7 +199,7 @@ class CodePreview(QtWidgets.QPlainTextEdit):
                 painter.drawText(
                     0,
                     top,
-                    self.line_numbers.width() - 6,
+                    self.line_numbers.width() - LINE_NUMBER_PADDING,
                     self.fontMetrics().height(),
                     QtCore.Qt.AlignRight,
                     str(number + 1),

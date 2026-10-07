@@ -41,6 +41,7 @@ ICON_NAMES = (
     "minus",
     "square",
     "copy",
+    "chevron-down",
 )
 # Lucide renamed this icon upstream but the application keeps the requested
 # stable asset filename.

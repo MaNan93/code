@@ -55,18 +55,20 @@ class ArtifactPreviewTests(unittest.TestCase):
         self.panel.set_files([one, two], self.root)
         wait_for_idle(self.app)
         label = self.panel.path_label
-        self.assertEqual(label.text(), str(one))
+        self.assertEqual(label.display_path, "rtl / first.sv")
+        self.assertIn("<b", label.text())
+        self.assertNotIn(str(self.root), label.text())
         self.assertGreater(label.x(), self.panel.tree_button.geometry().right())
         self.assertFalse(self.panel.tree_button.icon().pixmap(22, 22).mask().isNull())
-        self.panel.tree_button.click()
+        QtTest.QTest.mouseClick(label, QtCore.Qt.LeftButton)
         self.assertTrue(self.panel.file_tree.isVisible())
         self.panel.select_file(two)
         self.assertEqual(label.toolTip(), str(two))
         self.panel.resize(400, 630)
         wait_for_idle(self.app)
         self.assertEqual(label.toolTip(), str(two))
-        self.assertIn("\u2026", label.text())
-        self.assertLessEqual(label.fontMetrics().horizontalAdvance(label.text()), label.width())
+        self.assertIn("\u2026", label.display_path)
+        self.assertTrue(self.panel.maximize_button.isVisible())
         self.panel.set_files([], self.root)
         wait_for_idle(self.app)
         self.assertEqual(label.text(), "")
@@ -82,6 +84,7 @@ class ArtifactPreviewTests(unittest.TestCase):
         tree = self.panel.file_tree
         self.assertGreater(tree.height(), 190)
         self.assertEqual(tree.verticalScrollBar().maximum(), 0)
+
         folder = tree.topLevelItem(0)
         expanded_height = tree.height()
         folder.setExpanded(False)
@@ -95,6 +98,26 @@ class ArtifactPreviewTests(unittest.TestCase):
         self.panel.resize(1000, 1100)
         wait_for_idle(self.app)
         self.assertEqual(tree.verticalScrollBar().maximum(), 0)
+
+    def test_footer_separates_state_and_tracks_cursor_and_file_format(self):
+        path = self.root / "status.sv"
+        path.write_bytes(b"module example;\r\nendmodule\r\n")
+        self.panel.set_files([path], self.root)
+        wait_for_idle(self.app)
+        self.panel.set_output_state("out_of_date", "输出已过期")
+        self.assertEqual(self.panel.footer.height(), 28)
+        self.assertEqual(self.panel.status.text(), "输出已过期")
+        self.assertEqual(self.panel.file_progress.text(), "1/1")
+        cursor = self.panel.preview.textCursor()
+        cursor.setPosition(len("module example;\n") + 3)
+        self.panel.preview.setTextCursor(cursor)
+        metadata = self.panel.editor_metadata.text()
+        self.assertIn("行 2，列 4", metadata)
+        self.assertIn("SystemVerilog · UTF-8 · CRLF · RO", metadata)
+        self.assertEqual(len(self.panel.toolbar_separators), 2)
+        self.panel.resize(1000, 630)
+        wait_for_idle(self.app)
+        self.assertTrue(all(separator.isVisible() for separator in self.panel.toolbar_separators))
 
     def test_complete_readonly_source_and_line_numbers(self):
         text = "module generated;\n" + "assign value = " + "0" * 250 + ";\n"
@@ -177,7 +200,7 @@ class ArtifactPreviewTests(unittest.TestCase):
         wait_for_idle(self.app)
         self.assertFalse(self.panel.preview.toPlainText())
         self.assertTrue(self.panel.search_button.isEnabled())
-        self.assertIn("0 行", self.panel.status.text())
+        self.assertIn("0 行", self.panel.editor_metadata.text())
 
     def test_search_wraps_both_directions_and_reports_no_match(self):
         path = self.file("search.sv", "module match;\n// middle\nendmodule // match")
@@ -227,7 +250,7 @@ class ArtifactPreviewTests(unittest.TestCase):
         wait_for_idle(self.app)
         wait_for_idle(self.app)
         self.assertTrue(self.panel.file_tree.isVisible())
-        self.assertIs(self.panel.file_tree.parent(), self.panel)
+        self.assertIs(self.panel.file_tree.parent(), self.panel.content_layout.parentWidget())
         self.assertLess(self.panel.preview.height(), preview_geometry.height())
         self.assertFalse(self.panel.file_tree.geometry().intersects(self.panel.preview.geometry()))
 

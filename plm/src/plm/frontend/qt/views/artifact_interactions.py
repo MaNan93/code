@@ -67,6 +67,18 @@ class ArtifactInteractions:
         self.diff_button.setVisible(width >= 520)
         for index in (6, 7, 8):
             self.toolbar_buttons[index].show()
+        self._sync_overflow_menu()
+
+    def _sync_overflow_menu(self):
+        has_overflow = False
+        for action, button in self._overflow_actions:
+            hidden = button.isHidden()
+            action.setVisible(hidden)
+            action.setEnabled(button.isEnabled())
+            if action.isCheckable():
+                action.setChecked(button.isChecked())
+            has_overflow |= hidden
+        self._overflow_separator.setVisible(has_overflow)
 
     def resizeEvent(self, event):
         super().resizeEvent(event)

@@ -184,16 +184,23 @@ class ArtifactsPanel(
             self.toolbar_buttons[index].clicked.connect(callback)
 
         self.more_menu = StyledMenu(self)
-        self.more_menu.addAction("打开输出文件夹", self.open_folder)
-        self.more_menu.addAction("刷新文件", self.refreshRequested.emit)
-        self.more_menu.addAction("在编辑器中打开", self.open_in_editor)
-        self.more_menu.addAction("搜索当前文件", self.show_search)
-        self.more_menu.addAction("复制文件路径", self.copy_path)
-        self.more_menu.addAction("显示/隐藏文件树", self.tree_button.toggle)
-        self.more_menu.addAction("切换 Verilog 高亮", self.highlight_button.toggle)
-        self.more_menu.addAction("显示/隐藏差异", self.diff_button.toggle)
-        self.more_menu.addSeparator()
+        self._overflow_actions = []
+        for label, button in (
+            ("打开输出文件夹", self.toolbar_buttons[0]),
+            ("刷新文件", self.toolbar_buttons[1]),
+            ("在编辑器中打开", self.toolbar_buttons[2]),
+            ("搜索当前文件", self.toolbar_buttons[4]),
+            ("复制文件路径", self.toolbar_buttons[5]),
+            ("显示/隐藏文件树", self.tree_button),
+            ("切换 Verilog 高亮", self.highlight_button),
+            ("显示/隐藏差异", self.diff_button),
+        ):
+            action = self.more_menu.addAction(label, button.click)
+            action.setCheckable(button.isCheckable())
+            self._overflow_actions.append((action, button))
+        self._overflow_separator = self.more_menu.addSeparator()
         self.copy_content_action = self.more_menu.addAction("复制文件内容", self.copy_contents)
+        self.more_menu.aboutToShow.connect(self._sync_overflow_menu)
         self.toolbar_buttons[7].setMenu(self.more_menu)
         for key, callback in (
             ("Ctrl+F", self.show_search),

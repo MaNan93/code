@@ -219,14 +219,34 @@ class ArtifactPreviewTests(unittest.TestCase):
         self.assertTrue(self.panel.toolbar_buttons[6].isVisible())
         self.assertTrue(self.panel.toolbar_buttons[7].isVisible())
         self.assertTrue(self.panel.toolbar_buttons[8].isVisible())
-        labels = [action.text() for action in self.panel.more_menu.actions()]
+        labels = [action.text() for action in self.panel.more_menu.actions() if action.isVisible()]
         self.assertIn("在编辑器中打开", labels)
         self.assertIn("搜索当前文件", labels)
-        self.assertIn("显示/隐藏文件树", labels)
+        self.assertNotIn("显示/隐藏文件树", labels)
+        self.assertNotIn("刷新文件", labels)
         self.panel._apply_toolbar_density(700)
         self.assertTrue(self.panel.toolbar_buttons[2].isVisible())
         self.assertTrue(self.panel.toolbar_buttons[4].isVisible())
         self.assertTrue(self.panel.diff_button.isVisible())
+        labels = [action.text() for action in self.panel.more_menu.actions() if action.isVisible()]
+        self.assertEqual(labels, ["复制文件内容"])
+
+    def test_overflow_actions_follow_button_enabled_and_toggle_states(self):
+        self.panel._apply_toolbar_density(320)
+        self.panel.more_menu.aboutToShow.emit()
+        actions = {action.text(): action for action in self.panel.more_menu.actions()}
+        self.assertFalse(actions["搜索当前文件"].isEnabled())
+        path = self.file("example.v", "module example; endmodule\n")
+        self.panel.set_files([path], self.root)
+        wait_for_idle(self.app)
+        self.panel.more_menu.aboutToShow.emit()
+        self.assertTrue(actions["搜索当前文件"].isEnabled())
+        highlight = actions["切换 Verilog 高亮"]
+        self.assertEqual(highlight.isChecked(), self.panel.highlight_button.isChecked())
+        highlight.trigger()
+        self.assertFalse(self.panel.highlight_button.isChecked())
+        actions["搜索当前文件"].trigger()
+        self.assertTrue(self.panel.search_bar.isVisible())
 
     def test_verilog_highlight_multiline_comments_strings_and_toggle(self):
         editor = CodePreview()

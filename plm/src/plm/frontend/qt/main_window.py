@@ -25,7 +25,8 @@ __all__ = ["MainWindow"]
 class WindowBackdrop(QtWidgets.QWidget):
     """Paint only the outer shadow without filtering child widgets."""
 
-    SHADOW_MARGIN = 12
+    SHADOW_MARGIN = 24
+    SHADOW_LAYER_ALPHA = 6
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -43,11 +44,11 @@ class WindowBackdrop(QtWidgets.QWidget):
         painter.setRenderHint(QtGui.QPainter.Antialiasing)
         margin = self.SHADOW_MARGIN
         rect = QtCore.QRectF(self.rect()).adjusted(margin, margin, -margin, -margin)
-        rect.translate(0, 2)
         # Soft overlapping fills avoid nested graphics effects on text/previews.
-        color = QtGui.QColor(TEXT_SUB)
-        color.setAlpha(3)
+        color = QtGui.QColor(QtCore.Qt.black)
         for spread in range(margin, 0, -1):
+            falloff = 1.0 - spread / margin
+            color.setAlpha(round(self.SHADOW_LAYER_ALPHA * falloff * falloff))
             path = QtGui.QPainterPath()
             path.addRoundedRect(
                 rect.adjusted(-spread, -spread, spread, spread),

@@ -303,7 +303,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
         self.content_splitter = QtWidgets.QSplitter(QtCore.Qt.Vertical)
         self.content_splitter.setObjectName("ContentSplitter")
-        self.content_splitter.setHandleWidth(5)
+        self.content_splitter.setHandleWidth(2)
         self.content_splitter.setChildrenCollapsible(True)
         self.config_page = ConfigPage(
             editor_path_provider=self.controller.settings.editor_path

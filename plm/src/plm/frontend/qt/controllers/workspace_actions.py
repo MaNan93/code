@@ -3,7 +3,6 @@
 import hashlib
 from copy import copy
 from pathlib import Path
-from PyQt5 import QtWidgets
 from plm.core.validation import ValidationError, ValidationIssue
 
 
@@ -83,21 +82,6 @@ class WorkspaceActions:
             self.config_page.set_validation_issues(error.issues)
             self.config_page.focus_first_error()
 
-    def reload_current(self):
-        if self.current_project is None or self._generation_running or self._save_running:
-            return False
-        self.config_page.finish_editing()
-        if self.config_page.dirty:
-            answer = QtWidgets.QMessageBox.question(
-                self.window, "重新加载项目", "重新加载会丢弃未保存的修改，是否继续？",
-                QtWidgets.QMessageBox.Discard | QtWidgets.QMessageBox.Cancel,
-                QtWidgets.QMessageBox.Cancel,
-            )
-            if answer != QtWidgets.QMessageBox.Discard:
-                return False
-        self._load_project(self.current_project)
-        return True
-
     def save_current(self):
         if self.current_project is None or self._save_running or self._generation_running:
             return False
@@ -111,7 +95,7 @@ class WorkspaceActions:
 
         def save(_progress):
             if service.signature(project) != saved:
-                raise ValueError("配置文件已被外部修改，请先重新加载。")
+                raise ValueError("配置文件已被外部修改，请通过“打开项目”重新打开。")
             service.save(project, payload)
             return service.signature(project)
 
@@ -188,7 +172,7 @@ class WorkspaceActions:
 
         def generate(progress):
             if service.signature(project) != signature:
-                raise ValueError("配置文件已被外部修改，请先重新加载。")
+                raise ValueError("配置文件已被外部修改，请通过“打开项目”重新打开。")
             before = self._artifact_signature(service.output_files(project), root)
             progress(10, "正在生成")
             result, files, report = service.generate(

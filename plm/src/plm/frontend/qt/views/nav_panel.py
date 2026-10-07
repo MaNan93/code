@@ -20,6 +20,7 @@ class NavPanel(QtWidgets.QFrame):
     """Region 3: actions, draggable projects, and footer navigation."""
 
     new_chat_requested = QtCore.pyqtSignal()
+    open_project_requested = QtCore.pyqtSignal()
     save_requested = QtCore.pyqtSignal()
     settings_requested = QtCore.pyqtSignal()
     docs_requested = QtCore.pyqtSignal()
@@ -66,12 +67,20 @@ class NavPanel(QtWidgets.QFrame):
         self.new_chat_btn = self._action_button(
             "square-pen", "新对话", self.new_chat_requested
         )
+        self.new_chat_btn.setToolTip("新建项目")
+        self.open_project_btn = self._action_button(
+            "folder-open", "打开项目", self.open_project_requested
+        )
         self.save_btn = self._action_button("save", "保存", self.save_requested)
         self.new_chat_row, self.new_chat_row_layout = self._nav_row(
             self.new_chat_btn
         )
         self.save_row, self.save_row_layout = self._nav_row(self.save_btn)
         root.addWidget(self.new_chat_row)
+        self.open_project_row, self.open_project_row_layout = self._nav_row(
+            self.open_project_btn
+        )
+        root.addWidget(self.open_project_row)
         root.addWidget(self.save_row)
         root.addSpacing(4)
 
@@ -123,7 +132,10 @@ class NavPanel(QtWidgets.QFrame):
         footer_layout.addWidget(self.docs_row)
         root.addWidget(self.footer)
 
-        for button in (self.new_chat_btn, self.save_btn, self.settings_btn, self.docs_btn):
+        for button in (
+            self.new_chat_btn, self.open_project_btn, self.save_btn,
+            self.settings_btn, self.docs_btn,
+        ):
             button.setMinimumWidth(0)
             button.setMaximumWidth(QtWidgets.QWIDGETSIZE_MAX)
             button.setFixedHeight(36)
@@ -175,6 +187,7 @@ class NavPanel(QtWidgets.QFrame):
             layout.activate()
 
         self.new_chat_btn.setText("新对话" if visible else "")
+        self.open_project_btn.setText("打开项目" if visible else "")
         self.save_btn.setText("保存" if visible else "")
         self.settings_btn.setText("Settings" if visible else "")
         self.docs_btn.setText("Docs" if visible else "")

@@ -5,7 +5,6 @@ from pathlib import Path
 from PyQt5 import QtWidgets
 from plm.frontend.qt.views.nav_panel import NavPanel
 from plm.frontend.qt.views.new_project_dialog import NewProjectDialog
-from plm.frontend.qt.widgets.common import StyledMenu
 
 
 class ProjectNavigation:
@@ -27,25 +26,6 @@ class ProjectNavigation:
 
     def create_navigation(self):
         return NavPanel()
-
-    def show_project_menu(self):
-        self.hide_project_menu()
-        menu = StyledMenu(self.window)
-        self.project_menu = menu
-        menu.addAction("新建项目", self.new_project)
-        menu.addAction("打开项目…", self.open_project)
-        menu.addSeparator()
-        reload_action = menu.addAction("重新加载当前项目", self.reload_current)
-        reload_action.setEnabled(self.current_project is not None)
-        button = self.nav.new_chat_btn
-        menu.popup(button.mapToGlobal(button.rect().bottomLeft()))
-
-    def hide_project_menu(self):
-        menu = getattr(self, "project_menu", None)
-        if menu is not None:
-            menu.close()
-            menu.deleteLater()
-            self.project_menu = None
 
     def confirm_switch(self, on_saved=None):
         if self._generation_running or self._save_running or self._project_operation_running:

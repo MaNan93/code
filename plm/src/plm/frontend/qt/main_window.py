@@ -478,7 +478,6 @@ class MainWindow(QtWidgets.QMainWindow):
         self.redo_action.setEnabled(self.config_page.can_redo())
 
     def closeEvent(self, event):
-        self.controller.hide_project_menu()
         if not self.controller.confirm_switch(on_saved=self.close):
             event.ignore()
             return
@@ -529,16 +528,13 @@ class MainWindow(QtWidgets.QMainWindow):
         # Collapsing to height zero leaves the splitter handle in the layout.
         self.log_panel.hide()
     def on_save(self):
-        self.controller.hide_project_menu()
         self.nav_panel.set_active(None)
         self.controller.save_current()
 
     def on_open_settings(self):
-        self.controller.hide_project_menu()
         self._show_secondary_page("settings")
 
     def on_open_docs(self):
-        self.controller.hide_project_menu()
         self._show_secondary_page("docs")
 
     def _show_secondary_page(self, page):

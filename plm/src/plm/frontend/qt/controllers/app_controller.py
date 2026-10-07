@@ -44,8 +44,8 @@ class AppController(WorkspaceActions, ProjectNavigation, ProjectActions):
         config_page.historyChanged.connect(self._content_changed)
         config_page.dirtyChanged.connect(self._update_window_title)
         config_page.header.titleChanged.connect(self.rename_current_from_header)
-        nav.new_chat_requested.connect(self.show_project_menu)
-        nav.new_chat_btn.setToolTip("新建或打开 PLM 项目")
+        nav.new_chat_requested.connect(self.new_project)
+        nav.open_project_requested.connect(self.open_project)
         nav.save_requested.connect(window.on_save)
         nav.settings_requested.connect(window.on_open_settings)
         nav.docs_requested.connect(window.on_open_docs)
@@ -95,7 +95,7 @@ class AppController(WorkspaceActions, ProjectNavigation, ProjectActions):
         labels = {
             "no_project": "请选择项目", "ready": "尚未生成", "invalid": "配置有误",
             "up_to_date": "输出已是最新", "out_of_date": "输出已过期",
-            "external_changed": "请重新加载配置", "generating": "生成中…", "failed": "生成失败",
+            "external_changed": "配置已被外部修改，请重新打开项目", "generating": "生成中…", "failed": "生成失败",
         }
         self.generation_state = state
         text = labels[state]

@@ -876,10 +876,36 @@ class QtFrontendLayoutTests(unittest.TestCase):
         page.toggle_artifacts_maximized()
         self.assertEqual(page.artifacts_panel.width(), original_width + 60)
         hidden = QtTest.QSignalSpy(page._artifacts_animation.finished)
-        page.artifacts_panel.close_button.click()
+        page.header.artifacts_btn.click()
         self.assertTrue(hidden.wait(1000))
         self.assertFalse(page.artifacts_panel.isVisible())
         self.assertEqual(page._artifacts_animation.duration(), 200)
+
+    def test_header_panel_buttons_stay_fixed_and_clickable_above_drawer(self):
+        page = self.window.config_page
+        buttons = (page.header.log_btn, page.header.artifacts_btn)
+        positions = [button.mapTo(page, QtCore.QPoint()) for button in buttons]
+        shown = QtTest.QSignalSpy(page._artifacts_animation.finished)
+        page.header.artifacts_btn.click()
+        self.assertTrue(shown.wait(1000))
+        self.assertFalse(hasattr(page.artifacts_panel, "close_button"))
+        for maximized in (False, True):
+            if maximized:
+                page.toggle_artifacts_maximized()
+            page.tabs.setCurrentIndex(2)
+            wait_for_idle(self.app)
+            for button, position in zip(buttons, positions):
+                self.assertEqual(button.mapTo(page, QtCore.QPoint()), position)
+                point = button.mapTo(page, button.rect().center())
+                self.assertIs(page.childAt(point), button)
+            self.assertGreaterEqual(
+                page.artifacts_panel.toolbar.mapTo(page, QtCore.QPoint()).y(),
+                page.header.geometry().bottom() + 1,
+            )
+        hidden = QtTest.QSignalSpy(page._artifacts_animation.finished)
+        QtTest.QTest.mouseClick(page.header.artifacts_btn, QtCore.Qt.LeftButton)
+        self.assertTrue(hidden.wait(1000))
+        self.assertFalse(page.artifacts_panel.isVisible())
 
     def test_artifact_file_selection_and_copy_path(self):
         panel = self.window.config_page.artifacts_panel

@@ -21,7 +21,6 @@ class ArtifactsPanel(
     maximizeRequested = QtCore.pyqtSignal()
     refreshRequested = QtCore.pyqtSignal()
     widthRequested = QtCore.pyqtSignal(int)
-    closeRequested = QtCore.pyqtSignal()
     RESIZE_EDGE_WIDTH = 6
 
     def __init__(self, parent=None, editor_path_provider=None):
@@ -83,12 +82,6 @@ class ArtifactsPanel(
             "git-compare", "显示与上一次预览的差异", "ArtifactsToolButton", 28, ICON_SIZE
         )
         toolbar_layout.addWidget(self.diff_button)
-        # The full-height drawer covers ConfigHeader's toggle button.
-        self.close_button = make_icon_button(
-            "x", "关闭产物面板", "ArtifactsToolButton", 28, ICON_SIZE,
-        )
-        self.close_button.clicked.connect(self.closeRequested.emit)
-        toolbar_layout.addWidget(self.close_button)
         root.addWidget(toolbar)
 
         self.file_tree = QtWidgets.QTreeWidget(self)

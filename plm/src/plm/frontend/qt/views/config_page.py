@@ -261,7 +261,11 @@ class ConfigPage(RoundedCanvasFrame):
         )
         self.artifacts_panel.maximizeRequested.connect(self.toggle_artifacts_maximized)
         self.artifacts_panel.widthRequested.connect(self._on_artifacts_width_requested)
-        self.artifacts_panel.closeRequested.connect(self.toggle_artifacts)
+        margins = self.artifacts_panel.layout().contentsMargins()
+        self.artifacts_panel.layout().setContentsMargins(
+            margins.left(), self.header.height() + root.contentsMargins().top(),
+            margins.right(), margins.bottom(),
+        )
         self._artifacts_animation = QtCore.QPropertyAnimation(
             self.artifacts_panel, b"geometry", self
         )
@@ -271,12 +275,15 @@ class ConfigPage(RoundedCanvasFrame):
         self._artifacts_animation.finished.connect(
             self._finish_artifacts_animation
         )
-        self.tabs.currentChanged.connect(
-            lambda _index: self.artifacts_panel.raise_()
-            if self.artifacts_panel.isVisible() else None
-        )
+        self.tabs.currentChanged.connect(self._raise_artifacts)
         self.artifacts_panel.hide()
         self.installEventFilter(self)
+
+    def _raise_artifacts(self, *_args):
+        if self.artifacts_panel.isVisible():
+            self.artifacts_panel.raise_()
+        # Keep the original header actions accessible above the full-height drawer.
+        self.header.raise_()
 
     def update_title(self, project_name):
         self.header.title_label.setText(project_name)
@@ -459,7 +466,7 @@ class ConfigPage(RoundedCanvasFrame):
         self._hide_artifacts_after_animation = hide_after
         self.artifacts_panel.setGeometry(start)
         self.artifacts_panel.show()
-        self.artifacts_panel.raise_()
+        self._raise_artifacts()
         self._artifacts_animation.setStartValue(start)
         self._artifacts_animation.setEndValue(end)
         self._artifacts_animation.start()
@@ -481,7 +488,7 @@ class ConfigPage(RoundedCanvasFrame):
         if target is None:
             return
         self.artifacts_panel.setGeometry(target)
-        self.artifacts_panel.raise_()
+        self._raise_artifacts()
 
     def _on_artifacts_width_requested(self, width):
         if self.artifacts_maximized:

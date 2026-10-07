@@ -19,6 +19,12 @@ class ArtifactInteractions:
         self.search_bar.hide()
         self.preview.setFocus()
 
+    def _handle_escape(self):
+        if self.file_popup.isVisible():
+            self.file_popup.hide()
+        else:
+            self.hide_search()
+
     def _search_changed(self, *_):
         self.preview.moveCursor(QtGui.QTextCursor.Start)
         self.find_text()
@@ -51,7 +57,15 @@ class ArtifactInteractions:
         return found
 
     def _set_tree_visible(self, visible):
-        self.file_tree.setVisible(visible)
+        if visible and self.selection.files:
+            self.file_popup.show_below(self.path_button)
+        else:
+            self.file_popup.hide()
+
+    def _on_tree_popup_dismissed(self):
+        self.tree_button.blockSignals(True)
+        self.tree_button.setChecked(False)
+        self.tree_button.blockSignals(False)
 
     def _apply_toolbar_density(self, width):
         # File tree and window controls stay reachable; other actions overflow.
@@ -86,6 +100,13 @@ class ArtifactInteractions:
     def resizeEvent(self, event):
         super().resizeEvent(event)
         self._apply_toolbar_density(event.size().width())
+        if hasattr(self, "file_popup"):
+            self.file_popup.hide()
+
+    def hideEvent(self, event):
+        if hasattr(self, "file_popup"):
+            self.file_popup.hide()
+        super().hideEvent(event)
 
     def set_maximized(self, maximized: bool):
         self.is_maximized = bool(maximized)

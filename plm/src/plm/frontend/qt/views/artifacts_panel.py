@@ -10,7 +10,7 @@ from plm.frontend.qt.widgets.common import (
     load_lucide_icon, make_icon_button,
 )
 from plm.frontend.qt.styles.tokens import TEXT_MUTED, scale_content_size
-from .artifact_chrome import ArtifactFileSelector, ArtifactMetadataLabel, ArtifactPathLabel
+from .artifact_chrome import ArtifactFilePopup, ArtifactMetadataLabel, ArtifactPathButton
 from .artifact_preview import ArtifactPreview
 from .artifact_files import ArtifactFiles
 from .artifact_interactions import ArtifactInteractions
@@ -100,8 +100,13 @@ class ArtifactsPanel(
         toolbar_layout.setContentsMargins(16, 0, 16, 0)
         toolbar_layout.setSpacing(8)
         self.toolbar_buttons = []
+        self.path_button = ArtifactPathButton()
+        self.tree_button = self.path_button
+        self.path_label = self.path_button.path_label
+        self.file_selector = self.path_button
+        self.toolbar_buttons.append(self.path_button)
+        toolbar_layout.addWidget(self.path_button, 1)
         for name, icon, tooltip in (
-            ("tree_button", "chevron-down", "显示/隐藏文件树"),
             ("refresh_button", "refresh-cw", "刷新文件"),
             ("open_editor_button", "square-pen", "在编辑器中打开"),
             ("search_button", "search", "搜索文件内容 (Ctrl+F)"),
@@ -112,10 +117,6 @@ class ArtifactsPanel(
             button = make_icon_button(icon, tooltip, "ArtifactsToolButton", 28, ICON_SIZE)
             setattr(self, name, button)
             self.toolbar_buttons.append(button)
-            if name == "tree_button":
-                self.path_label = ArtifactPathLabel()
-                self.file_selector = ArtifactFileSelector(button, self.path_label)
-                toolbar_layout.addWidget(self.file_selector, 1)
         self.diff_button = make_icon_button(
             "git-compare", "显示与上一次预览的差异", "ArtifactsToolButton", 28, ICON_SIZE
         )
@@ -140,8 +141,10 @@ class ArtifactsPanel(
         self.file_tree.setHeaderHidden(True)
         self.file_tree.setIndentation(16)
         self.file_tree.itemClicked.connect(self._tree_item_clicked)
-        root.addWidget(self.file_tree)
-        self.file_tree.hide()
+        self.file_tree.itemActivated.connect(self._tree_item_clicked)
+        self.file_popup = ArtifactFilePopup(self.file_tree, self)
+        self.file_popup.dismissed.connect(self._on_tree_popup_dismissed)
+        self.file_popup.hide()
 
         self.search_bar = QtWidgets.QWidget()
         self.search_bar.setObjectName("ArtifactSearchBar")
@@ -248,7 +251,7 @@ class ArtifactsPanel(
             ("F3", self.find_text),
             ("Shift+F3", lambda: self.find_text(True)),
             ("Shift+Return", lambda: self.find_text(True)),
-            ("Escape", self.hide_search),
+            ("Escape", self._handle_escape),
         ):
             shortcut = QtWidgets.QShortcut(QtGui.QKeySequence(key), self)
             shortcut.setContext(QtCore.Qt.WidgetWithChildrenShortcut)

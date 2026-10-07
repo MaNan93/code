@@ -59,9 +59,9 @@ class ArtifactPreviewTests(unittest.TestCase):
         self.assertEqual(label.display_path, "rtl / first.sv")
         self.assertIn("<b", label.text())
         self.assertNotIn(str(self.root), label.text())
-        self.assertGreater(label.x(), self.panel.tree_button.geometry().right())
+        self.assertGreater(label.x(), self.panel.path_button.arrow.geometry().right())
         self.assertFalse(self.panel.tree_button.icon().pixmap(22, 22).mask().isNull())
-        QtTest.QTest.mouseClick(label, QtCore.Qt.LeftButton)
+        QtTest.QTest.mouseClick(self.panel.path_button, QtCore.Qt.LeftButton)
         self.assertTrue(self.panel.file_tree.isVisible())
         self.panel.select_file(two)
         self.assertEqual(label.toolTip(), "")
@@ -77,30 +77,30 @@ class ArtifactPreviewTests(unittest.TestCase):
         self.assertEqual(label.text(), "")
         self.assertEqual(label.toolTip(), "")
 
-    def test_expanded_file_tree_fits_all_rows_and_scrolls_only_when_needed(self):
-        paths = [self.file(f"rtl/file_{i:02d}.sv", "module test; endmodule") for i in range(19)]
-        self.panel.resize(1000, 1100)
+    def test_file_popup_preserves_preview_geometry_and_fits_screen(self):
+        paths = [self.file(f"rtl/file_{i:02d}.sv", "module test; endmodule") for i in range(80)]
+        self.panel.resize(1000, 630)
         self.panel.set_files(paths, self.root)
         wait_for_idle(self.app)
-        self.panel.tree_button.click()
+        geometry = self.panel.preview.geometry()
+        self.panel.path_button.click()
         wait_for_idle(self.app)
-        tree = self.panel.file_tree
-        self.assertGreater(tree.height(), 190)
-        self.assertEqual(tree.verticalScrollBar().maximum(), 0)
-
-        folder = tree.topLevelItem(0)
-        expanded_height = tree.height()
-        folder.setExpanded(False)
+        popup = self.panel.file_popup
+        self.assertTrue(popup.windowFlags() & QtCore.Qt.Popup)
+        self.assertTrue(popup.windowFlags() & QtCore.Qt.FramelessWindowHint)
+        self.assertEqual(self.panel.preview.geometry(), geometry)
+        self.assertTrue(popup.screen().availableGeometry().contains(popup.geometry()))
+        self.assertLessEqual(popup.height(), popup.MAX_HEIGHT)
+        self.assertGreater(self.panel.file_tree.verticalScrollBar().maximum(), 0)
+        QtTest.QTest.keyClick(self.panel.file_tree, QtCore.Qt.Key_Escape)
         wait_for_idle(self.app)
-        self.assertLess(tree.height(), expanded_height)
-        folder.setExpanded(True)
-        self.panel.resize(1000, 300)
-        wait_for_idle(self.app)
-        self.assertGreater(tree.verticalScrollBar().maximum(), 0)
-        self.assertFalse(tree.geometry().intersects(self.panel.preview.geometry()))
-        self.panel.resize(1000, 1100)
-        wait_for_idle(self.app)
-        self.assertEqual(tree.verticalScrollBar().maximum(), 0)
+        self.assertFalse(popup.isVisible())
+        self.assertFalse(self.panel.path_button.isChecked())
+        self.assertEqual(self.panel.preview.geometry(), geometry)
+        self.panel.path_button.click()
+        self.assertTrue(popup.isVisible())
+        self.panel.hide()
+        self.assertFalse(popup.isVisible())
 
     def test_footer_separates_state_and_tracks_cursor_and_file_format(self):
         path = self.root / "status.sv"
@@ -256,7 +256,7 @@ class ArtifactPreviewTests(unittest.TestCase):
         QtTest.QTest.keyClick(self.panel.search_input, QtCore.Qt.Key_Return, QtCore.Qt.ShiftModifier)
         self.assertEqual(self.panel.preview.textCursor().selectionStart(), first)
 
-    def test_file_tree_is_layout_managed_and_closes_after_selection(self):
+    def test_file_tree_is_popup_managed_and_closes_after_selection(self):
         one = self.file("rtl/one.sv", "module one;\nendmodule\n")
         two = self.file("tb/two.sv", "module two;\nendmodule\n")
         self.panel.set_files([one, two], self.root)
@@ -270,9 +270,8 @@ class ArtifactPreviewTests(unittest.TestCase):
         wait_for_idle(self.app)
         wait_for_idle(self.app)
         self.assertTrue(self.panel.file_tree.isVisible())
-        self.assertIs(self.panel.file_tree.parent(), self.panel.content_layout.parentWidget())
-        self.assertLess(self.panel.preview.height(), preview_geometry.height())
-        self.assertFalse(self.panel.file_tree.geometry().intersects(self.panel.preview.geometry()))
+        self.assertIs(self.panel.file_tree.parent(), self.panel.file_popup)
+        self.assertEqual(self.panel.preview.geometry(), preview_geometry)
 
         iterator = QtWidgets.QTreeWidgetItemIterator(self.panel.file_tree)
         target = None

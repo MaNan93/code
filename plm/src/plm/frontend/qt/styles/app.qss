@@ -412,8 +412,22 @@ QLabel#ArtifactPath {
 QPushButton#ArtifactsToolButton { border-radius: 6px; padding: 0; }
 QPushButton#ArtifactsToolButton:hover { background-color: $border; }
 QWidget#ArtifactContent { background: transparent; border: none; }
-QFrame#ArtifactFileSelector { background: transparent; border: none; border-radius: 6px; }
-QFrame#ArtifactFileSelector[hovered="true"] { background-color: $bg_subtle; }
+QPushButton#ArtifactPathButton {
+    background: transparent;
+    border: none;
+    border-radius: 6px;
+    padding: 0;
+}
+QPushButton#ArtifactPathButton:hover, QPushButton#ArtifactPathButton:checked {
+    background-color: $bg_subtle;
+}
+QPushButton#ArtifactPathButton:focus { border: 1px solid $border_focus; }
+QFrame#ArtifactFilePopup {
+    background-color: $bg_surface;
+    border: 1px solid $border;
+    border-radius: 8px;
+}
+QFrame#ArtifactFilePopup QTreeWidget#ArtifactFileTree { border: none; }
 QFrame#ArtifactToolSeparator { background-color: $border; border: none; }
 QFrame#ArtifactFooter {
     background-color: $bg_sidebar_inactive;

@@ -770,7 +770,9 @@ class QtFrontendLayoutTests(unittest.TestCase):
         )
         self.assertEqual(toolbar.layout().spacing(), 8)
         for button in panel.toolbar_buttons:
-            self.assertEqual(button.size(), QtCore.QSize(28, 28))
+            self.assertEqual(button.height(), 28)
+            if button is not panel.path_button:
+                self.assertEqual(button.width(), 28)
             self.assertEqual(button.iconSize(), QtCore.QSize(ICON_SIZE, ICON_SIZE))
 
         self.assertEqual(panel.content_layout.spacing(), 12)

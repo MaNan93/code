@@ -5,6 +5,7 @@ from html import escape
 from PyQt5 import QtCore, QtGui, QtWidgets
 
 from plm.frontend.qt.styles.tokens import TEXT_MAIN, TEXT_SUB
+from plm.frontend.qt.widgets.common import ICON_SIZE, load_lucide_icon
 
 
 class ArtifactMetadataLabel(QtWidgets.QLabel):
@@ -33,8 +34,6 @@ class ArtifactMetadataLabel(QtWidgets.QLabel):
 
 
 class ArtifactPathLabel(QtWidgets.QLabel):
-    clicked = QtCore.pyqtSignal()
-
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setObjectName("ArtifactPath")
@@ -46,7 +45,7 @@ class ArtifactPathLabel(QtWidgets.QLabel):
         self.setMinimumWidth(0)
         self.setSizePolicy(QtWidgets.QSizePolicy.Ignored, QtWidgets.QSizePolicy.Preferred)
         self.setAlignment(QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter)
-        self.setCursor(QtCore.Qt.PointingHandCursor)
+        self.setAttribute(QtCore.Qt.WA_TransparentForMouseEvents)
 
     def set_path(self, path, root=None):
         self._full_path = str(path or "")
@@ -85,38 +84,100 @@ class ArtifactPathLabel(QtWidgets.QLabel):
         super().resizeEvent(event)
         self._update_text()
 
-    def mouseReleaseEvent(self, event):
-        if event.button() == QtCore.Qt.LeftButton and self.rect().contains(event.pos()):
-            self.clicked.emit()
+class ArtifactPathButton(QtWidgets.QPushButton):
+    """One clickable, keyboard-accessible breadcrumb and arrow capsule."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setObjectName("ArtifactPathButton")
+        self.setCheckable(True)
+        self.setFixedHeight(28)
+        self.setMinimumWidth(36)
+        self.setSizePolicy(QtWidgets.QSizePolicy.Ignored, QtWidgets.QSizePolicy.Fixed)
+        self.setCursor(QtCore.Qt.PointingHandCursor)
+        self.setToolTip("")
+        self.setIcon(load_lucide_icon("chevron-down"))
+        self.setIconSize(QtCore.QSize(ICON_SIZE, ICON_SIZE))
+        layout = QtWidgets.QHBoxLayout(self)
+        layout.setContentsMargins(6, 0, 6, 0)
+        layout.setSpacing(8)
+        self.arrow = QtWidgets.QLabel()
+        self.arrow.setFixedSize(ICON_SIZE, ICON_SIZE)
+        self.arrow.setPixmap(self.icon().pixmap(ICON_SIZE, ICON_SIZE))
+        self.arrow.setAttribute(QtCore.Qt.WA_TransparentForMouseEvents)
+        self.path_label = ArtifactPathLabel()
+        layout.addWidget(self.arrow)
+        layout.addWidget(self.path_label, 1)
+
+    def paintEvent(self, event):
+        # QStyle paints the button surface; child labels render the rich breadcrumb.
+        option = QtWidgets.QStyleOptionButton()
+        self.initStyleOption(option)
+        option.icon = QtGui.QIcon()
+        painter = QtWidgets.QStylePainter(self)
+        painter.drawControl(QtWidgets.QStyle.CE_PushButton, option)
+
+
+class ArtifactFilePopup(QtWidgets.QFrame):
+    """Screen-bounded popup; its tree never participates in the editor layout."""
+
+    dismissed = QtCore.pyqtSignal()
+    GAP = 4
+    MAX_HEIGHT = 480
+    MAX_WIDTH = 720
+
+    def __init__(self, tree, parent=None):
+        super().__init__(parent, QtCore.Qt.Popup | QtCore.Qt.FramelessWindowHint
+                         | QtCore.Qt.NoDropShadowWindowHint)
+        self.setObjectName("ArtifactFilePopup")
+        self.setAttribute(QtCore.Qt.WA_StyledBackground, True)
+        self.setAttribute(QtCore.Qt.WA_TranslucentBackground, True)
+        self.setAttribute(QtCore.Qt.WA_NoMouseReplay, True)
+        self.tree = tree
+        tree.installEventFilter(self)
+        tree.viewport().installEventFilter(self)
+        layout = QtWidgets.QVBoxLayout(self)
+        layout.setContentsMargins(8, 8, 8, 8)
+        layout.addWidget(tree)
+
+    def show_below(self, anchor):
+        self.ensurePolished()
+        self.tree.ensurePolished()
+        top = anchor.mapToGlobal(QtCore.QPoint())
+        bottom = anchor.mapToGlobal(QtCore.QPoint(0, anchor.height()))
+        screen = QtWidgets.QApplication.screenAt(bottom) or anchor.screen()
+        available = screen.availableGeometry()
+        width = min(max(anchor.width(), 360), self.MAX_WIDTH, available.width())
+        height = min(max(self.tree.sizeHint().height() + 16, 120),
+                     self.MAX_HEIGHT, available.height())
+        y = bottom.y() + self.GAP
+        if y + height > available.bottom() + 1:
+            above = top.y() - self.GAP - available.top()
+            below = available.bottom() + 1 - y
+            if above > below:
+                height = min(height, max(1, above))
+                y = top.y() - self.GAP - height
+            else:
+                height = min(height, max(1, below))
+        x = max(available.left(), min(bottom.x(), available.right() + 1 - width))
+        y = max(available.top(), min(y, available.bottom() + 1 - height))
+        self.setGeometry(x, y, width, height)
+        self.show()
+        self.tree.setFocus(QtCore.Qt.PopupFocusReason)
+
+    def keyPressEvent(self, event):
+        if event.key() == QtCore.Qt.Key_Escape:
+            self.hide()
             event.accept()
         else:
-            super().mouseReleaseEvent(event)
+            super().keyPressEvent(event)
 
+    def eventFilter(self, watched, event):
+        if event.type() == QtCore.QEvent.KeyPress and event.key() == QtCore.Qt.Key_Escape:
+            self.hide()
+            return True
+        return super().eventFilter(watched, event)
 
-class ArtifactFileSelector(QtWidgets.QFrame):
-    """A single hover surface for the tree toggle and file breadcrumb."""
-
-    def __init__(self, button, label, parent=None):
-        super().__init__(parent)
-        self.setObjectName("ArtifactFileSelector")
-        self.setMinimumWidth(button.width())
-        self.setSizePolicy(QtWidgets.QSizePolicy.Ignored, QtWidgets.QSizePolicy.Preferred)
-        layout = QtWidgets.QHBoxLayout(self)
-        layout.setContentsMargins(0, 0, 4, 0)
-        layout.setSpacing(8)
-        layout.addWidget(button)
-        layout.addWidget(label, 1)
-        label.clicked.connect(button.click)
-
-    def enterEvent(self, event):
-        self._set_hovered(True)
-        super().enterEvent(event)
-
-    def leaveEvent(self, event):
-        self._set_hovered(False)
-        super().leaveEvent(event)
-
-    def _set_hovered(self, hovered):
-        self.setProperty("hovered", hovered)
-        self.style().unpolish(self)
-        self.style().polish(self)
+    def hideEvent(self, event):
+        super().hideEvent(event)
+        self.dismissed.emit()

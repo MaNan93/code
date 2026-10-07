@@ -18,6 +18,8 @@ class ArtifactFiles:
     def set_files(self, files, root=None, statuses=None):
         root = Path(root).resolve() if root is not None else None
         files = [Path(value).resolve() for value in files]
+        if root != self.workspace_root or not files:
+            self.tree_button.setChecked(False)
         self.selection.set_files(files, keep_current=root == self.workspace_root)
         files = self.selection.files
         if root == self.workspace_root:

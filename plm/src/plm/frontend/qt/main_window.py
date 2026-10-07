@@ -13,7 +13,7 @@ from plm.frontend.qt.styles.tokens import (
 )
 from plm.frontend.qt.views.config_page import ConfigPage
 from plm.frontend.qt.views.log_panel import LogPanel
-from plm.frontend.qt.widgets.common import load_lucide_icon
+from plm.frontend.qt.widgets.common import load_lucide_icon, rounded_widget_region
 
 __all__ = ["MainWindow"]
 
@@ -226,6 +226,7 @@ class MainWindow(QtWidgets.QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowFlags(self.windowFlags() | QtCore.Qt.FramelessWindowHint)
+        self.setAttribute(QtCore.Qt.WA_TranslucentBackground, True)
         install_exception_handler()
         self.controller = AppController()
         app = QtWidgets.QApplication.instance()
@@ -247,6 +248,8 @@ class MainWindow(QtWidgets.QMainWindow):
 
         self.window_shell = QtWidgets.QWidget()
         self.window_shell.setObjectName("WindowShell")
+        self.window_shell.setAttribute(QtCore.Qt.WA_StyledBackground, True)
+        self.window_shell.installEventFilter(self)
         self.window_shell.setProperty("maximized", False)
         shell_layout = QtWidgets.QVBoxLayout(self.window_shell)
         shell_layout.setContentsMargins(0, 0, 0, 0)
@@ -280,7 +283,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.main_container = QtWidgets.QWidget()
         self.main_container.setObjectName("MainContainer")
         main_layout = QtWidgets.QVBoxLayout(self.main_container)
-        main_layout.setContentsMargins(10, 10, 10, 10)
+        main_layout.setContentsMargins(0, 0, 5, 5)
         main_layout.setSpacing(0)
         main_layout.addWidget(self.content_splitter)
 
@@ -408,6 +411,11 @@ class MainWindow(QtWidgets.QMainWindow):
         if hasattr(self, "_resize_handles"):
             self._update_resize_handles()
 
+    def eventFilter(self, watched, event):
+        if watched is self.window_shell and event.type() == QtCore.QEvent.Resize:
+            self._update_shell_mask()
+        return super().eventFilter(watched, event)
+
     def _sync_window_chrome(self, active=None):
         if active is None:
             app = QtWidgets.QApplication.instance()
@@ -425,9 +433,22 @@ class MainWindow(QtWidgets.QMainWindow):
         self.window_shell.setProperty("maximized", "true" if maximized else "false")
         self.window_shell.style().unpolish(self.window_shell)
         self.window_shell.style().polish(self.window_shell)
+        for widget in (self.title_bar, self.title_bar.close_btn, self.nav_panel):
+            widget.style().unpolish(widget)
+            widget.style().polish(widget)
+            widget.update()
+        self._update_shell_mask()
         self.window_shell.update()
         self.title_bar.update_window_state()
         self._update_resize_handles()
+
+    def _update_shell_mask(self):
+        if self.isMaximized() or self.isFullScreen():
+            self.window_shell.clearMask()
+        else:
+            self.window_shell.setMask(
+                rounded_widget_region(self.window_shell.rect(), (12, 12, 12, 12))
+            )
 
     def _update_history_actions(self):
         self.undo_action.setEnabled(self.config_page.can_undo())

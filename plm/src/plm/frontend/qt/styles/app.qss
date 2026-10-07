@@ -7,11 +7,11 @@ QWidget {
 }
 QWidget:disabled { color: $text_muted; }
 QLabel { background: transparent; }
-QMainWindow { background-color: $bg_sidebar; }
+QMainWindow { background-color: transparent; }
 QWidget#WindowShell {
     background-color: $bg_sidebar;
     border: 1px solid $border;
-    border-radius: 4px;
+    border-radius: 12px;
 }
 QWidget#WindowShell[maximized="true"] {
     background-color: $bg_sidebar;
@@ -30,6 +30,12 @@ QWidget#WindowResizeHandle {
 QFrame#WindowTitleBar {
     background-color: $bg_sidebar;
     border: none;
+    border-top-left-radius: 12px;
+    border-top-right-radius: 12px;
+}
+QWidget#WindowShell[maximized="true"] QFrame#WindowTitleBar {
+    border-top-left-radius: 0;
+    border-top-right-radius: 0;
 }
 QFrame#WindowTitleBar[windowActive="false"] {
     background-color: $bg_sidebar_inactive;
@@ -58,6 +64,12 @@ QPushButton#WindowControlButton[role="maximize"]:hover {
 QPushButton#WindowControlButton[role="close"]:hover {
     background-color: #EF4444;
     color: $bg_surface;
+}
+QPushButton#WindowControlButton[role="close"] {
+    border-top-right-radius: 11px;
+}
+QWidget#WindowShell[maximized="true"] QPushButton#WindowControlButton[role="close"] {
+    border-top-right-radius: 0;
 }
 
 QPushButton {
@@ -234,6 +246,10 @@ QSplitter::handle:vertical { height: 1px; }
 QFrame#NavPanel {
     background-color: $bg_sidebar;
     border: none;
+    border-bottom-left-radius: 12px;
+}
+QWidget#WindowShell[maximized="true"] QFrame#NavPanel {
+    border-bottom-left-radius: 0;
 }
 QFrame#NavPanel[windowActive="false"] {
     background-color: $bg_sidebar_inactive;
@@ -301,6 +317,9 @@ QFrame#ConfigPage {
     border: 1px solid $border;
     border-radius: 0;
     border-top-left-radius: 12px;
+    border-top-right-radius: 8px;
+    border-bottom-right-radius: 8px;
+    border-bottom-left-radius: 8px;
 }
 QFrame#ConfigHeader {
     background-color: $bg_surface;
@@ -308,6 +327,7 @@ QFrame#ConfigHeader {
     border-bottom: 1px solid $border;
     border-radius: 0;
     border-top-left-radius: 11px;
+    border-top-right-radius: 7px;
 }
 QLabel#ConfigSessionTitle {
     color: $text_main;

@@ -17,6 +17,30 @@ PROJECT_ROOT = PLM_ROOT
 ICON_SIZE = 18
 
 
+def rounded_widget_region(rect, radii):
+    """Clip child backgrounds at rounded corners without painting outlines."""
+    area = QtCore.QRectF(rect)
+    limit = min(area.width(), area.height()) / 2
+    tl, tr, br, bl = (min(radius, limit) for radius in radii)
+    left, top, right, bottom = area.left(), area.top(), area.right(), area.bottom()
+    path = QtGui.QPainterPath()
+    path.moveTo(left + tl, top)
+    path.lineTo(right - tr, top)
+    if tr:
+        path.arcTo(right - 2 * tr, top, 2 * tr, 2 * tr, 90, -90)
+    path.lineTo(right, bottom - br)
+    if br:
+        path.arcTo(right - 2 * br, bottom - 2 * br, 2 * br, 2 * br, 0, -90)
+    path.lineTo(left + bl, bottom)
+    if bl:
+        path.arcTo(left, bottom - 2 * bl, 2 * bl, 2 * bl, 270, -90)
+    path.lineTo(left, top + tl)
+    if tl:
+        path.arcTo(left, top, 2 * tl, 2 * tl, 180, -90)
+    path.closeSubpath()
+    return QtGui.QRegion(path.toFillPolygon().toPolygon())
+
+
 @lru_cache(maxsize=256)
 def load_lucide_icon(name, color=TEXT_SUB, size=ICON_SIZE, align_visible_left=False):
     path = LUCIDE_ICON_DIR / f"{name}.svg"

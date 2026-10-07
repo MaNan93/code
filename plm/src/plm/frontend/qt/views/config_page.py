@@ -1,5 +1,5 @@
 from PyQt5 import QtCore, QtGui, QtWidgets
-from plm.frontend.qt.widgets.common import make_icon_button
+from plm.frontend.qt.widgets.common import make_icon_button, rounded_widget_region
 from plm.frontend.qt.widgets.config_editor import CsvTableEditor, GenerationEditor
 from plm.frontend.qt.views.artifacts_panel import ArtifactsPanel
 from plm.frontend.qt.styles.tokens import (
@@ -363,6 +363,10 @@ class ConfigPage(QtWidgets.QFrame):
         if watched is self.config_area and event.type() == QtCore.QEvent.Resize:
             self.reposition_artifacts()
         return super().eventFilter(watched, event)
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self.setMask(rounded_widget_region(self.rect(), (12, 8, 8, 8)))
 
     def toggle_artifacts(self):
         target = self._artifacts_target_geometry()

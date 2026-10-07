@@ -471,7 +471,7 @@ QTreeWidget#ArtifactFileTree::item:selected {
     background: $primary_light;
     color: $text_main;
 }
-QTreeWidget#ArtifactFileTree::branch:selected { background: $primary_light; }
+QTreeWidget#ArtifactFileTree::branch:selected { background: $bg_surface; }
 QLabel#ArtifactEmptyText {
     color: $text_muted;
     font-size: $font_size_body;

@@ -149,7 +149,7 @@ class ArtifactPreviewTests(unittest.TestCase):
         self.panel.copy_path()
         self.assertEqual(QtWidgets.QApplication.clipboard().text(), str(path))
 
-    def test_selected_file_indent_matches_row_background(self):
+    def test_selected_file_indent_stays_white_beside_highlighted_filename(self):
         self.panel.setStyleSheet(APP_QSS)
         path = self.file("rtl/common/selected.sv", "module selected; endmodule")
         self.panel.set_files([path], self.root)
@@ -160,7 +160,7 @@ class ArtifactPreviewTests(unittest.TestCase):
         item = tree.currentItem()
         rect = tree.visualItemRect(item)
         image = tree.viewport().grab().toImage()
-        self.assertEqual(image.pixelColor(2, rect.center().y()).name(), PRIMARY_LIGHT.lower())
+        self.assertEqual(image.pixelColor(2, rect.center().y()).name(), "#ffffff")
         self.assertEqual(image.pixelColor(image.width() - 10, rect.center().y()).name(), PRIMARY_LIGHT.lower())
 
     def test_narrow_metadata_keeps_line_and_column_prefix(self):

@@ -238,7 +238,7 @@ QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal { width: 0; }
 
 QSplitter::handle { background-color: transparent; }
 QSplitter::handle:vertical { height: 1px; }
-QSplitter#ContentSplitter::handle:vertical { height: 12px; }
+QSplitter#ContentSplitter::handle:vertical { height: 6px; }
 
 QFrame#NavPanel {
     background-color: transparent;

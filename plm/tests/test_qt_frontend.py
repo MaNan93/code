@@ -123,7 +123,7 @@ class QtFrontendLayoutTests(unittest.TestCase):
         self.assertEqual(self.window.content_splitter.orientation(), QtCore.Qt.Vertical)
         self.assertEqual(self.window.nav_panel.minimumWidth(), 260)
         self.assertEqual(self.window.nav_panel.maximumWidth(), 260)
-        self.assertEqual(self.window.content_splitter.handleWidth(), 12)
+        self.assertEqual(self.window.content_splitter.handleWidth(), 6)
         self.assertIsInstance(self.window.log_panel, LogPanel)
         self.assertEqual(
             self.window.nav_panel.collapse_btn.iconSize(),
@@ -683,12 +683,14 @@ class QtFrontendLayoutTests(unittest.TestCase):
         page = self.window.config_page
         panel = page.artifacts_panel
         self.assertIsInstance(panel, ArtifactsPanel)
-        self.assertIs(panel.parent(), page.config_area)
+        self.assertIs(panel.parent(), page)
         self.assertFalse(panel.isVisible())
         shown = QtTest.QSignalSpy(page._artifacts_animation.finished)
         page.toggle_artifacts()
         self.assertTrue(shown.wait(1000))
-        self.assertEqual(panel.geometry().right(), page.config_area.rect().right())
+        self.assertEqual(panel.geometry().right(), page.rect().right())
+        self.assertEqual(panel.geometry().top(), 0)
+        self.assertEqual(panel.height(), page.height())
         self.assertEqual(page.tabs.maximumWidth(), QtWidgets.QWIDGETSIZE_MAX)
         self.assertEqual(len(panel.toolbar_buttons), 9)
         toolbar = panel.findChild(QtWidgets.QWidget, "ArtifactsToolbar")
@@ -728,11 +730,14 @@ class QtFrontendLayoutTests(unittest.TestCase):
         self.assertEqual(page.artifacts_panel.width(), original_width + 60)
 
         page.toggle_artifacts_maximized()
-        self.assertEqual(page.artifacts_panel.width(), page.config_area.width())
+        self.assertEqual(page.artifacts_panel.width(), page.width())
+        self.window.resize(self.window.width() + 60, self.window.height() + 40)
+        wait_for_idle(self.app)
+        self.assertEqual(page.artifacts_panel.geometry(), page.rect())
         page.toggle_artifacts_maximized()
         self.assertEqual(page.artifacts_panel.width(), original_width + 60)
         hidden = QtTest.QSignalSpy(page._artifacts_animation.finished)
-        page.toggle_artifacts()
+        page.artifacts_panel.close_button.click()
         self.assertTrue(hidden.wait(1000))
         self.assertFalse(page.artifacts_panel.isVisible())
         self.assertEqual(page._artifacts_animation.duration(), 200)

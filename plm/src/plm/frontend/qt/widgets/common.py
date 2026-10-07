@@ -65,10 +65,10 @@ class RoundedCanvasFrame(QtWidgets.QFrame):
 
     CORNER_RADII = (12, 8, 8, 8)
     BORDER_WIDTH = 1.0
-    SHADOW_MARGIN = 12
+    SHADOW_MARGIN = 6
 
     def apply_canvas_shadow(self):
-        apply_drop_shadow(self, offset=(0, 0), blur_radius=24, alpha=60)
+        apply_drop_shadow(self, offset=(0, 0), blur_radius=12, alpha=60)
 
     def paintEvent(self, event):
         painter = QtGui.QPainter(self)

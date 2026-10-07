@@ -226,10 +226,11 @@ class ConfigPage(RoundedCanvasFrame):
         root.addWidget(self.config_area, 1)
 
         self.artifacts_panel = ArtifactsPanel(
-            self.config_area, editor_path_provider=editor_path_provider
+            self, editor_path_provider=editor_path_provider
         )
         self.artifacts_panel.maximizeRequested.connect(self.toggle_artifacts_maximized)
         self.artifacts_panel.widthRequested.connect(self._on_artifacts_width_requested)
+        self.artifacts_panel.closeRequested.connect(self.toggle_artifacts)
         self._artifacts_animation = QtCore.QPropertyAnimation(
             self.artifacts_panel, b"geometry", self
         )
@@ -244,7 +245,7 @@ class ConfigPage(RoundedCanvasFrame):
             if self.artifacts_panel.isVisible() else None
         )
         self.artifacts_panel.hide()
-        self.config_area.installEventFilter(self)
+        self.installEventFilter(self)
 
     def update_title(self, project_name):
         self.header.title_label.setText(project_name)
@@ -364,7 +365,7 @@ class ConfigPage(RoundedCanvasFrame):
         }
 
     def eventFilter(self, watched, event):
-        if watched is self.config_area and event.type() == QtCore.QEvent.Resize:
+        if watched is self and event.type() == QtCore.QEvent.Resize:
             self.reposition_artifacts()
         return super().eventFilter(watched, event)
 
@@ -382,16 +383,16 @@ class ConfigPage(RoundedCanvasFrame):
                 self.artifacts_panel.geometry()
                 if reopening
                 else QtCore.QRect(
-                    self.config_area.width(), 0, 0, target.height()
+                    self.width(), 0, 0, target.height()
                 )
             )
             self._animate_artifacts(start, target, hide_after=False)
             return
         end = QtCore.QRect(
-            self.config_area.width(),
+            self.width(),
             0,
             0,
-            self.config_area.height(),
+            self.height(),
         )
         self._animate_artifacts(
             self.artifacts_panel.geometry(), end, hide_after=True
@@ -410,8 +411,8 @@ class ConfigPage(RoundedCanvasFrame):
         self.reposition_artifacts()
 
     def _artifacts_target_geometry(self):
-        total_w = self.config_area.width()
-        total_h = self.config_area.height()
+        total_w = self.width()
+        total_h = self.height()
         if total_w <= 0 or total_h <= 0:
             return None
         panel_w = (
@@ -453,7 +454,7 @@ class ConfigPage(RoundedCanvasFrame):
     def _on_artifacts_width_requested(self, width):
         if self.artifacts_maximized:
             return
-        maximum = max(1, self.config_area.width())
+        maximum = max(1, self.width())
         minimum = min(300, maximum)
         self.artifacts_width = max(minimum, min(int(width), maximum))
         self.reposition_artifacts()

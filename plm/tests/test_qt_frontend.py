@@ -82,7 +82,7 @@ class QtFrontendLayoutTests(unittest.TestCase):
         self.assertEqual(self.window.windowTitle(), "plmConsultant")
         self.assertIsInstance(self.window.nav_panel, NavPanel)
         self.assertEqual(self.window.nav_panel.width(), 260)
-        self.assertIs(self.window.centralWidget(), self.window.window_shell)
+        self.assertIs(self.window.centralWidget(), self.window.window_backdrop)
         self.assertIs(self.window.view_stack.widget(0), self.window.main_container)
         shell_layout = self.window.window_shell.layout()
         self.assertIsInstance(shell_layout, QtWidgets.QVBoxLayout)
@@ -717,6 +717,49 @@ class QtFrontendLayoutTests(unittest.TestCase):
         page = self.window.config_page
         gap = page.config_area.geometry().top() - (page.header.geometry().bottom() + 1)
         self.assertEqual(gap, 12)
+
+    def test_config_tabs_fit_scaled_labels_including_generation(self):
+        tabs = self.window.config_page.tabs
+        bar = tabs.tabBar()
+        for selected in range(tabs.count()):
+            tabs.setCurrentIndex(selected)
+            wait_for_idle(self.app)
+            for index in range(tabs.count()):
+                font = QtGui.QFont(bar.font())
+                font.setBold(True)
+                width = QtGui.QFontMetrics(font).horizontalAdvance(tabs.tabText(index))
+                self.assertGreaterEqual(bar.tabRect(index).width(), width + 32)
+            self.assertLessEqual(bar.tabRect(tabs.count() - 1).right(), bar.width() - 1)
+
+    def test_controller_card_add_action_alignment_and_undo(self):
+        page = self.window.config_page
+        editor = page.controllers_editor
+        table = editor.table
+        original_count = table.rowCount()
+        self.assertLess(table.columnWidth(0), table.columnWidth(1))
+        self.assertLess(table.columnWidth(2), table.columnWidth(1))
+        self.assertEqual(table.item(0, 0).textAlignment(), int(QtCore.Qt.AlignCenter))
+        self.assertEqual(table.horizontalHeaderItem(1).textAlignment(),
+                         int(QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter))
+        original_height = table.height()
+        editor.add_row_btn.click()
+        wait_for_idle(self.app)
+        self.assertEqual(table.rowCount(), original_count + 1)
+        self.assertGreater(table.height(), original_height)
+        self.assertTrue(page.dirty)
+        self.assertEqual(page.header.status_badge.text(), "已修改")
+        page.undo()
+        wait_for_idle(self.app)
+        self.assertEqual(table.rowCount(), original_count)
+        self.assertFalse(page.dirty)
+        self.assertEqual(page.header.status_badge.text(), "未修改")
+        editor.set_rows([
+            {"ctrl_id": index, "ctrl_name": f"Ctrl{index}", "max_width": 4}
+            for index in range(15)
+        ])
+        wait_for_idle(self.app)
+        self.assertEqual(table.rowCount(), 15)
+        self.assertGreater(table.verticalScrollBar().maximum(), 0)
 
     def test_artifacts_drag_visibility_and_maximize(self):
         page = self.window.config_page

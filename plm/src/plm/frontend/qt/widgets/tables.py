@@ -204,6 +204,8 @@ class EditableTable(QtWidgets.QWidget):
         header.setTextElideMode(QtCore.Qt.ElideRight)
         for index, column in enumerate(columns):
             header.setSectionResizeMode(index, QtWidgets.QHeaderView.Fixed)
+            if "alignment" in column:
+                self.table.horizontalHeaderItem(index).setTextAlignment(column["alignment"])
         self.table.setHorizontalScrollMode(QtWidgets.QAbstractItemView.ScrollPerPixel)
         self.table.setAlternatingRowColors(True)
         self.table.rowContextMenuRequested.connect(self._on_row_context_menu)
@@ -418,6 +420,8 @@ class EditableTable(QtWidgets.QWidget):
                     self.table.setCellWidget(r, c, combo)
                 else:
                     item = QtWidgets.QTableWidgetItem(str(value))
+                    if "alignment" in col:
+                        item.setTextAlignment(col["alignment"])
                     self.table.setItem(r, c, item)
         self._building = False
 

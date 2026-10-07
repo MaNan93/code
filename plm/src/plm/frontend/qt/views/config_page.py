@@ -1,6 +1,6 @@
 from PyQt5 import QtCore, QtGui, QtWidgets
 from plm.frontend.qt.widgets.common import (
-    ICON_SIZE, RoundedCanvasFrame, make_icon_button,
+    ICON_SIZE, RoundedCanvasFrame, StatusBadge, make_icon_button,
 )
 from plm.frontend.qt.widgets.config_editor import CsvTableEditor, GenerationEditor
 from plm.frontend.qt.views.artifacts_panel import ArtifactsPanel
@@ -12,6 +12,9 @@ from plm.frontend.qt.styles.tokens import (
 class ConfigTabBar(QtWidgets.QTabBar):
     """Keep the full label visible when the selected tab becomes bold."""
 
+    TEXT_HORIZONTAL_SPACE = 36
+    TEXT_VERTICAL_SPACE = 12
+
     def tabSizeHint(self, index):
         self.ensurePolished()
         option = QtWidgets.QStyleOptionTab()
@@ -21,9 +24,9 @@ class ConfigTabBar(QtWidgets.QTabBar):
         metrics = QtGui.QFontMetrics(font)
         text_width = max(metrics.horizontalAdvance(option.text),
                          metrics.boundingRect(option.text).width())
-        size = self.style().sizeFromContents(
-            QtWidgets.QStyle.CT_TabBarTab, option,
-            QtCore.QSize(text_width + 2, metrics.height()), self,
+        size = QtCore.QSize(
+            text_width + self.TEXT_HORIZONTAL_SPACE,
+            metrics.height() + self.TEXT_VERTICAL_SPACE,
         )
         return super().tabSizeHint(index).expandedTo(size)
 
@@ -93,6 +96,11 @@ class ConfigHeader(QtWidgets.QFrame):
         self.title_edit.focusLost.connect(self.save_title)
         self.title_edit.escapePressed.connect(self.cancel_title)
         layout.addWidget(self.title_edit, 0, QtCore.Qt.AlignVCenter)
+        layout.addSpacing(SPACING_MD)
+        self.status_badge = StatusBadge("未修改")
+        self.status_badge.setObjectName("ConfigProjectStatus")
+        self.status_badge.setProperty("dirty", False)
+        layout.addWidget(self.status_badge, 0, QtCore.Qt.AlignVCenter)
         layout.addStretch(1)
         self.log_btn = make_icon_button(
             "panel-bottom", "显示/隐藏输出面板", "HeaderButton", 46, ICON_SIZE
@@ -106,6 +114,12 @@ class ConfigHeader(QtWidgets.QFrame):
         self.artifacts_btn.clicked.connect(self.artifactsToggleRequested.emit)
         layout.addWidget(self.log_btn, 0, QtCore.Qt.AlignVCenter)
         layout.addWidget(self.artifacts_btn, 0, QtCore.Qt.AlignVCenter)
+
+    def set_dirty(self, dirty):
+        self.status_badge.setText("已修改" if dirty else "未修改")
+        self.status_badge.setProperty("dirty", bool(dirty))
+        self.status_badge.style().unpolish(self.status_badge)
+        self.status_badge.style().polish(self.status_badge)
 
     def enter_edit_mode(self):
         self._original_title = self.title_label.text()
@@ -139,6 +153,9 @@ class ConfigTabPage(QtWidgets.QWidget):
     def __init__(self, editor, fill_editor=False, parent=None):
         super().__init__(parent)
         self.setObjectName("ConfigTabPage")
+        self.setProperty(
+            "tableCanvas", isinstance(editor, CsvTableEditor) and not editor.mapping,
+        )
         root = QtWidgets.QVBoxLayout(self)
         root.setContentsMargins(SPACING_LG, SPACING_LG, SPACING_LG, SPACING_LG)
         root.setSpacing(0)
@@ -265,6 +282,7 @@ class ConfigPage(RoundedCanvasFrame):
 
     def _update_dirty(self):
         self.dirty = self.content() != self._saved_content
+        self.header.set_dirty(self.dirty)
         self.dirtyChanged.emit(self.dirty)
 
     def mark_saved(self, payload=None):

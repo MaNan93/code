@@ -309,7 +309,6 @@ QFrame#ConfigPage {
 QFrame#ConfigHeader {
     background-color: transparent;
     border: none;
-    border-bottom: 1px solid $border;
     border-radius: 0;
 }
 QLabel#ConfigSessionTitle {
@@ -343,7 +342,49 @@ QTableWidget#ConfigDataTable {
     background-color: transparent;
     alternate-background-color: transparent;
 }
-QTableWidget#ConfigDataTable::item { background-color: $bg_surface; }
+QTableWidget#ConfigDataTable::item:alternate { background-color: $bg_sidebar; }
+QTableWidget#ConfigDataTable::item:hover:!selected { background-color: $bg_subtle; }
+QWidget#ConfigTabPage[tableCanvas="true"],
+QWidget#ConfigTabPage[tableCanvas="true"] QScrollArea#ConfigScroll,
+QWidget#ConfigTabPage[tableCanvas="true"] QWidget#ConfigScrollContent {
+    background-color: $bg_sidebar;
+}
+QFrame#ConfigTableCard {
+    background-color: $bg_surface;
+    border: 1px solid $border;
+    border-radius: 8px;
+}
+QWidget#ConfigCsvEditor { background-color: transparent; }
+QFrame#ConfigTableCard QTableWidget#ConfigDataTable {
+    background-color: $bg_surface;
+    alternate-background-color: $bg_sidebar;
+    border: none;
+}
+QFrame#ConfigTableCard QHeaderView::section:first { border-top-left-radius: 7px; }
+QFrame#ConfigTableCard QHeaderView::section:last { border-top-right-radius: 7px; }
+QPushButton#ConfigAddRowButton {
+    background-color: $bg_surface;
+    color: $text_sub;
+    border: 1px dashed $border;
+    border-radius: 8px;
+    padding: 8px;
+}
+QPushButton#ConfigAddRowButton:hover {
+    color: $primary;
+    background-color: $primary_light;
+    border-color: $primary;
+}
+QLabel#ConfigProjectStatus {
+    background-color: $bg_subtle;
+    color: $text_sub;
+    border-radius: $radius_chip;
+    padding: 4px 10px;
+    font-size: $font_size_sm;
+}
+QLabel#ConfigProjectStatus[dirty="true"] {
+    background-color: #FEF3C7;
+    color: #B45309;
+}
 QTableWidget#laneGrid { background-color: transparent; }
 
 QFrame#ArtifactsPanel {

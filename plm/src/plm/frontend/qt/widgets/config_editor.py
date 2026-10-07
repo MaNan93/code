@@ -20,6 +20,9 @@ from plm.frontend.qt.widgets.tables import EditableTable
 
 
 LANE_COUNTS = (2, 4, 8, 16, 32)
+CONTROLLER_COLUMN_WIDTHS = {"ctrl_id": 80, "max_width": 100}
+TABLE_VISIBLE_ROWS = 10
+TABLE_CARD_PADDING = 8
 
 
 class LaneCountCombo(QtWidgets.QComboBox):
@@ -46,6 +49,8 @@ class CsvTableEditor(QtWidgets.QWidget):
 
     def __init__(self, columns, mapping=False, parent=None):
         super().__init__(parent)
+        self.setObjectName("ConfigCsvEditor")
+        self.setAttribute(QtCore.Qt.WA_StyledBackground, True)
         self.mapping = mapping
         self._keys = tuple(columns)
         self._controllers = []
@@ -76,7 +81,14 @@ class CsvTableEditor(QtWidgets.QWidget):
         specs = []
         for key in self._keys:
             spec = {"key": key, "heading": key}
-            if key == "signal_type":
+            if key in CONTROLLER_COLUMN_WIDTHS:
+                spec.update(
+                    width=CONTROLLER_COLUMN_WIDTHS[key],
+                    alignment=QtCore.Qt.AlignCenter,
+                )
+            elif key == "ctrl_name":
+                spec["alignment"] = QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter
+            elif key == "signal_type":
                 spec.update(options=["perlane", "shared"], width=104)
             elif key == "direction":
                 spec.update(options=["mac2phy", "phy2mac"], width=112)
@@ -94,7 +106,36 @@ class CsvTableEditor(QtWidgets.QWidget):
         )
         self.table = self.editor.table
         self.editor.changed.connect(self.changed.emit)
-        layout.addWidget(self.editor, 1)
+        self.table.setMouseTracking(True)
+        self.table_card = QtWidgets.QFrame()
+        self.table_card.setObjectName("ConfigTableCard")
+        card_layout = QtWidgets.QVBoxLayout(self.table_card)
+        card_layout.setContentsMargins(*([TABLE_CARD_PADDING] * 4))
+        card_layout.setSpacing(0)
+        card_layout.addWidget(self.editor)
+        layout.addWidget(self.table_card)
+        self.add_row_btn = QtWidgets.QPushButton(
+            "+ 添加控制器" if "ctrl_id" in self._keys else "+ 添加信号"
+        )
+        self.add_row_btn.setObjectName("ConfigAddRowButton")
+        self.add_row_btn.clicked.connect(self.add_row)
+        layout.addWidget(self.add_row_btn)
+        layout.addStretch(1)
+        self.table.model().rowsInserted.connect(self._update_table_height)
+        self.table.model().rowsRemoved.connect(self._update_table_height)
+        self.table.verticalHeader().sectionResized.connect(self._update_table_height)
+        self.table.horizontalHeader().geometriesChanged.connect(self._update_table_height)
+        self._update_table_height()
+
+    def _update_table_height(self, *_args):
+        # Wrap short tables; long tables retain their native vertical scrollbar.
+        visible_rows = min(self.table.rowCount(), TABLE_VISIBLE_ROWS)
+        body_height = sum(self.table.rowHeight(row) for row in range(visible_rows))
+        if not visible_rows:
+            body_height = self.table.verticalHeader().defaultSectionSize()
+        height = self.table.horizontalHeader().height() + body_height
+        height += 2 * self.table.frameWidth()
+        self.table.setFixedHeight(height)
 
     @property
     def controllers(self):

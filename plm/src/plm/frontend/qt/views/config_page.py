@@ -156,9 +156,6 @@ class ConfigTabPage(QtWidgets.QWidget):
     def __init__(self, editor, fill_editor=False, parent=None):
         super().__init__(parent)
         self.setObjectName("ConfigTabPage")
-        self.setProperty(
-            "tableCanvas", isinstance(editor, CsvTableEditor) and not editor.mapping,
-        )
         root = QtWidgets.QVBoxLayout(self)
         root.setContentsMargins(SPACING_LG, SPACING_LG, SPACING_LG, SPACING_LG)
         root.setSpacing(0)

@@ -352,11 +352,6 @@ QTableWidget#ConfigDataTable {
 }
 QTableWidget#ConfigDataTable::item:alternate { background-color: $bg_sidebar; }
 QTableWidget#ConfigDataTable::item:hover:!selected { background-color: $bg_subtle; }
-QWidget#ConfigTabPage[tableCanvas="true"],
-QWidget#ConfigTabPage[tableCanvas="true"] QScrollArea#ConfigScroll,
-QWidget#ConfigTabPage[tableCanvas="true"] QWidget#ConfigScrollContent {
-    background-color: $bg_sidebar;
-}
 QFrame#ConfigTableCard {
     background-color: $bg_surface;
     border: 1px solid $border;

@@ -787,7 +787,7 @@ class QtFrontendLayoutTests(unittest.TestCase):
         toolbar = page.artifacts_panel.toolbar
         self.assertTrue(toolbar.testAttribute(QtCore.Qt.WA_StyledBackground))
         image = toolbar.grab().toImage()
-        self.assertEqual(image.pixelColor(image.width() // 2, 2).name(), "#f8fafc")
+        self.assertEqual(image.pixelColor(image.width() // 2, 2).alpha(), 0)
         self.assertEqual(image.pixelColor(image.width() // 2, image.height() - 1).name(), BORDER.lower())
         gutter = page.artifacts_panel.preview.line_numbers
         gutter_image = gutter.grab().toImage()

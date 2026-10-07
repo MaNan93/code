@@ -398,7 +398,7 @@ QFrame#ArtifactsPanel {
 }
 QWidget#ArtifactSearchBar { background: transparent; }
 QWidget#ArtifactsToolbar {
-    background-color: $bg_sidebar_inactive;
+    background-color: transparent;
     border: none;
     border-bottom: 1px solid $border;
 }

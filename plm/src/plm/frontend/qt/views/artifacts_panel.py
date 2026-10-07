@@ -15,6 +15,34 @@ from .artifact_files import ArtifactFiles
 from .artifact_interactions import ArtifactInteractions
 
 
+class ArtifactPathLabel(QtWidgets.QLabel):
+    """Keep the full path available without widening the drawer toolbar."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setObjectName("ArtifactPath")
+        self._full_path = ""
+        self.setTextFormat(QtCore.Qt.PlainText)
+        self.setMinimumWidth(0)
+        self.setSizePolicy(QtWidgets.QSizePolicy.Ignored, QtWidgets.QSizePolicy.Preferred)
+        self.setAlignment(QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter)
+
+    def set_path(self, path):
+        self._full_path = str(path or "")
+        self.setToolTip(self._full_path)
+        self.setAccessibleName(self._full_path)
+        self._update_text()
+
+    def _update_text(self):
+        self.setText(self.fontMetrics().elidedText(
+            self._full_path, QtCore.Qt.ElideMiddle, self.contentsRect().width()
+        ))
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self._update_text()
+
+
 class ArtifactsPanel(
     ArtifactPreview, ArtifactFiles, ArtifactInteractions, QtWidgets.QFrame
 ):
@@ -64,7 +92,7 @@ class ArtifactsPanel(
         toolbar_layout.setSpacing(8)
         self.toolbar_buttons = []
         for name, icon, tooltip in (
-            ("tree_button", "folder", "显示/隐藏文件树"),
+            ("tree_button", "chevron-down", "显示/隐藏文件树"),
             ("refresh_button", "refresh-cw", "刷新文件"),
             ("open_editor_button", "square-pen", "在编辑器中打开"),
             ("search_button", "search", "搜索文件内容 (Ctrl+F)"),
@@ -77,7 +105,8 @@ class ArtifactsPanel(
             toolbar_layout.addWidget(button)
             self.toolbar_buttons.append(button)
             if name == "tree_button":
-                toolbar_layout.addStretch(1)
+                self.path_label = ArtifactPathLabel()
+                toolbar_layout.addWidget(self.path_label, 1)
         self.diff_button = make_icon_button(
             "git-compare", "显示与上一次预览的差异", "ArtifactsToolButton", 28, ICON_SIZE
         )

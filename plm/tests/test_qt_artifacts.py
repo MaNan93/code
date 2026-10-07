@@ -47,6 +47,31 @@ class ArtifactPreviewTests(unittest.TestCase):
         path.write_text(text, encoding="utf-8")
         return path
 
+    def test_toolbar_path_tracks_selection_and_elides_without_moving_buttons(self):
+        one = self.file("rtl/first.sv", "module first; endmodule")
+        two = self.file("rtl/second.sv", "module second; endmodule")
+        path_width = self.panel.path_label.fontMetrics().horizontalAdvance(str(one))
+        self.panel.resize(path_width + 400, 630)
+        self.panel.set_files([one, two], self.root)
+        wait_for_idle(self.app)
+        label = self.panel.path_label
+        self.assertEqual(label.text(), str(one))
+        self.assertGreater(label.x(), self.panel.tree_button.geometry().right())
+        self.assertFalse(self.panel.tree_button.icon().pixmap(22, 22).mask().isNull())
+        self.panel.tree_button.click()
+        self.assertTrue(self.panel.file_tree.isVisible())
+        self.panel.select_file(two)
+        self.assertEqual(label.toolTip(), str(two))
+        self.panel.resize(400, 630)
+        wait_for_idle(self.app)
+        self.assertEqual(label.toolTip(), str(two))
+        self.assertIn("\u2026", label.text())
+        self.assertLessEqual(label.fontMetrics().horizontalAdvance(label.text()), label.width())
+        self.panel.set_files([], self.root)
+        wait_for_idle(self.app)
+        self.assertEqual(label.text(), "")
+        self.assertEqual(label.toolTip(), "")
+
     def test_complete_readonly_source_and_line_numbers(self):
         text = "module generated;\n" + "assign value = " + "0" * 250 + ";\n"
         text += "\n".join(f"// line {i}" for i in range(150)) + "\nendmodule\n"

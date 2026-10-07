@@ -397,6 +397,7 @@ QFrame#ArtifactsPanel {
     border-radius: $radius_card;
 }
 QWidget#ArtifactsToolbar, QWidget#ArtifactSearchBar { background: transparent; }
+QLabel#ArtifactPath { color: $text_sub; background: transparent; border: none; }
 QPlainTextEdit#ArtifactCodePreview {
     background-color: $bg_surface;
     color: $text_main;

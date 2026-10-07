@@ -52,6 +52,7 @@ class ArtifactPreview:
         self._readable = False
         self.search_status.clear()
         self.preview.setToolTip(str(self.current_path or ""))
+        self.path_label.set_path(self.current_path)
         self._file_error = ""
         text = ""
         if self.current_path is None:

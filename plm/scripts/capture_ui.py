@@ -1,5 +1,6 @@
 """Capture the current Qt UI pages for visual review."""
 import os
+import shutil
 import tempfile
 from pathlib import Path
 from unittest.mock import patch
@@ -43,6 +44,10 @@ with tempfile.TemporaryDirectory(prefix="plm-ui-") as td:
     root=Path(td)
     project=root/"demo-project"
     scaffold_default_content(project)
+    # Use a real multi-controller/multi-mode fixture instead of nearly empty defaults.
+    sample_config = Path(__file__).resolve().parents[1] / "tests/fixtures/samples/dpr/config"
+    for name in ("controllers.csv", "lane_mapping.csv", "pipe_signals.csv", "gen_flags.txt"):
+        shutil.copyfile(sample_config / name, project / "config" / name)
     store=SettingsStore(QtCore.QSettings(str(root/"settings.ini"),QtCore.QSettings.IniFormat))
     controller=AppController(settings_store=store)
     with patch("plm.frontend.qt.main_window.AppController",return_value=controller):

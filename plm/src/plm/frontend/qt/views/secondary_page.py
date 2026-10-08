@@ -1,5 +1,5 @@
 from PyQt5 import QtCore, QtGui, QtWidgets
-from plm.frontend.qt.widgets.common import ICON_SIZE, make_button_group, make_icon_button
+from plm.frontend.qt.widgets.common import ICON_SIZE, make_icon_button
 from plm.frontend.qt.styles.tokens import SPACING_LG, SPACING_SM, SPACING_XL, TEXT_MAIN
 
 
@@ -113,7 +113,9 @@ class SecondaryPage(QtWidgets.QFrame):
                 lambda _checked=False, selected=index: self._select_section(selected)
             )
             self.menu_buttons.append(button)
-        layout.addWidget(make_button_group(self.menu_buttons))
+        # Navigation tabs are underline tabs, not joined command buttons.
+        for button in self.menu_buttons:
+            layout.addWidget(button)
         layout.addStretch(1)
         return menu
 

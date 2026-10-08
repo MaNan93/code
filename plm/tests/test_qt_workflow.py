@@ -558,6 +558,79 @@ class QtWorkflowTests(unittest.TestCase):
         self.assertTrue(top.exists())
         self.assertEqual(controller.generation_state, "up_to_date")
 
+    def test_reload_marks_unchanged_outputs_stale_until_successful_generation(self):
+        from plm.core.exporter import export_all
+
+        controller, window = self._editing_window()
+        controller.generate_current()
+        wait_for_idle(self.app)
+        self.assertEqual(controller.generation_state, "up_to_date")
+        project = controller.current_project
+        files = self.workspaces.output_files(project)
+        original = {path: path.read_bytes() for path in files}
+        widget = next(w for w in window.nav_panel.project_list.project_widgets
+                      if w.project_name == controller.current_name)
+        menu = widget.build_more_menu()
+        self.addCleanup(menu.deleteLater)
+        next(action for action in menu.actions() if action.text() == "Reload").trigger()
+        wait_for_idle(self.app)
+        self.assertEqual(controller.generation_state, "out_of_date")
+        self.assertEqual(original, {path: path.read_bytes() for path in files})
+        controller.refresh_artifacts()
+        wait_for_idle(self.app)
+        self.assertEqual(controller.generation_state, "out_of_date")
+        controller.select_project("other")
+        wait_for_idle(self.app)
+        self.assertEqual(controller.generation_state, "ready")
+        controller.select_project(project.name)
+        wait_for_idle(self.app)
+        self.assertEqual(controller.generation_state, "out_of_date")
+
+        with patch("plm.core.service.export_all", side_effect=ValueError("reload generation failed")):
+            controller.generate_current()
+            wait_for_idle(self.app)
+        self.assertEqual(controller.generation_state, "failed")
+        self.assertIn(project.config_dir, controller._reload_stale_projects)
+        with patch("plm.core.service.export_all", wraps=export_all) as export:
+            controller.generate_current()
+            wait_for_idle(self.app)
+        export.assert_called_once()
+        self.assertEqual(controller.generation_state, "up_to_date")
+        self.assertNotIn(project.config_dir, controller._reload_stale_projects)
+        controller.refresh_artifacts()
+        wait_for_idle(self.app)
+        self.assertEqual(controller.generation_state, "up_to_date")
+
+    def test_reload_reads_disk_configs_and_preserves_unsaved_edits_on_cancel(self):
+        controller, window = self._editing_window()
+        page = window.config_page
+        project = controller.current_project
+        page.controllers_editor.table.item(0, 1).setText("unsaved_controller")
+        edited = page.content()
+        payload = self.workspaces.load(project)
+        payload["controllers"][0]["ctrl_name"] = "disk_controller"
+        self.workspaces.save(project, payload)
+        with patch.object(QtWidgets.QMessageBox, "question", return_value=QtWidgets.QMessageBox.Cancel):
+            controller.reload_project(project.name)
+        wait_for_idle(self.app)
+        self.assertEqual(page.content(), edited)
+        self.assertTrue(page.dirty)
+        self.assertNotIn(project.config_dir, controller._reload_stale_projects)
+        with patch.object(QtWidgets.QMessageBox, "question", return_value=QtWidgets.QMessageBox.Discard):
+            controller.reload_project(project.name)
+        wait_for_idle(self.app)
+        self.assertEqual(page.controllers_editor.rows()[0]["ctrl_name"], "disk_controller")
+        self.assertFalse(page.dirty)
+        self.assertFalse(page.can_undo())
+        self.assertEqual(controller._saved_signature, self.workspaces.signature(project))
+
+        with patch.object(WorkspaceService, "load_with_signature", side_effect=ValueError("bad configs")):
+            controller.reload_project("other")
+            wait_for_idle(self.app)
+        self.assertEqual(controller.current_project, project)
+        self.assertEqual(page.controllers_editor.rows()[0]["ctrl_name"], "disk_controller")
+        self.assertNotIn(self.projects._find("other").config_dir, controller._reload_stale_projects)
+
     def test_application_activation_marks_modified_output_out_of_date(self):
         controller, window = self._editing_window()
         controller.generate_current()

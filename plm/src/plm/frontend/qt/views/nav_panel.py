@@ -29,6 +29,7 @@ class NavPanel(QtWidgets.QFrame):
     project_renamed = QtCore.pyqtSignal(str, str)
     project_pinned = QtCore.pyqtSignal(str)
     project_selected = QtCore.pyqtSignal(str)
+    project_reload_requested = QtCore.pyqtSignal(str)
 
     def __init__(self, projects=(), recent_project="", parent=None):
         super().__init__(parent)
@@ -96,6 +97,7 @@ class NavPanel(QtWidgets.QFrame):
         self.project_list.projectRenamed.connect(self._project_renamed)
         self.project_list.projectPinned.connect(self.project_pinned.emit)
         self.project_list.projectSelected.connect(self._project_selected)
+        self.project_list.projectReloadRequested.connect(self.project_reload_requested.emit)
         root.addWidget(self.project_list, 1)
 
         self.current_project_name = self.project_list.select_project(
@@ -256,6 +258,7 @@ class NavPanel(QtWidgets.QFrame):
         self.project_list.projectRenamed.connect(self._project_renamed)
         self.project_list.projectPinned.connect(self.project_pinned.emit)
         self.project_list.projectSelected.connect(self._project_selected)
+        self.project_list.projectReloadRequested.connect(self.project_reload_requested.emit)
         self.layout().replaceWidget(old, self.project_list)
         self.layout().setStretch(self.layout().indexOf(self.project_list), 1)
         old.hide()

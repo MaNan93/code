@@ -18,6 +18,7 @@ class ProjectList(QtWidgets.QListWidget):
     projectRenamed = QtCore.pyqtSignal(str, str)
     projectPinned = QtCore.pyqtSignal(str)
     projectSelected = QtCore.pyqtSignal(str)
+    projectReloadRequested = QtCore.pyqtSignal(str)
 
     def __init__(self, projects: Iterable[ProjectInfo], parent=None):
         super().__init__(parent)
@@ -42,6 +43,7 @@ class ProjectList(QtWidgets.QListWidget):
             widget.archiveRequested.connect(self.archive_project)
             widget.deleteRequested.connect(self.delete_project)
             widget.projectSelected.connect(self.select_project)
+            widget.reloadRequested.connect(lambda row: self.projectReloadRequested.emit(row.project_name))
             self.addItem(item)
             self.setItemWidget(item, widget)
             self.project_widgets.append(widget)

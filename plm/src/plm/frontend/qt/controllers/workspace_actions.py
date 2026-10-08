@@ -73,6 +73,8 @@ class WorkspaceActions:
             if self._generation_running:
                 return
             issues, state = result
+            if state == "up_to_date" and project.config_dir in self._reload_stale_projects:
+                state = "out_of_date"
             self.config_page.set_validation_issues(issues)
             if self._generation_failure:
                 self._set_output_state("failed", self._generation_failure)
@@ -201,6 +203,7 @@ class WorkspaceActions:
         payload = self.config_page.content()
         service = self._worker_service()
         signature = self._saved_signature
+        force = project.config_dir in self._reload_stale_projects
         root = project.config_dir.parent
         self._generation_running = True
         self._validation_revision += 1
@@ -224,6 +227,7 @@ class WorkspaceActions:
                 result, files, report = service.generate(
                     project, payload, progress=lambda phase: progress(50, str(phase)),
                     on_saved=on_saved,
+                    **({"force": True} if force else {}),
                 )
                 after, _ = self._artifact_snapshot(files, root, texts=False)
                 progress(100, "生成完成")
@@ -260,6 +264,7 @@ class WorkspaceActions:
                 return
             result, files, report, statuses, baselines, saved = data
             self._saved_signature = saved
+            self._reload_stale_projects.discard(project.config_dir)
             self._validation_revision += 1
             self.config_page.mark_saved(payload)
             self.config_page.artifacts_panel.set_files(

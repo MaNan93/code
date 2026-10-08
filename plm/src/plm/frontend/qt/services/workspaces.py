@@ -70,14 +70,17 @@ class WorkspaceService:
         self.validate(payload)
         save_workspace_content(self._root(project), payload)
 
-    def generate(self, project, payload, progress=None, on_saved=None):
+    def generate(self, project, payload, progress=None, on_saved=None, *, force=False):
         self.save(project, payload)
         if on_saved:
             on_saved()
         root = self._root(project)
         report = StringIO()
         with redirect_stdout(report):
-            result = generate(project.config_dir, root / "rtl", self._options(payload), progress)
+            result = generate(
+                project.config_dir, root / "rtl", self._options(payload), progress,
+                **({"force": True} if force else {}),
+            )
         if result.plan.formatter.get("engine") == "unavailable":
             report.write("配置的 Verible 不可用，已保留生成器原始排版。\n")
         return result, self.output_files(project), report.getvalue()

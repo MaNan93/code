@@ -131,9 +131,18 @@ class ProjectNavigation:
             return
         self._load_project(project)
 
-    def _load_project(self, project):
+    def reload_project(self, name):
+        project = self._project(name)
+        if project is None:
+            return
+        if not self.confirm_switch(on_saved=lambda: self.reload_project(name)):
+            return
+        self._load_project(project, invalidate_outputs=True)
+
+    def _load_project(self, project, *, invalidate_outputs=False):
         name = project.name
         self._load_revision += 1
+        self._validation_revision += 1
         revision = self._load_revision
         service = self._worker_service()
         self._load_running = True
@@ -150,11 +159,18 @@ class ProjectNavigation:
             self.current_name = name
             self.current_project = project
             self._saved_signature = signature
+            self._generation_failure = None
+            if invalidate_outputs:
+                self._reload_stale_projects.add(project.config_dir)
+                self.nav.current_project_name = name
+                self.nav.project_list.select_project(name, emit_signal=False)
             self.config_page.set_content(payload)
             self.config_page.update_title(name)
             self.settings.set_recent_project(name)
             self.refresh_artifacts()
             self.log_panel.append_log(f"已打开项目：{name}")
+            if invalidate_outputs:
+                self.log_panel.append_log(f"已重新加载配置：{name}；所有生成文件已标记为 out-of-date。")
             self._update_window_title()
 
         def failed(error):

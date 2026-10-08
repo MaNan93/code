@@ -168,6 +168,12 @@ QMenu::item {
     color: $text_main;
 }
 StyledMenu { margin: 0; }
+QMenu#ProjectContextMenu {
+    background: transparent;
+    border: none;
+    padding: 14px;
+    margin: 0;
+}
 QMenu::item:selected {
     background-color: $primary_light;
     color: $primary;
@@ -293,6 +299,8 @@ QPushButton#ProjectButton:pressed, QPushButton#ProjectArchiveBtn:pressed,
 QPushButton#ProjectOpenBtn:pressed, QPushButton#ProjectMoreBtn:pressed {
     background-color: $border_hover;
 }
+QPushButton#ProjectButton[menuOpen="true"] { background-color: $border; }
+QPushButton#ProjectButton[menuOpen="true"] QPushButton { background: transparent; }
 QPushButton#ProjectButton[selected="true"], QPushButton#NavFooterButton[selected="true"] {
     background-color: $primary_light;
     color: $primary;

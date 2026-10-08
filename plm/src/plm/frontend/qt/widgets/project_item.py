@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-from PyQt5 import QtCore, QtWidgets
+from PyQt5 import QtCore, QtGui, QtWidgets
 
 from plm.frontend.qt.styles.tokens import DANGER, ICON_SIZE_SM, TEXT_SUB
 from plm.frontend.qt.widgets.common import (
@@ -15,6 +15,33 @@ from plm.frontend.qt.widgets.common import (
 )
 
 
+class ProjectContextMenu(StyledMenu):
+    """Project popup with a visible card edge and inset shadow clearance."""
+
+    def __init__(self, parent):
+        super().__init__(parent)
+        self.setObjectName("ProjectContextMenu")
+
+    def _apply_round_mask(self):
+        # The transparent outer margin contains the software shadow.
+        self.clearMask()
+
+    def paintEvent(self, event):
+        painter = QtGui.QPainter(self)
+        painter.setRenderHint(QtGui.QPainter.Antialiasing)
+        card = QtCore.QRectF(self.rect()).adjusted(8, 8, -8, -8)
+        painter.setPen(QtCore.Qt.NoPen)
+        for spread in range(7, 0, -1):
+            painter.setBrush(QtGui.QColor(15, 23, 42, 9 - spread))
+            shadow = card.translated(0, 2).adjusted(-spread, -spread, spread, spread)
+            painter.drawRoundedRect(shadow, self.RADIUS + spread, self.RADIUS + spread)
+        painter.setPen(QtGui.QPen(QtGui.QColor("#CBD5E1"), 1))
+        painter.setBrush(QtGui.QColor("#FFFFFF"))
+        painter.drawRoundedRect(card, self.RADIUS, self.RADIUS)
+        painter.end()
+        super().paintEvent(event)
+
+
 class ProjectItemWidget(QtWidgets.QWidget):
     """Single-line selectable project row with semantic interaction signals."""
 
@@ -23,6 +50,7 @@ class ProjectItemWidget(QtWidgets.QWidget):
     renameCommitted = QtCore.pyqtSignal(object, str)
     archiveRequested = QtCore.pyqtSignal(object)
     deleteRequested = QtCore.pyqtSignal(object)
+    reloadRequested = QtCore.pyqtSignal(object)
     projectSelected = QtCore.pyqtSignal(str)
 
     def __init__(self, project_name, project_path=None, parent=None):
@@ -31,6 +59,7 @@ class ProjectItemWidget(QtWidgets.QWidget):
         self.project_name = project_name
         self.project_path = Path(project_path or PROJECT_ROOT / project_name).resolve()
         self._renaming = False
+        self._menu_open = False
         root = QtWidgets.QVBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(2)
@@ -125,7 +154,7 @@ class ProjectItemWidget(QtWidgets.QWidget):
                 self.open_folder_btn.show()
                 self.more_btn.show()
             elif event.type() == QtCore.QEvent.Leave:
-                if not self._renaming:
+                if not self._renaming and not self._menu_open:
                     self.archive_btn.hide()
                     self.open_folder_btn.hide()
                     self.more_btn.hide()
@@ -165,6 +194,21 @@ class ProjectItemWidget(QtWidgets.QWidget):
         menu = self.build_more_menu()
         menu.exec_(self.header.mapToGlobal(pos))
 
+    def _set_menu_open(self, opened):
+        self._menu_open = opened
+        self.header.setProperty("menuOpen", opened)
+        actions_visible = opened or self._renaming or self.header.underMouse()
+        for widget in (self.header, self.archive_btn, self.open_folder_btn, self.more_btn):
+            if widget is not self.header:
+                widget.setVisible(actions_visible)
+            widget.style().unpolish(widget)
+            widget.style().polish(widget)
+            widget.update()
+        # Child buttons can leave stale pixels in their parent's backing store.
+        self.update()
+        if self.parentWidget() is not None:
+            self.parentWidget().update()
+
     def show_more_menu(self):
         menu = self.build_more_menu()
         menu.exec_(
@@ -172,7 +216,9 @@ class ProjectItemWidget(QtWidgets.QWidget):
         )
 
     def build_more_menu(self):
-        menu = StyledMenu(self)
+        menu = ProjectContextMenu(self)
+        menu.aboutToShow.connect(lambda: self._set_menu_open(True))
+        menu.aboutToHide.connect(lambda: self._set_menu_open(False))
         pin_action = menu.addAction(
             load_lucide_icon("pin", TEXT_SUB, ICON_SIZE), "置顶"
         )
@@ -184,6 +230,10 @@ class ProjectItemWidget(QtWidgets.QWidget):
             load_lucide_icon("folder-open", TEXT_SUB, ICON_SIZE),
             "在资源管理器中打开",
         )
+        reload_action = menu.addAction(
+            load_lucide_icon("refresh-cw", TEXT_SUB, ICON_SIZE), "Reload",
+        )
+        reload_action.setToolTip("重新加载配置文件，并将所有生成文件标记为过期")
         menu.addSeparator()
         archive_action = menu.addAction(
             load_lucide_icon("archive", TEXT_SUB, ICON_SIZE), "归档"
@@ -196,6 +246,7 @@ class ProjectItemWidget(QtWidgets.QWidget):
         rename_action.triggered.connect(menu.close)
         rename_action.triggered.connect(lambda: self.renameRequested.emit(self))
         open_action.triggered.connect(self.open_folder)
+        reload_action.triggered.connect(lambda: self.reloadRequested.emit(self))
         archive_action.triggered.connect(lambda: self.archiveRequested.emit(self))
         delete_action.triggered.connect(lambda: self.deleteRequested.emit(self))
         return menu

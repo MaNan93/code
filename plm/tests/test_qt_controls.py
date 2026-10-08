@@ -156,7 +156,7 @@ class QtControlLogicTests(unittest.TestCase):
         actions = [action for action in menu.actions() if not action.isSeparator()]
         self.assertEqual(
             [action.text() for action in actions],
-            ["置顶", "重命名", "在资源管理器中打开", "归档", "删除"],
+            ["置顶", "重命名", "在资源管理器中打开", "Reload", "归档", "删除"],
         )
         next(action for action in actions if action.text() == "置顶").trigger()
         wait_for_idle(self.app)

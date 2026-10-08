@@ -30,6 +30,7 @@ class AppController(WorkspaceActions, ProjectNavigation, ProjectActions):
         self.current_project = None
         self._saved_signature = None
         self._generation_failure = None
+        self._reload_stale_projects = set()
         self._validation_revision = 0
         self._validation_running = False
         self._generation_running = False
@@ -60,6 +61,7 @@ class AppController(WorkspaceActions, ProjectNavigation, ProjectActions):
         nav.settings_requested.connect(window.on_open_settings)
         nav.docs_requested.connect(window.on_open_docs)
         nav.project_selected.connect(self.select_project)
+        nav.project_reload_requested.connect(self.reload_project)
         nav.project_archived.connect(self.archive_project)
         nav.project_deleted.connect(self.delete_project)
         nav.project_renamed.connect(self.rename_project)

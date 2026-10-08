@@ -145,6 +145,8 @@ class CodePreview(QtWidgets.QPlainTextEdit):
         self.setReadOnly(True)
         self.setLineWrapMode(QtWidgets.QPlainTextEdit.NoWrap)
         font = QtGui.QFont(FONT_CODE_PRIMARY)
+        font.setStyleHint(QtGui.QFont.Monospace)
+        font.setFixedPitch(True)
         font.setPixelSize(FONT_SIZE_BODY)
         self.setFont(font)
         self.line_numbers = LineNumberArea(self)

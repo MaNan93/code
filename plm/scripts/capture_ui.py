@@ -91,7 +91,7 @@ with tempfile.TemporaryDirectory(prefix="plm-ui-") as td:
     assert project_widget.header.contextMenuPolicy() == QtCore.Qt.CustomContextMenu
     project_menu=project_widget.build_more_menu()
     project_actions=[action.text() for action in project_menu.actions() if not action.isSeparator()]
-    assert project_actions == ["置顶", "重命名", "在资源管理器中打开", "归档", "删除"]
+    assert project_actions == ["置顶", "重命名", "在资源管理器中打开", "Reload", "归档", "删除"]
     project_menu.popup(project_widget.header.mapToGlobal(QtCore.QPoint(12,project_widget.header.height())))
     screen_shot("00-project-context-menu")
     project_menu.close(); project_menu.deleteLater()

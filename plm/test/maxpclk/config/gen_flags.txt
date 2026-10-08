@@ -5,3 +5,4 @@
 # dpr       = true | false (dpr=true requires sel-mode=sync)
 arch = serdes
 pclk-mode = pclk_as_phy_input
+sel-mode = sync

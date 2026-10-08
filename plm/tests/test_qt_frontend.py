@@ -16,8 +16,8 @@ from PyQt5 import QtCore, QtGui, QtTest, QtWidgets
 from plm.frontend.qt.controllers import AppController
 from plm.frontend.qt.services import ProjectService, SettingsStore
 from plm.frontend.qt.styles.tokens import (
-    BORDER, FONT_CODE_PRIMARY, FONT_MONO, FONT_SCALE, FONT_SIZE_BODY, FONT_SIZE_LG,
-    FONT_SIZE_SM, PRIMARY_LIGHT, TEXT_MAIN, scale_content_size, scale_font_size,
+    BG_ARTIFACTS, BG_FOCUS, BG_HOVER, BG_SIDEBAR_INACTIVE, BG_SUBTLE, BG_SURFACE, BORDER, BORDER_HOVER, CONTROL_HEIGHT, FONT_CODE_PRIMARY, FONT_MONO, FONT_SCALE, FONT_SIZE_BODY, FONT_SIZE_LG,
+    FONT_SIZE_SM, ICON_GLYPH_SIZE, NAV_ITEM_GAP, PRIMARY_LIGHT, TEXT_MAIN, scale_content_size, scale_font_size,
 )
 from plm.frontend.qt.models import ProjectInfo
 from plm.frontend.qt.main_window import MainWindow
@@ -26,7 +26,7 @@ from plm.frontend.qt.views.artifacts_panel import ArtifactsPanel
 from plm.frontend.qt.views.config_page import ConfigHeader
 from plm.frontend.qt.views.log_panel import LogPanel
 from plm.frontend.qt.views.nav_panel import NavPanel
-from plm.frontend.qt.widgets.common import ICON_SIZE, LUCIDE_ICON_DIR, load_lucide_icon
+from plm.frontend.qt.widgets.common import ICON_SIZE, LUCIDE_ICON_DIR, button_height, load_lucide_icon
 from plm.frontend.qt.widgets.project_item import ProjectItemWidget
 from plm.frontend.qt.widgets.project_list import ProjectList
 
@@ -94,7 +94,7 @@ class QtFrontendLayoutTests(unittest.TestCase):
         self.assertEqual(body_layout.contentsMargins(), QtCore.QMargins(0, 0, 0, 0))
         self.assertIs(body_layout.itemAt(0).widget(), self.window.nav_panel)
         self.assertIs(body_layout.itemAt(1).widget(), self.window.view_stack)
-        self.assertEqual(self.window.title_bar.height(), 38)
+        self.assertEqual(self.window.title_bar.height(), 44)
         self.assertEqual(self.window.title_bar.logo_label.size(), QtCore.QSize(ICON_SIZE, ICON_SIZE))
         self.assertEqual(self.window.title_bar.title_label.text(), "plmConsultant")
         self.assertIs(
@@ -103,19 +103,19 @@ class QtFrontendLayoutTests(unittest.TestCase):
         )
         self.assertEqual(len(self.window._resize_handles), 8)
         self.assertEqual(
-            self.window.title_bar.minimize_btn.iconSize(), QtCore.QSize(scale_content_size(14), scale_content_size(14))
+            self.window.title_bar.minimize_btn.iconSize(), QtCore.QSize(ICON_SIZE, ICON_SIZE)
         )
         self.assertEqual(
-            self.window.title_bar.maximize_btn.iconSize(), QtCore.QSize(scale_content_size(12), scale_content_size(12))
+            self.window.title_bar.maximize_btn.iconSize(), QtCore.QSize(ICON_SIZE, ICON_SIZE)
         )
         self.assertEqual(
-            self.window.title_bar.close_btn.iconSize(), QtCore.QSize(scale_content_size(14), scale_content_size(14))
+            self.window.title_bar.close_btn.iconSize(), QtCore.QSize(ICON_SIZE, ICON_SIZE)
         )
         self.assertEqual(
-            self.window.config_page.header.log_btn.size(), QtCore.QSize(32, 34)
+            self.window.config_page.header.log_btn.size(), QtCore.QSize(32, CONTROL_HEIGHT)
         )
         self.assertEqual(
-            self.window.config_page.header.artifacts_btn.size(), QtCore.QSize(46, 34)
+            self.window.config_page.header.artifacts_btn.size(), QtCore.QSize(32, CONTROL_HEIGHT)
         )
         self.assertEqual(self.window.content_splitter.orientation(), QtCore.Qt.Vertical)
         self.assertEqual(self.window.nav_panel.minimumWidth(), 260)
@@ -134,17 +134,17 @@ class QtFrontendLayoutTests(unittest.TestCase):
             QtCore.QSize(ICON_SIZE, ICON_SIZE),
         )
 
-    def test_all_font_tokens_are_fourteen_pixels(self):
+    def test_all_font_tokens_are_sixteen_pixels(self):
         self.assertEqual(FONT_SCALE, 1.0)
-        self.assertEqual((FONT_SIZE_BODY, FONT_SIZE_SM, FONT_SIZE_LG), (14, 14, 14))
-        self.assertEqual(scale_font_size(10), 14)
+        self.assertEqual((FONT_SIZE_BODY, FONT_SIZE_SM, FONT_SIZE_LG), (16, 16, 16))
+        self.assertEqual(scale_font_size(10), 16)
         preview_font = self.window.config_page.artifacts_panel.preview.font()
-        self.assertEqual(preview_font.pixelSize(), 14)
+        self.assertEqual(preview_font.pixelSize(), 16)
         self.assertTrue(preview_font.fixedPitch())
         self.assertNotEqual(FONT_CODE_PRIMARY, self.window.font().family())
         self.assertIn("monospace", FONT_MONO)
 
-    def test_global_button_heights_stay_at_thirty_four_pixels(self):
+    def test_global_button_heights_use_the_shared_token(self):
         from plm.frontend.qt.views.new_project_dialog import NewProjectDialog
 
         dialog = NewProjectDialog(str(self.root), self.window)
@@ -154,28 +154,30 @@ class QtFrontendLayoutTests(unittest.TestCase):
             for button in self.window.findChildren(QtWidgets.QPushButton):
                 button.ensurePolished()
                 with self.subTest(button=button.objectName(), text=button.text()):
-                    self.assertEqual(button.height(), 34)
+                    self.assertEqual(button.height(), button_height(button))
         dialog.close()
-        button = QtWidgets.QPushButton("Reload")
+        button = QtWidgets.QPushButton("重新载入")
         button.ensurePolished()
         font = QtGui.QFont(button.font())
         font.setPixelSize(22)
         button.setFont(font)
-        self.assertEqual(button.height(), 34)
+        self.assertEqual(button.height(), CONTROL_HEIGHT)
         button.deleteLater()
 
-    def test_project_menu_rows_touch_without_extra_vertical_spacing(self):
+    def test_project_menu_capsules_have_four_pixel_spacing(self):
         widget = self.window.nav_panel.project_list.project_widgets[0]
         menu = widget.build_more_menu()
         menu.ensurePolished()
         menu.sizeHint()  # Lay out the actions before measuring their rectangles.
         previous = None
         for action in menu.actions():
+            if action.isSeparator():
+                self.assertFalse(action.isVisible())
+                continue
             rect = menu.actionGeometry(action)
             if previous is not None:
                 self.assertEqual(rect.top(), previous.bottom() + 1)
-            self.assertEqual(rect.height(), 1 if action.isSeparator()
-                             else 34)
+            self.assertEqual(rect.height() - 4, CONTROL_HEIGHT)
             previous = rect
         menu.deleteLater()
 
@@ -189,9 +191,9 @@ class QtFrontendLayoutTests(unittest.TestCase):
                 widths[index], metrics.horizontalAdvance(heading) + 24,
             )
         self.assertEqual(widths[1], table.viewport().width() - widths[0] - widths[2])
-        self.assertEqual(table.horizontalHeader().height(), 34)
+        self.assertEqual(table.horizontalHeader().height(), CONTROL_HEIGHT)
         for row in range(table.rowCount()):
-            self.assertEqual(table.rowHeight(row), 34)
+            self.assertEqual(table.rowHeight(row), CONTROL_HEIGHT)
         table.clearSelection()
         point = table.visualRect(table.model().index(1, 1)).center()
         QtTest.QTest.mouseMove(table.viewport(), point)
@@ -199,7 +201,7 @@ class QtFrontendLayoutTests(unittest.TestCase):
         image = table.viewport().grab().toImage()
         for column in range(3):
             rect = table.visualRect(table.model().index(1, column))
-            self.assertEqual(image.pixelColor(rect.right() - 4, point.y()).name(), "#f0f7ff")
+            self.assertEqual(image.pixelColor(rect.right() - 4, point.y()).name(), BG_SUBTLE.lower())
 
     def test_settings_button_groups_have_no_internal_gap(self):
         self.window.nav_panel.settings_btn.click()
@@ -212,11 +214,11 @@ class QtFrontendLayoutTests(unittest.TestCase):
         for section in page.menu_buttons:
             section.click()
             wait_for_idle(self.app)
-            self.assertEqual(section.height(), 34)
+            self.assertEqual(section.height(), CONTROL_HEIGHT)
             for group in page.findChildren(QtWidgets.QFrame, "ButtonGroup"):
                 if not group.isVisible():
                     continue
-                self.assertEqual(group.height(), 34)
+                self.assertEqual(group.height(), CONTROL_HEIGHT)
                 buttons = [group.layout().itemAt(i).widget() for i in range(group.layout().count())]
                 for left, right in zip(buttons, buttons[1:]):
                     self.assertEqual(left.geometry().right() + 1, right.geometry().left())
@@ -258,7 +260,7 @@ class QtFrontendLayoutTests(unittest.TestCase):
             wait_for_idle(self.app)
             self.assertTrue(button.hasFocus())
             point = QtCore.QPoint(button.width() - 12, button.height() // 2)
-            self.assertEqual(button.grab().toImage().pixelColor(point).name(), "#e2e8f0")
+            self.assertEqual(button.grab().toImage().pixelColor(point).name(), BG_FOCUS.lower())
             button.setDown(True)
             self.assertEqual(button.grab().toImage().pixelColor(point).name(), "#cbd5e1")
             button.setDown(False)
@@ -267,7 +269,7 @@ class QtFrontendLayoutTests(unittest.TestCase):
             button.setFocus(QtCore.Qt.TabFocusReason)
             wait_for_idle(self.app)
             point = QtCore.QPoint(button.width() - 12, button.height() // 2)
-            self.assertEqual(button.grab().toImage().pixelColor(point).name(), PRIMARY_LIGHT.lower())
+            self.assertEqual(button.grab().toImage().pixelColor(point).name(), BG_FOCUS.lower())
         nav.set_active(None)
 
     def test_nav_toggle_collapses_and_restores_sidebar(self):
@@ -290,8 +292,8 @@ class QtFrontendLayoutTests(unittest.TestCase):
         self.assertFalse(nav.project_list.isVisible())
         self.assertEqual(nav.new_chat_btn.objectName(), "NavActionButton")
         self.assertEqual(nav.save_btn.objectName(), "NavActionButton")
-        self.assertEqual(nav.new_chat_btn.height(), 34)
-        self.assertEqual(nav.save_btn.height(), 34)
+        self.assertEqual(nav.new_chat_btn.height(), CONTROL_HEIGHT)
+        self.assertEqual(nav.save_btn.height(), CONTROL_HEIGHT)
         self.assertEqual(
             self.window.content_splitter.mapTo(self.window.body_container, QtCore.QPoint()).x()
             - (nav.geometry().right() + 1),
@@ -334,8 +336,8 @@ class QtFrontendLayoutTests(unittest.TestCase):
         self.assertFalse(nav.project_list.isVisible())
         self.assertTrue(expand_finished.wait(1000))
         self.assertTrue(nav.project_list.isVisible())
-        self.assertEqual(nav.settings_btn.text(), "Settings")
-        self.assertEqual(nav.docs_btn.text(), "Docs")
+        self.assertEqual(nav.settings_btn.text(), "设置")
+        self.assertEqual(nav.docs_btn.text(), "文档")
         self.assertFalse(nav.is_collapsed)
         self.assertEqual(nav.width(), 260)
         self.assertEqual(nav.minimumWidth(), 260)
@@ -343,17 +345,17 @@ class QtFrontendLayoutTests(unittest.TestCase):
         self.assertEqual(nav.new_chat_btn.objectName(), "NavActionButton")
         self.assertEqual(nav.save_btn.objectName(), "NavActionButton")
 
-    def test_nav_separator_remains_visible_in_both_sidebar_states(self):
+    def test_nav_section_dividers_remain_visible_when_collapsed(self):
         nav = self.window.nav_panel
         for collapsed in (False, True):
             if collapsed:
                 finished = QtTest.QSignalSpy(nav.animation_group.finished)
                 nav.toggle_collapse()
                 self.assertTrue(finished.wait(1000))
-            separator = nav.project_separator
-            self.assertTrue(separator.isVisible())
-            image = separator.grab().toImage()
-            self.assertEqual(image.pixelColor(image.width() // 2, 0).name(), BORDER.lower())
+            for separator in (nav.project_separator, nav.footer_separator):
+                self.assertTrue(separator.isVisible())
+                image = separator.grab().toImage()
+                self.assertEqual(image.pixelColor(image.width() // 2, 0).name(), BORDER_HOVER.lower())
 
     def test_nav_width_stays_fixed_when_window_resizes(self):
         nav = self.window.nav_panel
@@ -376,8 +378,8 @@ class QtFrontendLayoutTests(unittest.TestCase):
         self.assertFalse(hasattr(nav, "actionRequested"))
         self.assertEqual(nav.new_chat_btn.text(), "新对话")
         self.assertEqual(nav.save_btn.text(), "保存")
-        self.assertEqual(nav.docs_btn.text(), "Docs")
-        self.assertEqual(nav.settings_btn.text(), "Settings")
+        self.assertEqual(nav.docs_btn.text(), "文档")
+        self.assertEqual(nav.settings_btn.text(), "设置")
         self.assertIsInstance(nav.project_list, ProjectList)
         self.assertEqual(
             nav.project_list.dragDropMode(), QtWidgets.QAbstractItemView.InternalMove
@@ -388,16 +390,13 @@ class QtFrontendLayoutTests(unittest.TestCase):
             widget.project_name for widget in nav.project_list.project_widgets
         }
         first_project = nav.project_list.project_widgets[0]
-        self.assertEqual(first_project.folder_icon.size(), QtCore.QSize(14, 14))
+        self.assertEqual(first_project.folder_icon.size(), QtCore.QSize(ICON_SIZE, ICON_SIZE))
         self.assertEqual(
             first_project.header.layout().contentsMargins(),
-            QtCore.QMargins(12, 0, 12, 0),
+            QtCore.QMargins(16, 0, 16, 0),
         )
         self.assertEqual(
-            first_project.header.layout().itemAt(1).spacerItem().sizeHint().width(), 8
-        )
-        self.assertEqual(
-            first_project.header.layout().itemAt(5).spacerItem().sizeHint().width(), 0
+            first_project.header.layout().itemAt(1).spacerItem().sizeHint().width(), 6
         )
         self.assertEqual(first_project.project_name_label.text(), first_project.project_name)
         self.assertEqual(first_project.header.text(), "")
@@ -406,13 +405,11 @@ class QtFrontendLayoutTests(unittest.TestCase):
         self.assertEqual(
             first_project.findChildren(QtWidgets.QPushButton, "SessionButton"), []
         )
-        self.assertEqual(first_project.archive_btn.size(), QtCore.QSize(28, 34))
-        self.assertEqual(first_project.more_btn.size(), QtCore.QSize(28, 34))
-        self.assertTrue(first_project.archive_btn.isHidden())
+        self.assertEqual(first_project.more_btn.size(), QtCore.QSize(28, 28))
         self.assertTrue(first_project.more_btn.isHidden())
         self.assertFalse(hasattr(nav.project_list, "hover_card"))
-        self.assertEqual(first_project.open_folder_btn.size(), QtCore.QSize(28, 34))
-        self.assertTrue(first_project.open_folder_btn.isHidden())
+        self.assertEqual(first_project.findChildren(QtWidgets.QPushButton, "ProjectArchiveBtn"), [])
+        self.assertEqual(first_project.findChildren(QtWidgets.QPushButton, "ProjectOpenBtn"), [])
         for icon_name in ("folder", "folder-open", "pin"):
             self.assertTrue((LUCIDE_ICON_DIR / f"{icon_name}.svg").is_file())
         expected_configs = {"bifurcate", "dpr", "finegrain", "maxpclk", "quad"}
@@ -479,31 +476,38 @@ class QtFrontendLayoutTests(unittest.TestCase):
         widget.header.setFocus(QtCore.Qt.TabFocusReason)
         wait_for_idle(self.app)
         point = QtCore.QPoint(widget.header.width() - 8, widget.header.height() // 2)
-        self.assertEqual(widget.header.grab().toImage().pixelColor(point).name(), BORDER.lower())
+        self.assertEqual(widget.header.grab().toImage().pixelColor(point).name(), BG_FOCUS.lower())
         widget.set_selected(True)
-        self.assertEqual(widget.header.grab().toImage().pixelColor(point).name(), PRIMARY_LIGHT.lower())
-        for button in (widget.archive_btn, widget.open_folder_btn, widget.more_btn):
+        self.assertEqual(widget.header.grab().toImage().pixelColor(point).name(), BG_FOCUS.lower())
+        for button in (widget.more_btn,):
             button.show()
             button.setFocus(QtCore.Qt.TabFocusReason)
             self.app.processEvents()
             pixel = QtCore.QPoint(button.width() // 2, 2)
-            self.assertEqual(button.grab().toImage().pixelColor(pixel).name(), BORDER.lower())
+            self.assertEqual(button.grab().toImage().pixelColor(pixel).name(), BG_FOCUS.lower())
+            button.setDown(True)
+            pressed = button.grab().toImage()
+            self.assertEqual(pressed.pixelColor(pixel).name(), "#cbd5e1")
+            self.assertNotEqual(pressed.pixelColor(0, 0), pressed.pixelColor(pixel))
+            button.setDown(False)
 
-    def test_project_folder_button_follows_archive_and_opens_current_path(self):
+    def test_project_folder_action_remains_in_more_menu(self):
         project_list = self.window.nav_panel.project_list
         widget = project_list.project_widgets[0]
         self.app.sendEvent(widget.header, QtCore.QEvent(QtCore.QEvent.Enter))
         self.app.processEvents()
-        self.assertTrue(widget.open_folder_btn.isVisible())
-        self.assertGreater(widget.open_folder_btn.x(), widget.archive_btn.geometry().right())
-        self.assertLess(widget.open_folder_btn.geometry().right(), widget.more_btn.x())
+        self.assertTrue(widget.more_btn.isVisible())
+        self.assertFalse(hasattr(widget, "archive_btn"))
+        self.assertFalse(hasattr(widget, "open_folder_btn"))
         selected = QtTest.QSignalSpy(widget.projectSelected)
         with patch("plm.frontend.qt.widgets.project_item.open_in_file_manager") as open_folder:
-            widget.open_folder_btn.click()
+            menu = widget.build_more_menu()
+            next(action for action in menu.actions() if action.text() == "打开所在目录").trigger()
             open_folder.assert_called_once_with(widget.project_path)
+            menu.deleteLater()
         self.assertEqual(len(selected), 0)
         self.app.sendEvent(widget.header, QtCore.QEvent(QtCore.QEvent.Leave))
-        self.assertTrue(widget.open_folder_btn.isHidden())
+        self.assertTrue(widget.more_btn.isHidden())
         self.assertFalse(hasattr(project_list, "hover_card"))
         self.assertFalse(hasattr(project_list, "_hover_timer"))
 
@@ -516,9 +520,9 @@ class QtFrontendLayoutTests(unittest.TestCase):
         initial_count = project_list.count()
         self.assertGreater(initial_count, 0)
         for row, widget in enumerate(project_list.project_widgets):
-            self.assertEqual(project_list.item(row).sizeHint().height(), 34)
-            self.assertEqual(widget.header.height(), 34)
-            self.assertEqual(widget.layout().count(), 1)
+            self.assertEqual(project_list.item(row).sizeHint().height(), CONTROL_HEIGHT + NAV_ITEM_GAP)
+            self.assertEqual(widget.header.height(), CONTROL_HEIGHT)
+            self.assertEqual(widget.layout().count(), 2)
             self.assertIs(widget.layout().itemAt(0).widget(), widget.header)
             self.assertFalse(widget.header.isCheckable())
 
@@ -550,7 +554,7 @@ class QtFrontendLayoutTests(unittest.TestCase):
             )
         self.assertEqual(
             first_project.header.layout().contentsMargins(),
-            QtCore.QMargins(12, 0, 12, 0),
+            QtCore.QMargins(16, 0, 16, 0),
         )
 
         nav_buttons = (
@@ -565,7 +569,7 @@ class QtFrontendLayoutTests(unittest.TestCase):
         )
         self.assertEqual(
             first_project.folder_icon.mapTo(nav, QtCore.QPoint()).x(),
-            24,
+            28,
         )
         next_project = nav.project_list.project_widgets[1]
         gap = (
@@ -573,7 +577,7 @@ class QtFrontendLayoutTests(unittest.TestCase):
             - first_project.header.mapTo(nav, QtCore.QPoint()).y()
             - first_project.header.height()
         )
-        self.assertEqual(gap, 0)
+        self.assertEqual(gap, NAV_ITEM_GAP)
         icon_pixmaps = (
             nav.new_chat_btn.icon().pixmap(ICON_SIZE, ICON_SIZE),
             nav.save_btn.icon().pixmap(ICON_SIZE, ICON_SIZE),
@@ -581,13 +585,12 @@ class QtFrontendLayoutTests(unittest.TestCase):
             nav.settings_btn.icon().pixmap(ICON_SIZE, ICON_SIZE),
             nav.docs_btn.icon().pixmap(ICON_SIZE, ICON_SIZE),
         )
-        self.assertEqual(
-            {
-                QtGui.QRegion(pixmap.mask()).boundingRect().left()
-                for pixmap in icon_pixmaps
-            },
-            {0},
-        )
+        for pixmap in icon_pixmaps:
+            self.assertEqual(pixmap.size(), QtCore.QSize(20, 20))
+            bounds = QtGui.QRegion(pixmap.mask()).boundingRect()
+            inset = (ICON_SIZE - ICON_GLYPH_SIZE) // 2
+            self.assertGreaterEqual(bounds.left(), inset)
+            self.assertLessEqual(bounds.right(), ICON_SIZE - inset - 1)
 
     def test_nav_panel_layout_contract(self):
         nav = self.window.nav_panel
@@ -600,7 +603,7 @@ class QtFrontendLayoutTests(unittest.TestCase):
         self.assertEqual(nav.collapsed_width, 56)
         self.assertEqual(nav.minimumWidth(), 260)
         self.assertEqual(nav.maximumWidth(), 260)
-        self.assertEqual(nav.collapse_btn.size(), QtCore.QSize(32, 34))
+        self.assertEqual(nav.collapse_btn.size(), QtCore.QSize(32, CONTROL_HEIGHT))
 
         for row_layout in (
             nav.new_chat_row_layout,
@@ -617,13 +620,13 @@ class QtFrontendLayoutTests(unittest.TestCase):
             nav.settings_btn,
             nav.docs_btn,
         ):
-            self.assertEqual(button.height(), 34)
+            self.assertEqual(button.height(), CONTROL_HEIGHT)
 
         project_index = root.indexOf(nav.project_list)
         collapsed_project_index = root.indexOf(nav.collapsed_projects)
         self.assertEqual(root.stretch(project_index), 1)
         self.assertEqual(root.stretch(collapsed_project_index), 1)
-        self.assertEqual(first_project.header.height(), 34)
+        self.assertEqual(first_project.header.height(), CONTROL_HEIGHT)
 
         footer_layout = nav.footer.layout()
         self.assertIsInstance(footer_layout, QtWidgets.QVBoxLayout)
@@ -758,11 +761,10 @@ class QtFrontendLayoutTests(unittest.TestCase):
                 first = project_list.project_widgets[0]
                 QtWidgets.QApplication.sendEvent(
                     first.header, QtCore.QEvent(QtCore.QEvent.Enter))
-                self.assertTrue(first.archive_btn.isVisible())
                 self.assertTrue(first.more_btn.isVisible())
                 QtWidgets.QApplication.sendEvent(
                     first.header, QtCore.QEvent(QtCore.QEvent.Leave))
-                self.assertFalse(first.archive_btn.isVisible())
+                self.assertFalse(first.more_btn.isVisible())
 
                 pin_spy = QtTest.QSignalSpy(nav.project_pinned)
                 project_list.pin_project(project_list.project_widgets[1])
@@ -810,11 +812,11 @@ class QtFrontendLayoutTests(unittest.TestCase):
 
             self.assertIn("置顶", actions)
             self.assertIn("重命名", actions)
-            self.assertIn("在资源管理器中打开", actions)
+            self.assertIn("打开所在目录", actions)
             self.assertIn("归档", actions)
             self.assertIn("删除", actions)
             menu.ensurePolished()
-            longest_text = "在资源管理器中打开"
+            longest_text = "打开所在目录"
             text_width = menu.fontMetrics().horizontalAdvance(longest_text)
             icon_width = menu.style().pixelMetric(QtWidgets.QStyle.PM_SmallIconSize)
             self.assertGreaterEqual(menu.sizeHint().width(), text_width + icon_width + 32)
@@ -837,7 +839,7 @@ class QtFrontendLayoutTests(unittest.TestCase):
             with patch(
                 "plm.frontend.qt.widgets.project_item.open_in_file_manager"
             ) as open_path:
-                actions["在资源管理器中打开"].trigger()
+                actions["打开所在目录"].trigger()
                 wait_for_idle(self.app)
                 open_path.assert_called_once_with(widget.project_path)
 
@@ -928,7 +930,7 @@ class QtFrontendLayoutTests(unittest.TestCase):
                 toolbar_margins.right(),
                 toolbar_margins.bottom(),
             ),
-            (0, 0, 30, 0),
+            (0, 0, 0, 0),
         )
         self.assertEqual(toolbar.layout().spacing(), 0)
         self.assertEqual(
@@ -936,29 +938,30 @@ class QtFrontendLayoutTests(unittest.TestCase):
             panel.toolbar.mapTo(panel, QtCore.QPoint()).x(),
         )
         for button in panel.toolbar_buttons:
-            self.assertEqual(button.height(), 34)
+            self.assertEqual(button.height(), button_height(button))
             if button is not panel.path_button:
-                self.assertEqual(button.width(), 28)
+                self.assertEqual(button.width(), button.height())
             self.assertEqual(button.iconSize(), QtCore.QSize(ICON_SIZE, ICON_SIZE))
 
         self.assertEqual(panel.content_layout.spacing(), 12)
         self.assertIsInstance(panel.preview, QtWidgets.QPlainTextEdit)
         self.assertIs(panel.path_button.parent(), toolbar)
 
-    def test_artifact_toolbar_and_gutter_have_light_structural_surfaces(self):
+    def test_artifact_toolbar_and_gutter_share_distinct_panel_surface(self):
         page = self.window.config_page
         shown = QtTest.QSignalSpy(page._artifacts_animation.finished)
         page.toggle_artifacts()
         self.assertTrue(shown.wait(1000))
         toolbar = page.artifacts_panel.toolbar
         self.assertTrue(toolbar.testAttribute(QtCore.Qt.WA_StyledBackground))
-        image = toolbar.grab().toImage()
-        self.assertEqual(image.pixelColor(image.width() // 2, 2).alpha(), 0)
-        self.assertEqual(image.pixelColor(image.width() // 2, image.height() - 1).name(), BORDER.lower())
+        image = page.artifacts_panel.grab().toImage()
+        for y in (2, toolbar.height() - 1):
+            point = toolbar.mapTo(page.artifacts_panel, QtCore.QPoint(toolbar.width() // 2, y))
+            self.assertEqual(image.pixelColor(point).name(), BG_ARTIFACTS.lower())
         gutter = page.artifacts_panel.preview.line_numbers
         gutter_image = gutter.grab().toImage()
-        self.assertEqual(gutter_image.pixelColor(2, 2).name(), "#f8fafc")
-        self.assertEqual(gutter_image.pixelColor(gutter.width() - 1, 2).name(), BORDER.lower())
+        self.assertEqual(gutter_image.pixelColor(2, 2).name(), BG_ARTIFACTS.lower())
+        self.assertEqual(gutter_image.pixelColor(gutter.width() - 1, 2).name(), BG_ARTIFACTS.lower())
 
     def test_config_header_has_twelve_pixel_gap_before_tabs(self):
         page = self.window.config_page
@@ -1003,7 +1006,7 @@ class QtFrontendLayoutTests(unittest.TestCase):
         original_count = table.rowCount()
         self.assertLess(table.columnWidth(0), table.columnWidth(1))
         self.assertLess(table.columnWidth(2), table.columnWidth(1))
-        self.assertEqual(table.item(0, 0).textAlignment(), int(QtCore.Qt.AlignCenter))
+        self.assertEqual(table.item(0, 0).textAlignment(), int(QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter))
         self.assertEqual(table.horizontalHeaderItem(1).textAlignment(),
                          int(QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter))
         original_height = table.height()
@@ -1013,12 +1016,14 @@ class QtFrontendLayoutTests(unittest.TestCase):
         self.assertEqual(table.rowCount(), original_count + 1)
         self.assertGreater(table.height(), original_height)
         self.assertTrue(page.dirty)
-        self.assertEqual(page.header.status_badge.text(), "已修改")
+        self.assertTrue(page.header.status_badge.isVisible())
+        self.assertEqual(page.header.status_badge.text(), "")
+        self.assertEqual(page.header.status_badge.size(), QtCore.QSize(8, 8))
         page.undo()
         wait_for_idle(self.app)
         self.assertEqual(table.rowCount(), original_count)
         self.assertFalse(page.dirty)
-        self.assertEqual(page.header.status_badge.text(), "未修改")
+        self.assertTrue(page.header.status_badge.isHidden())
         editor.set_rows([
             {"ctrl_id": index, "ctrl_name": f"Ctrl{index}", "max_width": 4}
             for index in range(15)
@@ -1086,24 +1091,28 @@ class QtFrontendLayoutTests(unittest.TestCase):
         wait_for_idle(self.app)
         self.assertTrue(button.hasFocus())
         image = button.grab().toImage()
-        self.assertEqual(image.pixelColor(2, button.height() // 2).name(), "#f1f5f9")
+        self.assertEqual(image.pixelColor(2, button.height() // 2).name(), BG_FOCUS.lower())
         self.assertNotEqual(image.pixelColor(0, 0), image.pixelColor(2, button.height() // 2))
         button.setDown(True)
         image = button.grab().toImage()
-        self.assertEqual(image.pixelColor(2, button.height() // 2).name(), "#e2e8f0")
+        self.assertEqual(image.pixelColor(2, button.height() // 2).name(), BORDER.lower())
         self.assertNotEqual(image.pixelColor(0, 0), image.pixelColor(2, button.height() // 2))
         button.setDown(False)
 
     def test_header_panel_buttons_stay_fixed_and_clickable_above_drawer(self):
         page = self.window.config_page
-        buttons = (page.header.artifacts_btn,)
+        buttons = (self.window.nav_panel.collapse_btn, self.window.log_toggle_button,
+                   self.window.artifacts_toggle_button)
         title_bar = self.window.title_bar
         log_button = self.window.log_toggle_button
         sidebar_button = self.window.nav_panel.collapse_btn
         self.assertIs(log_button.parentWidget(), title_bar)
         self.assertGreater(log_button.x(), sidebar_button.geometry().right())
         self.assertEqual(log_button.geometry().center().y(), sidebar_button.geometry().center().y())
-        positions = [button.mapTo(page, QtCore.QPoint()) for button in buttons]
+        self.assertIs(buttons[2].parentWidget(), title_bar)
+        self.assertGreater(buttons[2].x(), log_button.geometry().right())
+        self.assertEqual(buttons[2].geometry().center().y(), sidebar_button.geometry().center().y())
+        positions = [button.mapTo(title_bar, QtCore.QPoint()) for button in buttons]
         shown = QtTest.QSignalSpy(page._artifacts_animation.finished)
         page.header.artifacts_btn.click()
         self.assertTrue(shown.wait(1000))
@@ -1114,14 +1123,10 @@ class QtFrontendLayoutTests(unittest.TestCase):
             page.tabs.setCurrentIndex(2)
             wait_for_idle(self.app)
             for button, position in zip(buttons, positions):
-                self.assertEqual(button.mapTo(page, QtCore.QPoint()), position)
-                point = button.mapTo(page, button.rect().center())
-                self.assertIs(page.childAt(point), button)
-            action_y = page.header.artifacts_btn.mapTo(page, page.header.artifacts_btn.rect().center()).y()
-            last_button = page.artifacts_panel.maximize_button
-            last_right = last_button.mapTo(page, QtCore.QPoint(last_button.width(), 0)).x()
-            toggle_left = page.header.artifacts_btn.mapTo(page, QtCore.QPoint()).x()
-            self.assertEqual(toggle_left - last_right, 0)
+                self.assertEqual(button.mapTo(title_bar, QtCore.QPoint()), position)
+                point = button.mapTo(title_bar, button.rect().center())
+                self.assertIs(title_bar.childAt(point), button)
+            action_y = page.artifacts_panel.maximize_button.mapTo(page, page.artifacts_panel.maximize_button.rect().center()).y()
             for button in page.artifacts_panel.toolbar_buttons:
                 if button.isVisible():
                     self.assertEqual(button.mapTo(page, button.rect().center()).y(), action_y)
@@ -1184,13 +1189,14 @@ class QtFrontendLayoutTests(unittest.TestCase):
         self.assertIsNotNone(overlay)
         self.assertTrue(overlay.isVisible())
         self.assertEqual(overlay.page, "settings")
-        self.assertEqual(overlay.title_label.text(), "Settings")
+        self.assertEqual(overlay.title_label.text(), "设置")
         self.assertEqual(overlay.size(), self.window.view_stack.contentsRect().size())
-        self.assertEqual(overlay.back_btn.text(), "")
-        self.assertEqual(overlay.back_btn.size(), QtCore.QSize(32, 34))
+        self.assertEqual(overlay.back_btn.text(), "设置")
+        self.assertEqual(overlay.back_btn.height(), CONTROL_HEIGHT)
+        self.assertGreater(overlay.back_btn.width(), 32)
         self.assertEqual(overlay.back_btn.iconSize(), QtCore.QSize(ICON_SIZE, ICON_SIZE))
         panel = overlay.findChild(QtWidgets.QWidget, "SecondaryPagePanel")
-        self.assertEqual(panel.width(), 800)
+        self.assertEqual(panel.width(), min(1040, overlay.width() - 48))
         self.assertEqual(panel.mapTo(overlay, QtCore.QPoint()).y(), 72)
         self.assertEqual(
             panel.mapTo(overlay, panel.rect().center()).x(),
@@ -1199,14 +1205,14 @@ class QtFrontendLayoutTests(unittest.TestCase):
         divider = overlay.findChild(QtWidgets.QFrame, "SecondaryTabDivider")
         self.assertEqual(divider.height(), 1)
         for row in overlay.setting_rows.values():
-            self.assertEqual(row.height(), 34)
+            self.assertEqual(row.height(), CONTROL_HEIGHT)
 
         nav.docs_btn.click()
         wait_for_idle(self.app)
         overlay = self.window.view_stack.currentWidget()
         self.assertIsNotNone(overlay)
         self.assertEqual(overlay.page, "docs")
-        self.assertEqual(overlay.title_label.text(), "Documentation")
+        self.assertEqual(overlay.title_label.text(), "文档")
         overlay.back_btn.click()
         wait_for_idle(self.app)
         self.assertIs(self.window.view_stack.currentWidget(), self.window.main_container)
@@ -1349,15 +1355,15 @@ class QtFrontendLayoutTests(unittest.TestCase):
 
     def test_global_stylesheet_contains_key_visual_rules(self):
         self.assertIn("background-color: #FFFFFF", APP_QSS)
-        self.assertIn("border-radius: 8px", APP_QSS)
+        self.assertIn("border-radius: 16px", APP_QSS)
         self.assertIn("QSplitter::handle", APP_QSS)
         self.assertIn("QTabWidget#ConfigTabs QTabBar::tab:selected", APP_QSS)
         self.assertIn("QScrollBar::handle:vertical", APP_QSS)
         self.assertIn('QWidget#WindowShell[maximized="true"]', APP_QSS)
         self.assertIn("QFrame#WindowTitleBar", APP_QSS)
         self.assertIn("background-color: #DCFCE7", APP_QSS)
-        self.assertIn("background-color: #F1F5F9", APP_QSS)
-        self.assertEqual(self.window.config_page.CORNER_RADII[0], 12)
+        self.assertIn("background-color: #F2F4F7", APP_QSS)
+        self.assertEqual(self.window.config_page.CORNER_RADII[0], 16)
 
 
 if __name__ == "__main__":

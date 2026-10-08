@@ -15,7 +15,7 @@ from plm.core.gen_flags import (
     SEL_MODE_VALUES,
 )
 from plm.frontend.qt.widgets.lanegrid import LaneGrid
-from plm.frontend.qt.widgets.common import StatusBadge
+from plm.frontend.qt.widgets.common import StatusBadge, StyledComboBox
 from plm.frontend.qt.widgets.tables import EditableTable
 
 
@@ -25,7 +25,7 @@ TABLE_VISIBLE_ROWS = 10
 TABLE_CARD_PADDING = 8
 
 
-class LaneCountCombo(QtWidgets.QComboBox):
+class LaneCountCombo(StyledComboBox):
     """Product-mode lane picker with QSpinBox-compatible value helpers."""
 
     def value(self):
@@ -85,7 +85,7 @@ class CsvTableEditor(QtWidgets.QWidget):
                 spec.update(
                     width=CONTROLLER_COLUMN_WIDTHS[key],
                     fixed_width=True,
-                    alignment=QtCore.Qt.AlignCenter,
+                    alignment=QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter,
                 )
             elif key == "ctrl_name":
                 spec["alignment"] = QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter
@@ -95,10 +95,13 @@ class CsvTableEditor(QtWidgets.QWidget):
                 spec.update(options=["mac2phy", "phy2mac"], width=112)
             elif key == "width":
                 spec["width"] = 64
+                spec["alignment"] = QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter
             elif key == "safe_state":
                 spec["width"] = 96
             elif key == "tie_off":
                 spec["width"] = 72
+            if key in ("safe_state", "tie_off"):
+                spec["alignment"] = QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter
             specs.append(spec)
 
         self.editor = EditableTable(
@@ -234,15 +237,15 @@ class GenerationEditor(QtWidgets.QWidget):
         layout = QtWidgets.QFormLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(12)
-        self.arch = QtWidgets.QComboBox()
+        self.arch = StyledComboBox()
         self.arch.addItems(ARCH_VALUES)
-        self.pclk_mode = QtWidgets.QComboBox()
+        self.pclk_mode = StyledComboBox()
         self.pclk_mode.addItems(PCLK_MODE_VALUES)
         # PCLK direction is a property of the selected PHY architecture, not
         # an independent generation choice.
         self.pclk_mode.setEnabled(False)
         self.pclk_mode.setToolTip("PCLK 模式由 PHY 架构自动决定。")
-        self.sel_mode = QtWidgets.QComboBox()
+        self.sel_mode = StyledComboBox()
         self.sel_mode.addItems(SEL_MODE_VALUES)
         self.dpr = QtWidgets.QCheckBox("启用 DPR")
         layout.addRow("PHY 架构", self.arch)

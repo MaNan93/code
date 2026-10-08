@@ -12,7 +12,7 @@ from plm.frontend.qt.services import SettingsStore
 from plm.frontend.qt.views.new_project_dialog import NewProjectDialog
 from plm.frontend.qt.widgets.common import StyledMenu
 from plm.frontend.qt.widgets.lanegrid import LaneGrid
-from plm.frontend.qt.styles.tokens import FONT_FAMILY, ICON_SIZE
+from plm.frontend.qt.styles.tokens import CONTROL_HEIGHT, FONT_FAMILY, ICON_BUTTON_SIZE, ICON_SIZE
 from qt_smoke_support import wait_for_idle
 
 OUT=Path(os.environ.get("PLM_SCREENSHOT_DIR","ui-screenshots")).resolve()
@@ -29,6 +29,11 @@ def shot(widget,name):
 def screen_shot(name):
     app.processEvents()
     app.primaryScreen().grabWindow(0).save(str(OUT/f"{name}.png"))
+
+
+def prepare_capture(widget):
+    if os.environ.get("PLM_CAPTURE_HEADLESS") == "1":
+        widget.setAttribute(QtCore.Qt.WA_DontShowOnScreen)
 
 
 def tree_texts(tree):
@@ -52,6 +57,7 @@ with tempfile.TemporaryDirectory(prefix="plm-ui-") as td:
     controller=AppController(settings_store=store)
     with patch("plm.frontend.qt.main_window.AppController",return_value=controller):
         w=MainWindow()
+    prepare_capture(w)
     w.resize(1400,900); w.show(); wait_for_idle(app)
 
     # Visual review uses the fixed font baseline and CJK fallback stack.
@@ -78,6 +84,7 @@ with tempfile.TemporaryDirectory(prefix="plm-ui-") as td:
     assert not w.config_page.findChildren(QtWidgets.QPushButton, "ConfigRowButton")
     controller_editor=w.config_page.controllers_editor
     row_menu=StyledMenu(controller_editor.table)
+    prepare_capture(row_menu)
     row_menu.addAction("在上方插入行")
     row_menu.addAction("在下方插入行")
     row_menu.addSeparator()
@@ -85,7 +92,8 @@ with tempfile.TemporaryDirectory(prefix="plm-ui-") as td:
     first_item=controller_editor.table.item(0,0)
     menu_pos=controller_editor.table.visualItemRect(first_item).center()
     row_menu.popup(controller_editor.table.viewport().mapToGlobal(menu_pos))
-    screen_shot("01-controller-context-menu")
+    row_menu.setActiveAction(row_menu.actions()[0])
+    shot(row_menu,"01-controller-context-menu")
     row_menu.close(); row_menu.deleteLater()
 
     # Main-branch LaneGrid behavior and product-mode lane picker.
@@ -100,11 +108,23 @@ with tempfile.TemporaryDirectory(prefix="plm-ui-") as td:
     project_widget=w.nav_panel.project_list.project_widgets[0]
     assert project_widget.header.contextMenuPolicy() == QtCore.Qt.CustomContextMenu
     project_menu=project_widget.build_more_menu()
+    prepare_capture(project_menu)
     project_actions=[action.text() for action in project_menu.actions() if not action.isSeparator()]
-    assert project_actions == ["置顶", "重命名", "在资源管理器中打开", "Reload", "归档", "删除"]
+    assert project_actions == ["置顶", "重命名", "打开所在目录", "重新载入", "归档", "删除"]
     project_menu.popup(project_widget.header.mapToGlobal(QtCore.QPoint(12,project_widget.header.height())))
-    screen_shot("00-project-context-menu")
+    project_menu.setActiveAction(project_menu.actions()[0])
+    shot(project_menu,"00-project-context-menu")
     project_menu.close(); project_menu.deleteLater()
+    project_widget._set_menu_open(True)
+    shot(project_widget, "00-project-more-active")
+    project_widget._set_menu_open(False)
+    collapsed = QtTest.QSignalSpy(w.nav_panel.animation_group.finished)
+    w.nav_panel.toggle_collapse()
+    assert collapsed.wait(1000)
+    shot(w.nav_panel, "00-sidebar-collapsed")
+    expanded = QtTest.QSignalSpy(w.nav_panel.animation_group.finished)
+    w.nav_panel.toggle_collapse()
+    assert expanded.wait(1000)
 
     # Dirty state is visible in the custom window title, then undo restores it.
     name_item=w.config_page.controllers_editor.table.item(0,1)
@@ -150,14 +170,29 @@ with tempfile.TemporaryDirectory(prefix="plm-ui-") as td:
     assert create_button.iconSize() == QtCore.QSize(ICON_SIZE,ICON_SIZE)
     assert cancel_button.iconSize() == QtCore.QSize(ICON_SIZE,ICON_SIZE)
     assert not create_button.icon().isNull() and not cancel_button.icon().isNull()
+    prepare_capture(dlg)
     dlg.show(); shot(dlg,"03-new-project"); dlg.close()
+    for title, description, name in (
+        ("删除项目", "此操作会同时删除源文件，且不可恢复。", "delete"),
+        ("归档项目", "归档后，项目会从当前列表移除，但源文件不会删除。", "archive"),
+    ):
+        box = QtWidgets.QMessageBox(QtWidgets.QMessageBox.Question, title,
+                                   f"确定要{title} [quad] 吗？\n\n{description}",
+                                   QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No, w)
+        prepare_capture(box)
+        box.show(); app.processEvents()
+        dialog_image = box.grab().toImage()
+        assert dialog_image.pixelColor(2, box.height() // 2).name() == "#ffffff"
+        assert dialog_image.pixelColor(2, box.height() // 2).alpha() == 255
+        shot(box, f"03-confirm-{name}")
+        box.close(); box.deleteLater()
 
     w.on_open_settings(); app.processEvents()
     for idx,name in enumerate(("general","formatter")):
         page=w.view_stack.currentWidget()
         page.menu_buttons[idx].click()
         if name == "formatter":
-            assert page.settings_content_layout.getContentsMargins() == (32,0,32,24)
+            assert page.settings_content_layout.getContentsMargins() == (0,0,0,24)
             assert page.settings_content_layout.stretch(page._formatter_layout_index) == 1
             assert page.settings_content_layout.stretch(page._bottom_stretch_index) == 0
             align_control=page._flag_controls["assignment_statement_alignment"]
@@ -170,18 +205,33 @@ with tempfile.TemporaryDirectory(prefix="plm-ui-") as td:
             assert indent_control.itemText(0) == "indent (default)"
             assert page._flag_controls["column_limit"].text() == "120"
             assert page.flag_table.horizontalHeaderItem(1).text() == "值"
+            assert page.flag_table.horizontalHeader().isHidden()
             button_texts=[button.text() for button in page.formatter_panel.findChildren(QtWidgets.QPushButton)]
             assert "项目默认参数" not in button_texts
             assert "使用 Verible 默认参数" not in button_texts
+            assert "自动检测" not in button_texts
             assert page.flag_table.verticalScrollMode() == QtWidgets.QAbstractItemView.ScrollPerPixel
         if name == "general":
             assert page.setting_rows["editor"].isVisible()
+            shot(page.setting_rows["editor"], "04-settings-editor-row")
         shot(w,f"04-settings-{name}")
         if name == "formatter":
             align_control=page._flag_controls["assignment_statement_alignment"]
+            prepare_capture(align_control.popup_menu)
             align_control.showPopup()
-            screen_shot("04-settings-formatter-defaults")
+            shot(align_control.popup_menu,"04-settings-formatter-defaults")
             align_control.hidePopup()
+            numeric = page._flag_controls["line_break_penalty"]
+            row = list(page._flag_controls).index("line_break_penalty")
+            page.flag_table.scrollToItem(page.flag_table.item(row, 0))
+            page.flag_table.selectRow(row)
+            numeric.setFocus(QtCore.Qt.OtherFocusReason)
+            app.processEvents()
+            rect = page.flag_table.visualItemRect(page.flag_table.item(row, 0))
+            value_rect = page.flag_table.visualItemRect(page.flag_table.item(row, 1))
+            table_image = page.flag_table.viewport().grab().toImage()
+            assert table_image.pixelColor(2, rect.top() + 1) == table_image.pixelColor(value_rect.left() + 2, rect.top() + 1)
+            shot(w, "04-tools-numeric")
     w._close_secondary_page()
     w.on_open_docs(); app.processEvents()
     for idx,name in enumerate(("getting-started","configuration","generation")):
@@ -197,7 +247,7 @@ with tempfile.TemporaryDirectory(prefix="plm-ui-") as td:
     assert search_layout.getContentsMargins() == (0,0,12,0)
     search_buttons=artifacts.search_bar.findChildren(QtWidgets.QPushButton)
     assert len(search_buttons) == 3
-    assert all(button.size() == QtCore.QSize(24,34) for button in search_buttons)
+    assert all(button.size() == QtCore.QSize(ICON_BUTTON_SIZE,ICON_BUTTON_SIZE) for button in search_buttons)
     shot(w,"06-artifacts-search")
     w.config_page.toggle_artifacts_maximized(); shot(w,"07-artifacts-maximized")
 

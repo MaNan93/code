@@ -21,6 +21,7 @@ from plm.core.workspace import scaffold_default_content
 from plm.frontend.qt.controllers import AppController
 from plm.frontend.qt.main_window import MainWindow
 from plm.frontend.qt.services import ProjectService, SettingsStore, WorkspaceService
+from plm.frontend.qt.styles.tokens import CONTROL_HEIGHT
 from plm.frontend.qt.views.settings_page import SettingsPage
 
 
@@ -117,10 +118,10 @@ class GenerationIntegrationTests(unittest.TestCase):
         page.show()
         wait_for_idle(self.app)
         row = list(page._flag_controls).index("verify_convergence")
-        self.assertEqual(page.flag_table.rowHeight(row), 34)
+        self.assertEqual(page.flag_table.rowHeight(row), CONTROL_HEIGHT)
         self.assertFalse(page.flag_table.showGrid())
         self.assertTrue(page.flag_table.property("formatterTable"))
-        self.assertEqual(page._flag_controls["verify_convergence"].minimumHeight(), 34)
+        self.assertEqual(page._flag_controls["verify_convergence"].minimumHeight(), CONTROL_HEIGHT - 4)
         self.assertGreaterEqual(
             page.flag_table.rowHeight(row),
             page._flag_controls["verify_convergence"].minimumHeight(),

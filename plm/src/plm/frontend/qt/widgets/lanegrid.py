@@ -440,17 +440,14 @@ class LaneGrid(QtWidgets.QWidget):
             )
             text_color = _contrast_text_color(color)
             border_color = PRIMARY_HOVER if is_active else BORDER
-            outline = (
-                f"border: {int(2 * scale)}px solid {border_color};" if is_active
-                else f"border: {int(1 * scale)}px solid {border_color};"
-            )
+            outline = f"border: 1px solid {border_color};" if is_active else "border: none;"
             btn.setStyleSheet(
                 f"QPushButton#lgSwatch {{"
                 f"  background-color: {color};"
                 f"  color: {text_color};"
                 f"  font-size: {FONT_SIZE_SM}px;"
-                f"  font-weight: 600;"
-                f"  border-radius: {int(RADIUS_CHIP * scale)}px;"
+                f"  font-weight: 500;"
+                f"  border-radius: {RADIUS_CHIP}px;"
                 f"  padding: 0 {int(SPACING_MD * scale)}px;"
                 f"  {outline}"
                 f"}}"

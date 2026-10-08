@@ -1,5 +1,5 @@
 name: PLM functional smoke
-# Final BeautifulUI r1 validation trigger after the c209f6e visual polish.
+# Validate the current r4 UI and restored application workflows.
 
 on:
   push:
@@ -44,10 +44,11 @@ jobs:
         timeout-minutes: 2
         run: |
           uv run python -u -m unittest -v \
-            tests.test_qt_frontend.QtFrontendLayoutTests.test_all_font_tokens_are_fourteen_pixels \
+            tests.test_qt_frontend.QtFrontendLayoutTests.test_all_font_tokens_are_sixteen_pixels \
             tests.test_qt_frontend.QtFrontendLayoutTests.test_controller_table_fixed_dimensions_and_whole_row_hover \
             tests.test_qt_frontend.QtFrontendLayoutTests.test_settings_button_groups_have_no_internal_gap \
-            tests.test_qt_frontend.QtFrontendLayoutTests.test_project_menu_rows_touch_without_extra_vertical_spacing \
+            tests.test_qt_frontend.QtFrontendLayoutTests.test_project_menu_capsules_have_four_pixel_spacing \
+            tests.test_qt_menu_style \
             tests.test_qt_regressions.QtRegressionTests.test_document_tables_and_code_blocks_have_adaptive_formats
       - name: Core UI workflow logic
         shell: bash

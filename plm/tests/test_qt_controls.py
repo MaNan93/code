@@ -101,11 +101,21 @@ class QtControlLogicTests(unittest.TestCase):
         self.assertEqual(self.window.content_splitter.sizes()[1], 0)
 
     def test_settings_save_and_auto_detect_are_wired(self):
-        self.window.nav_panel.settings_btn.click()
-        wait_for_idle(self.app)
-        wait_for_idle(self.app)
+        with patch(
+            "plm.frontend.qt.views.settings_page.find_verible",
+            return_value="/tools/verible-verilog-format",
+        ) as detect:
+            self.window.nav_panel.settings_btn.click()
+            wait_for_idle(self.app)
+            wait_for_idle(self.app)
+            detect.assert_called_once_with(None)
         page = self.window.view_stack.currentWidget()
         self.assertIsInstance(page, SettingsPage)
+        self.assertEqual(page.verible_path_edit.text(), "/tools/verible-verilog-format")
+        self.assertEqual(page.settings_status.text(), "")
+        self.assertFalse(any(button.text() == "自动检测"
+                             for button in page.findChildren(QtWidgets.QPushButton)))
+        self.assertTrue(page.flag_table.horizontalHeader().isHidden())
 
         page.editor_path_edit.setText("custom-editor")
         page.save_settings_btn.click()
@@ -114,19 +124,6 @@ class QtControlLogicTests(unittest.TestCase):
             self.store.preferences()["editor_path"], "custom-editor"
         )
 
-        detect = next(
-            button for button in page.findChildren(QtWidgets.QPushButton)
-            if button.text() == "自动检测"
-        )
-        with patch(
-            "plm.frontend.qt.views.settings_page.find_verible",
-            return_value="/tools/verible-verilog-format",
-        ):
-            detect.click()
-            wait_for_idle(self.app)
-        self.assertEqual(
-            page.verible_path_edit.text(), "/tools/verible-verilog-format"
-        )
 
     def test_new_project_button_opens_creation_dialog_directly(self):
         with patch("plm.frontend.qt.controllers.project_navigation.NewProjectDialog") as dialog:
@@ -156,7 +153,7 @@ class QtControlLogicTests(unittest.TestCase):
         actions = [action for action in menu.actions() if not action.isSeparator()]
         self.assertEqual(
             [action.text() for action in actions],
-            ["置顶", "重命名", "在资源管理器中打开", "Reload", "归档", "删除"],
+            ["置顶", "重命名", "打开所在目录", "重新载入", "归档", "删除"],
         )
         next(action for action in actions if action.text() == "置顶").trigger()
         wait_for_idle(self.app)

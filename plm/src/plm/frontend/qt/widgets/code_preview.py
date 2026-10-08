@@ -5,7 +5,7 @@ import re
 from PyQt5 import QtCore, QtGui, QtWidgets
 from plm.frontend.qt.widgets.common import StyledMenu
 from plm.frontend.qt.styles.tokens import (
-    BG_SIDEBAR_INACTIVE, BORDER, FONT_CODE_PRIMARY, FONT_SIZE_BODY, TEXT_MUTED,
+    BG_ARTIFACTS, FONT_CODE_PRIMARY, FONT_SIZE_BODY, TEXT_MUTED,
 )
 
 
@@ -203,14 +203,7 @@ class CodePreview(QtWidgets.QPlainTextEdit):
 
     def paint_line_numbers(self, event):
         painter = QtGui.QPainter(self.line_numbers)
-        painter.fillRect(event.rect(), QtGui.QColor(BG_SIDEBAR_INACTIVE))
-        painter.setPen(QtGui.QColor(BORDER))
-        painter.drawLine(
-            self.line_numbers.width() - 1,
-            event.rect().top(),
-            self.line_numbers.width() - 1,
-            event.rect().bottom(),
-        )
+        painter.fillRect(event.rect(), QtGui.QColor(BG_ARTIFACTS))
         painter.setFont(self.font())
         painter.setPen(QtGui.QColor(TEXT_MUTED))
         block = self.firstVisibleBlock()

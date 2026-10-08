@@ -117,15 +117,21 @@ class NavPanel(QtWidgets.QFrame):
         self.collapsed_projects.hide()
         root.addWidget(self.collapsed_projects, 1)
 
+        self.footer_separator = QtWidgets.QFrame()
+        self.footer_separator.setObjectName("ProjectSectionSeparator")
+        self.footer_separator.setFixedHeight(1)
+        root.addWidget(self.footer_separator)
+        root.addSpacing(SPACING_SM)
+
         self.footer = QtWidgets.QWidget()
         footer_layout = QtWidgets.QVBoxLayout(self.footer)
         footer_layout.setContentsMargins(0, 0, 0, 0)
         footer_layout.setSpacing(0)
         self.docs_btn = self._footer_button(
-            "file-text", "Docs", self.docs_requested
+            "file-text", "文档", self.docs_requested
         )
         self.settings_btn = self._footer_button(
-            "settings", "Settings", self.settings_requested
+            "settings", "设置", self.settings_requested
         )
         self.settings_row, self.settings_row_layout = self._nav_row(
             self.settings_btn
@@ -191,8 +197,8 @@ class NavPanel(QtWidgets.QFrame):
         self.new_chat_btn.setText("新对话" if visible else "")
         self.open_project_btn.setText("打开项目" if visible else "")
         self.save_btn.setText("保存" if visible else "")
-        self.settings_btn.setText("Settings" if visible else "")
-        self.docs_btn.setText("Docs" if visible else "")
+        self.settings_btn.setText("设置" if visible else "")
+        self.docs_btn.setText("文档" if visible else "")
 
         self.project_list.setVisible(visible)
         self.collapsed_projects.setVisible(not visible)

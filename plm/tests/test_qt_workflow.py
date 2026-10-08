@@ -572,7 +572,7 @@ class QtWorkflowTests(unittest.TestCase):
                       if w.project_name == controller.current_name)
         menu = widget.build_more_menu()
         self.addCleanup(menu.deleteLater)
-        next(action for action in menu.actions() if action.text() == "Reload").trigger()
+        next(action for action in menu.actions() if action.text() == "重新载入").trigger()
         wait_for_idle(self.app)
         self.assertEqual(controller.generation_state, "out_of_date")
         self.assertEqual(original, {path: path.read_bytes() for path in files})

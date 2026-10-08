@@ -4,7 +4,7 @@ import unicodedata
 from PyQt5 import QtCore, QtGui, QtWidgets
 from plm.frontend.qt.services.tasks import TaskRunner
 from plm.frontend.qt.styles.tokens import (
-    BG_SUBTLE, BORDER, FONT_CODE_PRIMARY, TEXT_MAIN, TEXT_MUTED,
+    BG_SUBTLE, BORDER, FONT_CODE_PRIMARY, FONT_WEIGHT_MEDIUM, TEXT_MAIN, TEXT_MUTED,
     scale_font_size, shrink_font_size,
 )
 from .secondary_page import SecondaryPage
@@ -32,14 +32,15 @@ class DocumentationPage(SecondaryPage):
         h1 {{ color: {text_main}; font-size: {heading_size}px; font-weight: 600; margin: 16px 0 8px 0; }}
         h2, h3 {{ color: {text_main}; font-size: {subheading_size}px; font-weight: 600; margin: 12px 0 6px 0; }}
         p {{ color: {text_main}; font-size: {body_size}px; line-height: 160%; margin: 4px 0 10px 0; }}
-        table {{ border-collapse: collapse; border: 1px solid {border}; border-radius: 6px; }}
-        th {{ background-color: {bg_subtle}; color: {text_main}; font-size: {body_size}px; font-weight: 600; padding: 8px 12px; border-bottom: 1px solid {border}; }}
-        td {{ color: {text_main}; font-size: {body_size}px; font-weight: 400; padding: 8px 12px; }}
+        table {{ border-collapse: collapse; border: none; }}
+        th {{ background-color: {bg_subtle}; color: {text_main}; font-size: {body_size}px; font-weight: {header_weight}; padding: 8px 16px; }}
+        td {{ color: {text_main}; font-size: {body_size}px; font-weight: 400; padding: 8px 16px; }}
         """.format(
             text_main=TEXT_MAIN, border=BORDER, bg_subtle=BG_SUBTLE,
             heading_size=scale_font_size(16),
             subheading_size=scale_font_size(14),
             body_size=scale_font_size(13),
+            header_weight=FONT_WEIGHT_MEDIUM,
         )
         self.doc_browser.document().setDefaultStyleSheet(doc_css)
         layout.addWidget(self.doc_browser, 1)
@@ -166,9 +167,8 @@ class DocumentationPage(SecondaryPage):
             if table is not None and table.firstPosition() not in formatted_tables:
                 formatted_tables.add(table.firstPosition())
                 table_format = table.format()
-                table_format.setBorder(1)
-                table_format.setBorderStyle(QtGui.QTextFrameFormat.BorderStyle_Solid)
-                table_format.setBorderBrush(QtGui.QColor(BORDER))
+                table_format.setBorder(0)
+                table_format.setBorderStyle(QtGui.QTextFrameFormat.BorderStyle_None)
                 table_format.setCellPadding(8)
                 table_format.setCellSpacing(0)
                 table_format.setWidth(
@@ -190,7 +190,7 @@ class DocumentationPage(SecondaryPage):
                     header_format.setProperty(
                         QtGui.QTextFormat.FontPixelSize, shrink_font_size(13)
                     )
-                    header_format.setFontWeight(QtGui.QFont.Bold)
+                    header_format.setFontWeight(QtGui.QFont.Medium)
                     cell_cursor.mergeCharFormat(header_format)
             if block_format.property(QtGui.QTextFormat.BlockCodeFence):
                 cursor.select(QtGui.QTextCursor.BlockUnderCursor)

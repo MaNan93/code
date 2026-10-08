@@ -10,7 +10,7 @@ from plm.frontend.qt.widgets.common import (
     ICON_SIZE, StatusBadge, StyledMenu,
     load_lucide_icon, make_icon_button,
 )
-from plm.frontend.qt.styles.tokens import CONTROL_HEIGHT, TEXT_MUTED, scale_content_size
+from plm.frontend.qt.styles.tokens import CONTROL_HEIGHT, ICON_BUTTON_SIZE, TEXT_MUTED
 from .artifact_chrome import ArtifactFilePopup, ArtifactMetadataLabel, ArtifactPathButton
 from .artifact_preview import ArtifactPreview
 from .artifact_files import ArtifactFiles
@@ -129,11 +129,11 @@ class ArtifactsPanel(
             ("more_button", "more-horizontal", "更多"),
             ("maximize_button", "maximize", "展开"),
         ):
-            button = make_icon_button(icon, tooltip, "ArtifactsToolButton", 28, ICON_SIZE)
+            button = make_icon_button(icon, tooltip, "ArtifactsToolButton", ICON_BUTTON_SIZE, ICON_SIZE)
             setattr(self, name, button)
             self.toolbar_buttons.append(button)
         self.diff_button = make_icon_button(
-            "git-compare", "显示与上一次预览的差异", "ArtifactsToolButton", 28, ICON_SIZE
+            "git-compare", "显示与上一次预览的差异", "ArtifactsToolButton", ICON_BUTTON_SIZE, ICON_SIZE
         )
         self.toolbar_separators = []
         for index, group in enumerate((
@@ -154,13 +154,8 @@ class ArtifactsPanel(
         self.file_tree = ArtifactFileTree(self)
         self.file_tree.setObjectName("ArtifactFileTree")
         self.file_tree.setHeaderHidden(True)
-        self.file_tree.setIndentation(16)
+        self.file_tree.setIndentation(ICON_SIZE)
         self.file_tree.setRootIsDecorated(True)
-        tree_shadow = QtWidgets.QGraphicsDropShadowEffect(self.file_tree)
-        tree_shadow.setBlurRadius(8)
-        tree_shadow.setOffset(0, 2)
-        tree_shadow.setColor(QtGui.QColor(0, 0, 0, 20))
-        self.file_tree.setGraphicsEffect(tree_shadow)
         self.file_tree.itemClicked.connect(self._tree_item_clicked)
         self.file_tree.itemActivated.connect(self._tree_item_clicked)
         self.file_popup = ArtifactFilePopup(self.file_tree, self)
@@ -185,7 +180,7 @@ class ArtifactsPanel(
         ):
             button = QtWidgets.QPushButton(label)
             button.setObjectName("ArtifactsToolButton")
-            button.setFixedWidth(24)
+            button.setFixedWidth(ICON_BUTTON_SIZE)
             button.setToolTip(tooltip)
             button.clicked.connect(callback)
             search_layout.addWidget(button)
@@ -193,17 +188,19 @@ class ArtifactsPanel(
         self.search_bar.hide()
 
         self.empty_state = QtWidgets.QWidget()
+        self.empty_state.setObjectName("ArtifactEmptyState")
         empty_layout = QtWidgets.QVBoxLayout(self.empty_state)
         empty_layout.setContentsMargins(0, 0, 0, 0)
         empty_layout.setSpacing(8)
         empty_layout.addSpacing(52)
         empty_icon = QtWidgets.QLabel()
         empty_icon.setAlignment(QtCore.Qt.AlignCenter)
-        empty_size = scale_content_size(48)
+        empty_size = ICON_SIZE
+        empty_icon.setFixedSize(ICON_SIZE, ICON_SIZE)
         empty_icon.setPixmap(
             load_lucide_icon("file-x", TEXT_MUTED, empty_size).pixmap(empty_size, empty_size)
         )
-        empty_layout.addWidget(empty_icon)
+        empty_layout.addWidget(empty_icon, 0, QtCore.Qt.AlignHCenter)
         self.empty_text = QtWidgets.QLabel("暂无生成文件")
         self.empty_text.setObjectName("ArtifactEmptyText")
         self.empty_text.setAlignment(QtCore.Qt.AlignCenter)

@@ -4,7 +4,7 @@ from pathlib import Path
 
 from PyQt5 import QtCore, QtWidgets
 
-from plm.frontend.qt.styles.tokens import CONTROL_HEIGHT, DANGER, ICON_SIZE_SM, TEXT_SUB
+from plm.frontend.qt.styles.tokens import CONTROL_HEIGHT, CONTROL_PADDING_X, DANGER, ICON_SIZE_SM, ICON_TEXT_GAP, NAV_ITEM_GAP, TEXT_SUB
 from plm.frontend.qt.widgets.common import (
     ICON_SIZE,
     PROJECT_ROOT,
@@ -52,7 +52,7 @@ class ProjectItemWidget(QtWidgets.QWidget):
         self.header.setContextMenuPolicy(QtCore.Qt.CustomContextMenu)
         self.header.customContextMenuRequested.connect(self.show_context_menu)
         header_layout = QtWidgets.QHBoxLayout(self.header)
-        header_layout.setContentsMargins(12, 0, 12, 0)
+        header_layout.setContentsMargins(CONTROL_PADDING_X, 0, CONTROL_PADDING_X, 0)
         header_layout.setSpacing(0)
         self.folder_icon = QtWidgets.QLabel()
         self.folder_icon.setObjectName("ProjectFolderIcon")
@@ -80,32 +80,18 @@ class ProjectItemWidget(QtWidgets.QWidget):
         self.project_name_edit.installEventFilter(self)
         self.project_name_edit.returnPressed.connect(self._finish_rename)
         header_layout.addWidget(self.folder_icon)
-        header_layout.addSpacing(8)
+        header_layout.addSpacing(ICON_TEXT_GAP)
         header_layout.addWidget(self.project_name_label, 1)
         header_layout.addWidget(self.project_name_edit, 1, QtCore.Qt.AlignVCenter)
-        self.archive_btn = make_icon_button(
-            "archive", "归档项目", "ProjectArchiveBtn", 24, ICON_SIZE_SM
-        )
-        self.open_folder_btn = make_icon_button(
-            "folder-open", "打开项目文件夹", "ProjectOpenBtn", 24, ICON_SIZE_SM
-        )
-        self.open_folder_btn.clicked.connect(self.open_folder)
         self.more_btn = make_icon_button(
-            "more-horizontal", "更多操作", "ProjectMoreBtn", 24, ICON_SIZE_SM
+            "more-horizontal", "更多操作", "ProjectMoreBtn", 28, ICON_SIZE_SM
         )
-        self.archive_btn.clicked.connect(
-            lambda: self.archiveRequested.emit(self)
-        )
+        self.more_btn.setFixedSize(28, 28)
         self.more_btn.clicked.connect(self.show_more_menu)
-        self.archive_btn.hide()
-        self.open_folder_btn.hide()
         self.more_btn.hide()
-        header_layout.addWidget(self.archive_btn)
-        header_layout.addSpacing(0)
-        header_layout.addWidget(self.open_folder_btn)
-        header_layout.addSpacing(0)
         header_layout.addWidget(self.more_btn)
         root.addWidget(self.header)
+        root.addSpacing(NAV_ITEM_GAP)
         self.header.installEventFilter(self)
 
     def _header_clicked(self, _checked=False):
@@ -130,13 +116,9 @@ class ProjectItemWidget(QtWidgets.QWidget):
                 self._finish_rename()
         if watched is self.header:
             if event.type() == QtCore.QEvent.Enter:
-                self.archive_btn.show()
-                self.open_folder_btn.show()
                 self.more_btn.show()
             elif event.type() == QtCore.QEvent.Leave:
                 if not self._renaming and not self._menu_open:
-                    self.archive_btn.hide()
-                    self.open_folder_btn.hide()
                     self.more_btn.hide()
             elif (
                 event.type() == QtCore.QEvent.MouseButtonDblClick
@@ -150,8 +132,6 @@ class ProjectItemWidget(QtWidgets.QWidget):
         self._renaming = True
         self.project_name_edit.setText(self.project_path.name)
         self.project_name_label.hide()
-        self.archive_btn.show()
-        self.open_folder_btn.show()
         self.more_btn.show()
         self.project_name_edit.show()
         self.project_name_edit.setFocus(QtCore.Qt.OtherFocusReason)
@@ -164,8 +144,6 @@ class ProjectItemWidget(QtWidgets.QWidget):
         new_name = self.project_name_edit.text().strip()
         self.project_name_edit.hide()
         self.project_name_label.show()
-        self.archive_btn.setVisible(self.header.underMouse())
-        self.open_folder_btn.setVisible(self.header.underMouse())
         self.more_btn.setVisible(self.header.underMouse())
         if not cancel and new_name and new_name != self.project_path.name:
             self.renameCommitted.emit(self, new_name)
@@ -177,8 +155,9 @@ class ProjectItemWidget(QtWidgets.QWidget):
     def _set_menu_open(self, opened):
         self._menu_open = opened
         self.header.setProperty("menuOpen", opened)
+        self.more_btn.setProperty("menuOpen", opened)
         actions_visible = opened or self._renaming or self.header.underMouse()
-        for widget in (self.header, self.archive_btn, self.open_folder_btn, self.more_btn):
+        for widget in (self.header, self.more_btn):
             if widget is not self.header:
                 widget.setVisible(actions_visible)
             widget.style().unpolish(widget)
@@ -208,10 +187,10 @@ class ProjectItemWidget(QtWidgets.QWidget):
         menu.addSeparator()
         open_action = menu.addAction(
             load_lucide_icon("folder-open", TEXT_SUB, ICON_SIZE),
-            "在资源管理器中打开",
+            "打开所在目录",
         )
         reload_action = menu.addAction(
-            load_lucide_icon("refresh-cw", TEXT_SUB, ICON_SIZE), "Reload",
+            load_lucide_icon("refresh-cw", TEXT_SUB, ICON_SIZE), "重新载入",
         )
         reload_action.setToolTip("重新加载配置文件，并将所有生成文件标记为过期")
         menu.addSeparator()

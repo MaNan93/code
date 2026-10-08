@@ -1,6 +1,6 @@
 from PyQt5 import QtCore, QtGui, QtWidgets
 from plm.frontend.qt.widgets.common import (
-    ICON_SIZE, RoundedCanvasFrame, StatusBadge, make_icon_button,
+    ICON_SIZE, RoundedCanvasFrame, make_icon_button,
 )
 from plm.frontend.qt.widgets.config_editor import CsvTableEditor, GenerationEditor
 from plm.frontend.qt.views.artifacts_panel import ArtifactsPanel
@@ -110,16 +110,20 @@ class ConfigHeader(QtWidgets.QFrame):
         self.title_edit.escapePressed.connect(self.cancel_title)
         layout.addWidget(self.title_edit, 0, QtCore.Qt.AlignVCenter)
         layout.addSpacing(SPACING_MD)
-        self.status_badge = StatusBadge("未修改")
+        self.status_badge = QtWidgets.QLabel()
         self.status_badge.setObjectName("ConfigProjectStatus")
         self.status_badge.setProperty("dirty", False)
+        self.status_badge.setFixedSize(8, 8)
+        self.status_badge.setToolTip("有未保存的修改")
+        self.status_badge.setAccessibleName("有未保存的修改")
+        self.status_badge.hide()
         layout.addWidget(self.status_badge, 0, QtCore.Qt.AlignVCenter)
         layout.addStretch(1)
         self.log_btn = make_icon_button(
             "panel-bottom", "显示/隐藏输出面板", "HeaderButton", 46, ICON_SIZE
         )
         self.artifacts_btn = make_icon_button(
-            "panel-right", "显示/隐藏 Artifacts", "HeaderButton", 46, ICON_SIZE
+            "file-text", "显示/隐藏 Artifacts", "HeaderButton", 46, ICON_SIZE
         )
         self.log_btn.clicked.connect(self.logToggleRequested.emit)
         self.artifacts_btn.clicked.connect(self.artifactsToggleRequested.emit)
@@ -134,8 +138,8 @@ class ConfigHeader(QtWidgets.QFrame):
         layout.addWidget(self.panel_actions, 0, QtCore.Qt.AlignVCenter)
 
     def set_dirty(self, dirty):
-        self.status_badge.setText("已修改" if dirty else "未修改")
         self.status_badge.setProperty("dirty", bool(dirty))
+        self.status_badge.setVisible(bool(dirty))
         self.status_badge.style().unpolish(self.status_badge)
         self.status_badge.style().polish(self.status_badge)
 
@@ -286,9 +290,16 @@ class ConfigPage(RoundedCanvasFrame):
         self.header.installEventFilter(self)
 
     def take_log_button(self):
-        button = self.header.log_btn
+        return self._take_panel_button(self.header.log_btn)
+
+    def take_artifacts_button(self):
+        return self._take_panel_button(self.header.artifacts_btn)
+
+    def _take_panel_button(self, button):
         self.header_actions.layout().removeWidget(button)
-        self.header_actions.setFixedWidth(self.header.artifacts_btn.width())
+        remaining = self.header_actions.layout().count()
+        self.header_actions.setFixedWidth(46 * remaining)
+        self.header_actions.setVisible(bool(remaining))
         self._configure_artifacts_toolbar()
         self._position_header_actions()
         return button
@@ -306,7 +317,7 @@ class ConfigPage(RoundedCanvasFrame):
         # Account for the drawer's existing inset instead of adding it twice.
         right_inset = max(
             0, self.header_actions.width() + panel.toolbar_layout.spacing()
-            - margins.right(),
+            + self.layout().contentsMargins().right() - panel.frameWidth() - margins.right(),
         )
         panel.toolbar_layout.setContentsMargins(0, 0, right_inset, 0)
         panel.toolbar_reserved_width = self.header_actions.width()

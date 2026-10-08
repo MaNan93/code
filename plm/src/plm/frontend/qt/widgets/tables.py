@@ -8,7 +8,7 @@ Controller IDs remain editable and retain their values after reordering.
 from PyQt5 import QtCore, QtGui, QtWidgets, sip
 
 from plm.frontend.qt.widgets.common import StyledMenu
-from plm.frontend.qt.styles.tokens import CONTROL_HEIGHT, DANGER, PRIMARY, TEXT_MAIN
+from plm.frontend.qt.styles.tokens import CONTROL_HEIGHT, CONTROL_PADDING_X, LINE_HEIGHT, DANGER, PRIMARY, TEXT_MAIN
 
 
 
@@ -178,7 +178,7 @@ class RowDragTable(QtWidgets.QTableWidget):
 class _PaddedItemDelegate(QtWidgets.QStyledItemDelegate):
     """Paint table text with a compact, consistent visual inset."""
 
-    HORIZONTAL_PADDING = 12
+    HORIZONTAL_PADDING = CONTROL_PADDING_X
 
     def paint(self, painter, option, index):
         styled = QtWidgets.QStyleOptionViewItem(option)
@@ -191,6 +191,8 @@ class _PaddedItemDelegate(QtWidgets.QStyledItemDelegate):
         style.drawControl(QtWidgets.QStyle.CE_ItemViewItem, styled, painter, styled.widget)
 
         text_rect = option.rect.adjusted(self.HORIZONTAL_PADDING, 0, -self.HORIZONTAL_PADDING, 0)
+        text_rect.setTop(option.rect.top() + (option.rect.height() - LINE_HEIGHT) // 2)
+        text_rect.setHeight(LINE_HEIGHT)
         selected = bool(option.state & QtWidgets.QStyle.State_Selected)
         painter.save()
         # Native HighlightedText is white even when QSS uses a pale selection.
@@ -245,8 +247,9 @@ class EditableTable(QtWidgets.QWidget):
         header.setTextElideMode(QtCore.Qt.ElideRight)
         for index, column in enumerate(columns):
             header.setSectionResizeMode(index, QtWidgets.QHeaderView.Fixed)
-            if "alignment" in column:
-                self.table.horizontalHeaderItem(index).setTextAlignment(column["alignment"])
+            self.table.horizontalHeaderItem(index).setTextAlignment(
+                column.get("alignment", QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter)
+            )
         self.table.setHorizontalScrollMode(QtWidgets.QAbstractItemView.ScrollPerPixel)
         self.table.setAlternatingRowColors(True)
         self.table.rowContextMenuRequested.connect(self._on_row_context_menu)
@@ -304,11 +307,11 @@ class EditableTable(QtWidgets.QWidget):
                 else metrics.width(heading)
             )
             design_width = int(column.get("width", 0) * scale)
-            minimum = max(design_width, text_width + int(32 * scale))
+            minimum = max(design_width, text_width + 2 * CONTROL_PADDING_X + 12)
             if column.get("fixed_width"):
                 # Fixed means no distribution of spare width, not clipping
                 # the heading when font metrics or DPI change.
-                minimum = max(column["width"], text_width + int(32 * scale))
+                minimum = max(column["width"], text_width + 2 * CONTROL_PADDING_X + 12)
             if column.get("options"):
                 # QComboBox.sizeHint() includes its text padding and drop-down
                 # button. The table delegate then insets the cell widget on
@@ -468,8 +471,7 @@ class EditableTable(QtWidgets.QWidget):
                     self.table.setCellWidget(r, c, combo)
                 else:
                     item = QtWidgets.QTableWidgetItem(str(value))
-                    if "alignment" in col:
-                        item.setTextAlignment(col["alignment"])
+                    item.setTextAlignment(col.get("alignment", QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter))
                     self.table.setItem(r, c, item)
         self._building = False
 

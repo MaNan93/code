@@ -12,7 +12,7 @@ from plm.frontend.qt.styles.tokens import (
     FONT_SIZE_BODY,
     FONT_UI_PRIMARY,
     ICON_SIZE,
-    scale_content_size,
+    RADIUS_WINDOW,
     PRIMARY,
     TEXT_SUB,
 )
@@ -65,7 +65,7 @@ class WindowBackdrop(QtWidgets.QWidget):
 class WindowShell(QtWidgets.QWidget):
     """Paint the window perimeter with translucent, antialiased edges."""
 
-    RADIUS = 12.0
+    RADIUS = float(RADIUS_WINDOW)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -92,7 +92,7 @@ class WindowShell(QtWidgets.QWidget):
 class WindowTitleBar(QtWidgets.QFrame):
     """Full-width brand, drag surface, and frameless window controls."""
 
-    HEIGHT = 38
+    HEIGHT = 44
 
     def __init__(self, window, sidebar_button=None):
         super().__init__(window)
@@ -191,17 +191,17 @@ class WindowControlButton(QtWidgets.QPushButton):
     """Fixed-size title-bar button using centered Lucide vector icons."""
 
     ICONS = {
-        "minimize": ("minus", 14),
-        "maximize": ("square", 12),
-        "close": ("x", 14),
+        "minimize": "minus",
+        "maximize": "square",
+        "close": "x",
     }
 
     def __init__(self, role, tooltip, parent=None):
         super().__init__(parent)
         self._role = role
         self._restored_icon = False
-        self._icon_name, base_size = self.ICONS[role]
-        self._icon_size = scale_content_size(base_size)
+        self._icon_name = self.ICONS[role]
+        self._icon_size = ICON_SIZE
         self.setObjectName("WindowControlButton")
         self.setProperty("role", role)
         self.setFixedWidth(46)
@@ -360,6 +360,12 @@ class MainWindow(QtWidgets.QMainWindow):
         title_layout.insertSpacing(button_index, 8)
         title_layout.insertWidget(
             button_index + 1, self.log_toggle_button, 0, QtCore.Qt.AlignVCenter,
+        )
+        self.artifacts_toggle_button = self.config_page.take_artifacts_button()
+        self.artifacts_toggle_button.setFixedWidth(32)
+        title_layout.insertSpacing(button_index + 2, 8)
+        title_layout.insertWidget(
+            button_index + 3, self.artifacts_toggle_button, 0, QtCore.Qt.AlignVCenter,
         )
         self.log_panel = LogPanel()
         self.config_page.logToggleRequested.connect(self.toggle_log)

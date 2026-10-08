@@ -1,5 +1,5 @@
 from PyQt5 import QtCore, QtGui, QtWidgets
-from plm.frontend.qt.widgets.common import ICON_SIZE, make_icon_button
+from plm.frontend.qt.widgets.common import ICON_SIZE, load_lucide_icon
 from plm.frontend.qt.styles.tokens import SPACING_LG, SPACING_SM, SPACING_XL, TEXT_MAIN
 
 
@@ -48,16 +48,15 @@ class SecondaryPage(QtWidgets.QFrame):
         header_layout = QtWidgets.QHBoxLayout(header)
         header_layout.setContentsMargins(SPACING_LG, 0, SPACING_LG, 0)
         header_layout.setSpacing(SPACING_SM)
-        self.back_btn = make_icon_button(
-            "arrow-left", "返回", "SecondaryBackButton", 32, ICON_SIZE, TEXT_MAIN
-        )
+        self.back_btn = QtWidgets.QPushButton("设置" if page == "settings" else "文档")
+        self.back_btn.setObjectName("SecondaryBackButton")
+        self.back_btn.setIcon(load_lucide_icon("arrow-left", TEXT_MAIN))
+        self.back_btn.setIconSize(QtCore.QSize(ICON_SIZE, ICON_SIZE))
+        self.back_btn.setToolTip("返回")
+        self.back_btn.setCursor(QtCore.Qt.PointingHandCursor)
         self.back_btn.clicked.connect(self.closeRequested.emit)
         header_layout.addWidget(self.back_btn)
-        self.title_label = QtWidgets.QLabel(
-            "Settings" if page == "settings" else "Documentation"
-        )
-        self.title_label.setObjectName("SecondaryPageTitle")
-        header_layout.addWidget(self.title_label)
+        self.title_label = self.back_btn
         header_layout.addStretch(1)
         root.addWidget(header)
 
@@ -66,11 +65,14 @@ class SecondaryPage(QtWidgets.QFrame):
         page_area_layout = QtWidgets.QHBoxLayout(page_area)
         page_area_layout.setContentsMargins(SPACING_XL, SPACING_XL, SPACING_XL, SPACING_XL)
         page_area_layout.setSpacing(0)
-        page_area_layout.addStretch(1)
+        page_area_layout.addStretch(0 if page == "settings" else 1)
 
         self.page_panel = QtWidgets.QWidget()
         self.page_panel.setObjectName("SecondaryPagePanel")
-        self.page_panel.setFixedWidth(800)
+        if page == "settings":
+            self.page_panel.setMaximumWidth(1040)
+        else:
+            self.page_panel.setFixedWidth(800)
         self.page_panel.setSizePolicy(
             QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Expanding
         )
@@ -88,8 +90,8 @@ class SecondaryPage(QtWidgets.QFrame):
         )
         panel_layout.addItem(self.content_top_spacing)
         panel_layout.addWidget(self.content, 1)
-        page_area_layout.addWidget(self.page_panel, 0)
-        page_area_layout.addStretch(1)
+        page_area_layout.addWidget(self.page_panel, 1 if page == "settings" else 0)
+        page_area_layout.addStretch(0 if page == "settings" else 1)
         root.addWidget(page_area, 1)
         self._select_section(0)
 
@@ -101,7 +103,7 @@ class SecondaryPage(QtWidgets.QFrame):
         layout.setSpacing(0)
         self.menu_buttons = []
         entries = (
-            ("General", "Formatter")
+            ("通用", "工具")
             if page == "settings"
             else ("Getting Started", "Configuration", "Generation")
         )

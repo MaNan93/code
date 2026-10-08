@@ -39,7 +39,7 @@ class ProjectPathRestoreTests(unittest.TestCase):
                 "plm.frontend.qt.widgets.project_item.open_in_file_manager"
             ) as reveal:
                 actions = {action.text(): action for action in widget.build_more_menu().actions()}
-                actions["在资源管理器中打开"].trigger()
+                actions["打开所在目录"].trigger()
                 wait_for_idle(self.app)
                 reveal.assert_called_once_with(root)
 

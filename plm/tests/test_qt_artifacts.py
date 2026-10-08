@@ -12,6 +12,7 @@ from PyQt5 import QtCore, QtGui, QtTest, QtWidgets
 from plm.frontend.qt.views.artifacts_panel import ArtifactsPanel
 from plm.frontend.qt.views.artifact_chrome import ArtifactMetadataLabel
 from plm.frontend.qt.styles import APP_QSS
+from plm.frontend.qt.styles.tokens import BG_SUBTLE, CONTROL_HEIGHT, ICON_SIZE, RADIUS_HOVER
 from plm.frontend.qt.widgets.common import StyledMenu
 from plm.frontend.qt.widgets.code_preview import (
     CodePreview,
@@ -78,7 +79,8 @@ class ArtifactPreviewTests(unittest.TestCase):
         wait_for_idle(self.app)
         self.assertEqual(label.toolTip(), "")
         self.assertEqual(self.panel.preview.toolTip(), "")
-        self.assertIn("\u2026", label.display_path)
+        self.assertNotEqual(label.display_path, "rtl / second.sv")
+        self.assertTrue(label.display_path == "second.sv" or "\u2026" in label.display_path)
         self.assertTrue(self.panel.maximize_button.isVisible())
         self.panel.set_files([], self.root)
         wait_for_idle(self.app)
@@ -151,7 +153,7 @@ class ArtifactPreviewTests(unittest.TestCase):
         self.panel.copy_path()
         self.assertEqual(QtWidgets.QApplication.clipboard().text(), str(path))
 
-    def test_file_tree_is_a_compact_card_with_a_strong_selected_row(self):
+    def test_file_tree_uses_medium_rows_and_capsule_selection(self):
         self.panel.setStyleSheet(APP_QSS)
         path = self.file("rtl/common/selected.sv", "module selected; endmodule")
         self.panel.set_files([path], self.root)
@@ -161,20 +163,16 @@ class ArtifactPreviewTests(unittest.TestCase):
         tree = self.panel.file_tree
         self.assertTrue(tree.isHeaderHidden())
         self.assertTrue(tree.rootIsDecorated())
-        self.assertEqual(tree.indentation(), 16)
-        shadow = tree.graphicsEffect()
-        self.assertIsInstance(shadow, QtWidgets.QGraphicsDropShadowEffect)
-        self.assertEqual(shadow.blurRadius(), 8)
-        self.assertEqual(shadow.offset(), QtCore.QPointF(0, 2))
-        self.assertEqual(shadow.color(), QtGui.QColor(0, 0, 0, 20))
+        self.assertEqual(tree.indentation(), ICON_SIZE)
+        self.assertIsNone(tree.graphicsEffect())
         item = tree.currentItem()
         rect = tree.visualItemRect(item)
-        self.assertEqual(rect.height(), 28)
+        self.assertEqual(rect.height(), CONTROL_HEIGHT)
         image = tree.viewport().grab().toImage()
         self.assertEqual(image.pixelColor(2, rect.center().y()).name(), "#ffffff")
-        self.assertEqual(image.pixelColor(image.width() - 10, rect.center().y()).name(), "#eff6ff")
-        self.assertIn("background-color: #F7F9FC", APP_QSS)
-        self.assertIn("border-left: 2px solid #3B82F6", APP_QSS)
+        self.assertEqual(image.pixelColor(image.width() - 10, rect.center().y()).name(), BG_SUBTLE.lower())
+        self.assertIn(f"border-radius: {RADIUS_HOVER}px", APP_QSS)
+        self.assertNotIn("border-left: 2px solid #3B82F6", APP_QSS)
         self.assertNotIn("$chevron_", APP_QSS)
 
     def test_narrow_metadata_keeps_line_and_column_prefix(self):

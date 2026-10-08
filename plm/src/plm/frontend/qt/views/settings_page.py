@@ -8,7 +8,7 @@ from plm.core.verible import (
 from plm.frontend.qt.models.preferences import DEFAULT_EDITOR
 from plm.frontend.qt.services.tasks import TaskRunner
 from plm.frontend.qt.styles.tokens import CONTROL_HEIGHT, SPACING_MD
-from plm.frontend.qt.widgets.common import make_button_group
+from plm.frontend.qt.widgets.common import StyledComboBox
 from .secondary_page import SecondaryPage
 
 
@@ -17,6 +17,11 @@ def _executable_filter():
 
 
 class _FormatterControlDelegate(QtWidgets.QStyledItemDelegate):
+    def paint(self, painter, option, index):
+        option = QtWidgets.QStyleOptionViewItem(option)
+        option.state &= ~QtWidgets.QStyle.State_MouseOver
+        super().paint(painter, option, index)
+
     def updateEditorGeometry(self, editor, option, index):
         super().updateEditorGeometry(editor, option, index)
         if isinstance(editor, (QtWidgets.QComboBox, QtWidgets.QLineEdit)):
@@ -31,6 +36,13 @@ class _FormatterTable(QtWidgets.QTableWidget):
     """Keep formatter rows at a fixed height."""
 
     ROW_HEIGHT = CONTROL_HEIGHT
+
+    def eventFilter(self, watched, event):
+        if event.type() == QtCore.QEvent.FocusIn:
+            row = watched.property("formatterRow")
+            if row is not None:
+                self.selectRow(int(row))
+        return super().eventFilter(watched, event)
 
     def sizeHintForColumn(self, column):
         width = super().sizeHintForColumn(column)
@@ -62,6 +74,13 @@ class SettingsPage(SecondaryPage):
             **(preferences or {}),
         }
         super().__init__("settings", parent)
+        self._detection_started = False
+
+    def showEvent(self, event):
+        super().showEvent(event)
+        if not self._detection_started:
+            self._detection_started = True
+            self._detect_verible()
 
     def _build_content(self):
         return self._build_settings_content()
@@ -71,7 +90,7 @@ class SettingsPage(SecondaryPage):
         row.setObjectName("SettingsRow")
         row.setFixedHeight(CONTROL_HEIGHT)
         row_layout = QtWidgets.QHBoxLayout(row)
-        row_layout.setContentsMargins(0, 0, 0, 0)
+        row_layout.setContentsMargins(16, 0, 16, 0)
         key_label = QtWidgets.QLabel(label)
         key_label.setObjectName("SettingsRowLabel")
         row_layout.addWidget(key_label)
@@ -153,14 +172,11 @@ class SettingsPage(SecondaryPage):
             QtWidgets.QSizePolicy.Minimum, QtWidgets.QSizePolicy.Fixed,
         )
         self.page_panel.layout().invalidate()
-        # Formatter uses the whole content column: top aligned, 32 px side
-        # padding / 24 px bottom padding, with its table taking all spare
-        # height and the global actions pinned to the bottom.  Other Settings
-        # tabs retain their existing margins and stretch behavior.
+        # Share the tabs' left edge; the table uses the available height.
         self.settings_content_layout.setContentsMargins(
-            32 if is_formatter else 0,
             0,
-            32 if is_formatter else 0,
+            0,
+            0,
             24 if is_formatter else 0,
         )
         self.settings_content_layout.setStretch(
@@ -179,20 +195,19 @@ class SettingsPage(SecondaryPage):
         self.verible_path_edit = QtWidgets.QLineEdit(preferences["verible_path"])
         self.verible_path_edit.setPlaceholderText("留空自动搜索 verible-verilog-format")
         path_row.addWidget(self.verible_path_edit, 1)
-        buttons = []
-        for label, callback in (("浏览…", self._browse_verible), ("自动检测", self._detect_verible)):
-            button = QtWidgets.QPushButton(label)
-            button.setObjectName("SettingsSecondaryButton")
-            button.clicked.connect(callback)
-            buttons.append(button)
-        path_row.addWidget(make_button_group(buttons))
+        browse_button = QtWidgets.QPushButton("浏览…")
+        browse_button.setObjectName("SettingsSecondaryButton")
+        browse_button.clicked.connect(self._browse_verible)
+        path_row.addWidget(browse_button)
         layout.addLayout(path_row)
         self.flag_table = _FormatterTable(0, 2)
         self.flag_table.setObjectName("ConfigDataTable")
         self.flag_table.setProperty("formatterTable", True)
         self.flag_table.setShowGrid(False)
+        self.flag_table.setSelectionBehavior(QtWidgets.QAbstractItemView.SelectRows)
         self.flag_table.setItemDelegate(_FormatterControlDelegate(self.flag_table))
         self.flag_table.setHorizontalHeaderLabels(("参数", "值"))
+        self.flag_table.horizontalHeader().setDefaultAlignment(QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter)
         self.flag_table.verticalHeader().hide()
         rows = self.flag_table.verticalHeader()
         rows.setSectionResizeMode(QtWidgets.QHeaderView.Fixed)
@@ -200,6 +215,7 @@ class SettingsPage(SecondaryPage):
         rows.setMaximumSectionSize(CONTROL_HEIGHT)
         rows.setDefaultSectionSize(CONTROL_HEIGHT)
         formatter_header = self.flag_table.horizontalHeader()
+        formatter_header.hide()
         formatter_header.setFixedHeight(CONTROL_HEIGHT)
         formatter_header.setSectionResizeMode(0, QtWidgets.QHeaderView.Stretch)
         formatter_header.setSectionResizeMode(1, QtWidgets.QHeaderView.ResizeToContents)
@@ -221,9 +237,12 @@ class SettingsPage(SecondaryPage):
                 item = QtWidgets.QTableWidgetItem(name)
                 item.setFlags(item.flags() & ~QtCore.Qt.ItemIsEditable)
                 self.flag_table.setItem(row, 0, item)
+                value_item = QtWidgets.QTableWidgetItem()
+                value_item.setFlags(value_item.flags() & ~QtCore.Qt.ItemIsEditable)
+                self.flag_table.setItem(row, 1, value_item)
                 default_value = DEFAULT_VERIBLE_FLAGS[name]
                 if choices:
-                    control = QtWidgets.QComboBox()
+                    control = StyledComboBox()
                     control.setFixedHeight(CONTROL_HEIGHT)
                     control.addItem(f"{default_value} (default)", default_value)
                     for choice in choices:
@@ -237,8 +256,16 @@ class SettingsPage(SecondaryPage):
                     control.setToolTip(f"PLM 默认值：{default_value}")
                     if name in VERIBLE_INT_PARAMS:
                         control.setValidator(QtGui.QIntValidator(0, 2147483647, control))
+                        control.setAlignment(QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter)
                     control.textChanged.connect(self._flags_changed)
-                self.flag_table.setCellWidget(row, 1, control)
+                control.setProperty("formatterRow", row)
+                control.installEventFilter(self.flag_table)
+                value_cell = QtWidgets.QWidget()
+                value_cell.setObjectName("FormatterValueCell")
+                value_layout = QtWidgets.QHBoxLayout(value_cell)
+                value_layout.setContentsMargins(0, 2, 0, 2)
+                value_layout.addWidget(control)
+                self.flag_table.setCellWidget(row, 1, value_cell)
                 self._flag_controls[name] = control
         layout.addWidget(self.flag_table, 1)
         self._fill_flags(preferences["verible_flags"])
@@ -292,15 +319,25 @@ class SettingsPage(SecondaryPage):
     def _detect_verible(self):
         if not hasattr(self, "tasks"):
             self.tasks = TaskRunner(self)
+        initial_path = self.verible_path_edit.text().strip()
+        detecting_status = "正在检测 Verible…"
+
+        def update_status(message):
+            # Detection may finish after a save or validation error.
+            if self.settings_status.text() == detecting_status:
+                self.settings_status.setText(message)
 
         def finished(found):
+            if self.verible_path_edit.text().strip() != initial_path:
+                update_status("")
+                return
             if found:
                 self.verible_path_edit.setText(found)
-            self.settings_status.setText("已检测到 Verible" if found else "未找到 Verible，可手动选择路径。")
+            update_status("" if found else "未找到 Verible，可手动选择路径。")
 
-        self.settings_status.setText("正在检测 Verible…")
-        self.tasks.submit(lambda _progress: find_verible(), finished,
-                          lambda error: self.settings_status.setText(f"检测失败：{error}"))
+        self.settings_status.setText(detecting_status)
+        self.tasks.submit(lambda _progress: find_verible(initial_path or None), finished,
+                          lambda error: update_status(f"检测失败：{error}"))
 
     def _browse_editor(self):
         path, _selected_filter = QtWidgets.QFileDialog.getOpenFileName(
@@ -325,7 +362,7 @@ class SettingsPage(SecondaryPage):
             if control.text().strip() and not control.hasAcceptableInput():
                 self.settings_status.setText(f"{name} 必须是非负整数。")
                 formatter_index = next((i for i, button in enumerate(self.menu_buttons)
-                                        if button.text() == "Formatter"), 1)
+                                        if button.text() == "工具"), 1)
                 self._select_section(formatter_index)
                 row = list(self._flag_controls).index(name)
                 self.flag_table.scrollToItem(self.flag_table.item(row, 0))

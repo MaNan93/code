@@ -23,8 +23,8 @@ SUCCESS = "#10B981"
 
 FONT_UI_PRIMARY = {"win32": "Segoe UI", "darwin": ".AppleSystemUIFont"}.get(sys.platform, "Inter")
 FONT_FAMILY = f'"{FONT_UI_PRIMARY}", "Noto Sans CJK SC", sans-serif'
-FONT_CODE_PRIMARY = FONT_UI_PRIMARY
-FONT_MONO = FONT_FAMILY
+FONT_CODE_PRIMARY = {"win32": "Consolas", "darwin": "Menlo"}.get(sys.platform, "JetBrains Mono")
+FONT_MONO = f'"{FONT_CODE_PRIMARY}", "Cascadia Code", "Courier New", monospace'
 ICON_DIR = Path(__file__).resolve().parents[1] / "assets" / "icons"
 UI_CONTENT_SCALE = 1.2
 FONT_SCALE = 1.0

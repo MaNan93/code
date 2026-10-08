@@ -72,7 +72,7 @@ jobs:
         timeout-minutes: 1
         run: |
           uv run python -u -m unittest -v \
-            tests.test_qt_artifacts.ArtifactPreviewTests.test_file_tree_is_overlay_and_closes_after_selection \
+            tests.test_qt_artifacts.ArtifactPreviewTests.test_file_tree_is_popup_managed_and_closes_after_selection \
             tests.test_qt_artifacts.ArtifactPreviewTests.test_file_tree_blank_click_closes_overlay \
             tests.test_qt_artifacts.ArtifactPreviewTests.test_search_supports_line_jump \
             tests.test_qt_artifacts.ArtifactPreviewTests.test_diff_switches_between_unified_diff_and_current_file \

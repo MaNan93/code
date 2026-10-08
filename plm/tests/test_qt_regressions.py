@@ -20,6 +20,7 @@ from plm.frontend.qt.main_window import MainWindow
 from plm.frontend.qt.services import ProjectService, SettingsStore
 from plm.frontend.qt.views.config_page import ConfigPage
 from plm.frontend.qt.views.documentation_page import DocumentationPage
+from plm.frontend.qt.styles.tokens import FONT_CODE_PRIMARY
 from plm.frontend.qt.widgets.common import load_lucide_icon
 from plm.frontend.qt.widgets.lanegrid import LaneGrid
 from plm.frontend.qt.widgets.tables import _PaddedItemDelegate
@@ -151,7 +152,7 @@ class QtRegressionTests(unittest.TestCase):
             self.assertEqual(block.blockFormat().background().color().name().lower(), "#f1f5f9")
             self.assertGreater(block.blockFormat().leftMargin(), 0)
             self.assertGreater(block.blockFormat().rightMargin(), 0)
-            self.assertIn("Consolas", block.charFormat().fontFamilies())
+            self.assertIn(FONT_CODE_PRIMARY, block.charFormat().fontFamilies())
 
     def test_missing_activated_project_keeps_current_selection(self):
         before = self.controller.current_project

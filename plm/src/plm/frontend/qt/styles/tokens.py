@@ -21,8 +21,8 @@ TEXT_MUTED = "#94A3B8"
 DANGER = "#EF4444"
 SUCCESS = "#10B981"
 
-FONT_UI_PRIMARY = {"win32": "Segoe UI", "darwin": ".AppleSystemUIFont"}.get(sys.platform, "sans-serif")
-FONT_FAMILY = f'"{FONT_UI_PRIMARY}", sans-serif'
+FONT_UI_PRIMARY = {"win32": "Segoe UI", "darwin": ".AppleSystemUIFont"}.get(sys.platform, "Inter")
+FONT_FAMILY = f'"{FONT_UI_PRIMARY}", "Noto Sans CJK SC", sans-serif'
 FONT_CODE_PRIMARY = FONT_UI_PRIMARY
 FONT_MONO = FONT_FAMILY
 ICON_DIR = Path(__file__).resolve().parents[1] / "assets" / "icons"

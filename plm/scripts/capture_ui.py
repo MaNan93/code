@@ -63,6 +63,11 @@ with tempfile.TemporaryDirectory(prefix="plm-ui-") as td:
     wait_for_idle(app)
     assert w.config_page.controllers_editor.table.rowCount() > 0, "controllers did not load"
     assert w.config_page.controllers_editor.table.item(0, 1).text() == "CtrlA", "controller text did not load"
+    table = w.config_page.controllers_editor.table
+    header_metrics = table.horizontalHeader().fontMetrics()
+    for index in (0, 2):
+        heading = table.horizontalHeaderItem(index).text()
+        assert table.columnWidth(index) >= header_metrics.horizontalAdvance(heading) + 24, heading
     assert not w.config_page.controllers_editor.table.verticalHeader().isVisible(), "Controller row header is visible"
     assert w.config_page.mapping_editor.table.rowCount() > 0, "lane mapping did not load"
     assert w.config_page.signals_editor.table.rowCount() >= 30, "default signal data is incomplete"
@@ -119,6 +124,7 @@ with tempfile.TemporaryDirectory(prefix="plm-ui-") as td:
     assert controller.generation_state == "up_to_date", controller.generation_state
     artifacts=w.config_page.artifacts_panel
     assert artifacts.selection.files, "artifacts did not load"
+    assert artifacts.preview.font().fixedPitch(), "RTL preview font is not fixed pitch"
     assert artifacts.file_tree.topLevelItemCount() > 0, "artifact tree did not load"
     assert any(text.endswith(("New","Modified","Unchanged")) for text in tree_texts(artifacts.file_tree))
     assert w.log_panel.status_bar.isVisible(), "generation status bar is hidden"

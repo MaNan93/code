@@ -27,6 +27,7 @@ jobs:
         working-directory: plm
     env:
       QT_QPA_PLATFORM: offscreen
+      PYTHONPATH: tests
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v10.2.0

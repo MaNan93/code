@@ -6,7 +6,6 @@ from typing import Iterable
 from PyQt5 import QtCore, QtWidgets
 
 from plm.frontend.qt.models import ProjectInfo
-from plm.frontend.qt.styles.tokens import SPACING_XS
 from plm.frontend.qt.widgets.project_item import ProjectItemWidget
 
 
@@ -35,8 +34,7 @@ class ProjectList(QtWidgets.QListWidget):
             widget = ProjectItemWidget(
                 project.name, project_path=project.config_dir.parent
             )
-            # QListWidget spacing also indents icons; reserve only a bottom gap.
-            widget.layout().setContentsMargins(0, 0, 0, SPACING_XS)
+            widget.layout().setContentsMargins(0, 0, 0, 0)
             widget.pinRequested.connect(self.pin_project)
             widget.renameRequested.connect(self.rename_project)
             widget.renameCommitted.connect(self._commit_rename)

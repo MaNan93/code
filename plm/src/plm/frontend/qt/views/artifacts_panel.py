@@ -10,7 +10,7 @@ from plm.frontend.qt.widgets.common import (
     ICON_SIZE, StatusBadge, StyledMenu,
     load_lucide_icon, make_icon_button,
 )
-from plm.frontend.qt.styles.tokens import TEXT_MUTED, scale_content_size
+from plm.frontend.qt.styles.tokens import CONTROL_HEIGHT, TEXT_MUTED, scale_content_size
 from .artifact_chrome import ArtifactFilePopup, ArtifactMetadataLabel, ArtifactPathButton
 from .artifact_preview import ArtifactPreview
 from .artifact_files import ArtifactFiles
@@ -18,6 +18,11 @@ from .artifact_interactions import ArtifactInteractions
 
 
 class ArtifactFileDelegate(QtWidgets.QStyledItemDelegate):
+    def sizeHint(self, option, index):
+        size = super().sizeHint(option, index)
+        size.setHeight(CONTROL_HEIGHT)
+        return size
+
     def paint(self, painter, option, index):
         option = QtWidgets.QStyleOptionViewItem(option)
         option.state &= ~QtWidgets.QStyle.State_HasFocus
@@ -110,7 +115,7 @@ class ArtifactsPanel(
         toolbar_layout = QtWidgets.QHBoxLayout(toolbar)
         self.toolbar_layout = toolbar_layout
         toolbar_layout.setContentsMargins(0, 0, 16, 0)
-        toolbar_layout.setSpacing(8)
+        toolbar_layout.setSpacing(0)
         self.toolbar_buttons = []
         self.path_button = ArtifactPathButton()
         self.path_label = self.path_button.path_label
@@ -180,7 +185,7 @@ class ArtifactsPanel(
         ):
             button = QtWidgets.QPushButton(label)
             button.setObjectName("ArtifactsToolButton")
-            button.setFixedSize(24, 24)
+            button.setFixedWidth(24)
             button.setToolTip(tooltip)
             button.clicked.connect(callback)
             search_layout.addWidget(button)

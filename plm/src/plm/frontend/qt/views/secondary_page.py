@@ -1,5 +1,5 @@
 from PyQt5 import QtCore, QtGui, QtWidgets
-from plm.frontend.qt.widgets.common import ICON_SIZE, make_icon_button
+from plm.frontend.qt.widgets.common import ICON_SIZE, make_button_group, make_icon_button
 from plm.frontend.qt.styles.tokens import SPACING_LG, SPACING_SM, SPACING_XL, TEXT_MAIN
 
 
@@ -98,7 +98,7 @@ class SecondaryPage(QtWidgets.QFrame):
         menu.setObjectName("SecondaryTabs")
         layout = QtWidgets.QHBoxLayout(menu)
         layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(8)
+        layout.setSpacing(0)
         self.menu_buttons = []
         entries = (
             ("General", "Formatter")
@@ -112,8 +112,8 @@ class SecondaryPage(QtWidgets.QFrame):
             button.clicked.connect(
                 lambda _checked=False, selected=index: self._select_section(selected)
             )
-            layout.addWidget(button)
             self.menu_buttons.append(button)
+        layout.addWidget(make_button_group(self.menu_buttons))
         layout.addStretch(1)
         return menu
 

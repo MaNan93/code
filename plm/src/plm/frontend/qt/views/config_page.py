@@ -5,7 +5,7 @@ from plm.frontend.qt.widgets.common import (
 from plm.frontend.qt.widgets.config_editor import CsvTableEditor, GenerationEditor
 from plm.frontend.qt.views.artifacts_panel import ArtifactsPanel
 from plm.frontend.qt.styles.tokens import (
-    SPACING_LG, SPACING_MD,
+    CONTROL_HEIGHT, SPACING_LG, SPACING_MD,
 )
 
 
@@ -13,7 +13,6 @@ class ConfigTabBar(QtWidgets.QTabBar):
     """Keep the full label visible when the selected tab becomes bold."""
 
     TEXT_HORIZONTAL_SPACE = 48  # Padding, gap, and antialiased glyph allowance.
-    TEXT_VERTICAL_SPACE = 22  # Keep glyph edges clear of the indicator.
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -38,9 +37,11 @@ class ConfigTabBar(QtWidgets.QTabBar):
         )
         size = QtCore.QSize(
             text_width + horizontal_space,
-            metrics.height() + self.TEXT_VERTICAL_SPACE,
+            CONTROL_HEIGHT,
         )
-        return super().tabSizeHint(index).expandedTo(styled_size).expandedTo(size)
+        result = super().tabSizeHint(index).expandedTo(styled_size).expandedTo(size)
+        result.setHeight(CONTROL_HEIGHT)
+        return result
 
     def minimumTabSizeHint(self, index):
         return self.tabSizeHint(index)
@@ -120,8 +121,6 @@ class ConfigHeader(QtWidgets.QFrame):
         self.artifacts_btn = make_icon_button(
             "panel-right", "显示/隐藏 Artifacts", "HeaderButton", 46, ICON_SIZE
         )
-        self.log_btn.setFixedSize(46, self.height())
-        self.artifacts_btn.setFixedSize(46, self.height())
         self.log_btn.clicked.connect(self.logToggleRequested.emit)
         self.artifacts_btn.clicked.connect(self.artifactsToggleRequested.emit)
         self.panel_actions = QtWidgets.QWidget()

@@ -1,6 +1,7 @@
 """BeautifulUI design tokens shared by QSS and Qt widgets."""
 
 from pathlib import Path
+import sys
 
 PRIMARY = "#3B82F6"
 PRIMARY_HOVER = "#2563EB"
@@ -20,39 +21,39 @@ TEXT_MUTED = "#94A3B8"
 DANGER = "#EF4444"
 SUCCESS = "#10B981"
 
-FONT_UI_PRIMARY = "Segoe UI"
-FONT_CODE_PRIMARY = "Consolas"
-FONT_FAMILY = ('"Segoe UI", "Microsoft YaHei UI", "PingFang SC", '
-               '"Noto Sans CJK SC", "SimHei", "SimSun", sans-serif')
-FONT_MONO = '"Consolas", "SF Mono", "Menlo", "Liberation Mono", "Courier New", monospace'
+FONT_UI_PRIMARY = {"win32": "Segoe UI", "darwin": ".AppleSystemUIFont"}.get(sys.platform, "sans-serif")
+FONT_FAMILY = f'"{FONT_UI_PRIMARY}", sans-serif'
+FONT_CODE_PRIMARY = FONT_UI_PRIMARY
+FONT_MONO = FONT_FAMILY
 ICON_DIR = Path(__file__).resolve().parents[1] / "assets" / "icons"
 UI_CONTENT_SCALE = 1.2
-FONT_SCALE = 0.9
+FONT_SCALE = 1.0
+CONTROL_HEIGHT = 34
 
 
 def scale_content_size(size):
-    """Scale fonts and glyphs without changing the window's layout grid."""
+    """Scale glyphs without changing the window's layout grid."""
     return round(size * UI_CONTENT_SCALE)
 
 
 def scale_font_size(size):
-    """Render content-scaled fonts at 90% of their previous size."""
-    return scale_content_size(size) * FONT_SCALE
+    """Compatibility helper: all UI font sizes now resolve to 14 px."""
+    return FONT_SIZE_BODY
 
 
 def shrink_font_size(size):
-    """Render an existing unscaled font size at 90%."""
-    return size * FONT_SCALE
+    """Compatibility helper for the uniform 14 px font token."""
+    return FONT_SIZE_BODY
 
 
-FONT_SIZE_BODY = scale_font_size(13)
-FONT_SIZE_SM = scale_font_size(12)
-FONT_SIZE_LG = scale_font_size(15)
+FONT_SIZE_BODY = 14
+FONT_SIZE_SM = FONT_SIZE_BODY
+FONT_SIZE_LG = FONT_SIZE_BODY
 ICON_SIZE = scale_content_size(18)
-ICON_SIZE_SM = scale_content_size(16)
+ICON_SIZE_SM = 14
 
 RADIUS_CHIP = 6
-RADIUS_CONTROL = 8
+RADIUS_CONTROL = 6
 RADIUS_CARD = 10
 
 SPACING_XS = 4
@@ -64,6 +65,7 @@ SPACING_XL = 24
 SHADOW_SM = {"blur_radius": 4, "offset": (0, 1), "rgba": (0, 0, 0, 20)}
 
 QSS_TOKENS = {
+    "control_height": f"{CONTROL_HEIGHT}px",
     "primary": PRIMARY,
     "primary_hover": PRIMARY_HOVER,
     "primary_light": PRIMARY_LIGHT,

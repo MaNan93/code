@@ -19,7 +19,7 @@ class LogPanel(RoundedCanvasFrame):
         root.setSpacing(0)
         header = QtWidgets.QFrame()
         header.setObjectName("LogHeader")
-        header.setFixedHeight(32)
+        header.setMinimumHeight(32)
         header_layout = QtWidgets.QHBoxLayout(header)
         header_layout.setContentsMargins(16, 0, 12, 0)
         header_layout.setSpacing(8)

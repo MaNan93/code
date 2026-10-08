@@ -20,7 +20,7 @@ from plm.frontend.qt.widgets.tables import EditableTable
 
 
 LANE_COUNTS = (2, 4, 8, 16, 32)
-CONTROLLER_COLUMN_WIDTHS = {"ctrl_id": 80, "max_width": 100}
+CONTROLLER_COLUMN_WIDTHS = {"ctrl_id": 60, "max_width": 60}
 TABLE_VISIBLE_ROWS = 10
 TABLE_CARD_PADDING = 8
 
@@ -84,6 +84,7 @@ class CsvTableEditor(QtWidgets.QWidget):
             if key in CONTROLLER_COLUMN_WIDTHS:
                 spec.update(
                     width=CONTROLLER_COLUMN_WIDTHS[key],
+                    fixed_width=True,
                     alignment=QtCore.Qt.AlignCenter,
                 )
             elif key == "ctrl_name":

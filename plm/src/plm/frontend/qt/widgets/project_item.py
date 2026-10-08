@@ -62,7 +62,7 @@ class ProjectItemWidget(QtWidgets.QWidget):
         self._menu_open = False
         root = QtWidgets.QVBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
-        root.setSpacing(2)
+        root.setSpacing(0)
         self.header = QtWidgets.QPushButton()
         self.header.setObjectName("ProjectButton")
         self.header.setFocusPolicy(QtCore.Qt.StrongFocus)
@@ -72,16 +72,16 @@ class ProjectItemWidget(QtWidgets.QWidget):
         self.header.setContextMenuPolicy(QtCore.Qt.CustomContextMenu)
         self.header.customContextMenuRequested.connect(self.show_context_menu)
         header_layout = QtWidgets.QHBoxLayout(self.header)
-        header_layout.setContentsMargins(7, 0, 6, 0)
+        header_layout.setContentsMargins(12, 0, 12, 0)
         header_layout.setSpacing(0)
         self.folder_icon = QtWidgets.QLabel()
         self.folder_icon.setObjectName("ProjectFolderIcon")
-        self.folder_icon.setFixedSize(ICON_SIZE, ICON_SIZE)
+        self.folder_icon.setFixedSize(ICON_SIZE_SM, ICON_SIZE_SM)
         self.folder_icon.setAlignment(QtCore.Qt.AlignCenter)
         self.folder_icon.setPixmap(
             load_lucide_icon(
-                "folder", TEXT_SUB, align_visible_left=True
-            ).pixmap(ICON_SIZE, ICON_SIZE)
+                "folder", TEXT_SUB, ICON_SIZE_SM, align_visible_left=True
+            ).pixmap(ICON_SIZE_SM, ICON_SIZE_SM)
         )
         self.folder_icon.setAttribute(QtCore.Qt.WA_TransparentForMouseEvents)
         self.project_name_label = QtWidgets.QLabel(self.project_name)
@@ -121,9 +121,9 @@ class ProjectItemWidget(QtWidgets.QWidget):
         self.open_folder_btn.hide()
         self.more_btn.hide()
         header_layout.addWidget(self.archive_btn)
-        header_layout.addSpacing(4)
+        header_layout.addSpacing(0)
         header_layout.addWidget(self.open_folder_btn)
-        header_layout.addSpacing(4)
+        header_layout.addSpacing(0)
         header_layout.addWidget(self.more_btn)
         root.addWidget(self.header)
         self.header.installEventFilter(self)

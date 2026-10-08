@@ -13,7 +13,7 @@ from PyQt5 import QtCore, QtGui, QtWidgets
 from plm.frontend.qt.widgets.common import StyledMenu, apply_drop_shadow
 from plm.frontend.qt.widgets.tables import RowDragTable
 from plm.frontend.qt.styles.tokens import (
-    BG_MAIN, BG_SUBTLE, BG_SURFACE, BORDER, BORDER_HOVER, DANGER, FONT_SIZE_SM,
+    BG_MAIN, BG_SUBTLE, BG_SURFACE, BORDER, BORDER_HOVER, CONTROL_HEIGHT, DANGER, FONT_SIZE_SM,
     PRIMARY_HOVER, PRIMARY_LIGHT,
     RADIUS_CHIP, SHADOW_SM, SPACING_LG, SPACING_MD, SPACING_XS,
     TEXT_MAIN, TEXT_MUTED,
@@ -333,7 +333,7 @@ class LaneGrid(QtWidgets.QWidget):
         palette_outer.setSpacing(int(6 * _ui_scale()))
         # Use a flow layout so swatches wrap to multiple rows instead of
         # overflowing the lane mapping page at narrow widths.
-        self._palette_flow = _FlowLayout(h_spacing=int(6 * _ui_scale()), v_spacing=int(6 * _ui_scale()))
+        self._palette_flow = _FlowLayout(h_spacing=0, v_spacing=0)
         palette_outer.addLayout(self._palette_flow)
         layout.addWidget(self.palette_bar)
 
@@ -350,8 +350,7 @@ class LaneGrid(QtWidgets.QWidget):
             | QtWidgets.QAbstractItemView.EditKeyPressed
         )
         row_header = self.table.verticalHeader()
-        row_header.setDefaultSectionSize(int(38 * _ui_scale()))
-        row_header.setMinimumSectionSize(int(34 * _ui_scale()))
+        row_header.setDefaultSectionSize(CONTROL_HEIGHT)
         row_header.hide()
         self.table.rowMoveRequested.connect(self._on_row_drop)
         row_header.setContextMenuPolicy(QtCore.Qt.CustomContextMenu)
@@ -449,10 +448,10 @@ class LaneGrid(QtWidgets.QWidget):
                 f"QPushButton#lgSwatch {{"
                 f"  background-color: {color};"
                 f"  color: {text_color};"
-                f"  font-size: {FONT_SIZE_SM * scale:.1f}px;"
+                f"  font-size: {FONT_SIZE_SM}px;"
                 f"  font-weight: 600;"
                 f"  border-radius: {int(RADIUS_CHIP * scale)}px;"
-                f"  padding: {int(SPACING_XS * scale)}px {int(SPACING_MD * scale)}px;"
+                f"  padding: 0 {int(SPACING_MD * scale)}px;"
                 f"  {outline}"
                 f"}}"
                 f"QPushButton#lgSwatch:hover {{"
@@ -460,7 +459,6 @@ class LaneGrid(QtWidgets.QWidget):
                 f"}}"
             )
             btn.setCursor(QtCore.Qt.PointingHandCursor)
-            btn.setMinimumHeight(int((SPACING_LG * 2) * scale))
             apply_drop_shadow(
                 btn,
                 blur_radius=int(SHADOW_SM["blur_radius"] * scale),

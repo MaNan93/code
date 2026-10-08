@@ -5,7 +5,7 @@ import re
 from PyQt5 import QtCore, QtGui, QtWidgets
 from plm.frontend.qt.widgets.common import StyledMenu
 from plm.frontend.qt.styles.tokens import (
-    BG_SIDEBAR_INACTIVE, BORDER, FONT_CODE_PRIMARY, TEXT_MUTED, scale_font_size,
+    BG_SIDEBAR_INACTIVE, BORDER, FONT_CODE_PRIMARY, FONT_SIZE_BODY, TEXT_MUTED,
 )
 
 
@@ -145,8 +145,7 @@ class CodePreview(QtWidgets.QPlainTextEdit):
         self.setReadOnly(True)
         self.setLineWrapMode(QtWidgets.QPlainTextEdit.NoWrap)
         font = QtGui.QFont(FONT_CODE_PRIMARY)
-        font.setStyleHint(QtGui.QFont.Monospace)
-        font.setPointSizeF(scale_font_size(10))
+        font.setPixelSize(FONT_SIZE_BODY)
         self.setFont(font)
         self.line_numbers = LineNumberArea(self)
         self.highlighter = VerilogHighlighter(self.document())

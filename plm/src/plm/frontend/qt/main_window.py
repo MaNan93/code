@@ -18,7 +18,9 @@ from plm.frontend.qt.styles.tokens import (
 )
 from plm.frontend.qt.views.config_page import ConfigPage
 from plm.frontend.qt.views.log_panel import LogPanel
-from plm.frontend.qt.widgets.common import ContentIconStyle, load_lucide_icon
+from plm.frontend.qt.widgets.common import (
+    ContentIconStyle, install_button_sizing, load_lucide_icon,
+)
 from plm.frontend.qt.widgets.tooltip import install_tooltips
 
 __all__ = ["MainWindow"]
@@ -202,7 +204,7 @@ class WindowControlButton(QtWidgets.QPushButton):
         self._icon_size = scale_content_size(base_size)
         self.setObjectName("WindowControlButton")
         self.setProperty("role", role)
-        self.setFixedSize(46, WindowTitleBar.HEIGHT)
+        self.setFixedWidth(46)
         self.setIconSize(QtCore.QSize(self._icon_size, self._icon_size))
         self.setToolTip(tooltip)
         self.setCursor(QtCore.Qt.ArrowCursor)
@@ -313,6 +315,7 @@ class MainWindow(QtWidgets.QMainWindow):
         if not isinstance(app.style(), ContentIconStyle):
             app.setStyle(ContentIconStyle(app.style().objectName()))
         app.setStyleSheet(APP_QSS)
+        install_button_sizing(app)
         install_tooltips(app)
         self.setWindowTitle("plmConsultant")
         self.resize(1400, 900)
@@ -351,7 +354,7 @@ class MainWindow(QtWidgets.QMainWindow):
             editor_path_provider=self.controller.settings.editor_path
         )
         self.log_toggle_button = self.config_page.take_log_button()
-        self.log_toggle_button.setFixedSize(32, 32)
+        self.log_toggle_button.setFixedWidth(32)
         title_layout = self.title_bar.layout()
         button_index = title_layout.indexOf(self.nav_panel.collapse_btn) + 1
         title_layout.insertSpacing(button_index, 8)

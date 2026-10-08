@@ -117,10 +117,10 @@ class GenerationIntegrationTests(unittest.TestCase):
         page.show()
         wait_for_idle(self.app)
         row = list(page._flag_controls).index("verify_convergence")
-        self.assertEqual(page.flag_table.rowHeight(row), 40)
+        self.assertEqual(page.flag_table.rowHeight(row), 34)
         self.assertFalse(page.flag_table.showGrid())
         self.assertTrue(page.flag_table.property("formatterTable"))
-        self.assertEqual(page._flag_controls["verify_convergence"].minimumHeight(), 36)
+        self.assertEqual(page._flag_controls["verify_convergence"].minimumHeight(), 34)
         self.assertGreaterEqual(
             page.flag_table.rowHeight(row),
             page._flag_controls["verify_convergence"].minimumHeight(),

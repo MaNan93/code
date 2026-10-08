@@ -10,13 +10,80 @@ from PyQt5 import QtCore, QtGui, QtSvg, QtWidgets
 
 from plm.core.paths import PLM_ROOT
 from plm.frontend.qt.styles.tokens import (
-    BG_MAIN, BORDER, ICON_SIZE, RADIUS_CARD, SHADOW_SM, TEXT_SUB,
+    BG_MAIN, BORDER, CONTROL_HEIGHT, ICON_SIZE, ICON_SIZE_SM, RADIUS_CARD, SHADOW_SM, TEXT_SUB,
     scale_content_size,
 )
 
 LUCIDE_ICON_DIR = Path(__file__).resolve().parents[1] / "assets" / "icons"
 APP_ICON_PATH = Path(__file__).resolve().parents[1] / "assets" / "app_icon.svg"
 PROJECT_ROOT = PLM_ROOT
+
+
+def button_height(widget):
+    """Shared total height; independent of native font metrics and Qt scaling."""
+    return CONTROL_HEIGHT
+
+
+class FixedHeightItemDelegate(QtWidgets.QStyledItemDelegate):
+    """Uniform popup/list rows, including native QComboBox candidates."""
+
+    def sizeHint(self, option, index):
+        size = super().sizeHint(option, index)
+        size.setHeight(CONTROL_HEIGHT)
+        return size
+
+
+class ButtonSizingController(QtCore.QObject):
+    """Apply the fixed 34 px control token throughout the application."""
+
+    def __init__(self, app):
+        super().__init__(app)
+        self._applying = False
+        app.installEventFilter(self)
+
+    def eventFilter(self, watched, event):
+        if self._applying or event.type() not in (
+            QtCore.QEvent.Polish, QtCore.QEvent.FontChange,
+            QtCore.QEvent.StyleChange, QtCore.QEvent.Show,
+        ):
+            return False
+        self._applying = True
+        try:
+            if isinstance(watched, QtWidgets.QAbstractButton):
+                watched.setFixedHeight(button_height(watched))
+            elif isinstance(watched, (QtWidgets.QLineEdit, QtWidgets.QComboBox, QtWidgets.QSpinBox)):
+                watched.setFixedHeight(CONTROL_HEIGHT)
+                if isinstance(watched, QtWidgets.QComboBox) and not isinstance(watched.itemDelegate(), FixedHeightItemDelegate):
+                    watched.setItemDelegate(FixedHeightItemDelegate(watched))
+            elif isinstance(watched, QtWidgets.QMenu):
+                # QSS height is the content height; include the 1 px divider.
+                rule = f"QMenu::item {{ height: {CONTROL_HEIGHT - 1}px; }}"
+                if watched.styleSheet() != rule:
+                    watched.setStyleSheet(rule)
+        finally:
+            self._applying = False
+        return False
+
+
+def install_button_sizing(app):
+    if not hasattr(app, "_button_sizing"):
+        app._button_sizing = ButtonSizingController(app)
+    return app._button_sizing
+
+
+def make_button_group(buttons, parent=None):
+    """Seamless horizontal buttons with corners only at the outer edges."""
+    group = QtWidgets.QFrame(parent)
+    group.setObjectName("ButtonGroup")
+    group.setFixedHeight(CONTROL_HEIGHT)
+    layout = QtWidgets.QHBoxLayout(group)
+    layout.setContentsMargins(0, 0, 0, 0)
+    layout.setSpacing(0)
+    for index, button in enumerate(buttons):
+        button.setProperty("groupFirst", index == 0)
+        button.setProperty("groupLast", index == len(buttons) - 1)
+        layout.addWidget(button)
+    return group
 
 
 class ContentIconStyle(QtWidgets.QProxyStyle):
@@ -32,6 +99,8 @@ class ContentIconStyle(QtWidgets.QProxyStyle):
     }
 
     def pixelMetric(self, metric, option=None, widget=None):
+        if metric == QtWidgets.QStyle.PM_SmallIconSize:
+            return ICON_SIZE_SM
         size = super().pixelMetric(metric, option, widget)
         return scale_content_size(size) if metric in self.ICON_METRICS else size
 
@@ -118,7 +187,8 @@ def make_icon_button(icon_name, tooltip, object_name="IconButton", button_size=2
     button.setObjectName(object_name)
     button.setIcon(load_lucide_icon(icon_name, color, icon_size))
     button.setIconSize(QtCore.QSize(icon_size, icon_size))
-    button.setFixedSize(button_size, button_size)
+    button.setFixedWidth(button_size)
+    button.setSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Fixed)
     button.setToolTip(tooltip)
     button.setCursor(QtCore.Qt.PointingHandCursor)
     return button

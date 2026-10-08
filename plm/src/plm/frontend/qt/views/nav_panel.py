@@ -56,7 +56,7 @@ class NavPanel(QtWidgets.QFrame):
         root = QtWidgets.QVBoxLayout(self)
         root.setSizeConstraint(QtWidgets.QLayout.SetNoConstraint)
         root.setContentsMargins(SPACING_MD, SPACING_MD, SPACING_MD, SPACING_SM)
-        root.setSpacing(SPACING_SM)
+        root.setSpacing(0)
 
         self.collapse_btn = make_icon_button(
             "panel-left", "收起侧边栏", "NavCollapseButton", 32, ICON_SIZE
@@ -109,7 +109,7 @@ class NavPanel(QtWidgets.QFrame):
         # Fill the project-list space while collapsed, keeping the footer below.
         collapsed_projects_layout = QtWidgets.QVBoxLayout(self.collapsed_projects)
         collapsed_projects_layout.setContentsMargins(0, 0, 0, 0)
-        collapsed_projects_layout.setSpacing(8)
+        collapsed_projects_layout.setSpacing(0)
         collapsed_projects_layout.setAlignment(
             QtCore.Qt.AlignTop | QtCore.Qt.AlignHCenter
         )
@@ -120,7 +120,7 @@ class NavPanel(QtWidgets.QFrame):
         self.footer = QtWidgets.QWidget()
         footer_layout = QtWidgets.QVBoxLayout(self.footer)
         footer_layout.setContentsMargins(0, 0, 0, 0)
-        footer_layout.setSpacing(8)
+        footer_layout.setSpacing(0)
         self.docs_btn = self._footer_button(
             "file-text", "Docs", self.docs_requested
         )
@@ -141,7 +141,6 @@ class NavPanel(QtWidgets.QFrame):
         ):
             button.setMinimumWidth(0)
             button.setMaximumWidth(QtWidgets.QWIDGETSIZE_MAX)
-            button.setFixedHeight(36)
             button.setSizePolicy(QtWidgets.QSizePolicy.Ignored, QtWidgets.QSizePolicy.Fixed)
 
     def toggle_collapse(self):

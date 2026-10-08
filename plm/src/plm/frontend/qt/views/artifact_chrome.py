@@ -91,7 +91,6 @@ class ArtifactPathButton(QtWidgets.QPushButton):
         super().__init__(parent)
         self.setObjectName("ArtifactPathButton")
         self.setCheckable(True)
-        self.setFixedHeight(28)
         self.setMinimumWidth(36)
         self.setSizePolicy(QtWidgets.QSizePolicy.Ignored, QtWidgets.QSizePolicy.Fixed)
         self.setCursor(QtCore.Qt.PointingHandCursor)

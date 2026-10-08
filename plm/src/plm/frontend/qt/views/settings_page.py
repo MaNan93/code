@@ -7,7 +7,8 @@ from plm.core.verible import (
 )
 from plm.frontend.qt.models.preferences import DEFAULT_EDITOR
 from plm.frontend.qt.services.tasks import TaskRunner
-from plm.frontend.qt.styles.tokens import SPACING_MD
+from plm.frontend.qt.styles.tokens import CONTROL_HEIGHT, SPACING_MD
+from plm.frontend.qt.widgets.common import make_button_group
 from .secondary_page import SecondaryPage
 
 
@@ -18,7 +19,7 @@ def _executable_filter():
 class _FormatterControlDelegate(QtWidgets.QStyledItemDelegate):
     def updateEditorGeometry(self, editor, option, index):
         super().updateEditorGeometry(editor, option, index)
-        if isinstance(editor, QtWidgets.QComboBox):
+        if isinstance(editor, (QtWidgets.QComboBox, QtWidgets.QLineEdit)):
             rect = editor.geometry()
             height = editor.minimumHeight()
             rect.setTop(option.rect.top() + (option.rect.height() - height) // 2)
@@ -29,7 +30,7 @@ class _FormatterControlDelegate(QtWidgets.QStyledItemDelegate):
 class _FormatterTable(QtWidgets.QTableWidget):
     """Keep formatter rows at a fixed height."""
 
-    ROW_HEIGHT = 40
+    ROW_HEIGHT = CONTROL_HEIGHT
 
     def sizeHintForColumn(self, column):
         width = super().sizeHintForColumn(column)
@@ -68,7 +69,7 @@ class SettingsPage(SecondaryPage):
     def _setting_row(self, label, control):
         row = QtWidgets.QFrame()
         row.setObjectName("SettingsRow")
-        row.setFixedHeight(56)
+        row.setFixedHeight(CONTROL_HEIGHT)
         row_layout = QtWidgets.QHBoxLayout(row)
         row_layout.setContentsMargins(0, 0, 0, 0)
         key_label = QtWidgets.QLabel(label)
@@ -89,7 +90,7 @@ class SettingsPage(SecondaryPage):
 
         editor_control = QtWidgets.QWidget()
         editor_control.setObjectName("SettingsEditorControl")
-        editor_control.setFixedSize(280, 36)
+        editor_control.setFixedSize(280, CONTROL_HEIGHT)
         editor_layout = QtWidgets.QHBoxLayout(editor_control)
         editor_layout.setContentsMargins(0, 0, 0, 0)
         editor_layout.setSpacing(8)
@@ -97,10 +98,10 @@ class SettingsPage(SecondaryPage):
             preferences["editor_path"]
         )
         self.editor_path_edit.setObjectName("SettingsEditorPath")
-        self.editor_path_edit.setFixedHeight(36)
+        self.editor_path_edit.setFixedHeight(CONTROL_HEIGHT)
         browse_btn = QtWidgets.QPushButton("浏览…")
         browse_btn.setObjectName("SettingsBrowseButton")
-        browse_btn.setFixedSize(68, 36)
+        browse_btn.setFixedWidth(68)
         browse_btn.clicked.connect(self._browse_editor)
         editor_layout.addWidget(self.editor_path_edit, 1, QtCore.Qt.AlignVCenter)
         editor_layout.addWidget(browse_btn, 0, QtCore.Qt.AlignVCenter)
@@ -130,7 +131,6 @@ class SettingsPage(SecondaryPage):
         actions.addStretch(1)
         self.save_settings_btn = QtWidgets.QPushButton("保存设置")
         self.save_settings_btn.setObjectName("SettingsPrimaryButton")
-        self.save_settings_btn.setFixedHeight(36)
         self.save_settings_btn.clicked.connect(self._save_settings)
         actions.addWidget(self.save_settings_btn)
         layout.addLayout(actions)
@@ -179,11 +179,13 @@ class SettingsPage(SecondaryPage):
         self.verible_path_edit = QtWidgets.QLineEdit(preferences["verible_path"])
         self.verible_path_edit.setPlaceholderText("留空自动搜索 verible-verilog-format")
         path_row.addWidget(self.verible_path_edit, 1)
+        buttons = []
         for label, callback in (("浏览…", self._browse_verible), ("自动检测", self._detect_verible)):
             button = QtWidgets.QPushButton(label)
             button.setObjectName("SettingsSecondaryButton")
             button.clicked.connect(callback)
-            path_row.addWidget(button)
+            buttons.append(button)
+        path_row.addWidget(make_button_group(buttons))
         layout.addLayout(path_row)
         self.flag_table = _FormatterTable(0, 2)
         self.flag_table.setObjectName("ConfigDataTable")
@@ -192,8 +194,13 @@ class SettingsPage(SecondaryPage):
         self.flag_table.setItemDelegate(_FormatterControlDelegate(self.flag_table))
         self.flag_table.setHorizontalHeaderLabels(("参数", "值"))
         self.flag_table.verticalHeader().hide()
-        self.flag_table.verticalHeader().setDefaultSectionSize(40)
+        rows = self.flag_table.verticalHeader()
+        rows.setSectionResizeMode(QtWidgets.QHeaderView.Fixed)
+        rows.setMinimumSectionSize(CONTROL_HEIGHT)
+        rows.setMaximumSectionSize(CONTROL_HEIGHT)
+        rows.setDefaultSectionSize(CONTROL_HEIGHT)
         formatter_header = self.flag_table.horizontalHeader()
+        formatter_header.setFixedHeight(CONTROL_HEIGHT)
         formatter_header.setSectionResizeMode(0, QtWidgets.QHeaderView.Stretch)
         formatter_header.setSectionResizeMode(1, QtWidgets.QHeaderView.ResizeToContents)
         self.flag_table.setAlternatingRowColors(True)
@@ -217,7 +224,7 @@ class SettingsPage(SecondaryPage):
                 default_value = DEFAULT_VERIBLE_FLAGS[name]
                 if choices:
                     control = QtWidgets.QComboBox()
-                    control.setMinimumHeight(36)
+                    control.setFixedHeight(CONTROL_HEIGHT)
                     control.addItem(f"{default_value} (default)", default_value)
                     for choice in choices:
                         if choice != default_value:
@@ -226,7 +233,7 @@ class SettingsPage(SecondaryPage):
                     control.currentIndexChanged.connect(self._flags_changed)
                 else:
                     control = QtWidgets.QLineEdit()
-                    control.setMinimumHeight(36)
+                    control.setFixedHeight(CONTROL_HEIGHT)
                     control.setToolTip(f"PLM 默认值：{default_value}")
                     if name in VERIBLE_INT_PARAMS:
                         control.setValidator(QtGui.QIntValidator(0, 2147483647, control))

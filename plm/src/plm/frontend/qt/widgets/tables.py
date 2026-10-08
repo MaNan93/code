@@ -306,7 +306,9 @@ class EditableTable(QtWidgets.QWidget):
             design_width = int(column.get("width", 0) * scale)
             minimum = max(design_width, text_width + int(32 * scale))
             if column.get("fixed_width"):
-                minimum = column["width"]
+                # Fixed means no distribution of spare width, not clipping
+                # the heading when font metrics or DPI change.
+                minimum = max(column["width"], text_width + int(32 * scale))
             if column.get("options"):
                 # QComboBox.sizeHint() includes its text padding and drop-down
                 # button. The table delegate then insets the cell widget on

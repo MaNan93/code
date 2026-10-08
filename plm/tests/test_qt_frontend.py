@@ -15,7 +15,10 @@ from PyQt5 import QtCore, QtGui, QtTest, QtWidgets
 
 from plm.frontend.qt.controllers import AppController
 from plm.frontend.qt.services import ProjectService, SettingsStore
-from plm.frontend.qt.styles.tokens import BORDER, PRIMARY_LIGHT, TEXT_MAIN, scale_content_size
+from plm.frontend.qt.styles.tokens import (
+    BORDER, FONT_SCALE, FONT_SIZE_BODY, FONT_SIZE_LG, FONT_SIZE_SM,
+    PRIMARY_LIGHT, TEXT_MAIN, scale_content_size, scale_font_size,
+)
 from plm.frontend.qt.models import ProjectInfo
 from plm.frontend.qt.main_window import MainWindow
 from plm.frontend.qt.styles import APP_QSS
@@ -130,6 +133,14 @@ class QtFrontendLayoutTests(unittest.TestCase):
             self.window.nav_panel.collapse_btn.iconSize(),
             QtCore.QSize(ICON_SIZE, ICON_SIZE),
         )
+
+    def test_all_font_tokens_are_reduced_to_ninety_percent(self):
+        self.assertEqual(FONT_SCALE, 0.9)
+        self.assertEqual(FONT_SIZE_BODY, scale_content_size(13) * 0.9)
+        self.assertEqual(FONT_SIZE_SM, scale_content_size(12) * 0.9)
+        self.assertEqual(FONT_SIZE_LG, scale_content_size(15) * 0.9)
+        self.assertEqual(scale_font_size(10), scale_content_size(10) * 0.9)
+        self.assertEqual(self.window.config_page.artifacts_panel.preview.font().pointSizeF(), 10.8)
 
     def test_tooltip_has_transparent_rounded_corners_and_preserves_focus(self):
         button = self.window.nav_panel.save_btn
@@ -1245,8 +1256,10 @@ class QtFrontendLayoutTests(unittest.TestCase):
             "square",
             "copy",
             "chevron-down",
+            "chevron-right",
+            "tree-chevron-down",
         )
-        self.assertEqual(len(icon_names), 28)
+        self.assertEqual(len(icon_names), 30)
         self.assertEqual(
             {path.stem for path in LUCIDE_ICON_DIR.glob("*.svg")},
             set(icon_names),

@@ -67,6 +67,31 @@ class GenerationIntegrationTests(unittest.TestCase):
             page._fill_flags(None)
             self.assertEqual(page._preferences()["verible_flags"], DEFAULT_VERIBLE_FLAGS)
 
+    def test_startup_auto_detects_formatter_without_overwriting_an_explicit_path(self):
+        detected = str(self.root / "tools" / "verible-verilog-format.exe")
+        with patch("plm.core.verible.find_verible", return_value=detected) as find:
+            controller = AppController(ProjectService(self.root), self.store, self.service)
+        find.assert_called_once_with()
+        self.assertEqual(controller.workspaces.formatter_provider()["verible_path"], detected)
+        self.assertEqual(self.store.formatter_preferences()["verible_path"], "")
+
+        page = controller.create_secondary_page("settings", None)
+        self.addCleanup(page.close)
+        self.assertEqual(page.verible_path_edit.text(), detected)
+
+        explicit = str(self.root / "custom" / "formatter.exe")
+        self.store.save_preferences({"verible_path": explicit})
+        with patch(
+            "plm.core.verible.find_verible",
+            side_effect=AssertionError("explicit formatter path must be preserved"),
+        ):
+            explicit_controller = AppController(
+                ProjectService(self.root), self.store, WorkspaceService()
+            )
+        self.assertEqual(
+            explicit_controller.workspaces.formatter_provider()["verible_path"], explicit
+        )
+
     def test_default_generation_is_independent_of_the_host_formatter(self):
         controller, window = self.window()
         with patch(
@@ -88,6 +113,18 @@ class GenerationIntegrationTests(unittest.TestCase):
     def test_formatter_parameter_validation_and_detection(self):
         page = SettingsPage(preferences=self.store.preferences())
         self.addCleanup(page.close)
+        page._show_section(1)
+        page.show()
+        wait_for_idle(self.app)
+        row = list(page._flag_controls).index("verify_convergence")
+        self.assertEqual(page.flag_table.rowHeight(row), 40)
+        self.assertFalse(page.flag_table.showGrid())
+        self.assertTrue(page.flag_table.property("formatterTable"))
+        self.assertEqual(page._flag_controls["verify_convergence"].minimumHeight(), 36)
+        self.assertGreaterEqual(
+            page.flag_table.rowHeight(row),
+            page._flag_controls["verify_convergence"].minimumHeight(),
+        )
         spy = QtTest.QSignalSpy(page.preferencesSaved)
         page._flag_controls["column_limit"].setText("invalid")
         page.save_settings_btn.click()

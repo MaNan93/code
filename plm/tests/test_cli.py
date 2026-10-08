@@ -3,6 +3,7 @@ import io
 import unittest
 from unittest import mock
 
+import plm
 from plm.cli import main as cli
 
 
@@ -13,6 +14,14 @@ class CliEntryPointTests(unittest.TestCase):
             result = cli.main(["--help"])
         self.assertEqual(result, 0)
         self.assertIn("plm -gui", output.getvalue())
+        self.assertIn("plm --version", output.getvalue())
+
+    def test_version_returns_package_version(self):
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output):
+            result = cli.main(["--version"])
+        self.assertEqual(result, 0)
+        self.assertEqual(output.getvalue(), f"plm {plm.__version__}\n")
 
     def test_generate_is_one_command(self):
         with mock.patch.object(cli, "cmd_generate", return_value=23) as generate:

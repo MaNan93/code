@@ -95,6 +95,110 @@ class LazyArtifactTests(unittest.TestCase):
         wait_for_idle(self.app)
         self.assertFalse(self.panel.diff_button.isEnabled())
 
+    def test_diff_stays_checked_across_regeneration_and_file_switch(self):
+        path = self.file("rtl/demo.sv", "module before; endmodule\n")
+        self.panel.set_files([path], self.root)
+        wait_for_idle(self.app)
+        path.write_text("module after; endmodule\n", encoding="utf-8")
+        self.panel.set_files([path], self.root)
+        wait_for_idle(self.app)
+        self.panel.diff_button.setChecked(True)
+        wait_for_idle(self.app)
+        self.assertIn("+module after;", self.panel.preview.toPlainText())
+        # Regenerating while the toggle is on must not silently drop it: the
+        # refresh clears current contents before its worker read lands, and
+        # that read window used to read as "no diff available".
+        path.write_text("module final; endmodule\n", encoding="utf-8")
+        self.panel.set_files([path], self.root, statuses={"rtl/demo.sv": "Modified"})
+        wait_for_idle(self.app)
+        self.assertTrue(self.panel.diff_button.isChecked())
+        self.assertTrue(self.panel.diff_button.isEnabled())
+        self.assertIn("+module final;", self.panel.preview.toPlainText())
+        # The status line reports the file's own size, not the pending diff's.
+        self.assertEqual(self.panel._file_status, "1/1 · 1 行")
+        # A file with no previous preview has no baseline, so it turns off.
+        other = self.file("rtl/fresh.sv", "module fresh; endmodule\n")
+        self.panel.set_files([path, other], self.root, statuses={"rtl/fresh.sv": "New"})
+        wait_for_idle(self.app)
+        self.panel.select_file(other)
+        wait_for_idle(self.app)
+        self.assertFalse(self.panel.diff_button.isEnabled())
+        self.assertFalse(self.panel.diff_button.isChecked())
+
+    def test_generation_baselines_cover_files_that_were_never_previewed(self):
+        first = self.file("rtl/first.sv", "module first; endmodule\n")
+        second = self.file("rtl/second.sv", "module second; endmodule\n")
+        self.panel.set_files([first, second], self.root)  # only first is read
+        wait_for_idle(self.app)
+        first.write_text("module first_v2; endmodule\n", encoding="utf-8")
+        second.write_text("module second_v2; endmodule\n", encoding="utf-8")
+        self.panel.set_files(
+            [first, second], self.root,
+            statuses={"rtl/first.sv": "Modified", "rtl/second.sv": "Modified"},
+            baselines={
+                "rtl/first.sv": "module first; endmodule\n",
+                "rtl/second.sv": "module second; endmodule\n",
+            },
+        )
+        wait_for_idle(self.app)
+        self.assertEqual(len(self.panel._previous_contents), 2)
+        self.select(second)  # never previewed before this generation
+        self.assertTrue(self.panel.diff_button.isEnabled())
+        self.panel.diff_button.setChecked(True)
+        wait_for_idle(self.app)
+        self.assertIn("-module second;", self.panel.preview.toPlainText())
+        self.assertIn("+module second_v2;", self.panel.preview.toPlainText())
+
+    def test_refresh_preserves_generation_diff_until_next_generation(self):
+        path = self.file("rtl/demo.sv", "module after; endmodule\n")
+        self.panel.set_files(
+            [path], self.root, statuses={"rtl/demo.sv": "Modified"},
+            baselines={"rtl/demo.sv": "module before; endmodule\n"},
+        )
+        wait_for_idle(self.app)
+        self.panel.diff_button.click()
+        wait_for_idle(self.app)
+        original_diff = self.panel.preview.toPlainText()
+        for _ in range(2):
+            self.panel.set_files([path], self.root)
+            wait_for_idle(self.app)
+            self.assertTrue(self.panel.diff_button.isEnabled())
+            self.assertTrue(self.panel.diff_button.isChecked())
+            self.assertEqual(self.panel.preview.toPlainText(), original_diff)
+
+        path.write_text("module final; endmodule\n", encoding="utf-8")
+        self.panel.set_files(
+            [path], self.root, statuses={"rtl/demo.sv": "Modified"},
+            baselines={"rtl/demo.sv": "module after; endmodule\n"},
+        )
+        wait_for_idle(self.app)
+        self.assertTrue(self.panel.diff_button.isChecked())
+        self.assertIn("-module after;", self.panel.preview.toPlainText())
+        self.assertIn("+module final;", self.panel.preview.toPlainText())
+        self.assertNotIn("module before;", self.panel.preview.toPlainText())
+
+        self.panel.set_files(
+            [path], self.root, statuses={"rtl/demo.sv": "Unchanged"}, baselines={},
+        )
+        wait_for_idle(self.app)
+        self.assertFalse(self.panel.diff_button.isEnabled())
+        self.assertFalse(self.panel.diff_button.isChecked())
+        self.assertEqual(self.panel.preview.toPlainText(), "module final; endmodule\n")
+
+    def test_refresh_unchecks_diff_when_file_matches_baseline_again(self):
+        original = "module before; endmodule\n"
+        path = self.file("rtl/demo.sv", "module after; endmodule\n")
+        self.panel.set_files([path], self.root, baselines={"rtl/demo.sv": original})
+        wait_for_idle(self.app)
+        self.panel.diff_button.click()
+        wait_for_idle(self.app)
+        path.write_bytes(original.encode("utf-8"))
+        self.panel.set_files([path], self.root)
+        wait_for_idle(self.app)
+        self.assertFalse(self.panel.diff_button.isEnabled())
+        self.assertFalse(self.panel.diff_button.isChecked())
+        self.assertEqual(self.panel.preview.toPlainText(), original)
+
     def test_rapid_selection_skips_intermediate_pending_reads(self):
         files = [self.file(f"rtl/{index}.sv", f"module m{index}; endmodule") for index in range(10)]
         started, release = threading.Event(), threading.Event()

@@ -358,6 +358,9 @@ QTableWidget#ConfigDataTable::item:selected {
     color: $text_main;
 }
 QTableWidget#ConfigDataTable::item:hover:!selected { background-color: $bg_subtle; }
+QTableWidget#ConfigDataTable[formatterTable="true"]::item {
+    padding: 0px $spacing_md;
+}
 QFrame#ConfigTableCard {
     background-color: $bg_surface;
     border: 1px solid $border;
@@ -405,7 +408,7 @@ QLabel#ArtifactPath {
     color: $text_header;
     background: transparent;
     border: none;
-    font-size: 13px;
+    font-size: $font_size_13;
     padding: 2px 6px;
 }
 QPushButton#ArtifactsToolButton { border-radius: 6px; padding: 0; }
@@ -422,11 +425,10 @@ QPushButton#ArtifactPathButton:hover, QPushButton#ArtifactPathButton:checked {
 }
 QPushButton#ArtifactPathButton:focus { border: 1px solid $border_focus; }
 QFrame#ArtifactFilePopup {
-    background-color: $bg_surface;
+    background-color: #F7F9FC;
     border: 1px solid $border;
     border-radius: 8px;
 }
-QFrame#ArtifactFilePopup QTreeWidget#ArtifactFileTree { border: none; }
 QFrame#ArtifactToolSeparator { background-color: $border; border: none; }
 QFrame#ArtifactFooter {
     background-color: $bg_sidebar_inactive;
@@ -435,7 +437,7 @@ QFrame#ArtifactFooter {
     border-bottom-left-radius: 9px;
     border-bottom-right-radius: 9px;
 }
-QFrame#ArtifactFooter QLabel { font-size: 12px; }
+QFrame#ArtifactFooter QLabel { font-size: $font_size_12; }
 QLabel#ArtifactFileProgress, QLabel#ArtifactEditorMetadata {
     color: $text_sub; background: transparent; border: none;
 }
@@ -455,22 +457,56 @@ QPlainTextEdit#ArtifactCodePreview QScrollBar::handle:horizontal {
     border-radius: 2px;
 }
 QTreeWidget#ArtifactFileTree {
-    background-color: $bg_surface;
+    background-color: #FFFFFF;
     color: $text_main;
     border: 1px solid $border;
-    border-radius: $radius_control;
+    border-radius: 10px;
     outline: none;
-    padding: $spacing_xs;
+    padding: 8px;
+    font-family: "Inter", "Microsoft YaHei UI", sans-serif;
+    font-size: 13px;
     selection-background-color: $primary_light;
     selection-color: $text_main;
 }
-QTreeWidget#ArtifactFileTree::item { min-height: 28px; border-radius: $radius_chip; }
-QTreeWidget#ArtifactFileTree::item:hover:!selected { background: $bg_sidebar_inactive; }
+QTreeWidget#ArtifactFileTree::item {
+    height: 20px;
+    padding: 4px 8px;
+    border-radius: 6px;
+    color: #1E293B;
+    font-size: 13px;
+}
+QTreeWidget#ArtifactFileTree::item:hover:!selected { background-color: #F1F5F9; }
 QTreeWidget#ArtifactFileTree::item:selected {
-    background: $primary_light;
-    color: $text_main;
+    background-color: #EFF6FF;
+    color: #3B82F6;
+    border-left: 2px solid #3B82F6;
 }
 QTreeWidget#ArtifactFileTree::branch:selected { background: $bg_surface; }
+QTreeWidget#ArtifactFileTree::branch:has-children:!has-siblings:closed,
+QTreeWidget#ArtifactFileTree::branch:closed:has-children:has-siblings {
+    border-image: none;
+    image: url("$chevron_right_icon");
+}
+QTreeWidget#ArtifactFileTree::branch:open:has-children:!has-siblings,
+QTreeWidget#ArtifactFileTree::branch:open:has-children:has-siblings {
+    border-image: none;
+    image: url("$chevron_down_icon");
+}
+QTreeWidget#ArtifactFileTree QScrollBar:vertical {
+    background: transparent;
+    width: 6px;
+    margin: 4px 2px 4px 0;
+}
+QTreeWidget#ArtifactFileTree QScrollBar::handle:vertical {
+    background: #CBD5E1;
+    border-radius: 3px;
+    min-height: 30px;
+}
+QTreeWidget#ArtifactFileTree QScrollBar::handle:vertical:hover { background: #94A3B8; }
+QTreeWidget#ArtifactFileTree QScrollBar::add-line:vertical,
+QTreeWidget#ArtifactFileTree QScrollBar::sub-line:vertical { height: 0; }
+QTreeWidget#ArtifactFileTree QScrollBar::add-page:vertical,
+QTreeWidget#ArtifactFileTree QScrollBar::sub-page:vertical { background: transparent; }
 QLabel#ArtifactEmptyText {
     color: $text_muted;
     font-size: $font_size_body;
@@ -594,5 +630,5 @@ QToolTip {
     border: none;
     border-radius: 10px;
     padding: 6px 10px;
-    font-size: 12px;
+    font-size: $font_size_12;
 }

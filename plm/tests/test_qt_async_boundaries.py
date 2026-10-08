@@ -33,7 +33,7 @@ class AsyncBoundaryTests(unittest.TestCase):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
         self.addCleanup(dispose_new_widgets, self.app, set(self.app.topLevelWidgets()))
-        self.root = Path(self.temp.name)
+        self.root = Path(self.temp.name).resolve()
         scaffold_default_content(self.root / "test/demo")
         scaffold_default_content(self.root / "test/other")
         settings = SettingsStore(QtCore.QSettings(

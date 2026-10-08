@@ -1,6 +1,7 @@
 """Compose frontend views and asynchronous controller actions."""
 
 from PyQt5 import QtCore
+from plm.core import verible
 from plm.frontend.qt.services import ProjectService, SettingsStore, WorkspaceService
 from plm.frontend.qt.services.tasks import TaskRunner
 from plm.frontend.qt.views.documentation_page import DocumentationPage
@@ -16,7 +17,15 @@ class AppController(WorkspaceActions, ProjectNavigation, ProjectActions):
         self.projects = project_service or ProjectService(PROJECT_ROOT)
         self.settings = settings_store or SettingsStore()
         self.workspaces = workspace_service or WorkspaceService()
-        self.workspaces.formatter_provider = self.settings.formatter_preferences
+        self._detected_verible_path = ""
+        if not self.settings.formatter_preferences().get("verible_path"):
+            try:
+                self._detected_verible_path = verible.find_verible() or ""
+            except OSError:
+                # Formatter discovery is optional and must never prevent the
+                # application from opening.
+                pass
+        self.workspaces.formatter_provider = self._formatter_preferences
         self.current_name = None
         self.current_project = None
         self._saved_signature = None
@@ -105,8 +114,16 @@ class AppController(WorkspaceActions, ProjectNavigation, ProjectActions):
 
     def create_secondary_page(self, page, parent):
         if page == "settings":
-            return SettingsPage(parent, preferences=self.settings.preferences())
+            preferences = self.settings.preferences()
+            preferences.update(self._formatter_preferences())
+            return SettingsPage(parent, preferences=preferences)
         return DocumentationPage(parent)
+
+    def _formatter_preferences(self):
+        preferences = self.settings.formatter_preferences()
+        if not preferences.get("verible_path") and self._detected_verible_path:
+            preferences = dict(preferences, verible_path=self._detected_verible_path)
+        return preferences
 
     def save_preferences(self, preferences):
         self.settings.save_preferences(preferences)

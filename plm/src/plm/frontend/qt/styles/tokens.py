@@ -1,5 +1,7 @@
 """BeautifulUI design tokens shared by QSS and Qt widgets."""
 
+from pathlib import Path
+
 PRIMARY = "#3B82F6"
 PRIMARY_HOVER = "#2563EB"
 PRIMARY_LIGHT = "#DBEAFE"
@@ -23,7 +25,9 @@ FONT_CODE_PRIMARY = "Consolas"
 FONT_FAMILY = ('"Segoe UI", "Microsoft YaHei UI", "PingFang SC", '
                '"Noto Sans CJK SC", "SimHei", "SimSun", sans-serif')
 FONT_MONO = '"Consolas", "SF Mono", "Menlo", "Liberation Mono", "Courier New", monospace'
+ICON_DIR = Path(__file__).resolve().parents[1] / "assets" / "icons"
 UI_CONTENT_SCALE = 1.2
+FONT_SCALE = 0.9
 
 
 def scale_content_size(size):
@@ -31,9 +35,19 @@ def scale_content_size(size):
     return round(size * UI_CONTENT_SCALE)
 
 
-FONT_SIZE_BODY = scale_content_size(13)
-FONT_SIZE_SM = scale_content_size(12)
-FONT_SIZE_LG = scale_content_size(15)
+def scale_font_size(size):
+    """Render content-scaled fonts at 90% of their previous size."""
+    return scale_content_size(size) * FONT_SCALE
+
+
+def shrink_font_size(size):
+    """Render an existing unscaled font size at 90%."""
+    return size * FONT_SCALE
+
+
+FONT_SIZE_BODY = scale_font_size(13)
+FONT_SIZE_SM = scale_font_size(12)
+FONT_SIZE_LG = scale_font_size(15)
 ICON_SIZE = scale_content_size(18)
 ICON_SIZE_SM = scale_content_size(16)
 
@@ -72,6 +86,10 @@ QSS_TOKENS = {
     "font_size_body": f"{FONT_SIZE_BODY}px",
     "font_size_sm": f"{FONT_SIZE_SM}px",
     "font_size_lg": f"{FONT_SIZE_LG}px",
+    "font_size_12": f"{shrink_font_size(12)}px",
+    "font_size_13": f"{shrink_font_size(13)}px",
+    "chevron_right_icon": (ICON_DIR / "chevron-right.svg").as_posix(),
+    "chevron_down_icon": (ICON_DIR / "tree-chevron-down.svg").as_posix(),
     "radius_chip": f"{RADIUS_CHIP}px",
     "radius_control": f"{RADIUS_CONTROL}px",
     "radius_card": f"{RADIUS_CARD}px",

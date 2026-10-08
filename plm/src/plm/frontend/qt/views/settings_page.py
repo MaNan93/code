@@ -7,7 +7,7 @@ from plm.core.verible import (
 )
 from plm.frontend.qt.models.preferences import DEFAULT_EDITOR
 from plm.frontend.qt.services.tasks import TaskRunner
-from plm.frontend.qt.styles.tokens import SPACING_MD, SPACING_SM
+from plm.frontend.qt.styles.tokens import SPACING_MD
 from .secondary_page import SecondaryPage
 
 
@@ -15,8 +15,21 @@ def _executable_filter():
     return "Executables (*.exe);;All files (*)" if sys.platform == "win32" else "All files (*)"
 
 
+class _FormatterControlDelegate(QtWidgets.QStyledItemDelegate):
+    def updateEditorGeometry(self, editor, option, index):
+        super().updateEditorGeometry(editor, option, index)
+        if isinstance(editor, QtWidgets.QComboBox):
+            rect = editor.geometry()
+            height = editor.minimumHeight()
+            rect.setTop(option.rect.top() + (option.rect.height() - height) // 2)
+            rect.setHeight(height)
+            editor.setGeometry(rect)
+
+
 class _FormatterTable(QtWidgets.QTableWidget):
-    """Include styled cell padding when sizing embedded parameter controls."""
+    """Keep formatter rows at a fixed height."""
+
+    ROW_HEIGHT = 40
 
     def sizeHintForColumn(self, column):
         width = super().sizeHintForColumn(column)
@@ -28,11 +41,15 @@ class _FormatterTable(QtWidgets.QTableWidget):
         return width
 
     def sizeHintForRow(self, row):
-        height = super().sizeHintForRow(row)
-        control = self.cellWidget(row, 1)
-        if control is not None:
-            height = max(height, control.sizeHint().height() + 2 * SPACING_SM + 1)
-        return height
+        return self.ROW_HEIGHT
+
+    def applyRowHeight(self):
+        for row in range(self.rowCount()):
+            self.setRowHeight(row, self.sizeHintForRow(row))
+
+    def showEvent(self, event):
+        super().showEvent(event)
+        QtCore.QTimer.singleShot(0, self.applyRowHeight)
 
 
 class SettingsPage(SecondaryPage):
@@ -97,7 +114,10 @@ class SettingsPage(SecondaryPage):
         for row in self.setting_rows.values():
             rows_layout.addWidget(row)
         layout.addLayout(rows_layout)
-        layout.addSpacing(24)
+        self.general_rows_spacing = QtWidgets.QSpacerItem(
+            0, 24, QtWidgets.QSizePolicy.Minimum, QtWidgets.QSizePolicy.Fixed
+        )
+        layout.addItem(self.general_rows_spacing)
         self.formatter_panel = self._build_formatter(preferences)
         self._formatter_layout_index = layout.count()
         layout.addWidget(self.formatter_panel, 1)
@@ -124,13 +144,22 @@ class SettingsPage(SecondaryPage):
             row.setVisible(name in visible_rows)
         is_formatter = index == 1
         self.formatter_panel.setVisible(is_formatter)
+        self.general_rows_spacing.changeSize(
+            0, 0 if is_formatter else 24,
+            QtWidgets.QSizePolicy.Minimum, QtWidgets.QSizePolicy.Fixed,
+        )
+        self.content_top_spacing.changeSize(
+            0, 12 if is_formatter else 24,
+            QtWidgets.QSizePolicy.Minimum, QtWidgets.QSizePolicy.Fixed,
+        )
+        self.page_panel.layout().invalidate()
         # Formatter uses the whole content column: top aligned, 32 px side
-        # padding / 24 px vertical padding, with its table taking all spare
+        # padding / 24 px bottom padding, with its table taking all spare
         # height and the global actions pinned to the bottom.  Other Settings
         # tabs retain their existing margins and stretch behavior.
         self.settings_content_layout.setContentsMargins(
             32 if is_formatter else 0,
-            24 if is_formatter else 0,
+            0,
             32 if is_formatter else 0,
             24 if is_formatter else 0,
         )
@@ -158,6 +187,9 @@ class SettingsPage(SecondaryPage):
         layout.addLayout(path_row)
         self.flag_table = _FormatterTable(0, 2)
         self.flag_table.setObjectName("ConfigDataTable")
+        self.flag_table.setProperty("formatterTable", True)
+        self.flag_table.setShowGrid(False)
+        self.flag_table.setItemDelegate(_FormatterControlDelegate(self.flag_table))
         self.flag_table.setHorizontalHeaderLabels(("参数", "值"))
         self.flag_table.verticalHeader().hide()
         self.flag_table.verticalHeader().setDefaultSectionSize(40)
@@ -203,13 +235,13 @@ class SettingsPage(SecondaryPage):
                 self._flag_controls[name] = control
         layout.addWidget(self.flag_table, 1)
         self._fill_flags(preferences["verible_flags"])
-        self.flag_table.resizeRowsToContents()
+        self.flag_table.applyRowHeight()
         return panel
 
     def changeEvent(self, event):
         super().changeEvent(event)
         if event.type() in (QtCore.QEvent.FontChange, QtCore.QEvent.StyleChange) and hasattr(self, "flag_table"):
-            self.flag_table.resizeRowsToContents()
+            QtCore.QTimer.singleShot(0, self.flag_table.applyRowHeight)
 
     def _flags_changed(self, *_):
         self._flags_dirty = True

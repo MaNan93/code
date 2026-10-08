@@ -43,11 +43,26 @@ class ArtifactPreview:
         size = len(text.encode("utf-8"))
         self._content_lru[token] = size
         self._content_cache_bytes += size
+        self._trim_content_cache()
+
+    def _trim_content_cache(self):
+        """Evict the least recently used preview until the budget holds."""
         while self._content_cache_bytes > MAX_PREVIEW_CACHE_BYTES:
             (version, oldest), size = self._content_lru.popitem(last=False)
             contents = self._current_contents if version == "current" else self._previous_contents
             contents.pop(oldest, None)
             self._content_cache_bytes -= size
+
+    def _diff_baseline(self):
+        """True when a previous preview exists for the current file.
+
+        Deliberately independent of whether this refresh's read has landed:
+        set_files() clears _current_contents up front and refills it from a
+        worker, so a readiness-based check sees "no diff" for the whole read
+        window and would strip the button's checked state on every
+        regeneration or on every switch to a file that is not cached yet.
+        """
+        return self.current_path is not None and str(self.current_path) in self._previous_contents
 
     def _diff_available(self):
         if self.current_path is None:
@@ -58,6 +73,20 @@ class ArtifactPreview:
             and key in self._current_contents
             and self._previous_contents[key] != self._current_contents[key]
         )
+
+    def _diff_enabled(self):
+        """Whether the toggle can do anything for the current file.
+
+        A file whose read has not landed yet stays enabled: set_files()
+        empties _current_contents up front, so a purely readiness-based
+        answer reads as "no diff" for the whole read window and would grey
+        the button out on every regeneration.
+        """
+        if not self._diff_baseline():
+            return False
+        if str(self.current_path) not in self._current_contents:
+            return True
+        return self._diff_available()
 
     def _load_selected(self, *_):
         self._ensure_selected_contents()
@@ -110,6 +139,8 @@ class ArtifactPreview:
                         ):
                             progress.check_cancelled()
                             chunks.append(chunk)
+                            if not chunk.endswith("\n"):
+                                chunks.append("\n\\ No newline at end of file\n")
                         return "".join(chunks)
 
                     def show_diff(diff):
@@ -127,13 +158,15 @@ class ArtifactPreview:
                 self.preview.setPlainText(text)
                 self.preview.moveCursor(QtGui.QTextCursor.Start)
                 self.preview.horizontalScrollBar().setValue(0)
+                # Report the file's own line count, not the diff's: while a
+                # diff is pending, text is cleared and would read as 0 行.
                 self._file_status = (
                     f"{self.selection.current_index + 1}/{len(self.selection.files)}"
-                    f" · {len(text.splitlines())} 行"
+                    f" · {len(self._current_contents.get(key, '').splitlines())} 行"
                 )
-        diff_available = self._diff_available()
-        self.diff_button.setEnabled(diff_available)
-        if not diff_available and self.diff_button.isChecked():
+        diff_enabled = self._diff_enabled()
+        self.diff_button.setEnabled(diff_enabled)
+        if not diff_enabled and self.diff_button.isChecked():
             self.diff_button.blockSignals(True)
             self.diff_button.setChecked(False)
             self.diff_button.blockSignals(False)

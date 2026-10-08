@@ -303,7 +303,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.controller = AppController()
         app = QtWidgets.QApplication.instance()
         font = QtGui.QFont(FONT_UI_PRIMARY)
-        font.setPixelSize(FONT_SIZE_BODY)
+        font.setPixelSize(round(FONT_SIZE_BODY))
         font.setStyleStrategy(QtGui.QFont.PreferAntialias)
         font.setHintingPreference(QtGui.QFont.PreferFullHinting)
         app.setFont(font)

@@ -12,7 +12,6 @@ from PyQt5 import QtCore, QtGui, QtTest, QtWidgets
 from plm.frontend.qt.views.artifacts_panel import ArtifactsPanel
 from plm.frontend.qt.views.artifact_chrome import ArtifactMetadataLabel
 from plm.frontend.qt.styles import APP_QSS
-from plm.frontend.qt.styles.tokens import PRIMARY_LIGHT
 from plm.frontend.qt.widgets.common import StyledMenu
 from plm.frontend.qt.widgets.code_preview import (
     CodePreview,
@@ -152,7 +151,7 @@ class ArtifactPreviewTests(unittest.TestCase):
         self.panel.copy_path()
         self.assertEqual(QtWidgets.QApplication.clipboard().text(), str(path))
 
-    def test_selected_file_indent_stays_white_beside_highlighted_filename(self):
+    def test_file_tree_is_a_compact_card_with_a_strong_selected_row(self):
         self.panel.setStyleSheet(APP_QSS)
         path = self.file("rtl/common/selected.sv", "module selected; endmodule")
         self.panel.set_files([path], self.root)
@@ -160,11 +159,23 @@ class ArtifactPreviewTests(unittest.TestCase):
         self.panel.path_button.click()
         wait_for_idle(self.app)
         tree = self.panel.file_tree
+        self.assertTrue(tree.isHeaderHidden())
+        self.assertTrue(tree.rootIsDecorated())
+        self.assertEqual(tree.indentation(), 16)
+        shadow = tree.graphicsEffect()
+        self.assertIsInstance(shadow, QtWidgets.QGraphicsDropShadowEffect)
+        self.assertEqual(shadow.blurRadius(), 8)
+        self.assertEqual(shadow.offset(), QtCore.QPointF(0, 2))
+        self.assertEqual(shadow.color(), QtGui.QColor(0, 0, 0, 20))
         item = tree.currentItem()
         rect = tree.visualItemRect(item)
+        self.assertEqual(rect.height(), 28)
         image = tree.viewport().grab().toImage()
         self.assertEqual(image.pixelColor(2, rect.center().y()).name(), "#ffffff")
-        self.assertEqual(image.pixelColor(image.width() - 10, rect.center().y()).name(), PRIMARY_LIGHT.lower())
+        self.assertEqual(image.pixelColor(image.width() - 10, rect.center().y()).name(), "#eff6ff")
+        self.assertIn("background-color: #F7F9FC", APP_QSS)
+        self.assertIn("border-left: 2px solid #3B82F6", APP_QSS)
+        self.assertNotIn("$chevron_", APP_QSS)
 
     def test_narrow_metadata_keeps_line_and_column_prefix(self):
         label = ArtifactMetadataLabel(self.panel)
@@ -344,6 +355,30 @@ class ArtifactPreviewTests(unittest.TestCase):
         self.panel.diff_button.click()
         wait_for_idle(self.app)
         self.assertEqual(self.panel.preview.toPlainText(), current)
+
+    def test_diff_separates_lines_without_trailing_newlines(self):
+        for previous, current, markers in (
+            ("before", "after", 2),
+            ("before\n", "after", 1),
+            ("before", "after\n", 1),
+            ("same", "same\n", 1),
+        ):
+            with self.subTest(previous=previous, current=current):
+                path = self.file("rtl/no_newline.sv", current)
+                self.panel.set_files(
+                    [path], self.root, baselines={"rtl/no_newline.sv": previous},
+                )
+                wait_for_idle(self.app)
+                if not self.panel.diff_button.isChecked():
+                    self.panel.diff_button.click()
+                wait_for_idle(self.app)
+                lines = self.panel.preview.toPlainText().splitlines()
+                self.assertIn("-" + previous.rstrip("\n"), lines)
+                self.assertIn("+" + current.rstrip("\n"), lines)
+                self.assertEqual(lines.count("\\ No newline at end of file"), markers)
+                self.panel.diff_button.click()
+                wait_for_idle(self.app)
+                self.assertEqual(self.panel.preview.toPlainText(), current)
 
     def test_toolbar_compacts_without_losing_more_actions(self):
         self.panel._apply_toolbar_density(320)

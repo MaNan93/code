@@ -127,6 +127,9 @@ class QtWorkflowTests(unittest.TestCase):
         self.assertEqual(panel.preview.toPlainText(), generated.read_text())
         self.assertIn("endmodule", panel.preview.toPlainText())
         self.assertTrue(panel.preview.isReadOnly())
+        # Every generated file gets a diff baseline, not just the one the
+        # drawer happened to auto-select.
+        self.assertEqual(len(panel._previous_contents), len(files))
         self.assertIn("生成完成", window.log_panel.status_label.text())
 
     def test_project_actions_flow_through_controller_and_keep_selection(self):

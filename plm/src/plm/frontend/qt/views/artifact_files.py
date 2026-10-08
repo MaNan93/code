@@ -15,7 +15,7 @@ _STATUS_COLORS = {
 class ArtifactFiles:
     """Focused artifact drawer behavior; widgets are owned by ArtifactsPanel."""
 
-    def set_files(self, files, root=None, statuses=None):
+    def set_files(self, files, root=None, statuses=None, baselines=None):
         root = Path(root).resolve() if root is not None else None
         files = [Path(value).resolve() for value in files]
         if root != self.workspace_root or not files:
@@ -24,19 +24,29 @@ class ArtifactFiles:
         files = self.selection.files
         self.tasks.cancel_latest("artifact-read")
         self.tasks.cancel_latest("artifact-diff")
-        if root == self.workspace_root:
-            listed = {str(path) for path in files}
-            # An unfinished refresh has no current content yet. Retain the
-            # last successful preview until the replacement read completes.
-            cached = {**self._previous_contents, **self._current_contents}
-            previous = {}
+        listed = {str(path) for path in files}
+        previous = {}
+        if root == self.workspace_root and baselines is None:
+            # Refresh keeps the existing comparison baseline. A generation
+            # without explicit baselines compares against the last preview.
+            if statuses is None:
+                cached = {**self._current_contents, **self._previous_contents}
+            else:
+                cached = {**self._previous_contents, **self._current_contents}
             for _version, key in self._content_lru:
                 if key in listed:
                     previous.pop(key, None)
                     previous[key] = cached[key]
-            self._previous_contents = previous
-        else:
-            self._previous_contents = {}
+        # Explicit generation baselines replace the previous generation's.
+        # A generation hands over the pre-generation text it captured before
+        # overwriting, so every changed file gets a real baseline -- not just
+        # the files the user happened to preview in the meantime.
+        if root is not None:
+            for relative, text in (baselines or {}).items():
+                key = str((root / relative).resolve())
+                if key in listed:
+                    previous[key] = text
+        self._previous_contents = previous
         self._current_contents = {}
         self._content_lru.clear()
         self._content_cache_bytes = 0
@@ -44,6 +54,7 @@ class ArtifactFiles:
             size = len(text.encode("utf-8"))
             self._content_lru[("previous", key)] = size
             self._content_cache_bytes += size
+        self._trim_content_cache()
         self._file_errors = {}
         self._files_revision += 1
         self._loading_contents = False

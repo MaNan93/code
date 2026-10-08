@@ -4,7 +4,8 @@ import unicodedata
 from PyQt5 import QtCore, QtGui, QtWidgets
 from plm.frontend.qt.services.tasks import TaskRunner
 from plm.frontend.qt.styles.tokens import (
-    BG_SUBTLE, BORDER, FONT_CODE_PRIMARY, TEXT_MAIN, TEXT_MUTED, scale_content_size,
+    BG_SUBTLE, BORDER, FONT_CODE_PRIMARY, TEXT_MAIN, TEXT_MUTED,
+    scale_font_size, shrink_font_size,
 )
 from .secondary_page import SecondaryPage
 DOCS_DIR = Path(__file__).resolve().parents[3] / "docs"
@@ -36,9 +37,9 @@ class DocumentationPage(SecondaryPage):
         td {{ color: {text_main}; font-size: {body_size}px; font-weight: 400; padding: 8px 12px; }}
         """.format(
             text_main=TEXT_MAIN, border=BORDER, bg_subtle=BG_SUBTLE,
-            heading_size=scale_content_size(16),
-            subheading_size=scale_content_size(14),
-            body_size=scale_content_size(13),
+            heading_size=scale_font_size(16),
+            subheading_size=scale_font_size(14),
+            body_size=scale_font_size(13),
         )
         self.doc_browser.document().setDefaultStyleSheet(doc_css)
         layout.addWidget(self.doc_browser, 1)
@@ -139,7 +140,7 @@ class DocumentationPage(SecondaryPage):
                 heading_format.clearProperty(QtGui.QTextFormat.FontSizeAdjustment)
                 heading_format.setProperty(
                     QtGui.QTextFormat.FontPixelSize,
-                    16 if heading_level == 1 else 14,
+                    shrink_font_size(16 if heading_level == 1 else 14),
                 )
                 heading_format.setFontWeight(QtGui.QFont.Bold)
                 cursor.setCharFormat(heading_format)
@@ -156,7 +157,9 @@ class DocumentationPage(SecondaryPage):
                 cursor.select(QtGui.QTextCursor.BlockUnderCursor)
                 note_format = QtGui.QTextCharFormat()
                 note_format.setForeground(QtGui.QColor(TEXT_MUTED))
-                note_format.setProperty(QtGui.QTextFormat.FontPixelSize, 12)
+                note_format.setProperty(
+                    QtGui.QTextFormat.FontPixelSize, shrink_font_size(12)
+                )
                 cursor.mergeCharFormat(note_format)
 
             table = cursor.currentTable()
@@ -184,14 +187,18 @@ class DocumentationPage(SecondaryPage):
                     )
                     header_format = QtGui.QTextCharFormat()
                     header_format.setForeground(QtGui.QColor(TEXT_MAIN))
-                    header_format.setProperty(QtGui.QTextFormat.FontPixelSize, 13)
+                    header_format.setProperty(
+                        QtGui.QTextFormat.FontPixelSize, shrink_font_size(13)
+                    )
                     header_format.setFontWeight(QtGui.QFont.Bold)
                     cell_cursor.mergeCharFormat(header_format)
             if block_format.property(QtGui.QTextFormat.BlockCodeFence):
                 cursor.select(QtGui.QTextCursor.BlockUnderCursor)
                 code_format = QtGui.QTextCharFormat()
                 code_format.setFontFamilies([FONT_CODE_PRIMARY, "Courier New", "monospace"])
-                code_format.setProperty(QtGui.QTextFormat.FontPixelSize, 13)
+                code_format.setProperty(
+                    QtGui.QTextFormat.FontPixelSize, shrink_font_size(13)
+                )
                 cursor.setCharFormat(code_format)
                 cursor.setBlockCharFormat(code_format)
                 block_format.setBackground(QtGui.QColor(BG_SUBTLE))

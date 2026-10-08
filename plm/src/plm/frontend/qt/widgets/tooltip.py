@@ -2,7 +2,7 @@
 
 from PyQt5 import QtCore, QtGui, QtWidgets
 
-from plm.frontend.qt.styles.tokens import FONT_UI_PRIMARY
+from plm.frontend.qt.styles.tokens import FONT_UI_PRIMARY, shrink_font_size
 
 
 class RoundedToolTip(QtWidgets.QWidget):
@@ -25,7 +25,8 @@ class RoundedToolTip(QtWidgets.QWidget):
         self.label.setMaximumWidth(self.MAX_TEXT_WIDTH)
         self.label.setStyleSheet(
             f'background: transparent; border: none; color: white; '
-            f'font-family: "{FONT_UI_PRIMARY}"; font-size: 12px; padding: 0;'
+            f'font-family: "{FONT_UI_PRIMARY}"; '
+            f'font-size: {shrink_font_size(12)}px; padding: 0;'
         )
         layout.addWidget(self.label)
 

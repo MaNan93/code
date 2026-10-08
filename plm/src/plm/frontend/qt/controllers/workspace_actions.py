@@ -6,6 +6,11 @@ from pathlib import Path
 from plm.core.validation import ValidationError, ValidationIssue
 
 
+# Mirrors the artifact drawer's preview cap: a diff baseline only has to
+# cover what the drawer can render.
+MAX_BASELINE_BYTES = 200 * 1024
+
+
 class SavedGenerationError(Exception):
     """Keep the successful save checkpoint when later generation fails."""
 
@@ -135,26 +140,47 @@ class WorkspaceActions:
         return False
 
     @staticmethod
-    def _artifact_signature(files, root):
+    def _artifact_snapshot(files, root, texts=True):
+        """Digests of artifact files under root, plus their contents.
+
+        The pre-generation call captures contents as well: the generator is
+        about to overwrite those files, and the drawer needs that text as its
+        diff baseline. Without it, only files the user happened to preview
+        would have anything to compare against.
+        """
         root = Path(root).resolve()
         signature = {}
+        baseline = {}
         for value in files:
             path = Path(value).resolve()
             try:
                 relative = path.relative_to(root).as_posix()
                 hasher = hashlib.sha256()
+                captured = bytearray()
                 with path.open("rb") as stream:
                     for chunk in iter(lambda: stream.read(65536), b""):
                         hasher.update(chunk)
-                digest = hasher.hexdigest()
+                        if texts and len(captured) <= MAX_BASELINE_BYTES:
+                            captured.extend(chunk)
             except (OSError, ValueError):
                 continue
-            signature[relative] = digest
-        return signature
+            signature[relative] = hasher.hexdigest()
+            if texts and len(captured) <= MAX_BASELINE_BYTES:
+                try:
+                    baseline[relative] = bytes(captured).decode("utf-8")
+                except UnicodeDecodeError:
+                    pass
+        return signature, baseline
 
     @staticmethod
-    def _artifact_statuses(before, after):
+    def _artifact_statuses(before, after, texts=None):
+        """Per-file New/Modified/Unchanged plus the pre-generation text.
+
+        Only files that actually change carry a baseline; an unchanged file
+        has nothing to diff, and a new one starts from empty.
+        """
         statuses = {}
+        baselines = {}
         for relative, digest in after.items():
             if relative not in before:
                 statuses[relative] = "New"
@@ -162,7 +188,9 @@ class WorkspaceActions:
                 statuses[relative] = "Modified"
             else:
                 statuses[relative] = "Unchanged"
-        return statuses
+                continue
+            baselines[relative] = (texts or {}).get(relative, "")
+        return statuses, baselines
 
     def generate_current(self):
         if (self.current_project is None or self._generation_running or self._save_running
@@ -184,7 +212,7 @@ class WorkspaceActions:
         def generate(progress):
             if service.signature(project) != signature:
                 raise ValueError("配置文件已被外部修改，请通过“打开项目”重新打开。")
-            before = self._artifact_signature(service.output_files(project), root)
+            before, before_texts = self._artifact_snapshot(service.output_files(project), root)
             progress(10, "正在生成")
             saved = None
 
@@ -197,9 +225,13 @@ class WorkspaceActions:
                     project, payload, progress=lambda phase: progress(50, str(phase)),
                     on_saved=on_saved,
                 )
-                after = self._artifact_signature(files, root)
+                after, _ = self._artifact_snapshot(files, root, texts=False)
                 progress(100, "生成完成")
-                return result, files, report, self._artifact_statuses(before, after), service.signature(project)
+                statuses, baselines = self._artifact_statuses(before, after, before_texts)
+                return (
+                    result, files, report, statuses, baselines,
+                    service.signature(project),
+                )
             except Exception as error:
                 if saved is not None:
                     raise SavedGenerationError(error, saved) from error
@@ -226,11 +258,13 @@ class WorkspaceActions:
             unlock()
             if project != self.current_project:
                 return
-            result, files, report, statuses, saved = data
+            result, files, report, statuses, baselines, saved = data
             self._saved_signature = saved
             self._validation_revision += 1
             self.config_page.mark_saved(payload)
-            self.config_page.artifacts_panel.set_files(files, root, statuses=statuses)
+            self.config_page.artifacts_panel.set_files(
+                files, root, statuses=statuses, baselines=baselines
+            )
             self.validate_current()
             if report.strip():
                 self.log_panel.append_log(report.strip())

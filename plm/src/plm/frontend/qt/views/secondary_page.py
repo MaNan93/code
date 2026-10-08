@@ -83,7 +83,10 @@ class SecondaryPage(QtWidgets.QFrame):
         divider.setObjectName("SecondaryTabDivider")
         divider.setFixedHeight(1)
         panel_layout.addWidget(divider)
-        panel_layout.addSpacing(24)
+        self.content_top_spacing = QtWidgets.QSpacerItem(
+            0, 24, QtWidgets.QSizePolicy.Minimum, QtWidgets.QSizePolicy.Fixed
+        )
+        panel_layout.addItem(self.content_top_spacing)
         panel_layout.addWidget(self.content, 1)
         page_area_layout.addWidget(self.page_panel, 0)
         page_area_layout.addStretch(1)

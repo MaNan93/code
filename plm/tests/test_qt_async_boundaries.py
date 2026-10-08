@@ -17,15 +17,19 @@ from plm.frontend.qt.main_window import MainWindow
 from plm.frontend.qt.services import ProjectService, SettingsStore, WorkspaceService
 from plm.frontend.qt.services.tasks import TaskRunner
 from plm.frontend.qt.views.artifact_preview import MAX_PREVIEW_BYTES
-from qt_test_support import dispose_new_widgets, wait_for_idle
+from qt_test_support import (
+    dispose_new_widgets, isolate_host_formatter, preserve_application_state, wait_for_idle,
+)
 
 
 class AsyncBoundaryTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+        preserve_application_state(cls, cls.app)
 
     def setUp(self):
+        isolate_host_formatter(self, self.app)
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
         self.addCleanup(dispose_new_widgets, self.app, set(self.app.topLevelWidgets()))
@@ -124,6 +128,40 @@ class AsyncBoundaryTests(unittest.TestCase):
         page.undo()
         self.assertEqual(page.controllers_editor.table.item(0, 1).text(), "saved_snapshot")
         self.assertFalse(page.dirty)
+
+    def test_external_edit_during_load_cannot_become_the_saved_baseline(self):
+        controller = self.controller
+        project = controller.current_project
+        original_load = WorkspaceService.load
+        before_content = self.window.config_page.content()
+        before_signature = controller._saved_signature
+
+        def load_then_external_edit(service, selected):
+            payload = original_load(service, selected)
+            path = selected.controllers_csv
+            path.write_text(path.read_text(encoding="utf-8").replace("CtrlA", "ExternalCtrl"), encoding="utf-8")
+            return payload
+
+        with patch.object(WorkspaceService, "load", load_then_external_edit):
+            controller._load_project(project)
+            wait_for_idle(self.app)
+        self.assertEqual(self.window.config_page.content(), before_content)
+        self.assertEqual(controller._saved_signature, before_signature)
+        self.assertFalse(controller._load_running)
+        self.assertTrue(self.window.config_page.tabs.isEnabled())
+        self.assertTrue(self.window.nav_panel.isEnabled())
+        controller.save_current()
+        wait_for_idle(self.app)
+        self.assertIn("ExternalCtrl", project.controllers_csv.read_text(encoding="utf-8"))
+        self.assertEqual(controller.generation_state, "external_changed")
+
+        # A deliberate reopen now reads the actual external revision.
+        controller._load_project(project)
+        wait_for_idle(self.app)
+        self.assertEqual(self.window.config_page.content()["controllers"][0]["ctrl_name"], "ExternalCtrl")
+        controller.save_current()
+        wait_for_idle(self.app)
+        self.assertIn("ExternalCtrl", project.controllers_csv.read_text(encoding="utf-8"))
 
     def test_shadow_free_canvases_have_no_clearance_and_panels_stay_aligned(self):
         window = self.window

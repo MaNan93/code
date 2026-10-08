@@ -10,7 +10,9 @@ from unittest.mock import patch
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from qt_test_support import wait_for_idle
+from qt_test_support import (
+    dispose_new_widgets, isolate_host_formatter, preserve_application_state, wait_for_idle,
+)
 from PyQt5 import QtCore, QtGui, QtTest, QtWidgets, sip
 from plm.core.workspace import scaffold_default_content
 from plm.frontend.qt.controllers import AppController
@@ -27,10 +29,13 @@ class QtRegressionTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+        preserve_application_state(cls, cls.app)
 
     def setUp(self):
+        isolate_host_formatter(self, self.app)
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
+        self.addCleanup(dispose_new_widgets, self.app, set(self.app.topLevelWidgets()))
         self.root = Path(self.temp.name)
         for name in ("demo", "other"):
             scaffold_default_content(self.root / "test" / name)
@@ -43,14 +48,6 @@ class QtRegressionTests(unittest.TestCase):
             wait_for_idle(self.app)
         self.window.show()
         wait_for_idle(self.app)
-        self.addCleanup(self.dispose)
-
-    def dispose(self):
-        self.window.config_page.mark_saved()
-        self.window.close()
-        self.window.deleteLater()
-        QtCore.QCoreApplication.sendPostedEvents(None, QtCore.QEvent.DeferredDelete)
-
     def test_invalid_save_reports_inline_without_modal_dialog(self):
         page = self.window.config_page
         page.controllers_editor.table.item(0, 0).setText("invalid-id")

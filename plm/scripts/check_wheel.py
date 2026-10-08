@@ -8,6 +8,7 @@ import argparse
 import configparser
 import os
 from pathlib import Path
+import shutil
 import subprocess
 import sys
 import tarfile
@@ -25,6 +26,20 @@ PACKAGE_DATA = (
     "plm/frontend/qt/assets/icons/*.svg",
     "plm/frontend/qt/styles/*.qss",
 )
+
+
+def installed_smoke_environment(scripts, installation_env):
+    """Exercise the wheel without inheriting checkout tools from PATH."""
+    env = dict(installation_env)
+    paths = [str(scripts)]
+    if os.name == "nt":
+        # Keep Windows system commands available without retaining unrelated
+        # developer tools, including an optional external SV formatter.
+        system_root = env.get("SystemRoot") or env.get("SYSTEMROOT")
+        if system_root:
+            paths.append(str(Path(system_root) / "System32"))
+    env["PATH"] = os.pathsep.join(paths)
+    return env
 
 
 def package_files(root):
@@ -113,11 +128,13 @@ import tempfile
 import plm
 from plm.core.paths import COMMON_DIR, TB_MAKEFILE
 from plm.core.workspace import scaffold_default_content
+from plm.core.verible import find_verible
 
 assert Path(plm.__file__).resolve().is_relative_to(Path(sys.argv[1]).resolve())
 assert find_spec('PyQt5') is None, 'The base CLI check must run without Qt'
 assert len(list(COMMON_DIR.glob('*.sv'))) == 5
 assert TB_MAKEFILE.is_file()
+assert find_verible() is None, 'The wheel smoke must not inherit a host Formatter'
 def run_cli(command):
     result = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
     if result.returncode:
@@ -155,6 +172,7 @@ import plm
 from PyQt5 import QtCore, QtWidgets
 from plm.core.paths import DOCS_DIR, PLM_ROOT
 from plm.core.workspace import scaffold_default_content
+from plm.core.verible import find_verible
 from plm.frontend.qt.widgets.common import APP_ICON_PATH, PROJECT_ROOT
 from plm.frontend.qt.controllers import AppController
 from plm.frontend.qt.main_window import MainWindow
@@ -167,6 +185,7 @@ assert (DOCS_DIR / 'qt_frontend_guide.md').is_file()
 assert APP_ICON_PATH.is_file()
 assert (PLM_ROOT / 'frontend/qt/widgets/lanegrid.py').is_file()
 assert (PLM_ROOT / 'frontend/qt/widgets/tables.py').is_file()
+assert find_verible() is None, 'The wheel smoke must not inherit a host Formatter'
 app = QtWidgets.QApplication([])
 app.setStyle('Fusion')
 for name in ('critical', 'information', 'question', 'warning'):
@@ -244,6 +263,9 @@ def main():
     if not wheel.is_file():
         parser.error(f"wheel not found: {wheel}")
     source_root = Path(__file__).resolve().parents[1]
+    uv = shutil.which("uv")
+    if uv is None:
+        parser.error("uv was not found on PATH")
     print(f"Wheel: {check_wheel_contents(wheel, source_root)} package files match source.", flush=True)
     if args.sdist:
         print(f"Source distribution: {check_sdist_contents(args.sdist, source_root)} files checked.", flush=True)
@@ -253,22 +275,23 @@ def main():
         env = dict(os.environ, QT_QPA_PLATFORM="offscreen", PYTHONNOUSERSITE="1")
         for name in ("PYTHONPATH", "PYTHONHOME", "VIRTUAL_ENV", "UV_PROJECT_ENVIRONMENT", "UV_PROJECT"):
             env.pop(name, None)
-        subprocess.run(["uv", "venv", "--python", sys.executable, str(target)], cwd=root, env=env, check=True)
+        subprocess.run([uv, "venv", "--python", sys.executable, str(target)], cwd=root, env=env, check=True)
         scripts = target / ("Scripts" if os.name == "nt" else "bin")
         interpreter = scripts / ("python.exe" if os.name == "nt" else "python")
         cli = scripts / ("plm.exe" if os.name == "nt" else "plm")
         gui = scripts / ("plm-gui.exe" if os.name == "nt" else "plm-gui")
-        subprocess.run(["uv", "pip", "install", "--python", str(interpreter), str(wheel)],
+        subprocess.run([uv, "pip", "install", "--python", str(interpreter), str(wheel)],
                        cwd=root, env=env, check=True)
         assert cli.is_file() and gui.is_file(), "Installed console scripts are missing"
-        subprocess.run([str(cli), "--help"], cwd=root, env=env, check=True)
-        runner = ["uv", "run", "--no-project", "--python", str(interpreter),
+        smoke_env = installed_smoke_environment(scripts, env)
+        subprocess.run([str(cli), "--help"], cwd=root, env=smoke_env, check=True)
+        runner = [uv, "run", "--no-project", "--python", str(interpreter),
                   "python", "-X", "faulthandler", "-c"]
-        subprocess.run([*runner, CLI_CHECK, str(target), str(cli)], cwd=root, env=env, check=True)
-        subprocess.run(["uv", "pip", "install", "--python", str(interpreter), f"{wheel}[qt]"],
+        subprocess.run([*runner, CLI_CHECK, str(target), str(cli)], cwd=root, env=smoke_env, check=True)
+        subprocess.run([uv, "pip", "install", "--python", str(interpreter), f"{wheel}[qt]"],
                        cwd=root, env=env, check=True)
         subprocess.run([*runner, CHECK, str(target), str(Path(__file__).resolve().parent)],
-                       cwd=root, env=env, check=True)
+                       cwd=root, env=smoke_env, check=True)
 
 
 if __name__ == "__main__":

@@ -48,7 +48,9 @@ class Worker(QtCore.QRunnable):
         try:
             self.report.check_cancelled()
             result = self.operation(self.report)
-        except Exception as error:
+        except BaseException as error:
+            # Config readers may raise SystemExit. Every worker outcome must
+            # reach the GUI-side cleanup, including superseded keyed jobs.
             self.signals.failed.emit(self.task_id, error)
         else:
             self.signals.completed.emit(self.task_id, result)

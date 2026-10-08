@@ -10,7 +10,9 @@ import unittest
 from unittest.mock import patch
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-from qt_test_support import wait_for_idle
+from qt_test_support import (
+    dispose_new_widgets, isolate_host_formatter, preserve_application_state, wait_for_idle,
+)
 from PyQt5 import QtCore, QtTest, QtWidgets
 
 from plm.core.validation import ValidationError
@@ -20,15 +22,16 @@ from plm.frontend.qt.controllers import AppController
 from plm.frontend.qt.main_window import MainWindow
 from plm.frontend.qt.services import ProjectService, SettingsStore, WorkspaceService
 from plm.frontend.qt.views.settings_page import SettingsPage
-from qt_test_support import dispose_new_widgets
 
 
 class GenerationIntegrationTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+        preserve_application_state(cls, cls.app)
 
     def setUp(self):
+        isolate_host_formatter(self, self.app)
         self.temp = tempfile.TemporaryDirectory(prefix="plm generation test ")
         self.addCleanup(self.temp.cleanup)
         self.addCleanup(dispose_new_widgets, self.app, set(self.app.topLevelWidgets()))
@@ -63,6 +66,24 @@ class GenerationIntegrationTests(unittest.TestCase):
             self.assertEqual(page._preferences()["verible_flags"], DEFAULT_VERIBLE_FLAGS)
             page._fill_flags(None)
             self.assertEqual(page._preferences()["verible_flags"], DEFAULT_VERIBLE_FLAGS)
+
+    def test_default_generation_is_independent_of_the_host_formatter(self):
+        controller, window = self.window()
+        with patch(
+            "plm.core.verible.shutil.which", return_value="machine-formatter.bat"
+        ), patch(
+            "plm.core.verible.subprocess.run",
+            side_effect=AssertionError("default UI test invoked the host formatter"),
+        ) as run:
+            controller.generate_current()
+            wait_for_idle(self.app)
+
+        self.assertEqual(controller.generation_state, "up_to_date")
+        run.assert_not_called()
+        manifest = json.loads(
+            (controller.current_project.config_dir.parent / "rtl/manifest.json").read_text()
+        )
+        self.assertEqual(manifest["formatter"]["engine"], "none")
 
     def test_formatter_parameter_validation_and_detection(self):
         page = SettingsPage(preferences=self.store.preferences())

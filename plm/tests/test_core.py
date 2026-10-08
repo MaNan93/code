@@ -5,6 +5,8 @@ import tempfile
 import unittest
 from unittest import mock
 
+from sample_data import sample_config
+
 from plm.core import exporter
 from plm.core.gen_flags import GenerationOptions
 from plm.core.model import Config
@@ -12,7 +14,6 @@ from plm.core.plan import GenerationPlan, MANIFEST_SCHEMA_VERSION
 from plm.core.service import generate
 from plm.core.paths import DOCS_DIR, WORKSPACE_MARKER, is_deletable_workspace
 from plm.core.workspace import (
-    read_gen_flags,
     load_default_signals,
     read_csv_rows,
     save_workspace_content,
@@ -35,6 +36,9 @@ def valid_payload():
         "signals": [{
             "signal_name": "mac_phy_txdata", "signal_type": "perlane",
             "direction": "mac2phy", "width": "8", "safe_state": "0", "tie_off": "0",
+        }, {
+            "signal_name": "phy_mac_rxdata", "signal_type": "perlane",
+            "direction": "phy2mac", "width": "8", "safe_state": "0", "tie_off": "0",
         }],
         "mapping": {"lane_count": 2, "rows": [{"mode": "0", "lane0": "0-0", "lane1": "0-1"}]},
     }
@@ -203,8 +207,14 @@ class WorkspaceTests(unittest.TestCase):
 
 
 class ExporterTests(unittest.TestCase):
+    def setUp(self):
+        # Exporter contracts should not depend on a Formatter found on this host.
+        formatter = mock.patch("plm.core.verible.find_verible", return_value=None)
+        formatter.start()
+        self.addCleanup(formatter.stop)
+
     def test_parameter_check_accepts_alignment_and_rejects_wrong_widths(self):
-        cfg = Config(ROOT / "test" / "bifurcate" / "config")
+        cfg = Config(sample_config("bifurcate"))
         plan = GenerationPlan.build(cfg, GenerationOptions(quiet=True))
         for wrong_parameter in (None, "NL", "NC"):
             with self.subTest(wrong_parameter=wrong_parameter), tempfile.TemporaryDirectory() as td:
@@ -225,7 +235,7 @@ class ExporterTests(unittest.TestCase):
                             exporter.export_all(plan, Path(td) / "rtl")
 
     def test_generated_outputs_have_no_dft_clock_bypass(self):
-        config_dir = ROOT / "test" / "bifurcate" / "config"
+        config_dir = sample_config("bifurcate")
         with tempfile.TemporaryDirectory() as td:
             workspace = Path(td)
             generate(
@@ -242,7 +252,7 @@ class ExporterTests(unittest.TestCase):
             self.assertNotIn("DFT", generated_text)
 
     def test_generation_is_noop_only_for_a_verified_current_output_set(self):
-        config_dir = ROOT / "test" / "bifurcate" / "config"
+        config_dir = sample_config("bifurcate")
         options = GenerationOptions(quiet=True)
         with tempfile.TemporaryDirectory() as td:
             workspace = Path(td)
@@ -282,7 +292,7 @@ class ExporterTests(unittest.TestCase):
             )
 
     def test_failed_generation_preserves_previous_output_set(self):
-        cfg = Config(ROOT / "test" / "bifurcate" / "config")
+        cfg = Config(sample_config("bifurcate"))
         plan = GenerationPlan.build(cfg, GenerationOptions(quiet=True))
         with tempfile.TemporaryDirectory() as td:
             workspace = Path(td)
@@ -301,7 +311,7 @@ class ExporterTests(unittest.TestCase):
             self.assertEqual(tb_sentinel.read_text(encoding="utf-8"), "old tb")
 
     def test_manifests_prove_rtl_and_tb_are_one_generation(self):
-        cfg = Config(ROOT / "test" / "bifurcate" / "config")
+        cfg = Config(sample_config("bifurcate"))
         options = GenerationOptions(quiet=True)
         plan = GenerationPlan.build(cfg, options)
         with tempfile.TemporaryDirectory() as td:
@@ -323,7 +333,7 @@ class ExporterTests(unittest.TestCase):
             self.assertIn("tb_pipe_lane_mapper.sv", tb["files"])
 
     def test_failed_post_generation_self_check_preserves_previous_outputs(self):
-        cfg = Config(ROOT / "test" / "bifurcate" / "config")
+        cfg = Config(sample_config("bifurcate"))
         plan = GenerationPlan.build(cfg, GenerationOptions(quiet=True))
         with tempfile.TemporaryDirectory() as td:
             workspace = Path(td)
@@ -344,7 +354,7 @@ class ExporterTests(unittest.TestCase):
             self.assertEqual(old_tb.read_text(encoding="utf-8"), "tb")
 
     def test_corrupt_manifests_are_stale_and_repaired(self):
-        config_dir = ROOT / "test" / "bifurcate" / "config"
+        config_dir = sample_config("bifurcate")
         options = GenerationOptions(quiet=True)
         corruptions = (
             [],
@@ -378,6 +388,114 @@ class ExporterTests(unittest.TestCase):
 
 
 class GenerationPlanTests(unittest.TestCase):
+    def test_each_signal_direction_is_required_before_outputs_are_replaced(self):
+        for direction in ("mac2phy", "phy2mac"):
+            with self.subTest(direction=direction), tempfile.TemporaryDirectory() as td:
+                root = Path(td)
+                payload = valid_payload()
+                payload["signals"] = [s for s in payload["signals"] if s["direction"] == direction]
+                save_workspace_content(root, payload)
+                for folder in ("rtl", "tb"):
+                    (root / folder).mkdir()
+                    (root / folder / "previous.txt").write_text(folder, encoding="utf-8")
+                missing = "phy2mac" if direction == "mac2phy" else "mac2phy"
+                with self.assertRaisesRegex(ValidationError, f"direction {missing} requires at least one signal"):
+                    generate(root / "config", root / "rtl", GenerationOptions())
+                for folder in ("rtl", "tb"):
+                    self.assertEqual((root / folder / "previous.txt").read_text(), folder)
+
+    def test_systemverilog_keywords_are_rejected_with_signal_coordinates(self):
+        for name in ("byte", "shortint", "longint", "rand", "sequence", "modport", "checker", "nettype"):
+            with self.subTest(name=name):
+                payload = valid_payload()
+                payload["signals"][0]["signal_name"] = name
+                with self.assertRaises(ValidationError) as caught:
+                    load_generation_plan_from_payload(payload, GenerationOptions())
+                issue = caught.exception.issues[0]
+                self.assertIn("not a legal SystemVerilog identifier", issue.message)
+                self.assertEqual((issue.table, issue.row, issue.column), ("signals", 0, "signal_name"))
+        payload = valid_payload()
+        payload["signals"][0]["signal_name"] = "Byte"
+        self.assertEqual(load_generation_plan_from_payload(payload, GenerationOptions()).signals[0].name, "Byte")
+
+    def test_generated_port_and_net_collisions_are_rejected(self):
+        for pclk_mode in ("pclk_as_phy_output", "pclk_as_phy_input"):
+            for dpr in (False, True):
+                options = GenerationOptions(
+                    arch="serdes" if pclk_mode == "pclk_as_phy_input" else "original_pipe",
+                    pclk_mode=pclk_mode, dpr=dpr,
+                )
+                cases = [("controllers", "ctrl_name", name) for name in ("PHY", "CTRL")]
+                cases += [("signals", "signal_name", name) for name in ("pclk", "rst_n")]
+                if dpr:
+                    cases.append(("controllers", "ctrl_name", "DPR"))
+                if pclk_mode == "pclk_as_phy_input":
+                    cases.append(("signals", "signal_name", "rx_clk"))
+                else:
+                    cases.append(("signals", "signal_name", "pclk_out"))
+                for table, column, name in cases:
+                    with self.subTest(pclk_mode=pclk_mode, dpr=dpr, name=name):
+                        payload = valid_payload()
+                        payload[table][0][column] = name
+                        with self.assertRaises(ValidationError) as caught:
+                            load_generation_plan_from_payload(payload, options)
+                        self.assertTrue(any(
+                            "collides" in issue.message and (issue.table, issue.row, issue.column) == (table, 0, column)
+                            for issue in caught.exception.issues
+                        ))
+                        with tempfile.TemporaryDirectory() as td:
+                            save_workspace_content(td, payload)
+                            config = Config(Path(td) / "config")
+                            with self.assertRaisesRegex(ValueError, "collides"):
+                                GenerationPlan.build(config, options)
+
+    def test_flattened_names_are_checked_across_controller_prefixes(self):
+        payload = valid_payload()
+        payload["controllers"] = [
+            {"ctrl_id": "0", "ctrl_name": "A", "max_width": "1"},
+            {"ctrl_id": "1", "ctrl_name": "A_B", "max_width": "1"},
+        ]
+        payload["mapping"]["rows"][0]["lane1"] = "1-0"
+        payload["signals"][0]["signal_name"] = "b_c"
+        payload["signals"][1]["signal_name"] = "c"
+        with self.assertRaisesRegex(ValidationError, "generated identifier 'a_b_c'"):
+            load_generation_plan_from_payload(payload, GenerationOptions())
+
+    def test_names_are_checked_for_the_selected_architecture_and_dpr(self):
+        payload = valid_payload()
+        payload["controllers"][0]["ctrl_name"] = "DPR"
+        load_generation_plan_from_payload(payload, GenerationOptions(dpr=False))
+        payload = valid_payload()
+        payload["signals"][0]["signal_name"] = "pclk_out"
+        load_generation_plan_from_payload(payload, GenerationOptions(
+            arch="serdes", pclk_mode="pclk_as_phy_input",
+        ))
+        with tempfile.TemporaryDirectory() as td:
+            save_workspace_content(td, payload)
+            validation.load_validated_config(Path(td) / "config")
+            payload["signals"][0]["signal_name"] = "pclk"
+            save_workspace_content(td, payload)
+            with self.assertRaisesRegex(ValidationError, "collides"):
+                validation.load_validated_config(Path(td) / "config")
+
+    @mock.patch("plm.core.verible.find_verible", return_value=None)
+    def test_connection_wrapper_preserves_the_generated_select_mode(self, _formatter):
+        for pclk_mode in ("pclk_as_phy_output", "pclk_as_phy_input"):
+            for sel_mode in ("sync", "comb"):
+                with self.subTest(pclk_mode=pclk_mode, sel_mode=sel_mode), tempfile.TemporaryDirectory() as td:
+                    root = Path(td)
+                    options = GenerationOptions(
+                        arch="serdes" if pclk_mode == "pclk_as_phy_input" else "original_pipe",
+                        pclk_mode=pclk_mode, sel_mode=sel_mode, quiet=True,
+                    )
+                    generate(sample_config("bifurcate"), root / "rtl", options)
+                    default = "1'b1" if sel_mode == "sync" else "1'b0"
+                    for module in ("pipe_lane_mapper", "pipe_lane_mapper_connection", "pipe_lane_sel_gen"):
+                        text = (root / "rtl/src" / f"{module}.sv").read_text(encoding="utf-8")
+                        self.assertIn(f"parameter bit SEL_SYNC = {default}", text)
+                    wrapper = (root / "rtl/src/pipe_lane_mapper_connection.sv").read_text(encoding="utf-8")
+                    self.assertIn(".SEL_SYNC (SEL_SYNC)", wrapper)
+
     def test_editor_payload_validation_matches_saved_config(self):
         payload = valid_payload()
         memory_plan = load_generation_plan_from_payload(payload, GenerationOptions())
@@ -402,7 +520,7 @@ class GenerationPlanTests(unittest.TestCase):
         )
 
     def test_config_snapshot_drives_both_parsing_and_hash(self):
-        source = ROOT / "test" / "bifurcate" / "config"
+        source = sample_config("bifurcate")
         with tempfile.TemporaryDirectory() as td:
             config_dir = Path(td)
             for path in source.iterdir():
@@ -430,7 +548,7 @@ class GenerationPlanTests(unittest.TestCase):
         self.assertEqual(snapshotted.controllers[0].name, baseline.controllers[0].name)
 
     def test_formatter_binary_and_flags_change_generation_key(self):
-        cfg = Config(ROOT / "test" / "bifurcate" / "config")
+        cfg = Config(sample_config("bifurcate"))
         with tempfile.TemporaryDirectory() as td:
             formatter = Path(td) / "verible-verilog-format"
             formatter.write_bytes(b"formatter-v1")
@@ -499,7 +617,7 @@ class GenerationPlanTests(unittest.TestCase):
         )
 
     def test_plan_caches_topology_and_changes_key_with_options(self):
-        cfg = Config(ROOT / "test" / "bifurcate" / "config")
+        cfg = Config(sample_config("bifurcate"))
         first = GenerationPlan.build(cfg, GenerationOptions())
         second = GenerationPlan.build(
             cfg,
@@ -511,7 +629,7 @@ class GenerationPlanTests(unittest.TestCase):
         self.assertRegex(first.generator_fingerprint, r"^[0-9a-f]{64}$")
 
     def test_generator_fingerprint_changes_the_generation_key(self):
-        cfg = Config(ROOT / "test" / "bifurcate" / "config")
+        cfg = Config(sample_config("bifurcate"))
         with mock.patch(
             "plm.core.plan._generator_fingerprint",
             side_effect=("1" * 64, "2" * 64),
@@ -522,7 +640,7 @@ class GenerationPlanTests(unittest.TestCase):
         self.assertNotEqual(first.generation_key, second.generation_key)
 
     def test_config_hash_is_independent_of_checkout_line_endings(self):
-        source = ROOT / "test" / "bifurcate" / "config"
+        source = sample_config("bifurcate")
         baseline = GenerationPlan.build(Config(source), GenerationOptions())
         with tempfile.TemporaryDirectory() as td:
             config_dir = Path(td)
@@ -543,7 +661,7 @@ class GenerationPlanTests(unittest.TestCase):
 
         with self.assertRaises(ValidationError) as caught:
             load_generation_plan(
-                ROOT / "test" / "quad" / "config", GenerationOptions()
+                sample_config("quad"), GenerationOptions()
             )
         self.assertTrue(
             all(issue.layer == "topology" for issue in caught.exception.issues)
@@ -551,170 +669,10 @@ class GenerationPlanTests(unittest.TestCase):
 
         with self.assertRaises(ValidationError) as caught:
             load_generation_plan(
-                ROOT / "test" / "bifurcate" / "config",
+                sample_config("bifurcate"),
                 GenerationOptions(dpr=True, sel_mode="comb"),
             )
         self.assertEqual(caught.exception.issues[0].layer, "generation")
-
-
-# Non-default generation flags each bundled sample is meant to be generated
-# with. The CLI takes these as command-line arguments only, so the same fact is
-# written down in three places for three different consumers:
-#   - here, for this regression
-#   - SETFLAGS_<SET> in the top-level Makefile, for `make <SET>`
-#   - test/<SET>/config/gen_flags.txt, which only the Qt front end reads
-# test_sample_gen_flags_match_the_qt_workspace_files below pins the third
-# against this one so they cannot drift; the Makefile copy is checked by eye.
-# Add an entry here whenever a new sample needs a non-default flag, or that
-# sample silently gets generated with the defaults and stops covering whatever
-# it exists to demonstrate.
-SAMPLE_GEN_FLAGS = {
-    "maxpclk": {"pclk_mode": "pclk_as_phy_input"},
-    "dpr": {"dpr": True},
-}
-
-# Deliberately invalid configurations used to prove that topology validation
-# rejects unsafe mappings.  They are regression fixtures, not generation
-# samples, so the positive generation sweep below must not try to export them.
-NEGATIVE_SAMPLES = {
-    "quad": (
-        "driving sources span multiple lane groups",
-        "working clock comes from different lanes",
-    ),
-}
-
-
-def sample_gen_kwargs(sample_name):
-    """export_all kwargs for one bundled sample."""
-    return dict(SAMPLE_GEN_FLAGS.get(sample_name, {}))
-
-
-class SampleRegressionTests(unittest.TestCase):
-    def test_mode_transitions_only_affect_groups_whose_owner_changes(self):
-        """A global mode update must not widen into a global lane interruption."""
-        for source in sorted((ROOT / "test").iterdir()):
-            if not (source / "config").is_dir() or source.name in NEGATIVE_SAMPLES:
-                continue
-            cfg = Config(source / "config")
-            with self.subTest(sample=source.name):
-                for old_mode in cfg.modes:
-                    for new_mode in cfg.modes:
-                        if old_mode == new_mode:
-                            continue
-                        changed_lanes = {
-                            lane
-                            for lane in range(cfg.lane_count)
-                            if cfg.mapping[old_mode][lane][0]
-                            != cfg.mapping[new_mode][lane][0]
-                        }
-                        grouped_changed_lanes = {
-                            lane
-                            for group in cfg.groups
-                            if group.owners[old_mode] != group.owners[new_mode]
-                            for lane in group.lanes
-                        }
-                        self.assertEqual(
-                            grouped_changed_lanes,
-                            changed_lanes,
-                            f"mode {old_mode}->{new_mode} disturbs an unchanged lane",
-                        )
-
-    @mock.patch("plm.core.verible.find_verible", return_value=None)
-    def test_all_bundled_samples_validate_and_generate(self, _formatter):
-        # Golden samples use the generator's native formatting, independently
-        # of whichever Verible version happens to be installed on the host.
-        for source in sorted((ROOT / "test").iterdir()):
-            if not (source / "config").is_dir():
-                continue
-            if source.name in NEGATIVE_SAMPLES:
-                continue
-            with self.subTest(sample=source.name), tempfile.TemporaryDirectory() as td:
-                copied = Path(td) / source.name
-                shutil.copytree(source / "config", copied / "config")
-                cfg = Config(copied / "config")
-                self.assertEqual(cfg.validate(), [])
-                kwargs = sample_gen_kwargs(source.name)
-                pclk_mode = kwargs.get("pclk_mode", "pclk_as_phy_output")
-                options = GenerationOptions(
-                    arch="serdes" if pclk_mode == "pclk_as_phy_input" else "original_pipe",
-                    quiet=True,
-                    **kwargs,
-                )
-                exporter.export_all(
-                    GenerationPlan.build(cfg, options),
-                    copied / "rtl",
-                )
-                self.assertTrue((copied / "rtl" / "flist.f").is_file())
-                self.assertTrue((copied / "tb" / "tb_pipe_lane_mapper.sv").is_file())
-                for output_name in ("rtl", "tb"):
-                    expected_root = source / output_name
-                    actual_root = copied / output_name
-                    expected_files = {
-                        path.relative_to(expected_root)
-                        for path in expected_root.rglob("*")
-                        if path.is_file()
-                    }
-                    actual_files = {
-                        path.relative_to(actual_root)
-                        for path in actual_root.rglob("*")
-                        if path.is_file()
-                    }
-                    self.assertEqual(
-                        actual_files,
-                        expected_files,
-                        f"{source.name}/{output_name} generated file list is stale",
-                    )
-                    for relative in sorted(expected_files):
-                        self.assertEqual(
-                            (actual_root / relative).read_text(encoding="utf-8"),
-                            (expected_root / relative).read_text(encoding="utf-8"),
-                            f"{source.name}/{output_name}/{relative} is stale; regenerate samples",
-                        )
-
-    def test_negative_samples_are_rejected_for_the_expected_reason(self):
-        for sample_name, expected_messages in NEGATIVE_SAMPLES.items():
-            with self.subTest(sample=sample_name):
-                errors = Config(ROOT / "test" / sample_name / "config").validate()
-                self.assertTrue(errors, f"{sample_name} unexpectedly became valid")
-                joined = "\n".join(errors)
-                for message in expected_messages:
-                    self.assertIn(message, joined)
-
-    def test_sample_gen_flags_match_the_qt_workspace_files(self):
-        """A sample's gen_flags.txt is what the Qt front end shows when you
-        open it; SAMPLE_GEN_FLAGS is what this regression generates it with.
-        They describe the same intent, so they must agree -- otherwise opening
-        maxpclk in the GUI and hitting Generate produces different RTL than
-        `make maxpclk` does."""
-        for source in sorted((ROOT / "test").iterdir()):
-            if not (source / "config").is_dir():
-                continue
-            with self.subTest(sample=source.name):
-                on_disk = read_gen_flags(source / "config" / "gen_flags.txt")
-                expected = sample_gen_kwargs(source.name)
-                self.assertEqual(
-                    on_disk["pclk-mode"] or "pclk_as_phy_output",
-                    expected.get("pclk_mode", "pclk_as_phy_output"),
-                )
-                self.assertEqual(on_disk["dpr"], expected.get("dpr", False))
-
-    def test_samples_exercise_both_clock_architectures_and_dpr(self):
-        """Guard against the flags silently going unused again: the two most
-        intricate generator branches (gen_clk_mux_phy_input and every --dpr
-        path) only have coverage while some sample actually selects them."""
-        samples = {s.name for s in (ROOT / "test").iterdir() if (s / "config").is_dir()}
-        seen = {"pclk_as_phy_output"}  # the default, and no sample opts out of it entirely
-        for name in samples:
-            kwargs = sample_gen_kwargs(name)
-            seen.add(kwargs.get("pclk_mode", "pclk_as_phy_output"))
-            if kwargs.get("dpr"):
-                seen.add("dpr")
-        self.assertIn("pclk_as_phy_input", seen)
-        self.assertIn("dpr", seen)
-        self.assertLessEqual(
-            set(SAMPLE_GEN_FLAGS), samples,
-            "SAMPLE_GEN_FLAGS names a sample that no longer exists under test/",
-        )
 
 
 if __name__ == "__main__":

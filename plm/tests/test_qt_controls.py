@@ -9,28 +9,33 @@ from unittest.mock import patch
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from qt_test_support import wait_for_idle
+from qt_test_support import (
+    dispose_new_widgets, isolate_host_formatter, preserve_application_state, wait_for_idle,
+)
+from sample_data import sample_config
 from PyQt5 import QtCore, QtTest, QtWidgets
 
 from plm.frontend.qt.controllers import AppController
 from plm.frontend.qt.main_window import MainWindow
 from plm.frontend.qt.services import ProjectService, SettingsStore, WorkspaceService
 from plm.frontend.qt.views.settings_page import SettingsPage
-from plm.frontend.qt.widgets.common import PROJECT_ROOT
 
 
 class QtControlLogicTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+        preserve_application_state(cls, cls.app)
         cls.app.setStyle("Fusion")
 
     def setUp(self):
+        isolate_host_formatter(self, self.app)
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
+        self.addCleanup(dispose_new_widgets, self.app, set(self.app.topLevelWidgets()))
         self.root = Path(self.temp.name).resolve()
         shutil.copytree(
-            PROJECT_ROOT / "test/bifurcate/config",
+            sample_config("bifurcate"),
             self.root / "test/demo/config",
         )
         self.store = SettingsStore(
@@ -45,16 +50,6 @@ class QtControlLogicTests(unittest.TestCase):
         self.controller = controller
         self.window.show()
         wait_for_idle(self.app)
-        self.addCleanup(self._close_window)
-
-    def _close_window(self):
-        self.window.config_page.mark_saved()
-        self.window._close_secondary_page()
-        self.window.close()
-        self.window.deleteLater()
-        QtCore.QCoreApplication.sendPostedEvents(None, QtCore.QEvent.DeferredDelete)
-        wait_for_idle(self.app)
-
     @staticmethod
     def _menu_class_selecting(label):
         base_menu = QtWidgets.QMenu
@@ -143,7 +138,7 @@ class QtControlLogicTests(unittest.TestCase):
 
     def test_open_project_button_opens_selected_workspace(self):
         external = self.root / "external/opened"
-        shutil.copytree(PROJECT_ROOT / "test/bifurcate/config", external / "config")
+        shutil.copytree(sample_config("bifurcate"), external / "config")
         with patch.object(
             QtWidgets.QFileDialog, "getExistingDirectory", return_value=str(external)
         ):

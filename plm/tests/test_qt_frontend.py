@@ -7,7 +7,10 @@ from unittest.mock import patch
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from qt_test_support import wait_for_idle
+from qt_test_support import (
+    dispose_new_widgets, isolate_host_formatter, preserve_application_state, wait_for_idle,
+)
+from sample_data import SAMPLES_DIR
 from PyQt5 import QtCore, QtGui, QtTest, QtWidgets
 
 from plm.frontend.qt.controllers import AppController
@@ -20,7 +23,7 @@ from plm.frontend.qt.views.artifacts_panel import ArtifactsPanel
 from plm.frontend.qt.views.config_page import ConfigHeader
 from plm.frontend.qt.views.log_panel import LogPanel
 from plm.frontend.qt.views.nav_panel import NavPanel
-from plm.frontend.qt.widgets.common import ICON_SIZE, LUCIDE_ICON_DIR, PROJECT_ROOT, load_lucide_icon
+from plm.frontend.qt.widgets.common import ICON_SIZE, LUCIDE_ICON_DIR, load_lucide_icon
 from plm.frontend.qt.widgets.project_item import ProjectItemWidget
 from plm.frontend.qt.widgets.project_list import ProjectList
 
@@ -29,6 +32,7 @@ class QtFrontendLayoutTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+        preserve_application_state(cls, cls.app)
         cls.app.setStyle("Fusion")
         cls.app.setFont(QtGui.QFont("Segoe UI", 10))
         cls.app.setStyleSheet(APP_QSS)
@@ -48,10 +52,12 @@ class QtFrontendLayoutTests(unittest.TestCase):
             cls.addClassCleanup(patcher.stop)
 
     def setUp(self):
+        isolate_host_formatter(self, self.app)
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
+        self.addCleanup(dispose_new_widgets, self.app, set(self.app.topLevelWidgets()))
         self.root = Path(self.temp.name)
-        for config in (PROJECT_ROOT / "test").glob("*/config"):
+        for config in SAMPLES_DIR.glob("*/config"):
             shutil.copytree(config, self.root / "test" / config.parent.name / "config")
         self.store = SettingsStore(QtCore.QSettings(
             str(self.root / "settings.ini"), QtCore.QSettings.IniFormat
@@ -63,18 +69,6 @@ class QtFrontendLayoutTests(unittest.TestCase):
         self.window = MainWindow()
         wait_for_idle(self.app)
         self.window.show()
-        wait_for_idle(self.app)
-
-    def tearDown(self):
-        self.window.close()
-        # processEvents() does not guarantee DeferredDelete delivery. Destroy
-        # every top-level test widget before the next test reuses QApplication;
-        # otherwise timers/event filters can accumulate across the full suite.
-        for widget in self.app.topLevelWidgets():
-            widget.deleteLater()
-        QtCore.QCoreApplication.sendPostedEvents(
-            None, QtCore.QEvent.DeferredDelete
-        )
         wait_for_idle(self.app)
 
     def test_frameless_window_with_immersive_sidebar_and_log_splitter(self):

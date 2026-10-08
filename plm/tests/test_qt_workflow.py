@@ -9,30 +9,33 @@ from unittest.mock import patch
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from qt_test_support import wait_for_idle
+from qt_test_support import (
+    dispose_new_widgets, isolate_host_formatter, preserve_application_state, wait_for_idle,
+)
+from sample_data import sample_config
 from PyQt5 import QtCore, QtTest, QtWidgets
 
 from plm.frontend.qt.controllers import AppController
 from plm.frontend.qt.main_window import MainWindow
 from plm.frontend.qt.services import ProjectService, SettingsStore, WorkspaceService
-from plm.frontend.qt.widgets.common import PROJECT_ROOT
-from qt_test_support import dispose_new_widgets
 
 
 class QtWorkflowTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+        preserve_application_state(cls, cls.app)
         cls.app.setStyle("Fusion")
 
     def setUp(self):
+        isolate_host_formatter(self, self.app)
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
         self.addCleanup(dispose_new_widgets, self.app, set(self.app.topLevelWidgets()))
         self.root = Path(self.temp.name).resolve()
         for name in ("demo", "other"):
             shutil.copytree(
-                PROJECT_ROOT / "test/bifurcate/config",
+                sample_config("bifurcate"),
                 self.root / "test" / name / "config",
             )
         qsettings = QtCore.QSettings(str(self.root / "settings.ini"), QtCore.QSettings.IniFormat)

@@ -45,7 +45,12 @@ def main(argv=None):
     app.setStyle("Fusion")
     win = MainWindow()
     win.show()
-    return app.exec_()
+    try:
+        return app.exec_()
+    finally:
+        # Keep QApplication and the window alive until Python worker code has
+        # finished, before the interpreter begins tearing down Qt objects.
+        QtCore.QThreadPool.globalInstance().waitForDone()
 
 
 if __name__ == "__main__":

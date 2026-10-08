@@ -6,7 +6,7 @@ from unittest.mock import patch
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from qt_test_support import wait_for_idle
+from qt_test_support import preserve_application_state, wait_for_idle
 from PyQt5 import QtCore, QtGui, QtTest, QtWidgets
 
 from plm.frontend.qt.views.artifacts_panel import ArtifactsPanel
@@ -26,6 +26,7 @@ class ArtifactPreviewTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+        preserve_application_state(cls, cls.app)
 
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
@@ -39,6 +40,8 @@ class ArtifactPreviewTests(unittest.TestCase):
         self._dispose_widget(self.panel)
 
     def _dispose_widget(self, widget):
+        # Finish lazy reads before deleting the widget and its temporary files.
+        wait_for_idle(self.app)
         widget.close()
         widget.deleteLater()
         self.app.sendPostedEvents(None, QtCore.QEvent.DeferredDelete)

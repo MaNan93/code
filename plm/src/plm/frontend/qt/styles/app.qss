@@ -173,12 +173,6 @@ QMenu::item {
     color: $text_main;
 }
 StyledMenu { margin: 0; }
-QMenu#ProjectContextMenu {
-    background: transparent;
-    border: none;
-    padding: 14px;
-    margin: 0;
-}
 QMenu::item:selected {
     background-color: $primary_light;
     color: $primary;
@@ -634,24 +628,31 @@ QLabel#NewProjectDialogSubtitle {
     font-size: $font_size_body;
 }
 QDialogButtonBox { background: transparent; }
-/* Joined groups: only the two outside edges retain a 6 px radius. */
-QFrame#ButtonGroup { background: $bg_surface; border: none; border-radius: 6px; }
+/* Joined command buttons share borders and touch without gaps.
+   Navigation tabs use SecondaryMenuButton instead of a ButtonGroup. */
+QFrame#ButtonGroup { background: transparent; border: none; border-radius: 0; }
 QFrame#ButtonGroup > QPushButton {
-    padding: 0 16px;
+    background-color: $bg_surface;
+    padding: 0 $spacing_md;
     margin: 0;
-    border: none;
-    border-right: 1px solid #E5E7EB;
+    border: 1px solid $border;
+    border-right: none;
     border-radius: 0;
 }
 QFrame#ButtonGroup > QPushButton[groupFirst="true"] {
-    border-top-left-radius: 6px;
-    border-bottom-left-radius: 6px;
+    border-top-left-radius: $radius_control;
+    border-bottom-left-radius: $radius_control;
 }
 QFrame#ButtonGroup > QPushButton[groupLast="true"] {
-    border-right: none;
-    border-top-right-radius: 6px;
-    border-bottom-right-radius: 6px;
+    border-right: 1px solid $border;
+    border-top-right-radius: $radius_control;
+    border-bottom-right-radius: $radius_control;
 }
+QFrame#ButtonGroup > QPushButton:hover {
+    background-color: $bg_subtle;
+    border-color: $border_hover;
+}
+QFrame#ButtonGroup > QPushButton:pressed { background-color: $border; }
 QPushButton#NavActionButton:hover, QPushButton#NavFooterButton:hover,
 QPushButton#ProjectButton:hover {
     background-color: #F5F5F5;

@@ -20,7 +20,7 @@ from plm.frontend.qt.widgets.tables import EditableTable
 
 
 LANE_COUNTS = (2, 4, 8, 16, 32)
-CONTROLLER_COLUMN_WIDTHS = {"ctrl_id": 60, "max_width": 60}
+CONTROLLER_COLUMN_WIDTHS = {"ctrl_id": 96, "max_width": 128}
 TABLE_VISIBLE_ROWS = 10
 TABLE_CARD_PADDING = 8
 

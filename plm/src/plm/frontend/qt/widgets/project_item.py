@@ -2,9 +2,9 @@
 
 from pathlib import Path
 
-from PyQt5 import QtCore, QtGui, QtWidgets
+from PyQt5 import QtCore, QtWidgets
 
-from plm.frontend.qt.styles.tokens import DANGER, ICON_SIZE_SM, TEXT_SUB
+from plm.frontend.qt.styles.tokens import CONTROL_HEIGHT, DANGER, ICON_SIZE_SM, TEXT_SUB
 from plm.frontend.qt.widgets.common import (
     ICON_SIZE,
     PROJECT_ROOT,
@@ -16,31 +16,11 @@ from plm.frontend.qt.widgets.common import (
 
 
 class ProjectContextMenu(StyledMenu):
-    """Project popup with a visible card edge and inset shadow clearance."""
+    """Use the same rounded popup styling as every other PLM context menu."""
 
     def __init__(self, parent):
         super().__init__(parent)
         self.setObjectName("ProjectContextMenu")
-
-    def _apply_round_mask(self):
-        # The transparent outer margin contains the software shadow.
-        self.clearMask()
-
-    def paintEvent(self, event):
-        painter = QtGui.QPainter(self)
-        painter.setRenderHint(QtGui.QPainter.Antialiasing)
-        card = QtCore.QRectF(self.rect()).adjusted(8, 8, -8, -8)
-        painter.setPen(QtCore.Qt.NoPen)
-        for spread in range(7, 0, -1):
-            painter.setBrush(QtGui.QColor(15, 23, 42, 9 - spread))
-            shadow = card.translated(0, 2).adjusted(-spread, -spread, spread, spread)
-            painter.drawRoundedRect(shadow, self.RADIUS + spread, self.RADIUS + spread)
-        painter.setPen(QtGui.QPen(QtGui.QColor("#CBD5E1"), 1))
-        painter.setBrush(QtGui.QColor("#FFFFFF"))
-        painter.drawRoundedRect(card, self.RADIUS, self.RADIUS)
-        painter.end()
-        super().paintEvent(event)
-
 
 class ProjectItemWidget(QtWidgets.QWidget):
     """Single-line selectable project row with semantic interaction signals."""
@@ -92,7 +72,7 @@ class ProjectItemWidget(QtWidgets.QWidget):
         self.project_name_label.setAttribute(QtCore.Qt.WA_TransparentForMouseEvents)
         self.project_name_edit = QtWidgets.QLineEdit()
         self.project_name_edit.setObjectName("ProjectNameEditor")
-        self.project_name_edit.setFixedHeight(28)
+        self.project_name_edit.setFixedHeight(CONTROL_HEIGHT)
         self.project_name_edit.setSizePolicy(
             QtWidgets.QSizePolicy.Ignored, QtWidgets.QSizePolicy.Fixed
         )

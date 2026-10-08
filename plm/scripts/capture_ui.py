@@ -146,7 +146,7 @@ with tempfile.TemporaryDirectory(prefix="plm-ui-") as td:
         page=w.view_stack.currentWidget()
         page.menu_buttons[idx].click()
         if name == "formatter":
-            assert page.settings_content_layout.getContentsMargins() == (32,24,32,24)
+            assert page.settings_content_layout.getContentsMargins() == (32,0,32,24)
             assert page.settings_content_layout.stretch(page._formatter_layout_index) == 1
             assert page.settings_content_layout.stretch(page._bottom_stretch_index) == 0
             align_control=page._flag_controls["assignment_statement_alignment"]
@@ -186,7 +186,7 @@ with tempfile.TemporaryDirectory(prefix="plm-ui-") as td:
     assert search_layout.getContentsMargins() == (0,0,12,0)
     search_buttons=artifacts.search_bar.findChildren(QtWidgets.QPushButton)
     assert len(search_buttons) == 3
-    assert all(button.size() == QtCore.QSize(24,24) for button in search_buttons)
+    assert all(button.size() == QtCore.QSize(24,34) for button in search_buttons)
     shot(w,"06-artifacts-search")
     w.config_page.toggle_artifacts_maximized(); shot(w,"07-artifacts-maximized")
 

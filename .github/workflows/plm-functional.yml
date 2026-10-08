@@ -40,6 +40,15 @@ jobs:
       - run: uv sync --extra qt --locked
       - name: Compile Python
         run: uv run python -m compileall -q src run.py
+      - name: Unified UI controls and font contracts
+        timeout-minutes: 2
+        run: |
+          uv run python -u -m unittest -v \
+            tests.test_qt_frontend.QtFrontendLayoutTests.test_all_font_tokens_are_fourteen_pixels \
+            tests.test_qt_frontend.QtFrontendLayoutTests.test_controller_table_fixed_dimensions_and_whole_row_hover \
+            tests.test_qt_frontend.QtFrontendLayoutTests.test_settings_button_groups_have_no_internal_gap \
+            tests.test_qt_frontend.QtFrontendLayoutTests.test_project_menu_rows_touch_without_extra_vertical_spacing \
+            tests.test_qt_regressions.QtRegressionTests.test_document_tables_and_code_blocks_have_adaptive_formats
       - name: Core UI workflow logic
         shell: bash
         run: |

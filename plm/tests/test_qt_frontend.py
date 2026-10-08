@@ -16,8 +16,8 @@ from PyQt5 import QtCore, QtGui, QtTest, QtWidgets
 from plm.frontend.qt.controllers import AppController
 from plm.frontend.qt.services import ProjectService, SettingsStore
 from plm.frontend.qt.styles.tokens import (
-    BORDER, FONT_SCALE, FONT_SIZE_BODY, FONT_SIZE_LG, FONT_SIZE_SM,
-    PRIMARY_LIGHT, TEXT_MAIN, scale_content_size, scale_font_size,
+    BORDER, FONT_CODE_PRIMARY, FONT_MONO, FONT_SCALE, FONT_SIZE_BODY, FONT_SIZE_LG,
+    FONT_SIZE_SM, PRIMARY_LIGHT, TEXT_MAIN, scale_content_size, scale_font_size,
 )
 from plm.frontend.qt.models import ProjectInfo
 from plm.frontend.qt.main_window import MainWindow
@@ -138,7 +138,11 @@ class QtFrontendLayoutTests(unittest.TestCase):
         self.assertEqual(FONT_SCALE, 1.0)
         self.assertEqual((FONT_SIZE_BODY, FONT_SIZE_SM, FONT_SIZE_LG), (14, 14, 14))
         self.assertEqual(scale_font_size(10), 14)
-        self.assertEqual(self.window.config_page.artifacts_panel.preview.font().pixelSize(), 14)
+        preview_font = self.window.config_page.artifacts_panel.preview.font()
+        self.assertEqual(preview_font.pixelSize(), 14)
+        self.assertTrue(preview_font.fixedPitch())
+        self.assertNotEqual(FONT_CODE_PRIMARY, self.window.font().family())
+        self.assertIn("monospace", FONT_MONO)
 
     def test_global_button_heights_stay_at_thirty_four_pixels(self):
         from plm.frontend.qt.views.new_project_dialog import NewProjectDialog
@@ -177,9 +181,14 @@ class QtFrontendLayoutTests(unittest.TestCase):
 
     def test_controller_table_fixed_dimensions_and_whole_row_hover(self):
         table = self.window.config_page.controllers_editor.table
-        self.assertEqual(table.columnWidth(0), 60)
-        self.assertEqual(table.columnWidth(2), 60)
-        self.assertEqual(table.columnWidth(1), table.viewport().width() - 120)
+        widths = [table.columnWidth(i) for i in range(3)]
+        metrics = table.horizontalHeader().fontMetrics()
+        for index in (0, 2):
+            heading = table.horizontalHeaderItem(index).text()
+            self.assertGreaterEqual(
+                widths[index], metrics.horizontalAdvance(heading) + 24,
+            )
+        self.assertEqual(widths[1], table.viewport().width() - widths[0] - widths[2])
         self.assertEqual(table.horizontalHeader().height(), 34)
         for row in range(table.rowCount()):
             self.assertEqual(table.rowHeight(row), 34)
@@ -196,9 +205,14 @@ class QtFrontendLayoutTests(unittest.TestCase):
         self.window.nav_panel.settings_btn.click()
         wait_for_idle(self.app)
         page = self.window.view_stack.currentWidget()
+        self.assertTrue(all(
+            section.parentWidget().objectName() == "SecondaryTabs"
+            for section in page.menu_buttons
+        ))
         for section in page.menu_buttons:
             section.click()
             wait_for_idle(self.app)
+            self.assertEqual(section.height(), 34)
             for group in page.findChildren(QtWidgets.QFrame, "ButtonGroup"):
                 if not group.isVisible():
                     continue

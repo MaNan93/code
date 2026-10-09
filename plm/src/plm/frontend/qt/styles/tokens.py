@@ -131,6 +131,9 @@ SPACING_MD = 12
 SPACING_LG = 16
 SPACING_XL = 24
 
+# Keep nav icons centered on the collapsed rail in both states.
+NAV_ICON_INSET = (NAV_COLLAPSED_WIDTH - ICON_SIZE) // 2 - SPACING_MD
+
 SHADOW_SM = {"blur_radius": 4, "offset": (0, 1), "rgba": (0, 0, 0, 20)}
 
 QSS_TOKENS = {
@@ -138,6 +141,7 @@ QSS_TOKENS = {
     "titlebar_button_width": f"{TITLEBAR_BUTTON_WIDTH}px",
     "control_padding_y": f"{CONTROL_PADDING_Y}px",
     "control_padding_x": f"{CONTROL_PADDING_X}px",
+    "nav_icon_inset": f"{NAV_ICON_INSET}px",
     "menu_radius": f"{MENU_RADIUS}px",
     "menu_padding": f"{MENU_PADDING}px",
     "menu_gap": f"{MENU_GAP}px",

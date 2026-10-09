@@ -143,11 +143,11 @@ class ContentIconStyle(QtWidgets.QProxyStyle):
 
 
 def draw_icon_text_label(style, option, painter, widget):
-    """Draw a centered icon slot and the shared text line with a uniform gap."""
+    """Keep navigation icons left aligned; center other icon/text labels."""
     rect = QtCore.QRect(option.rect)
     text_width = option.fontMetrics.horizontalAdvance(option.text)
     total = ICON_SIZE + (ICON_TEXT_GAP + text_width if option.text else 0)
-    left_aligned = option.text and widget and widget.objectName() in ("NavActionButton", "NavFooterButton")
+    left_aligned = widget is not None and widget.objectName() in ("NavActionButton", "NavFooterButton")
     x = rect.left() if left_aligned else rect.left() + max(0, (rect.width() - total) // 2)
     enabled = bool(option.state & QtWidgets.QStyle.State_Enabled)
     if option.state & QtWidgets.QStyle.State_HasFocus and not option.state & QtWidgets.QStyle.State_Sunken:
@@ -198,8 +198,7 @@ def paint_icon_text_button(button):
     painter = QtWidgets.QStylePainter(button)
     painter.setFont(button.font())
     painter.drawControl(QtWidgets.QStyle.CE_PushButton, face)
-    option.rect = (button.style().subElementRect(QtWidgets.QStyle.SE_PushButtonContents, option, button)
-                   if option.text else button.rect())
+    option.rect = button.style().subElementRect(QtWidgets.QStyle.SE_PushButtonContents, option, button)
     draw_icon_text_label(button.style(), option, painter, button)
     painter.end()
 

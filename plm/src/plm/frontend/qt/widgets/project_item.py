@@ -4,7 +4,7 @@ from pathlib import Path
 
 from PyQt5 import QtCore, QtWidgets
 
-from plm.frontend.qt.styles.tokens import CONTROL_HEIGHT, CONTROL_PADDING_X, DANGER, ICON_SIZE, ICON_TEXT_GAP, NAV_ITEM_GAP, TEXT_SUB
+from plm.frontend.qt.styles.tokens import CONTROL_HEIGHT, CONTROL_PADDING_X, DANGER, ICON_SIZE, ICON_TEXT_GAP, NAV_ICON_INSET, NAV_ITEM_GAP, TEXT_SUB
 from plm.frontend.qt.widgets.common import (
     ICON_SIZE,
     PROJECT_ROOT,
@@ -52,7 +52,7 @@ class ProjectItemWidget(QtWidgets.QWidget):
         self.header.setContextMenuPolicy(QtCore.Qt.CustomContextMenu)
         self.header.customContextMenuRequested.connect(self.show_context_menu)
         header_layout = QtWidgets.QHBoxLayout(self.header)
-        header_layout.setContentsMargins(CONTROL_PADDING_X, 0, CONTROL_PADDING_X, 0)
+        header_layout.setContentsMargins(NAV_ICON_INSET, 0, CONTROL_PADDING_X, 0)
         header_layout.setSpacing(0)
         self.folder_icon = QtWidgets.QLabel()
         self.folder_icon.setObjectName("ProjectFolderIcon")

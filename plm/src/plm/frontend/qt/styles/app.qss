@@ -283,7 +283,9 @@ QPushButton#ProjectButton {
     color: $text_main;
     text-align: left;
 }
-QPushButton#NavActionButton, QPushButton#NavFooterButton { padding: $control_padding_y $control_padding_x; }
+QPushButton#NavActionButton, QPushButton#NavFooterButton {
+    padding: $control_padding_y $control_padding_x $control_padding_y $nav_icon_inset;
+}
 QPushButton#ProjectButton { padding: 0; }
 QPushButton#NavActionButton:hover, QPushButton#NavFooterButton:hover,
 QPushButton#ProjectButton:hover,

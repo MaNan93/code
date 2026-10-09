@@ -17,7 +17,7 @@ from plm.frontend.qt.controllers import AppController
 from plm.frontend.qt.services import ProjectService, SettingsStore
 from plm.frontend.qt.styles.tokens import (
     BG_ARTIFACTS, BG_FOCUS, BG_HOVER, BG_SUBTLE, BG_SURFACE, BORDER, BORDER_HOVER, CONTROL_HEIGHT, FONT_CODE_PRIMARY, FONT_MONO, FONT_SCALE, FONT_SIZE_BODY,
-    ICON_GLYPH_SIZE, NAV_ITEM_GAP, TITLEBAR_CONTROLS_WIDTH, PRIMARY_SOFT, PRIMARY_PRESSED, TEXT_MAIN, TOOLTIP_BG, scale_content_size,
+    ICON_GLYPH_SIZE, NAV_COLLAPSED_WIDTH, NAV_ICON_INSET, NAV_ITEM_GAP, SPACING_MD, TITLEBAR_CONTROLS_WIDTH, PRIMARY_SOFT, PRIMARY_PRESSED, TEXT_MAIN, TOOLTIP_BG, scale_content_size,
 )
 from plm.frontend.qt.models import ProjectInfo
 from plm.frontend.qt.main_window import MainWindow
@@ -26,7 +26,7 @@ from plm.frontend.qt.views.artifacts_panel import ArtifactsPanel
 from plm.frontend.qt.views.config_page import ConfigHeader
 from plm.frontend.qt.views.log_panel import LogPanel
 from plm.frontend.qt.views.nav_panel import NavPanel
-from plm.frontend.qt.widgets.common import ICON_SIZE, LUCIDE_ICON_DIR, button_height, load_lucide_icon
+from plm.frontend.qt.widgets.common import ICON_SIZE, ICON_TEXT_GAP, LUCIDE_ICON_DIR, button_height, load_lucide_icon
 from plm.frontend.qt.widgets.project_item import ProjectItemWidget
 from plm.frontend.qt.widgets.project_list import ProjectList
 
@@ -327,11 +327,10 @@ class QtFrontendLayoutTests(unittest.TestCase):
             nav.settings_btn,
             nav.docs_btn,
         ]
-        center_positions = {
-            widget.mapTo(nav, widget.rect().center()).x() for widget in aligned_widgets
-        }
-        self.assertEqual(len(center_positions), 1)
-        self.assertEqual(center_positions, {(nav.width() - 1) // 2})
+        for widget in aligned_widgets:
+            self.assertEqual(widget.mapTo(nav, QtCore.QPoint()).x(), SPACING_MD)
+            self.assertEqual(widget.width(), NAV_COLLAPSED_WIDTH - 2 * SPACING_MD)
+        self.assertEqual(nav.layout().contentsMargins().right(), SPACING_MD)
         self.assertEqual(
             nav.new_chat_btn.mapTo(nav, QtCore.QPoint()).y(),
             stable_y_positions["new"],
@@ -367,6 +366,63 @@ class QtFrontendLayoutTests(unittest.TestCase):
         self.assertEqual(nav.maximumWidth(), 260)
         self.assertEqual(nav.new_chat_btn.objectName(), "NavActionButton")
         self.assertEqual(nav.save_btn.objectName(), "NavActionButton")
+
+    def test_nav_icons_keep_rendered_position_and_shape_through_animation(self):
+        nav = self.window.nav_panel
+        buttons = (nav.new_chat_btn, nav.open_project_btn, nav.save_btn,
+                   nav.settings_btn, nav.docs_btn)
+        for button in buttons:
+            button.clearFocus()
+        self.window.resize(1400, 900)
+        self.app.processEvents()
+        toggle_position = self.window.title_bar.collapse_btn.mapTo(self.window, QtCore.QPoint())
+
+        def rendered_icons():
+            # Widget grabs and style content rectangles do not prove where the
+            # custom painter draws. Scan actual pixels from the whole window.
+            image = self.window.grab().toImage()
+            if image.size() != self.window.size():
+                image = image.scaled(self.window.size())
+            shapes = []
+            for button in buttons:
+                pos = button.mapTo(self.window, QtCore.QPoint())
+                pixels = {
+                    (x, y)
+                    for x in range(min(button.width(), NAV_ICON_INSET + ICON_SIZE))
+                    for y in range(6, button.height() - 6)
+                    if image.pixelColor(pos.x() + x, pos.y() + y).lightness() < 160
+                }
+                self.assertTrue(pixels, button.toolTip())
+                self.assertEqual(button.mapTo(nav, QtCore.QPoint()).x(), SPACING_MD)
+                shapes.append(pixels)
+            self.assertEqual(
+                self.window.title_bar.collapse_btn.mapTo(self.window, QtCore.QPoint()),
+                toggle_position,
+            )
+            return shapes
+
+        expanded = rendered_icons()
+        for shape in expanded:
+            self.assertGreaterEqual(min(x for x, _y in shape), NAV_ICON_INSET)
+        for target in (True, False):
+            finished = QtTest.QSignalSpy(nav.animation_group.finished)
+            nav.toggle_collapse()
+            nav.animation_group.pause()
+            for elapsed in (0, 30, 80, 140, 199):
+                nav.animation_group.setCurrentTime(elapsed)
+                self.app.processEvents()
+                with self.subTest(collapsed=target, elapsed=elapsed):
+                    self.assertEqual(rendered_icons(), expanded)
+            nav.animation_group.resume()
+            self.assertTrue(finished.wait(1000))
+            self.assertEqual(nav.is_collapsed, target)
+            rendered = rendered_icons()
+            self.assertEqual(rendered, expanded)
+            if target:
+                for button, shape in zip(buttons, rendered):
+                    left = min(x for x, _y in shape)
+                    right = max(x for x, _y in shape)
+                    self.assertLessEqual(abs(left - (button.width() - 1 - right)), 2)
 
     def test_nav_section_dividers_remain_visible_when_collapsed(self):
         nav = self.window.nav_panel
@@ -418,7 +474,7 @@ class QtFrontendLayoutTests(unittest.TestCase):
         self.assertEqual(first_project.folder_icon.size(), QtCore.QSize(ICON_SIZE, ICON_SIZE))
         self.assertEqual(
             first_project.header.layout().contentsMargins(),
-            QtCore.QMargins(16, 0, 16, 0),
+            QtCore.QMargins(NAV_ICON_INSET, 0, 16, 0),
         )
         self.assertEqual(
             first_project.header.layout().itemAt(1).spacerItem().sizeHint().width(), 6
@@ -558,7 +614,7 @@ class QtFrontendLayoutTests(unittest.TestCase):
         self.assertEqual(project_list.selected_project_name, target.project_name)
         self.assertTrue(target.header.property("selected"))
 
-    def test_expanded_nav_icons_share_one_left_edge(self):
+    def test_expanded_nav_icons_and_project_names_share_alignment(self):
         nav = self.window.nav_panel
         first_project = nav.project_list.project_widgets[0]
         margins = nav.layout().contentsMargins()
@@ -579,7 +635,7 @@ class QtFrontendLayoutTests(unittest.TestCase):
             )
         self.assertEqual(
             first_project.header.layout().contentsMargins(),
-            QtCore.QMargins(16, 0, 16, 0),
+            QtCore.QMargins(NAV_ICON_INSET, 0, 16, 0),
         )
 
         nav_buttons = (
@@ -594,8 +650,37 @@ class QtFrontendLayoutTests(unittest.TestCase):
         )
         self.assertEqual(
             first_project.folder_icon.mapTo(nav, QtCore.QPoint()).x(),
-            28,
+            SPACING_MD + NAV_ICON_INSET,
         )
+        text_left = SPACING_MD + NAV_ICON_INSET + ICON_SIZE + ICON_TEXT_GAP
+        for project in nav.project_list.project_widgets:
+            self.assertEqual(project.project_name_label.mapTo(nav, QtCore.QPoint()).x(), text_left)
+
+        # Compare the same folder glyph through the navigation painter and the
+        # project-row QLabel using actual window pixels, including hover rows.
+        nav.new_chat_btn.setIcon(QtGui.QIcon(first_project.folder_icon.pixmap()))
+        nav.new_chat_btn.clearFocus()
+        for project in nav.project_list.project_widgets:
+            project.header.clearFocus()
+            self.app.sendEvent(project.header, QtCore.QEvent(QtCore.QEvent.Enter))
+        self.app.processEvents()
+        image = self.window.grab().toImage().scaled(self.window.size())
+
+        def icon_pixels(button):
+            pos = button.mapTo(self.window, QtCore.QPoint())
+            return {
+                (x, y) for x in range(NAV_ICON_INSET + ICON_SIZE)
+                for y in range(6, button.height() - 6)
+                if image.pixelColor(pos.x() + x, pos.y() + y).lightness() < 160
+            }
+
+        reference = icon_pixels(nav.new_chat_btn)
+        self.assertTrue(reference)
+        reference_edges = min(x for x, _y in reference), max(x for x, _y in reference)
+        for project in nav.project_list.project_widgets:
+            pixels = icon_pixels(project.header)
+            self.assertTrue(pixels)
+            self.assertEqual((min(x for x, _y in pixels), max(x for x, _y in pixels)), reference_edges)
         next_project = nav.project_list.project_widgets[1]
         gap = (
             next_project.header.mapTo(nav, QtCore.QPoint()).y()

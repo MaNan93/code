@@ -8,6 +8,7 @@ BASE_URL = "https://raw.githubusercontent.com/lucide-icons/lucide/main/icons"
 ICON_NAMES = (
     "layout-dashboard",
     "arrow-left",
+    "arrow-right-left",
     "panel-left",
     "x",
     "panel-bottom",
@@ -15,6 +16,8 @@ ICON_NAMES = (
     "square-pen",
     "save",
     "file-text",
+    "file-code-corner",
+    "file-braces-corner",
     "settings",
     "trash-2",
     "archive",

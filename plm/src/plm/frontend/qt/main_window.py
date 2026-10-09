@@ -356,7 +356,7 @@ class MainWindow(QtWidgets.QMainWindow):
         install_button_sizing(app)
         install_tooltips(app)
         self.setWindowTitle("plmConsultant")
-        self.resize(1400, 900)
+        self.resize(1280, 800)
         self.setMinimumSize(960, 640)
         self.setWindowIcon(load_lucide_icon("layout-dashboard", PRIMARY))
         self._log_sizes = [700, 200]

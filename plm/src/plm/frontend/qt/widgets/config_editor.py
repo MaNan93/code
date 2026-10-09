@@ -15,14 +15,12 @@ from plm.core.gen_flags import (
     PCLK_MODE_VALUES,
     SEL_MODE_VALUES,
 )
-from plm.frontend.qt.styles.tokens import TABLE_CARD_PADDING
 from plm.frontend.qt.widgets.lanegrid import LaneGrid
 from plm.frontend.qt.widgets.common import StatusBadge, StyledComboBox
 from plm.frontend.qt.widgets.tables import EditableTable
 
 
 LANE_COUNTS = (2, 4, 8, 16, 32)
-CONTROLLER_COLUMN_WIDTHS = {"ctrl_id": 96, "max_width": 128}
 TABLE_VISIBLE_ROWS = 10
 
 
@@ -76,24 +74,22 @@ class CsvTableEditor(QtWidgets.QWidget):
             self.table = self.editor.table
             self.editor.set_columns(self.lane_count.value())
             self.editor.changed.connect(self.changed.emit)
-            self._setup_table_card(layout)
+            self._setup_table_layout(layout)
             return
 
         specs = []
         for key in self._keys:
             spec = {"key": key, "heading": key}
-            if key in CONTROLLER_COLUMN_WIDTHS:
-                spec.update(
-                    width=CONTROLLER_COLUMN_WIDTHS[key],
-                    fixed_width=True,
-                    alignment=QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter,
-                )
+            if key in ("ctrl_id", "max_width"):
+                spec["alignment"] = QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter
             elif key == "ctrl_name":
                 spec["alignment"] = QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter
+            elif key == "signal_name":
+                spec.update(min_width=256, alignment=QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter)
             elif key == "signal_type":
-                spec.update(options=["perlane", "shared"], width=104)
+                spec.update(options=["perlane", "shared"], switch=True, width=112)
             elif key == "direction":
-                spec.update(options=["mac2phy", "phy2mac"], width=112)
+                spec.update(options=["mac2phy", "phy2mac"], switch=True, width=120)
             elif key == "width":
                 spec["width"] = 64
                 spec["alignment"] = QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter
@@ -108,21 +104,18 @@ class CsvTableEditor(QtWidgets.QWidget):
         self.editor = EditableTable(
             specs,
             id_column="ctrl_id" if "ctrl_id" in self._keys else None,
+            equal_columns="ctrl_id" in self._keys,
         )
         self.table = self.editor.table
         self.editor.changed.connect(self.changed.emit)
-        self._setup_table_card(layout)
+        self._setup_table_layout(layout)
 
-    def _setup_table_card(self, layout):
-        """Use one card and height policy for both CSV tables and the lane grid."""
+    def _setup_table_layout(self, layout):
+        """Let tables fill the editor width and share a content-based height."""
         self.table.setMouseTracking(True)
-        self.table_card = QtWidgets.QFrame()
-        self.table_card.setObjectName("ConfigTableCard")
-        card_layout = QtWidgets.QVBoxLayout(self.table_card)
-        card_layout.setContentsMargins(*([TABLE_CARD_PADDING] * 4))
-        card_layout.setSpacing(0)
-        card_layout.addWidget(self.editor)
-        layout.addWidget(self.table_card)
+        self.table.setShowGrid(True)
+        self.table.setGridStyle(QtCore.Qt.SolidLine)
+        layout.addWidget(self.editor)
         layout.addStretch(1)
         self.table.model().rowsInserted.connect(self._update_table_height)
         self.table.model().rowsRemoved.connect(self._update_table_height)

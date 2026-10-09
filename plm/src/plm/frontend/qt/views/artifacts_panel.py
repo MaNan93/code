@@ -1,18 +1,20 @@
 """Generated-file drawer construction and public signals."""
 
 from collections import OrderedDict
-from plm.frontend.qt.styles.tokens import ARTIFACTS_TOOLBAR_HEIGHT, ARTIFACTS_FOOTER_HEIGHT
+from plm.frontend.qt.styles.tokens import ARTIFACTS_TOOLBAR_HEIGHT
 from PyQt5 import QtCore, QtGui, QtWidgets
 from plm.frontend.qt.models.artifacts import ArtifactSelection
 from plm.frontend.qt.models.preferences import DEFAULT_EDITOR
 from plm.frontend.qt.services.tasks import TaskRunner
 from plm.frontend.qt.widgets.code_preview import CodePreview
 from plm.frontend.qt.widgets.common import (
-    ICON_SIZE, StatusBadge, StyledMenu,
+    ICON_SIZE, StyledMenu,
     load_lucide_icon, make_icon_button,
 )
-from plm.frontend.qt.styles.tokens import CONTROL_HEIGHT, ICON_BUTTON_SIZE, TEXT_MUTED
-from .artifact_chrome import ArtifactFilePopup, ArtifactMetadataLabel, ArtifactPathButton
+from plm.frontend.qt.styles.tokens import (
+    BORDER_ARTIFACTS, CONTROL_HEIGHT, ICON_BUTTON_SIZE, TEXT_ARTIFACTS_MUTED,
+)
+from .artifact_chrome import ArtifactFilePopup, ArtifactPathButton
 from .artifact_preview import ArtifactPreview
 from .artifact_files import ArtifactFiles
 from .artifact_interactions import ArtifactInteractions
@@ -39,6 +41,13 @@ class ArtifactFileTree(QtWidgets.QTreeWidget):
         self.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Preferred)
         self.itemExpanded.connect(self.updateGeometry)
         self.itemCollapsed.connect(self.updateGeometry)
+        self.itemExpanded.connect(lambda item: self._update_folder_icon(item, True))
+        self.itemCollapsed.connect(lambda item: self._update_folder_icon(item, False))
+
+    def _update_folder_icon(self, item, expanded):
+        if item.data(0, QtCore.Qt.UserRole) is None:
+            name = "folder-open" if expanded else "folder"
+            item.setIcon(0, load_lucide_icon(name, TEXT_ARTIFACTS_MUTED))
 
     def sizeHint(self):
         size = super().sizeHint()
@@ -59,11 +68,24 @@ class ArtifactFileTree(QtWidgets.QTreeWidget):
     def minimumSizeHint(self):
         return QtCore.QSize(0, 0)
 
+    def drawBranches(self, painter, rect, index):
+        super().drawBranches(painter, rect, index)
+        painter.save()
+        painter.setPen(QtGui.QPen(QtGui.QColor(BORDER_ARTIFACTS), 1))
+        ancestor = index.parent()
+        x = rect.right() - self.indentation() // 2 - self.indentation()
+        while ancestor.isValid() and x >= rect.left():
+            painter.drawLine(x, rect.top(), x, rect.bottom())
+            x -= self.indentation()
+            ancestor = ancestor.parent()
+        painter.restore()
+
 
 class ArtifactsPanel(
     ArtifactPreview, ArtifactFiles, ArtifactInteractions, QtWidgets.QFrame
 ):
     maximizeRequested = QtCore.pyqtSignal()
+    closeRequested = QtCore.pyqtSignal()
     refreshRequested = QtCore.pyqtSignal()
     widthRequested = QtCore.pyqtSignal(int)
     RESIZE_EDGE_WIDTH = 6
@@ -76,6 +98,7 @@ class ArtifactsPanel(
         self._tree_items = {}
         self._readable = False
         self._file_status = "尚无生成文件"
+        self.status_text = "尚无生成文件"
         self._file_error = ""
         self._output_state = "no_project"
         self._output_text = ""
@@ -105,7 +128,7 @@ class ArtifactsPanel(
         content.setObjectName("ArtifactContent")
         root = QtWidgets.QVBoxLayout(content)
         self.content_layout = root
-        root.setContentsMargins(16, 0, 16, 8)
+        root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(12)
         outer.addWidget(content, 1)
         toolbar = QtWidgets.QWidget()
@@ -115,7 +138,7 @@ class ArtifactsPanel(
         toolbar.setFixedHeight(ARTIFACTS_TOOLBAR_HEIGHT)
         toolbar_layout = QtWidgets.QHBoxLayout(toolbar)
         self.toolbar_layout = toolbar_layout
-        toolbar_layout.setContentsMargins(0, 0, 16, 0)
+        toolbar_layout.setContentsMargins(16, 0, 16, 0)
         toolbar_layout.setSpacing(0)
         self.toolbar_buttons = []
         self.path_button = ArtifactPathButton()
@@ -129,33 +152,28 @@ class ArtifactsPanel(
             ("copy_path_button", "link", "复制文件路径"),
             ("more_button", "more-horizontal", "更多"),
             ("maximize_button", "maximize", "展开"),
+            ("close_button", "x", "关闭 Artifacts"),
         ):
             button = make_icon_button(icon, tooltip, "ArtifactsToolButton", ICON_BUTTON_SIZE, ICON_SIZE)
+            button.setIcon(load_lucide_icon(icon, TEXT_ARTIFACTS_MUTED))
             setattr(self, name, button)
             self.toolbar_buttons.append(button)
         self.diff_button = make_icon_button(
             "git-compare", "显示与上一次预览的差异", "ArtifactsToolButton", ICON_BUTTON_SIZE, ICON_SIZE
         )
-        self.toolbar_separators = []
-        for index, group in enumerate((
-            (self.search_button, self.diff_button),
-            (self.copy_path_button, self.open_editor_button),
-            (self.refresh_button, self.more_button, self.maximize_button),
-        )):
-            if index:
-                separator = QtWidgets.QFrame()
-                separator.setObjectName("ArtifactToolSeparator")
-                separator.setFixedSize(1, 16)
-                toolbar_layout.addWidget(separator, 0, QtCore.Qt.AlignVCenter)
-                self.toolbar_separators.append(separator)
-            for button in group:
-                toolbar_layout.addWidget(button)
+        self.diff_button.setIcon(load_lucide_icon("git-compare", TEXT_ARTIFACTS_MUTED))
+        self.toolbar_buttons.append(self.diff_button)
+        for button in (self.search_button, self.diff_button, self.copy_path_button,
+                       self.open_editor_button, self.refresh_button, self.more_button,
+                       self.maximize_button, self.close_button):
+            toolbar_layout.addWidget(button)
         root.addWidget(toolbar)
 
         self.file_tree = ArtifactFileTree(self)
         self.file_tree.setObjectName("ArtifactFileTree")
         self.file_tree.setHeaderHidden(True)
         self.file_tree.setIndentation(ICON_SIZE)
+        self.file_tree.setIconSize(QtCore.QSize(ICON_SIZE, ICON_SIZE))
         self.file_tree.setRootIsDecorated(True)
         self.file_tree.itemClicked.connect(self._tree_item_clicked)
         self.file_tree.itemActivated.connect(self._tree_item_clicked)
@@ -199,7 +217,7 @@ class ArtifactsPanel(
         empty_size = ICON_SIZE
         empty_icon.setFixedSize(ICON_SIZE, ICON_SIZE)
         empty_icon.setPixmap(
-            load_lucide_icon("file-x", TEXT_MUTED, empty_size).pixmap(empty_size, empty_size)
+            load_lucide_icon("file-x", TEXT_ARTIFACTS_MUTED, empty_size).pixmap(empty_size, empty_size)
         )
         empty_layout.addWidget(empty_icon, 0, QtCore.Qt.AlignHCenter)
         self.empty_text = QtWidgets.QLabel("暂无生成文件")
@@ -212,28 +230,6 @@ class ArtifactsPanel(
         self.preview = CodePreview()
         self.preview.setPlaceholderText("尚无生成文件")
         root.addWidget(self.preview, 1)
-        self.status = StatusBadge("尚无生成文件")
-        self.status.setObjectName("ArtifactStatus")
-        self.footer = QtWidgets.QFrame()
-        self.footer.setObjectName("ArtifactFooter")
-        self.footer.setFixedHeight(ARTIFACTS_FOOTER_HEIGHT)
-        status_row = QtWidgets.QHBoxLayout(self.footer)
-        status_row.setContentsMargins(12, 0, 12, 0)
-        status_row.setSpacing(8)
-        status_row.addWidget(
-            self.status, 0, QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter
-        )
-        self.file_progress = QtWidgets.QLabel()
-        self.file_progress.setObjectName("ArtifactFileProgress")
-        status_row.addWidget(self.file_progress)
-        status_row.addStretch(1)
-        self.editor_metadata = ArtifactMetadataLabel()
-        self.editor_metadata.setObjectName("ArtifactEditorMetadata")
-        status_row.addWidget(self.editor_metadata, 1)
-        outer.addWidget(self.footer)
-        self.preview.cursorPositionChanged.connect(self._update_editor_status)
-        self.preview.textChanged.connect(self._update_editor_status)
-
         self.search_input.textChanged.connect(self._search_changed)
         self.search_input.returnPressed.connect(self.find_text)
         self.path_button.toggled.connect(self._set_tree_visible)
@@ -246,19 +242,22 @@ class ArtifactsPanel(
             (self.search_button, self.show_search),
             (self.copy_path_button, self.copy_path),
             (self.maximize_button, self.maximizeRequested.emit),
+            (self.close_button, self.closeRequested.emit),
         ):
             button.clicked.connect(callback)
 
         self.more_menu = StyledMenu(self)
         self._overflow_actions = []
-        for label, button in (
-            ("刷新文件", self.refresh_button),
-            ("在编辑器中打开", self.open_editor_button),
-            ("搜索当前文件", self.search_button),
-            ("复制文件路径", self.copy_path_button),
-            ("显示/隐藏差异", self.diff_button),
+        for label, icon, button in (
+            ("刷新文件", "refresh-cw", self.refresh_button),
+            ("在编辑器中打开", "square-pen", self.open_editor_button),
+            ("搜索当前文件", "search", self.search_button),
+            ("复制文件路径", "link", self.copy_path_button),
+            ("显示/隐藏差异", "git-compare", self.diff_button),
         ):
-            action = self.more_menu.addAction(label, button.click)
+            action = self.more_menu.addAction(
+                load_lucide_icon(icon, TEXT_ARTIFACTS_MUTED), label, button.click
+            )
             action.setCheckable(button.isCheckable())
             self._overflow_actions.append((action, button))
         self.more_menu.aboutToShow.connect(self._sync_overflow_menu)

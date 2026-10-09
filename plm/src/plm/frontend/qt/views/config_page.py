@@ -6,7 +6,7 @@ from plm.frontend.qt.widgets.config_editor import CsvTableEditor, GenerationEdit
 from plm.frontend.qt.views.artifacts_panel import ArtifactsPanel
 from plm.frontend.qt.styles.tokens import (
     CONTROL_HEIGHT, HEADER_HEIGHT, SPACING_LG, SPACING_MD,
-    ARTIFACTS_DEFAULT_WIDTH, ARTIFACTS_MIN_WIDTH, TITLEBAR_CONTROLS_WIDTH,
+    ARTIFACTS_DEFAULT_WIDTH, ARTIFACTS_MIN_WIDTH,
     PANEL_ANIMATION_DURATION,
 )
 
@@ -242,8 +242,8 @@ class ConfigPage(RoundedCanvasFrame):
             self, editor_path_provider=editor_path_provider
         )
         self.artifacts_panel.maximizeRequested.connect(self.toggle_artifacts_maximized)
+        self.artifacts_panel.closeRequested.connect(self.hide_artifacts)
         self.artifacts_panel.widthRequested.connect(self._on_artifacts_width_requested)
-        self._configure_artifacts_toolbar()
         self._artifacts_animation = QtCore.QPropertyAnimation(
             self.artifacts_panel, b"geometry", self
         )
@@ -256,13 +256,6 @@ class ConfigPage(RoundedCanvasFrame):
         self.tabs.currentChanged.connect(self._raise_artifacts)
         self.artifacts_panel.hide()
         self.installEventFilter(self)
-
-    def _configure_artifacts_toolbar(self):
-        panel = self.artifacts_panel
-        panel.toolbar.setFixedHeight(HEADER_HEIGHT)
-        panel.toolbar_layout.setContentsMargins(0, 0, TITLEBAR_CONTROLS_WIDTH, 0)
-        panel.toolbar_reserved_width = TITLEBAR_CONTROLS_WIDTH
-        panel._apply_toolbar_density(panel.width())
 
     def _raise_artifacts(self, *_args):
         if self.artifacts_panel.isVisible():
@@ -408,7 +401,15 @@ class ConfigPage(RoundedCanvasFrame):
             )
             self._animate_artifacts(start, target, hide_after=False)
             return
+        self.hide_artifacts()
+
+    def hide_artifacts(self):
+        if not self.artifacts_panel.isVisible():
+            return
         end = self._artifacts_rect("collapsed")
+        if end is None:
+            self.artifacts_panel.hide()
+            return
         self._animate_artifacts(
             self.artifacts_panel.geometry(), end, hide_after=True
         )

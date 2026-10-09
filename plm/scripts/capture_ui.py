@@ -58,7 +58,7 @@ with tempfile.TemporaryDirectory(prefix="plm-ui-") as td:
     with patch("plm.frontend.qt.main_window.AppController",return_value=controller):
         w=MainWindow()
     prepare_capture(w)
-    w.resize(1400,900); w.show(); wait_for_idle(app)
+    w.show(); wait_for_idle(app)
 
     # Visual review uses the fixed font baseline and CJK fallback stack.
     stylesheet=app.styleSheet()

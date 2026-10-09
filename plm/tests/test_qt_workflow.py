@@ -522,9 +522,8 @@ class QtWorkflowTests(unittest.TestCase):
             "输出已是最新",
             window.config_page.generation_editor.status_label.text(),
         )
-        self.assertEqual(panel.status.text(), "输出已是最新")
-        self.assertIn("行", panel.file_progress.text())
-        self.assertIn("列", panel.editor_metadata.toolTip())
+        self.assertEqual(panel.status_text, "输出已是最新")
+        self.assertTrue(panel.preview.isReadOnly())
         files = self.workspaces.output_files(controller.current_project)
         stamps = {path: path.stat().st_mtime_ns for path in files}
         controller.generate_current()
@@ -743,7 +742,7 @@ class QtWorkflowTests(unittest.TestCase):
         self.assertIsNone(controller.current_project)
         self.assertEqual(controller.generation_state, "no_project")
         self.assertFalse(window.config_page.generation_editor.generate_btn.isEnabled())
-        self.assertEqual(window.config_page.artifacts_panel.status.text(), "请选择项目")
+        self.assertEqual(window.config_page.artifacts_panel.status_text, "请选择项目")
 
     def test_lane_grid_tracks_controllers_and_paints_ranges(self):
         controller, window = self._editing_window()
@@ -783,6 +782,27 @@ class QtWorkflowTests(unittest.TestCase):
         page.undo()
         self.assertEqual(table.item(0, 1).text(), original)
 
+    def test_signal_option_switch_is_undoable_and_saved(self):
+        controller, window = self._editing_window()
+        page = window.config_page
+        page.tabs.setCurrentIndex(2)
+        control = page.signals_editor.table.cellWidget(0, 2)
+        original = control.currentText()
+        control.click()
+        changed = control.currentText()
+        self.assertNotEqual(changed, original)
+        self.assertTrue(page.dirty)
+        page.undo()
+        self.assertEqual(page.signals_editor.rows()[0]["direction"], original)
+        page.redo()
+        self.assertEqual(page.signals_editor.rows()[0]["direction"], changed)
+        controller.save_current()
+        wait_for_idle(self.app)
+        self.assertFalse(page.dirty)
+        self._reopen_current(controller)
+        self.assertEqual(page.signals_editor.rows()[0]["direction"], changed)
+        self.assertFalse(page.dirty)
+
     def test_table_editors_preserve_invalid_values_for_core_validation(self):
         controller, window = self._editing_window()
         page = window.config_page
@@ -799,11 +819,12 @@ class QtWorkflowTests(unittest.TestCase):
         rows[0]["signal_type"] = "unknown"
         page.signals_editor.set_rows(rows)
         combo = page.signals_editor.table.cellWidget(0, 1)
-        self.assertIsInstance(combo, QtWidgets.QComboBox)
+        from plm.frontend.qt.widgets.option_switch import OptionSwitch
+        self.assertIsInstance(combo, OptionSwitch)
         self.assertEqual(combo.currentText(), "unknown")
         self.assertEqual(
-            [combo.itemText(i) for i in range(combo.count())],
-            ["perlane", "shared", "unknown"],
+            combo.options(),
+            ("perlane", "shared", "unknown"),
         )
 
         editor = page.signals_editor.editor

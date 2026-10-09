@@ -80,9 +80,19 @@ class ButtonSizingController(QtCore.QObject):
                     label_width = watched.fontMetrics().horizontalAdvance(watched.text())
                     watched.setMinimumWidth(label_width + ICON_SIZE + ICON_TEXT_GAP + 2 * CONTROL_PADDING_X)
             elif isinstance(watched, (QtWidgets.QLineEdit, QtWidgets.QComboBox, QtWidgets.QSpinBox)):
-                watched.setFixedHeight(CONTROL_HEIGHT - 4 if watched.property("formatterRow") is not None else CONTROL_HEIGHT)
-                if isinstance(watched, QtWidgets.QComboBox) and not isinstance(watched.itemDelegate(), FixedHeightItemDelegate):
-                    watched.setItemDelegate(FixedHeightItemDelegate(watched))
+                height = CONTROL_HEIGHT - 4 if watched.property("formatterRow") is not None else CONTROL_HEIGHT
+                if watched.minimumHeight() != height or watched.maximumHeight() != height:
+                    watched.setFixedHeight(height)
+                # StyledComboBox paints its own menu, so its native popup never
+                # needs a delegate. Install other popup delegates only once.
+                if (isinstance(watched, QtWidgets.QComboBox)
+                        and not isinstance(watched, StyledComboBox)
+                        and not hasattr(watched, "_plm_popup_delegate")):
+                    delegate = watched.itemDelegate()
+                    if not isinstance(delegate, FixedHeightItemDelegate):
+                        delegate = FixedHeightItemDelegate(watched)
+                        watched.setItemDelegate(delegate)
+                    watched._plm_popup_delegate = delegate
         finally:
             self._applying = False
         return False
@@ -482,7 +492,13 @@ class StyledComboBox(QtWidgets.QComboBox):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.popup_menu = StyledMenu(self)
+        self._popup_menu = None
+
+    @property
+    def popup_menu(self):
+        if self._popup_menu is None:
+            self._popup_menu = StyledMenu(self)
+        return self._popup_menu
 
     def showPopup(self):
         if not self.count():
@@ -505,5 +521,6 @@ class StyledComboBox(QtWidgets.QComboBox):
         self.activated[str].emit(self.itemText(index))
 
     def hidePopup(self):
-        self.popup_menu.hide()
+        if self._popup_menu is not None:
+            self._popup_menu.hide()
         super().hidePopup()

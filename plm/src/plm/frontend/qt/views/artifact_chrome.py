@@ -4,33 +4,11 @@ from html import escape
 
 from PyQt5 import QtCore, QtGui, QtWidgets
 
-from plm.frontend.qt.styles.tokens import ICON_TEXT_GAP, MENU_PADDING, MENU_SHADOW_MARGIN, RADIUS_CARD, TEXT_MAIN, TEXT_SUB
+from plm.frontend.qt.styles.tokens import (
+    ACCENT_ARTIFACTS, ICON_TEXT_GAP, MENU_PADDING, MENU_SHADOW_MARGIN,
+    RADIUS_CARD, TEXT_ARTIFACTS, TEXT_ARTIFACTS_MUTED,
+)
 from plm.frontend.qt.widgets.common import ICON_SIZE, load_lucide_icon, paint_popup_surface
-
-
-class ArtifactMetadataLabel(QtWidgets.QLabel):
-    """Preserve the line/column prefix when a narrow drawer truncates details."""
-
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self._metadata = ""
-        self.setMinimumWidth(0)
-        self.setSizePolicy(QtWidgets.QSizePolicy.Ignored, QtWidgets.QSizePolicy.Preferred)
-        self.setAlignment(QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter)
-
-    def set_metadata(self, text):
-        self._metadata = text
-        self.setToolTip(text)
-        self._update_text()
-
-    def _update_text(self):
-        self.setText(self.fontMetrics().elidedText(
-            self._metadata, QtCore.Qt.ElideRight, self.contentsRect().width()
-        ))
-
-    def resizeEvent(self, event):
-        super().resizeEvent(event)
-        self._update_text()
 
 
 class ArtifactPathLabel(QtWidgets.QLabel):
@@ -75,8 +53,8 @@ class ArtifactPathLabel(QtWidgets.QLabel):
             )
         self.display_path = directory + filename
         self.setText(
-            f'<span style="color:{TEXT_SUB}">{escape(directory)}</span>'
-            f'<b style="color:{TEXT_MAIN};font-weight:500">{escape(filename)}</b>'
+            f'<span style="color:{ACCENT_ARTIFACTS}">{escape(directory)}</span>'
+            f'<b style="color:{TEXT_ARTIFACTS};font-weight:500">{escape(filename)}</b>'
             if self._filename else ""
         )
 
@@ -95,7 +73,7 @@ class ArtifactPathButton(QtWidgets.QPushButton):
         self.setSizePolicy(QtWidgets.QSizePolicy.Ignored, QtWidgets.QSizePolicy.Fixed)
         self.setCursor(QtCore.Qt.PointingHandCursor)
         self.setToolTip("")
-        self.setIcon(load_lucide_icon("chevron-down"))
+        self.setIcon(load_lucide_icon("chevron-down", TEXT_ARTIFACTS_MUTED))
         self.setIconSize(QtCore.QSize(ICON_SIZE, ICON_SIZE))
         layout = QtWidgets.QHBoxLayout(self)
         layout.setContentsMargins(6, 0, 6, 0)

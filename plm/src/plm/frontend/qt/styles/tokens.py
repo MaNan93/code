@@ -51,15 +51,21 @@ BG_CARD = N50
 BG_SUBTLE = N100
 BG_ALTERNATE = N25
 BG_HOVER = N200
+BG_SWITCH_HOVER = "#F3F4F6"
 BG_FOCUS = N200
-BG_ARTIFACTS = "#F0F1F4"
-BORDER_ARTIFACTS = "#D5D9E0"
+# GitHub Primer light surfaces and foregrounds for the source viewer.
+BG_ARTIFACTS = "#FFFFFF"
+BG_ARTIFACTS_HEADER = "#F6F8FA"
+BORDER_ARTIFACTS = "#D1D9E0"
+TEXT_ARTIFACTS = "#1F2328"
+TEXT_ARTIFACTS_MUTED = "#59636E"
+ACCENT_ARTIFACTS = "#0969DA"
 BORDER = "#E5E8ED"
 BORDER_HOVER = N300
 BORDER_FOCUS = P500
 TEXT_MAIN = N800
 TEXT_SUB = N500
-TEXT_HEADER = N600
+TEXT_HEADER = "#475569"
 TEXT_MUTED = N450
 TOOLTIP_BG = N800
 TOOLTIP_TEXT = N0
@@ -80,8 +86,7 @@ TITLEBAR_BUTTON_WIDTH = 46
 TITLEBAR_CONTROLS_WIDTH = 3 * TITLEBAR_BUTTON_WIDTH
 LOG_HEADER_HEIGHT = 32
 LOG_STATUS_HEIGHT = 24
-ARTIFACTS_TOOLBAR_HEIGHT = 40
-ARTIFACTS_FOOTER_HEIGHT = 28
+ARTIFACTS_TOOLBAR_HEIGHT = HEADER_HEIGHT
 NAV_EXPANDED_WIDTH = 260
 NAV_COLLAPSED_WIDTH = 56
 ARTIFACTS_DEFAULT_WIDTH = 380
@@ -122,8 +127,6 @@ RADIUS_CONTROL = 12
 RADIUS_CARD = 16
 RADIUS_HOVER = CONTROL_HEIGHT // 2
 RADIUS_WINDOW = 16
-TABLE_CARD_PADDING = 8
-RADIUS_CARD_INNER = RADIUS_CARD - TABLE_CARD_PADDING
 
 SPACING_XS = 4
 SPACING_SM = 8
@@ -151,7 +154,6 @@ QSS_TOKENS = {
     "menu_bottom_padding": f"{MENU_SHADOW_MARGIN + MENU_PADDING - MENU_GAP}px",
     "icon_size": f"{ICON_SIZE}px",
     "icon_glyph_size": f"{ICON_GLYPH_SIZE}px",
-    "icon_button_radius": f"{ICON_BUTTON_SIZE // 2}px",
     "primary": PRIMARY,
     "primary_hover": PRIMARY_HOVER,
     "primary_soft": PRIMARY_SOFT,
@@ -165,7 +167,11 @@ QSS_TOKENS = {
     "bg_hover": BG_HOVER,
     "bg_focus": BG_FOCUS,
     "bg_artifacts": BG_ARTIFACTS,
+    "bg_artifacts_header": BG_ARTIFACTS_HEADER,
     "border_artifacts": BORDER_ARTIFACTS,
+    "text_artifacts": TEXT_ARTIFACTS,
+    "text_artifacts_muted": TEXT_ARTIFACTS_MUTED,
+    "accent_artifacts": ACCENT_ARTIFACTS,
     "info_bg": INFO_BG,
     "info_text": INFO_TEXT,
     "success_bg": SUCCESS_BG,
@@ -193,7 +199,6 @@ QSS_TOKENS = {
     "radius_chip": f"{RADIUS_CHIP}px",
     "radius_control": f"{RADIUS_CONTROL}px",
     "radius_card": f"{RADIUS_CARD}px",
-    "radius_card_inner": f"{RADIUS_CARD_INNER}px",
     "radius_hover": f"{RADIUS_HOVER}px",
     "font_weight_normal": FONT_WEIGHT_NORMAL,
     "font_weight_medium": FONT_WEIGHT_MEDIUM,

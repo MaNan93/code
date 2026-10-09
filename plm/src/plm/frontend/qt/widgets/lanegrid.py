@@ -15,7 +15,7 @@ from plm.frontend.qt.widgets.tables import RowDragTable
 from plm.frontend.qt.styles.tokens import (
     BG_MAIN, BG_SUBTLE, BG_SURFACE, BORDER, BORDER_HOVER, CONTROL_HEIGHT, DANGER, FONT_SIZE_BODY,
     PRIMARY_HOVER, PRIMARY_SOFT,
-    RADIUS_CHIP, SHADOW_SM, SPACING_LG, SPACING_MD, SPACING_XS,
+    RADIUS_CHIP, SHADOW_SM, SPACING_MD,
     TEXT_MAIN, TEXT_MUTED,
 )
 

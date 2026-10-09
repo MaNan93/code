@@ -5,16 +5,16 @@ import re
 from PyQt5 import QtCore, QtGui, QtWidgets
 from plm.frontend.qt.widgets.common import StyledMenu
 from plm.frontend.qt.styles.tokens import (
-    BG_ARTIFACTS, FONT_CODE_PRIMARY, FONT_SIZE_BODY, TEXT_MUTED,
+    BG_ARTIFACTS, FONT_CODE_PRIMARY, FONT_SIZE_BODY, TEXT_ARTIFACTS_MUTED,
 )
 
 
-SYNTAX_COMMENT = "#6E7781"
-SYNTAX_KEYWORD = "#0969DA"
-SYNTAX_PORT = "#0086B3"
-SYNTAX_NUMBER = "#986801"
+SYNTAX_COMMENT = "#57606A"
+SYNTAX_KEYWORD = "#CF222E"
+SYNTAX_PORT = "#953800"
+SYNTAX_NUMBER = "#0550AE"
 SYNTAX_STRING = "#0A3069"
-SYNTAX_DIRECTIVE = "#8250DF"
+SYNTAX_DIRECTIVE = "#CF222E"
 LINE_NUMBER_PADDING = 12
 
 
@@ -54,8 +54,6 @@ class VerilogHighlighter(QtGui.QSyntaxHighlighter):
         ):
             fmt = QtGui.QTextCharFormat()
             fmt.setForeground(QtGui.QColor(color))
-            if name == "comment":
-                fmt.setFontItalic(True)
             self.formats[name] = fmt
 
     def set_enabled(self, enabled):
@@ -150,6 +148,7 @@ class CodePreview(QtWidgets.QPlainTextEdit):
         font.setPixelSize(FONT_SIZE_BODY)
         self.setFont(font)
         self.line_numbers = LineNumberArea(self)
+        self._line_number_width = 0
         self.highlighter = VerilogHighlighter(self.document())
         self.blockCountChanged.connect(self.update_line_number_width)
         self.updateRequest.connect(self.update_line_number_area)
@@ -179,6 +178,9 @@ class CodePreview(QtWidgets.QPlainTextEdit):
 
     def update_line_number_width(self, *_):
         width = self.line_number_width()
+        if width == self._line_number_width:
+            return
+        self._line_number_width = width
         self.setViewportMargins(width, 0, 0, 0)
         rect = self.contentsRect()
         self.line_numbers.setGeometry(rect.left(), rect.top(), width, rect.height())
@@ -201,11 +203,16 @@ class CodePreview(QtWidgets.QPlainTextEdit):
             rect.left(), rect.top(), self.line_number_width(), rect.height()
         )
 
+    def changeEvent(self, event):
+        super().changeEvent(event)
+        if event.type() == QtCore.QEvent.FontChange and hasattr(self, "line_numbers"):
+            self.update_line_number_width()
+
     def paint_line_numbers(self, event):
         painter = QtGui.QPainter(self.line_numbers)
         painter.fillRect(event.rect(), QtGui.QColor(BG_ARTIFACTS))
         painter.setFont(self.font())
-        painter.setPen(QtGui.QColor(TEXT_MUTED))
+        painter.setPen(QtGui.QColor(TEXT_ARTIFACTS_MUTED))
         block = self.firstVisibleBlock()
         number = block.blockNumber()
         top = int(self.blockBoundingGeometry(block).translated(self.contentOffset()).top())

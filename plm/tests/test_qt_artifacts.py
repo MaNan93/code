@@ -10,10 +10,9 @@ from qt_test_support import preserve_application_state, wait_for_idle
 from PyQt5 import QtCore, QtGui, QtTest, QtWidgets
 
 from plm.frontend.qt.views.artifacts_panel import ArtifactsPanel
-from plm.frontend.qt.views.artifact_chrome import ArtifactMetadataLabel
 from plm.frontend.qt.styles import APP_QSS
-from plm.frontend.qt.styles.tokens import PRIMARY_SOFT, CONTROL_HEIGHT, ICON_SIZE, RADIUS_HOVER
-from plm.frontend.qt.widgets.common import StyledMenu
+from plm.frontend.qt.styles.tokens import PRIMARY_SOFT, CONTROL_HEIGHT, ICON_SIZE, RADIUS_HOVER, TEXT_ARTIFACTS_MUTED
+from plm.frontend.qt.widgets.common import StyledMenu, load_lucide_icon
 from plm.frontend.qt.widgets.code_preview import (
     CodePreview,
     SYNTAX_COMMENT,
@@ -63,7 +62,7 @@ class ArtifactPreviewTests(unittest.TestCase):
         label = self.panel.path_label
         self.assertEqual(
             self.panel.path_button.mapTo(self.panel, QtCore.QPoint()).x(),
-            self.panel.preview.mapTo(self.panel, QtCore.QPoint()).x(),
+            self.panel.preview.mapTo(self.panel, QtCore.QPoint()).x() + 16,
         )
         self.assertEqual(label.display_path, "rtl / first.sv")
         self.assertIn("<b", label.text())
@@ -112,26 +111,20 @@ class ArtifactPreviewTests(unittest.TestCase):
         self.panel.hide()
         self.assertFalse(popup.isVisible())
 
-    def test_footer_separates_state_and_tracks_cursor_and_file_format(self):
+    def test_preview_fills_removed_footer_and_keeps_output_status(self):
         path = self.root / "status.sv"
         path.write_bytes(b"module example;\r\nendmodule\r\n")
         self.panel.set_files([path], self.root)
         wait_for_idle(self.app)
         self.panel.set_output_state("out_of_date", "输出已过期")
-        self.assertEqual(self.panel.footer.height(), 28)
-        self.assertEqual(self.panel.status.text(), "输出已过期")
-        self.assertEqual(self.panel.file_progress.text(), "1/1 · 2 行")
-        cursor = self.panel.preview.textCursor()
-        cursor.setPosition(len("module example;\n") + 3)
-        self.panel.preview.setTextCursor(cursor)
-        metadata = self.panel.editor_metadata.toolTip()
-        self.assertIn("行 2，列 4", metadata)
-        self.assertTrue(metadata.startswith("行 2，列 4 · "))
-        self.assertIn("SystemVerilog · UTF-8 · CRLF · RO", metadata)
-        self.assertEqual(len(self.panel.toolbar_separators), 2)
+        self.assertIsNone(self.panel.findChild(QtWidgets.QFrame, "ArtifactFooter"))
+        self.assertEqual(self.panel.preview.mapTo(self.panel, self.panel.preview.rect().bottomLeft()).y(),
+                         self.panel.contentsRect().bottom())
+        self.assertEqual(self.panel.status_text, "输出已过期")
+        self.assertIn("输出已过期", self.panel.toolbar.toolTip())
         self.panel.resize(1000, 630)
         wait_for_idle(self.app)
-        self.assertTrue(all(separator.isVisible() for separator in self.panel.toolbar_separators))
+        self.assertEqual(self.panel.close_button.geometry().right(), self.panel.toolbar.width() - 17)
 
     def test_complete_readonly_source_and_line_numbers(self):
         text = "module generated;\n" + "assign value = " + "0" * 250 + ";\n"
@@ -143,6 +136,12 @@ class ArtifactPreviewTests(unittest.TestCase):
         editor = self.panel.preview
         self.assertEqual(editor.toPlainText(), text)
         self.assertGreater(editor.horizontalScrollBar().maximum(), 0)
+        self.assertEqual(editor.line_numbers.width(), editor.line_number_width())
+        font = QtGui.QFont(editor.font())
+        font.setPixelSize(font.pixelSize() + 4)
+        editor.setFont(font)
+        wait_for_idle(self.app)
+        self.assertEqual(editor.viewportMargins().left(), editor.line_number_width())
         self.assertEqual(editor.line_numbers.width(), editor.line_number_width())
         editor.moveCursor(QtGui.QTextCursor.End)
         QtTest.QTest.keyClicks(editor, "unexpected_edit")
@@ -166,6 +165,11 @@ class ArtifactPreviewTests(unittest.TestCase):
         self.assertEqual(tree.indentation(), ICON_SIZE)
         self.assertIsNone(tree.graphicsEffect())
         item = tree.currentItem()
+        file_icon = load_lucide_icon("file-code-corner", TEXT_ARTIFACTS_MUTED)
+        self.assertEqual(item.icon(0).cacheKey(), file_icon.cacheKey())
+        tree.collapseAll()
+        tree.expandAll()
+        self.assertEqual(item.icon(0).cacheKey(), file_icon.cacheKey())
         rect = tree.visualItemRect(item)
         self.assertEqual(rect.height(), CONTROL_HEIGHT)
         image = tree.viewport().grab().toImage()
@@ -174,22 +178,6 @@ class ArtifactPreviewTests(unittest.TestCase):
         self.assertIn(f"border-radius: {RADIUS_HOVER}px", APP_QSS)
         self.assertNotIn("border-left: 2px solid #3B82F6", APP_QSS)
         self.assertNotIn("$chevron_", APP_QSS)
-
-    def test_narrow_metadata_keeps_line_and_column_prefix(self):
-        label = ArtifactMetadataLabel(self.panel)
-        font = QtGui.QFont(label.font())
-        font.setPixelSize(12)
-        label.setFont(font)
-        label.resize(180, 24)
-        label.show()
-        details = "行 43，列 1 · SystemVerilog · UTF-8 · LF · RO"
-        label.set_metadata(details)
-        self.assertTrue(label.text().startswith("行 43，列 1"))
-        self.assertTrue(label.text().endswith("\u2026"))
-        self.assertEqual(label.toolTip(), details)
-        label.set_metadata("")
-        self.assertEqual(label.text(), "")
-        self.assertEqual(label.toolTip(), "")
 
     def test_preview_context_menu_has_no_native_frame_and_preserves_copy(self):
         preview = self.panel.preview
@@ -243,7 +231,7 @@ class ArtifactPreviewTests(unittest.TestCase):
             self.panel.select_file(path)
             wait_for_idle(self.app)
             self.assertFalse(self.panel.preview.toPlainText())
-            self.assertIn("无法预览", self.panel.status.text())
+            self.assertIn("无法预览", self.panel.status_text)
             self.assertFalse(self.panel.search_button.isEnabled())
             self.panel.select_file(valid)
             wait_for_idle(self.app)
@@ -252,7 +240,7 @@ class ArtifactPreviewTests(unittest.TestCase):
         wait_for_idle(self.app)
         self.assertFalse(self.panel.preview.toPlainText())
         self.assertTrue(self.panel.search_button.isEnabled())
-        self.assertIn("0 行", self.panel.file_progress.text())
+        self.assertIn("0 行", self.panel.status_text)
 
     def test_search_wraps_both_directions_and_reports_no_match(self):
         path = self.file("search.sv", "module match;\n// middle\nendmodule // match")
@@ -426,7 +414,7 @@ class ArtifactPreviewTests(unittest.TestCase):
             block.layout().formats()[0].format.foreground().color().name(),
             SYNTAX_COMMENT.lower(),
         )
-        self.assertTrue(block.layout().formats()[0].format.fontItalic())
+        self.assertFalse(block.layout().formats()[0].format.fontItalic())
         block = block.next()
         formats = block.layout().formats()
         self.assertEqual(

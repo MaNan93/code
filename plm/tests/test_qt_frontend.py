@@ -16,7 +16,7 @@ from PyQt5 import QtCore, QtGui, QtTest, QtWidgets
 from plm.frontend.qt.controllers import AppController
 from plm.frontend.qt.services import ProjectService, SettingsStore
 from plm.frontend.qt.styles.tokens import (
-    BG_ARTIFACTS, BG_FOCUS, BG_HOVER, BG_SUBTLE, BG_SURFACE, BORDER, BORDER_HOVER, CONTROL_HEIGHT, FONT_CODE_PRIMARY, FONT_MONO, FONT_SCALE, FONT_SIZE_BODY,
+    BG_ARTIFACTS, BG_ARTIFACTS_HEADER, BG_FOCUS, BG_SUBTLE, BG_SURFACE, BORDER, BORDER_HOVER, CONTROL_HEIGHT, FONT_CODE_PRIMARY, FONT_MONO, FONT_SCALE, FONT_SIZE_BODY,
     ICON_GLYPH_SIZE, NAV_COLLAPSED_WIDTH, NAV_ICON_INSET, NAV_ITEM_GAP, SPACING_MD, TITLEBAR_CONTROLS_WIDTH, PRIMARY_SOFT, PRIMARY_PRESSED, TEXT_MAIN, TOOLTIP_BG, scale_content_size,
 )
 from plm.frontend.qt.models import ProjectInfo
@@ -219,7 +219,7 @@ class QtFrontendLayoutTests(unittest.TestCase):
         image = table.viewport().grab().toImage()
         for column in range(3):
             rect = table.visualRect(table.model().index(1, column))
-            self.assertEqual(image.pixelColor(rect.right() - 4, point.y()).name(), BG_HOVER.lower())
+            self.assertEqual(image.pixelColor(rect.right() - 4, point.y()).name(), BG_SUBTLE.lower())
 
     def test_settings_button_groups_have_no_internal_gap(self):
         self.window.nav_panel.settings_btn.click()
@@ -982,11 +982,11 @@ class QtFrontendLayoutTests(unittest.TestCase):
         self.assertTrue(table.viewport().rect().intersects(last_cell))
         self.assertLessEqual(last_cell.bottom(), table.viewport().rect().bottom())
 
-    def test_lane_mapping_shares_table_card_and_preserves_overflow_access(self):
+    def test_lane_mapping_fills_editor_and_preserves_overflow_access(self):
         page = self.window.config_page
         page.tabs.setCurrentIndex(1)
         editor = page.mapping_editor
-        self.assertEqual(editor.table_card.objectName(), "ConfigTableCard")
+        self.assertEqual(editor.table.width(), editor.width())
         editor.lane_count.setValue(32)
         wait_for_idle(self.app)
         self.assertGreater(editor.table.horizontalScrollBar().maximum(), 0)
@@ -1030,7 +1030,7 @@ class QtFrontendLayoutTests(unittest.TestCase):
         self.assertEqual(panel.geometry().top(), 0)
         self.assertEqual(panel.height(), page.height())
         self.assertEqual(page.tabs.maximumWidth(), QtWidgets.QWIDGETSIZE_MAX)
-        self.assertEqual(len(panel.toolbar_buttons), 7)
+        self.assertEqual(len(panel.toolbar_buttons), 9)
         toolbar = panel.findChild(QtWidgets.QWidget, "ArtifactsToolbar")
         toolbar_margins = toolbar.layout().contentsMargins()
         self.assertEqual(
@@ -1040,14 +1040,14 @@ class QtFrontendLayoutTests(unittest.TestCase):
                 toolbar_margins.right(),
                 toolbar_margins.bottom(),
             ),
-            (0, 0, TITLEBAR_CONTROLS_WIDTH, 0),
+            (16, 0, 16, 0),
         )
         self.assertEqual(toolbar.layout().spacing(), 0)
-        self.assertEqual(panel.toolbar_reserved_width, TITLEBAR_CONTROLS_WIDTH)
         self.assertEqual(
             panel.path_button.mapTo(panel, QtCore.QPoint()).x(),
-            panel.toolbar.mapTo(panel, QtCore.QPoint()).x(),
+            panel.toolbar.mapTo(panel, QtCore.QPoint()).x() + 16,
         )
+        self.assertEqual(panel.close_button.geometry().right(), toolbar.width() - 17)
         for button in panel.toolbar_buttons:
             self.assertEqual(button.height(), button_height(button))
             if button is not panel.path_button:
@@ -1058,7 +1058,7 @@ class QtFrontendLayoutTests(unittest.TestCase):
         self.assertIsInstance(panel.preview, QtWidgets.QPlainTextEdit)
         self.assertIs(panel.path_button.parent(), toolbar)
 
-    def test_artifact_toolbar_and_gutter_share_distinct_panel_surface(self):
+    def test_artifact_toolbar_and_gutter_use_github_surfaces(self):
         page = self.window.config_page
         shown = QtTest.QSignalSpy(page._artifacts_animation.finished)
         page.toggle_artifacts()
@@ -1066,9 +1066,9 @@ class QtFrontendLayoutTests(unittest.TestCase):
         toolbar = page.artifacts_panel.toolbar
         self.assertTrue(toolbar.testAttribute(QtCore.Qt.WA_StyledBackground))
         image = page.artifacts_panel.grab().toImage()
-        for y in (2, toolbar.height() - 1):
+        for y in (2, toolbar.height() - 2):
             point = toolbar.mapTo(page.artifacts_panel, QtCore.QPoint(toolbar.width() // 2, y))
-            self.assertEqual(image.pixelColor(point).name(), BG_ARTIFACTS.lower())
+            self.assertEqual(image.pixelColor(point).name(), BG_ARTIFACTS_HEADER.lower())
         gutter = page.artifacts_panel.preview.line_numbers
         gutter_image = gutter.grab().toImage()
         self.assertEqual(gutter_image.pixelColor(2, 2).name(), BG_ARTIFACTS.lower())
@@ -1114,14 +1114,16 @@ class QtFrontendLayoutTests(unittest.TestCase):
                 )
             self.assertLessEqual(bar.tabRect(tabs.count() - 1).right(), bar.width() - 1)
 
-    def test_controller_card_alignment_and_context_insertion_undo(self):
+    def test_controller_table_alignment_and_context_insertion_undo(self):
         page = self.window.config_page
         editor = page.controllers_editor
         table = editor.table
         original_count = table.rowCount()
-        self.assertLess(table.columnWidth(0), table.columnWidth(1))
-        self.assertLess(table.columnWidth(2), table.columnWidth(1))
-        self.assertEqual(table.item(0, 0).textAlignment(), int(QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter))
+        self.assertEqual(table.width(), editor.width())
+        widths = [table.columnWidth(index) for index in range(3)]
+        self.assertLessEqual(max(widths) - min(widths), 1)
+        self.assertTrue(table.showGrid())
+        self.assertEqual(table.item(0, 0).textAlignment(), int(QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter))
         self.assertEqual(table.horizontalHeaderItem(1).textAlignment(),
                          int(QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter))
         original_height = table.height()
@@ -1190,7 +1192,7 @@ class QtFrontendLayoutTests(unittest.TestCase):
         hover_row(2)
         self.app.processEvents()
         image = table.viewport().grab().toImage()
-        for row, color in ((0, "#e8f0fe"), (1, "#fafbfc"), (2, "#e1e5eb")):
+        for row, color in ((0, "#e8f0fe"), (1, "#fafbfc"), (2, "#eef0f4")):
             for column in range(table.columnCount()):
                 rect = table.visualRect(table.model().index(row, column))
                 self.assertEqual(image.pixelColor(rect.right() - 4, rect.center().y()).name(), color)
@@ -1258,7 +1260,7 @@ class QtFrontendLayoutTests(unittest.TestCase):
         shown = QtTest.QSignalSpy(page._artifacts_animation.finished)
         self.window.artifacts_toggle_button.click()
         self.assertTrue(shown.wait(1000))
-        self.assertFalse(hasattr(page.artifacts_panel, "close_button"))
+        self.assertTrue(page.artifacts_panel.close_button.isVisible())
         for maximized in (False, True):
             if maximized:
                 page.toggle_artifacts_maximized()
@@ -1275,7 +1277,7 @@ class QtFrontendLayoutTests(unittest.TestCase):
                     point = button.mapTo(page, button.rect().center())
                     self.assertIs(page.childAt(point), button)
         hidden = QtTest.QSignalSpy(page._artifacts_animation.finished)
-        QtTest.QTest.mouseClick(self.window.artifacts_toggle_button, QtCore.Qt.LeftButton)
+        QtTest.QTest.mouseClick(page.artifacts_panel.close_button, QtCore.Qt.LeftButton)
         self.assertTrue(hidden.wait(1000))
         self.assertFalse(page.artifacts_panel.isVisible())
 
@@ -1476,6 +1478,9 @@ class QtFrontendLayoutTests(unittest.TestCase):
             "search",
             "link",
             "file-x",
+            "file-code-corner",
+            "arrow-right-left",
+            "file-braces-corner",
             "more-horizontal",
             "maximize",
             "rocket",
@@ -1486,7 +1491,7 @@ class QtFrontendLayoutTests(unittest.TestCase):
             "chevron-right",
             "tree-chevron-down",
         )
-        self.assertEqual(len(icon_names), 30)
+        self.assertEqual(len(icon_names), 33)
         self.assertEqual(
             {path.stem for path in LUCIDE_ICON_DIR.glob("*.svg")},
             set(icon_names),

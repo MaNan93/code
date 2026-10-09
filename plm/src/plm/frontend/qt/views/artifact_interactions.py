@@ -68,8 +68,8 @@ class ArtifactInteractions:
         self.path_button.blockSignals(False)
 
     def _apply_toolbar_density(self, width):
-        # File tree and window controls stay reachable; other actions overflow.
-        width = int(width) - getattr(self, "toolbar_reserved_width", 0)
+        # File selection and maximize stay reachable; other actions overflow.
+        width = int(width)
         self.refresh_button.setVisible(width >= 280)
         self.open_editor_button.setVisible(width >= 360)
         self.search_button.setVisible(width >= 360)
@@ -77,6 +77,7 @@ class ArtifactInteractions:
         self.diff_button.setVisible(width >= 460)
         self.path_button.show()
         self.maximize_button.show()
+        self.close_button.show()
         self._sync_overflow_menu()
 
     def _sync_overflow_menu(self):
@@ -89,13 +90,6 @@ class ArtifactInteractions:
                 action.setChecked(button.isChecked())
             has_overflow |= hidden
         self.more_button.setVisible(has_overflow)
-        self.toolbar_separators[0].setVisible(
-            (not self.search_button.isHidden() or not self.diff_button.isHidden())
-            and (not self.copy_path_button.isHidden() or not self.open_editor_button.isHidden())
-        )
-        self.toolbar_separators[1].setVisible(
-            not self.copy_path_button.isHidden() or not self.open_editor_button.isHidden()
-        )
 
     def resizeEvent(self, event):
         super().resizeEvent(event)

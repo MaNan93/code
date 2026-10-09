@@ -2,7 +2,8 @@
 
 from pathlib import Path
 from PyQt5 import QtCore, QtGui, QtWidgets
-from plm.frontend.qt.styles.tokens import PRIMARY, SUCCESS, TEXT_MUTED
+from plm.frontend.qt.styles.tokens import PRIMARY, SUCCESS, TEXT_MUTED, TEXT_ARTIFACTS_MUTED
+from plm.frontend.qt.widgets.common import load_lucide_icon
 
 
 _STATUS_COLORS = {
@@ -150,6 +151,15 @@ class ArtifactFiles:
                     if status:
                         label = f"{part}   {status}"
                 item = QtWidgets.QTreeWidgetItem(parent, [label])
+                if is_file:
+                    suffix = path.suffix.lower()
+                    icon = (
+                        "file-code-corner" if suffix in (".sv", ".svh", ".v", ".vh") else
+                        "file-braces-corner" if suffix == ".json" else "file-text"
+                    )
+                else:
+                    icon = "folder"
+                item.setIcon(0, load_lucide_icon(icon, TEXT_ARTIFACTS_MUTED))
                 nodes[key] = item
                 if is_file:
                     self._tree_items[path] = item

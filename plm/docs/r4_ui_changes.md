@@ -23,3 +23,11 @@
 - 原生 Windows 截图检查通过，包含设置、菜单、确认弹窗、折叠导航和 Artifacts 面板。
 
 本轮提交包含 PLM 工作区的现有样例配置编辑与审查记录，以及对应的 CI 测试入口更新。
+
+## R4 冗余代码清理（2026-10-09）
+
+- 删除 `TopologyIndexes.widths` 对外字段及其仅供断言使用的检查；局部 `widths` 统计仍用于 `minimum_widths` 和拓扑校验。
+- 删除未被使用的 `Config._min_granularity()` 转发方法，统一访问 `topology_indexes().minimum_widths`。
+- 删除 `TaskRunner.submit()` 和 `submit_latest()` 无调用方依赖的 task ID 返回值；内部 `_prepare()` 仍返回 ID 并继续管理任务生命周期。
+- 移除项目时显式释放 `takeItem()` 返回的 `QListWidgetItem`。
+- 不改动 RTL/TB 生成逻辑、DPR、PCLK 模式、格式化逻辑以及 `test/` 示例数据。

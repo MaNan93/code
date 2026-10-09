@@ -234,7 +234,6 @@ class TopologyIndexes:
     lane_groups: object
     pclk_sources: object
     pclk_candidates: object
-    widths: object
     minimum_widths: object
 
 
@@ -500,7 +499,7 @@ class Config:
             active_widths = [width for width in per.values() if width]
             if active_widths:
                 minimum_widths[cid] = min(active_widths)
-        return TopologyIndexes(groups, lane_groups, sources, candidates, widths, minimum_widths)
+        return TopologyIndexes(groups, lane_groups, sources, candidates, minimum_widths)
 
     def snapshot(self):
         """Detach generation inputs from the editor's mutable configuration."""
@@ -522,19 +521,6 @@ class Config:
 
     def ctrl_pclk_cands(self):
         return self.topology_indexes().pclk_candidates
-
-    def _min_granularity(self):
-        """For each controller, the minimum width across every mode where
-        it owns any lane at all.
-
-        This represents the smallest granularity at which this controller
-        is actually ever allocated lanes, and is used to work out "how many
-        controllers this granularity can simultaneously feed from the
-        PHY's total lane count". A controller that never owns any lane
-        doesn't appear in the result (handled separately by the zombie
-        check).
-        """
-        return self.topology_indexes().minimum_widths
 
     # ------------------------------------------------------------ validation
 

@@ -71,7 +71,6 @@ class TaskRunner(QtCore.QObject):
     def submit(self, operation, completed, failed, progress=None):
         task_id = self._prepare(operation, completed, failed, progress)
         self._pool.start(self._tasks[task_id][0])
-        return task_id
 
     def _prepare(self, operation, completed, failed, progress):
         self._next_id += 1
@@ -93,7 +92,6 @@ class TaskRunner(QtCore.QObject):
         else:
             self._latest[key] = task_id
             self._pool.start(self._tasks[task_id][0])
-        return task_id
 
     def cancel_latest(self, key):
         running = self._tasks.get(self._latest.get(key))

@@ -161,7 +161,8 @@ class ProjectList(QtWidgets.QListWidget):
             return
         was_selected = widget.project_name == self.selected_project_name
         self.removeItemWidget(item)
-        self.takeItem(row)
+        removed_item = self.takeItem(row)
+        del removed_item
         self.project_widgets.remove(widget)
         widget.deleteLater()
         if was_selected:

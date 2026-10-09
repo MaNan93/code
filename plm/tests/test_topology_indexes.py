@@ -52,7 +52,6 @@ class TopologyIndexTests(unittest.TestCase):
         }
         self.assertEqual(indexes.pclk_sources, sources)
         self.assertEqual(indexes.pclk_candidates, candidates)
-        self.assertEqual(indexes.widths, widths)
         self.assertEqual(indexes.minimum_widths, minimum)
         self.assertEqual(set(indexes.lane_groups), set(range(config.lane_count)))
         for lane, group in indexes.lane_groups.items():

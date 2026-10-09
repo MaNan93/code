@@ -31,3 +31,8 @@
 - 删除 `TaskRunner.submit()` 和 `submit_latest()` 无调用方依赖的 task ID 返回值；内部 `_prepare()` 仍返回 ID 并继续管理任务生命周期。
 - 移除项目时显式释放 `takeItem()` 返回的 `QListWidgetItem`。
 - 不改动 RTL/TB 生成逻辑、DPR、PCLK 模式、格式化逻辑以及 `test/` 示例数据。
+
+## CI 行内控件高度修复
+
+- Formatter 参数表行高保持 40px，ComboBox/LineEdit 在创建时就固定为 36px，供上下各 2px 内边距使用。
+- 不再依赖 `ButtonSizingController` 在后续事件中把默认 40px 高度调整成 36px；这使 Linux/Windows 的最小高度断言一致。

@@ -243,7 +243,7 @@ class SettingsPage(SecondaryPage):
                 default_value = DEFAULT_VERIBLE_FLAGS[name]
                 if choices:
                     control = StyledComboBox()
-                    control.setFixedHeight(CONTROL_HEIGHT)
+                    control.setFixedHeight(CONTROL_HEIGHT - 4)
                     control.addItem(f"{default_value} (default)", default_value)
                     for choice in choices:
                         if choice != default_value:
@@ -252,7 +252,7 @@ class SettingsPage(SecondaryPage):
                     control.currentIndexChanged.connect(self._flags_changed)
                 else:
                     control = QtWidgets.QLineEdit()
-                    control.setFixedHeight(CONTROL_HEIGHT)
+                    control.setFixedHeight(CONTROL_HEIGHT - 4)
                     control.setToolTip(f"PLM 默认值：{default_value}")
                     if name in VERIBLE_INT_PARAMS:
                         control.setValidator(QtGui.QIntValidator(0, 2147483647, control))

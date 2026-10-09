@@ -11,13 +11,18 @@ on:
       - "plm/**"
       - ".github/workflows/plm.yml"
       - ".gitattributes"
+  workflow_dispatch:
 
 concurrency:
   group: plm-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
+  # During the plm-ui-refactor functional-restoration phase, keep the full
+  # cross-platform matrix for final/manual validation instead of every small
+  # UI logic change. A separate fast functional workflow covers this branch.
   test:
+    if: github.ref != 'refs/heads/plm-ui-refactor'
     strategy:
       matrix:
         os: [ubuntu-latest, windows-latest]
@@ -27,8 +32,6 @@ jobs:
       run:
         working-directory: plm
     env:
-      # tests/test_qt_frontend.py builds real widgets; there is no display
-      # on any runner, so Qt has to use its headless platform plugin.
       QT_QPA_PLATFORM: offscreen
     steps:
       - uses: actions/checkout@v4
@@ -38,8 +41,6 @@ jobs:
           working-directory: plm
           enable-cache: true
           cache-dependency-glob: uv.lock
-      # The PyQt5 wheel links against libGL/libEGL even for the offscreen
-      # platform, and the Linux runner image doesn't ship them.
       - if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y libgl1 libegl1
       - run: uv sync --extra qt --locked
@@ -47,6 +48,7 @@ jobs:
       - run: uv run python -m unittest discover -s tests -v
 
   rtl-sim:
+    if: github.ref != 'refs/heads/plm-ui-refactor'
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -64,10 +66,16 @@ jobs:
       - run: PLM_RUN_RTL_SIM=1 uv run python -m unittest -v tests.test_dpr_phy_input
 
   wheel:
-    runs-on: ubuntu-latest
+    if: github.ref != 'refs/heads/plm-ui-refactor'
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
     defaults:
       run:
         working-directory: plm
+    env:
+      QT_QPA_PLATFORM: offscreen
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v10.2.0
@@ -76,18 +84,8 @@ jobs:
           working-directory: plm
           enable-cache: true
           cache-dependency-glob: uv.lock
+      - if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libgl1 libegl1
+      - run: uv sync --extra qt --locked
       - run: uv build --wheel
-      - run: uv venv wheel-venv --python 3.12
-      - run: uv pip install --python wheel-venv/bin/python --no-deps dist/plm-*.whl
-      - run: >-
-          wheel-venv/bin/python -c "import tempfile;
-          from pathlib import Path;
-          from plm.core.paths import DOCS_DIR;
-          from plm.core.workspace import load_default_signals, scaffold_default_content;
-          from plm.core.model import Config;
-          root=Path(tempfile.mkdtemp())/'new-project';
-          scaffold_default_content(root);
-          cfg=Config(root/'config');
-          assert len(load_default_signals()) > 20;
-          assert (DOCS_DIR/'tool_usage.md').is_file();
-          assert not cfg.validate()"
+      - run: uv run python scripts/check_wheel.py

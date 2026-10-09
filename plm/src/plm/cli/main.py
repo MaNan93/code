@@ -4,6 +4,7 @@ plm -- generate matched RTL and testbench outputs from three configuration CSVs.
 
     plm generate  --config SET  [flags]   generate RTL + testbench
     plm validate  --config SET            parse + check, write nothing
+    plm --version                         print the installed version
     plm -gui                              launch the Qt front end
 
 RTL and testbench are one output set. Generation stages both and replaces
@@ -14,6 +15,7 @@ import argparse
 import json
 import sys
 
+from plm import __version__
 from plm.core.gen_flags import (
     ARCH_VALUES,
     PCLK_MODE_VALUES,
@@ -144,6 +146,9 @@ def cmd_gui(argv):
 
 def main(argv=None):
     argv = sys.argv[1:] if argv is None else argv
+    if argv == ["--version"]:
+        print(f"plm {__version__}")
+        return 0
     if argv[:1] in (["-gui"], ["--gui"]):
         return cmd_gui(argv[1:])
     if argv in (["-h"], ["--help"]):

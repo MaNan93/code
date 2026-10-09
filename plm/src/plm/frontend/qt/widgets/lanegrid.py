@@ -6,28 +6,33 @@ coloured pen cursor. Rows can be reordered directly or edited through the
 context menu.
 """
 
-import copy
-import math
+from functools import lru_cache
 
 from PyQt5 import QtCore, QtGui, QtWidgets
 
+from plm.frontend.qt.widgets.common import StyledMenu, apply_drop_shadow
 from plm.frontend.qt.widgets.tables import RowDragTable
-from plm.frontend.qt.widgets.theme import BORDER, BORDER_STRONG, TEXT, add_shadow
+from plm.frontend.qt.styles.tokens import (
+    BG_MAIN, BG_SUBTLE, BG_SURFACE, BORDER, BORDER_HOVER, CONTROL_HEIGHT, DANGER, FONT_SIZE_SM,
+    PRIMARY_HOVER, PRIMARY_LIGHT,
+    RADIUS_CHIP, SHADOW_SM, SPACING_LG, SPACING_MD, SPACING_XS,
+    TEXT_MAIN, TEXT_MUTED,
+)
 
 LANE_GRID_PALETTE = [
-    "#4C78A8", "#F58518", "#54A24B", "#E45756", "#72B7B2",
-    "#EECA3B", "#B279A2", "#FF9DA6", "#9D755D", "#17BECF",
-    "#B5B02B", "#7B6FD1",
+    "#6366F1",
+    "#0EA5E9",
+    "#8B5CF6",
+    "#F59E0B",
+    "#14B8A6",
+    "#EC4899",
 ]
-LANE_GRID_UNASSIGNED_BG = "#e6e6e6"
+LANE_GRID_UNASSIGNED_BG = BG_SUBTLE
 
-# Lane column widths step up geometrically as the lane count drops: x32 is
-# the reference (fills the available width) and each halving of the lane
-# count makes every lane column LANE_W_RATIO times wider -- x16 = 1.68x
-# x32's width, x8 = 1.68x x16's, and so on -- recomputed on every resize
-# and every lane-count change so the grid stays proportional at any window
-# size instead of just using whatever QTableWidget's own auto-sizing picks.
-LANE_W_RATIO = 1.68
+# Keep the mode column compact and let the active lane columns consume the
+# remaining viewport width evenly. This avoids the large dead area that used
+# to appear in x2/x4/x8 configurations. Larger lane counts scroll when
+# necessary to keep their text readable.
 LANE_MODE_W = 64
 
 
@@ -41,36 +46,38 @@ def _ui_scale():
 PAINT_OPACITY = 0.58
 PREVIEW_OPACITY = 0.78
 
+@lru_cache(maxsize=64)
 def _contrast_text_color(hex_color):
-    hex_color = hex_color.lstrip("#")
-    r, g, b = (int(hex_color[i:i + 2], 16) for i in (0, 2, 4))
-    luminance = 0.299 * r + 0.587 * g + 0.114 * b
-    return "#000000" if luminance > 140 else "#ffffff"
+    color = QtGui.QColor(hex_color)
+    # Preserve perceived luminance; HSL lightness gives different contrast
+    # decisions for saturated controller colors.
+    luminance = 0.299 * color.red() + 0.587 * color.green() + 0.114 * color.blue()
+    return TEXT_MAIN if luminance > 140 else BG_SURFACE
 
 
+@lru_cache(maxsize=64)
 def _darken_color(hex_color, factor=0.82):
-    """Darken a hex colour toward black (1 = unchanged, 0 = black)."""
-    hex_color = hex_color.lstrip("#")
-    r, g, b = (int(hex_color[i:i + 2], 16) for i in (0, 2, 4))
+    """Blend a color toward the existing dark text tone."""
+    color = QtGui.QColor(hex_color)
     target = 0x1a
-    r = int(r * factor + target * (1 - factor))
-    g = int(g * factor + target * (1 - factor))
-    b = int(b * factor + target * (1 - factor))
-    return f"#{r:02x}{g:02x}{b:02x}"
+    channels = [int(channel * factor + target * (1 - factor))
+                for channel in (color.red(), color.green(), color.blue())]
+    return QtGui.QColor(*channels).name()
 
 
+@lru_cache(maxsize=32)
 def _make_pen_cursor(color):
     """Build a crisp paint-brush cursor with the active controller colour."""
     svg = (
         '<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32">'
         '<path d="M15.2 20.2L25.8 9.6c1.8-1.8 1.8-4.6 0-6.4s-4.6-1.8-6.4 0L8.8 13.8z" '
-        'fill="#f7f7f7" stroke="#202124" stroke-width="1.5" stroke-linejoin="round"/>'
-        '<path d="M11.4 12.1l8.5 8.5-3.2 3.2-8.5-8.5z" fill="#c7c9cc" '
-        'stroke="#202124" stroke-width="1.3" stroke-linejoin="round"/>'
+        f'fill="{BG_MAIN}" stroke="{TEXT_MAIN}" stroke-width="1.5" stroke-linejoin="round"/>'
+        f'<path d="M11.4 12.1l8.5 8.5-3.2 3.2-8.5-8.5z" fill="{TEXT_MUTED}" '
+        f'stroke="{TEXT_MAIN}" stroke-width="1.3" stroke-linejoin="round"/>'
         f'<path d="M8.5 15.2c-2.7 2.5-3.4 5.2-3.7 8.2-.2 1.9-1 3.7-2.5 5.4 '
-        f'4.3-.1 7.8-1.4 10.2-4.9z" fill="{color}" stroke="#202124" stroke-width="1.5" '
+        f'4.3-.1 7.8-1.4 10.2-4.9z" fill="{color}" stroke="{TEXT_MAIN}" stroke-width="1.5" '
         'stroke-linejoin="round"/>'
-        '<path d="M4.2 27.3c1.8-.2 3.2-.7 4.3-1.5" fill="none" stroke="#ffffff" '
+        f'<path d="M4.2 27.3c1.8-.2 3.2-.7 4.3-1.5" fill="none" stroke="{BG_SURFACE}" '
         'stroke-opacity=".8" stroke-width="1.2" stroke-linecap="round"/>'
         '</svg>'
     )
@@ -103,16 +110,16 @@ class _LaneCellDelegate(QtWidgets.QStyledItemDelegate):
             style.drawControl(QtWidgets.QStyle.CE_ItemViewItem, styled, painter, styled.widget)
             text_rect = option.rect.adjusted(12, 0, -12, 0)
             selected = bool(option.state & QtWidgets.QStyle.State_Selected)
-            role = QtGui.QPalette.HighlightedText if selected else QtGui.QPalette.Text
             painter.save()
-            painter.setPen(styled.palette.color(role))
+            painter.setPen(QtGui.QColor(TEXT_MAIN) if selected
+                           else styled.palette.color(QtGui.QPalette.Text))
             painter.drawText(
                 text_rect,
                 styled.displayAlignment | QtCore.Qt.AlignVCenter,
                 option.fontMetrics.elidedText(text, styled.textElideMode, text_rect.width()),
             )
             if (r, c) in grid._cell_errors:
-                painter.setPen(QtGui.QPen(QtGui.QColor("#bb0000"), 2))
+                painter.setPen(QtGui.QPen(QtGui.QColor(DANGER), 2))
                 painter.drawRect(option.rect.adjusted(1, 1, -2, -2))
             painter.restore()
             return
@@ -121,12 +128,16 @@ class _LaneCellDelegate(QtWidgets.QStyledItemDelegate):
             return
         lane_idx = c - 1
         val = index.data(QtCore.Qt.DisplayRole) or ""
+        pending = grid.table._click_preview
+        is_pending = pending is not None and pending[:2] == (r, lane_idx)
+        if is_pending:
+            val = f"{pending[2]}-0"
         has_dash = "-" in val
         cid = val.split("-", 1)[0] if has_dash else None
         port = val[val.index("-") + 1:] if has_dash else val
         paint_color = grid.color_by_id.get(cid) if cid else None
 
-        is_hover = (not grid._drag_active and grid._hover_cell is not None
+        is_hover = (not is_pending and not grid._drag_active and grid._hover_cell is not None
                     and grid._hover_cell[0] == r and grid._hover_cell[1] == lane_idx)
         active_color = grid.color_by_id.get(grid.active_ctrl_id) if grid.active_ctrl_id else None
 
@@ -139,7 +150,7 @@ class _LaneCellDelegate(QtWidgets.QStyledItemDelegate):
         else:
             painter.fillRect(rect, QtGui.QColor(LANE_GRID_UNASSIGNED_BG))
         if option.state & QtWidgets.QStyle.State_Selected:
-            painter.fillRect(rect, QtGui.QColor(16, 163, 127, 24))
+            painter.fillRect(rect, QtGui.QColor(PRIMARY_LIGHT))
 
         # Adjacent cells assigned to the same controller join into one
         # continuous marker band. Only the two outer ends retain rounded caps.
@@ -170,11 +181,11 @@ class _LaneCellDelegate(QtWidgets.QStyledItemDelegate):
             font.setBold(True)
             painter.setFont(font)
         else:
-            painter.setPen(QtGui.QColor("#333333"))
+            painter.setPen(QtGui.QColor(TEXT_MAIN))
 
         painter.drawText(rect, QtCore.Qt.AlignCenter, port)
         if (r, c) in grid._cell_errors:
-            painter.setPen(QtGui.QPen(QtGui.QColor("#bb0000"), 2))
+            painter.setPen(QtGui.QPen(QtGui.QColor(DANGER), 2))
             painter.drawRect(rect.adjusted(1, 1, -2, -2))
 
         painter.restore()
@@ -183,6 +194,9 @@ class _LaneCellDelegate(QtWidgets.QStyledItemDelegate):
         grid = self._grid
         if row < 0 or row >= len(grid.data) or lane < 0 or lane >= grid.lane_count:
             return None
+        pending = grid.table._click_preview
+        if pending is not None and pending[:2] == (row, lane):
+            return grid.color_by_id.get(pending[2])
         value = grid.data[row].get(f"lane{lane}", "")
         controller_id = value.split("-", 1)[0] if "-" in value else None
         return grid.color_by_id.get(controller_id) if controller_id else None
@@ -192,7 +206,6 @@ class _LaneCellDelegate(QtWidgets.QStyledItemDelegate):
             editor.setGeometry(option.rect.adjusted(12, 1, -12, -1))
         else:
             super().updateEditorGeometry(editor, option, index)
-
     @staticmethod
     def _draw_marker_band(painter, rect, color, opacity, joins_left, joins_right):
         """Draw one clipped segment of a continuous, round-ended marker band."""
@@ -302,10 +315,10 @@ class LaneGrid(QtWidgets.QWidget):
         self._drag_active = False
         self._drag_anchor = None
         self._drag_current = None
-        self._drag_snapshot = None
+        self._paint_originals = {}
         self._hover_cell = None  # (row, lane) under the cursor, for pen preview
         self._pen_cursor = None  # cached QCursor for the active controller
-        self._bg_color = "#ffffff"  # card background, set from theme
+        self._bg_color = BG_SURFACE  # card background, set from theme
         self._cell_errors = {}
 
         layout = QtWidgets.QVBoxLayout(self)
@@ -320,7 +333,7 @@ class LaneGrid(QtWidgets.QWidget):
         palette_outer.setSpacing(int(6 * _ui_scale()))
         # Use a flow layout so swatches wrap to multiple rows instead of
         # overflowing the lane mapping page at narrow widths.
-        self._palette_flow = _FlowLayout(h_spacing=int(6 * _ui_scale()), v_spacing=int(6 * _ui_scale()))
+        self._palette_flow = _FlowLayout(h_spacing=0, v_spacing=0)
         palette_outer.addLayout(self._palette_flow)
         layout.addWidget(self.palette_bar)
 
@@ -337,6 +350,7 @@ class LaneGrid(QtWidgets.QWidget):
             | QtWidgets.QAbstractItemView.EditKeyPressed
         )
         row_header = self.table.verticalHeader()
+        row_header.setDefaultSectionSize(CONTROL_HEIGHT)
         row_header.hide()
         self.table.rowMoveRequested.connect(self._on_row_drop)
         row_header.setContextMenuPolicy(QtCore.Qt.CustomContextMenu)
@@ -425,39 +439,37 @@ class LaneGrid(QtWidgets.QWidget):
                 else f"Use {c.get('ctrl_name') or cid} as the brush"
             )
             text_color = _contrast_text_color(color)
-            # Pill shape: fully rounded ends, border, active gets inner ring.
-            # Scale padding/radius/font from the 13 px baseline.
-            border_color = TEXT if is_active else BORDER
-            outline = (
-                f"border: {int(2 * scale)}px solid {border_color};" if is_active
-                else f"border: {int(1 * scale)}px solid {border_color};"
-            )
+            border_color = PRIMARY_HOVER if is_active else BORDER
+            outline = f"border: 1px solid {border_color};" if is_active else "border: none;"
             btn.setStyleSheet(
                 f"QPushButton#lgSwatch {{"
                 f"  background-color: {color};"
                 f"  color: {text_color};"
-                f"  font-size: {12.5 * scale:.1f}px;"
-                f"  font-weight: 600;"
-                f"  border-radius: {int(14 * scale)}px;"
-                # Horizontal padding must be >= the border-radius, otherwise
-                # the pill's rounded ends bite into the top/bottom of the
-                # first/last character before the flat padding band starts.
-                f"  padding: {int(5 * scale)}px {int(15 * scale)}px;"
+                f"  font-size: {FONT_SIZE_SM}px;"
+                f"  font-weight: 500;"
+                f"  border-radius: {RADIUS_CHIP}px;"
+                f"  padding: 0 {int(SPACING_MD * scale)}px;"
                 f"  {outline}"
                 f"}}"
                 f"QPushButton#lgSwatch:hover {{"
-                f"  border-color: {BORDER_STRONG};"
+                f"  border-color: {BORDER_HOVER};"
                 f"}}"
             )
             btn.setCursor(QtCore.Qt.PointingHandCursor)
-            btn.setMinimumHeight(int(30 * scale))
-            add_shadow(btn, blur=int(8 * scale), offset=(0, int(1 * scale)), alpha=45)
+            apply_drop_shadow(
+                btn,
+                blur_radius=int(SHADOW_SM["blur_radius"] * scale),
+                offset=(0, int(SHADOW_SM["offset"][1] * scale)),
+                alpha=SHADOW_SM["rgba"][3],
+                shadow=SHADOW_SM,
+            )
             btn.clicked.connect(lambda _checked=False, cid=cid: self._set_active_controller(cid))
             self._palette_flow.addWidget(btn)
         self._palette_flow.invalidate()
         self.palette_bar.updateGeometry()
 
     def _set_active_controller(self, cid):
+        self.table._commit_single_click()
         self.active_ctrl_id = cid
         self._render_palette()
         self._apply_paint_cursor()
@@ -479,6 +491,7 @@ class LaneGrid(QtWidgets.QWidget):
 
     # ------------------------------------------------------------ grid construction
     def _render(self):
+        self.table._cancel_pending_paint()
         self._building = True
         self.table.blockSignals(True)
         self.table.clear()
@@ -505,7 +518,7 @@ class LaneGrid(QtWidgets.QWidget):
 
     def _apply_lane_width(self):
         """Recompute every lane column's width from the table's own
-        viewport width and current lane count using LANE_W_RATIO. Called
+        viewport width and current lane count. Called
         on every resize (_LaneTable.resizeEvent) and every column-
         structure change (_render), so the grid stays proportional at any
         window size instead of just falling back on Qt's own default
@@ -514,18 +527,27 @@ class LaneGrid(QtWidgets.QWidget):
             return
         scale = _ui_scale()
         mode_w = int(LANE_MODE_W * scale)
-        # Every column must fit in the viewport. At x32 the cells become
-        # compact colour swatches rather than forcing a horizontal scrollbar.
+        # Every lane shares the complete remaining viewport. Small lane-count
+        # modes therefore read like a deliberate grid rather than a narrow
+        # strip stranded on the left side of the card.
         usable = max(1, self.table.viewport().width() - 1)
         avail = max(1, usable - mode_w)
         n = max(1, self.lane_count)
-        w32 = avail / 32 if avail > 0 else 0
-        preferred = w32 * (LANE_W_RATIO ** math.log2(32 / n))
-        lane_total = min(avail, max(n, int(preferred * n)))
-        lane_w, remainder = divmod(lane_total, n)
+        lane_w, remainder = divmod(avail, n)
+        font = QtGui.QFont(self.table.font())
+        font.setBold(True)
+        minimum = QtGui.QFontMetrics(font).horizontalAdvance(str(max(31, n - 1))) + 2 * SPACING_MD
+        overflow = lane_w < minimum
+        self.table.setHorizontalScrollBarPolicy(
+            QtCore.Qt.ScrollBarAsNeeded if overflow else QtCore.Qt.ScrollBarAlwaysOff
+        )
+        if overflow:
+            lane_w, remainder = minimum, 0
         self.table.setColumnWidth(0, mode_w)
         for lane_idx in range(self.lane_count):
-            self.table.setColumnWidth(lane_idx + 1, lane_w + (1 if lane_idx < remainder else 0))
+            self.table.setColumnWidth(
+                lane_idx + 1, lane_w + (1 if lane_idx < remainder else 0)
+            )
 
         # On very narrow x32 grids, printing every two-digit lane number
         # produces an unreadable solid string. Keep spatial orientation with
@@ -544,6 +566,8 @@ class LaneGrid(QtWidgets.QWidget):
                 item.setToolTip(f"Lane {lane_idx}")
 
     def _render_body(self):
+        # A reload or row change invalidates coordinates of deferred clicks.
+        self.table._cancel_pending_paint()
         self._building = True
         self.table.blockSignals(True)
         self.table.setRowCount(0)
@@ -619,10 +643,9 @@ class LaneGrid(QtWidgets.QWidget):
         self._drag_active = True
         self._drag_anchor = (r, lane_idx)
         self._drag_current = (r, lane_idx)
-        self._drag_snapshot = copy.deepcopy(self.data)
+        self._paint_originals = {}
         self._hover_cell = None  # suppress preview during drag
-        # Lay the stroke down on press so a plain click (press + release,
-        # no movement) still paints one cell.
+        # Called only after a drag starts or a single click is confirmed.
         self._paint_current_rect()
 
     def _continue_paint(self, r, lane_idx):
@@ -634,16 +657,22 @@ class LaneGrid(QtWidgets.QWidget):
 
     def _end_paint(self):
         self._drag_active = False
-        changed = self._drag_snapshot is not None and self.data != self._drag_snapshot
+        changed = any(
+            self.data[row].get(key, "") != original
+            for (row, key), original in self._paint_originals.items()
+        )
+        self._paint_originals.clear()
         # Refresh so the hover preview comes back after the stroke finishes
         self._refresh_cell_styles()
         if changed:
             self.changed.emit()
 
     def _paint_current_rect(self):
-        if self._drag_snapshot is None:
+        if not self._drag_active:
             return
-        self.data = copy.deepcopy(self._drag_snapshot)
+        # [REFACTORED]: Restore only cells touched by the preceding rectangle.
+        for (row, key), original in self._paint_originals.items():
+            self.data[row][key] = original
         r0, l0 = self._drag_anchor
         r1, l1 = self._drag_current
         row_lo, row_hi = min(r0, r1), max(r0, r1)
@@ -654,7 +683,9 @@ class LaneGrid(QtWidgets.QWidget):
                     continue
                 i = 0
                 for lane_idx in range(lane_lo, lane_hi + 1):
-                    self.data[r][f"lane{lane_idx}"] = f"{self.active_ctrl_id}-{i}"
+                    key = f"lane{lane_idx}"
+                    self._paint_originals.setdefault((r, key), self.data[r].get(key, ""))
+                    self.data[r][key] = f"{self.active_ctrl_id}-{i}"
                     i += 1
         self._sync_table_from_data()
 
@@ -670,15 +701,6 @@ class LaneGrid(QtWidgets.QWidget):
         self.table.blockSignals(False)
         self._building = False
         self._refresh_cell_styles()
-
-    def _rollback_to_snapshot(self):
-        """Undo the just-completed first click's own paint stroke before a
-        double-click opens the cell for editing -- otherwise the value the
-        user meant to hand-type over would already have been overwritten
-        by that first click's paint."""
-        if self._drag_snapshot is not None:
-            self.data = copy.deepcopy(self._drag_snapshot)
-            self._sync_table_from_data()
 
     # ------------------------------------------------------------ hover tracking
     def _on_cell_hover(self, pos):
@@ -715,7 +737,7 @@ class LaneGrid(QtWidgets.QWidget):
         logical = header.logicalIndexAt(pos)
         if logical < 0:
             return
-        menu = QtWidgets.QMenu(self)
+        menu = StyledMenu(self)
         insert_action = menu.addAction("Insert mode row below")
         delete_action = menu.addAction("Delete this mode row")
         chosen = menu.exec_(header.mapToGlobal(pos))
@@ -731,7 +753,7 @@ class LaneGrid(QtWidgets.QWidget):
                 row = self.table.rowCount() - 1
         if row >= 0:
             self.table.selectRow(row)
-        menu = QtWidgets.QMenu(self.table)
+        menu = StyledMenu(self.table)
         if row >= 0:
             insert_above = menu.addAction("Insert row above")
             insert_below = menu.addAction("Insert row below")
@@ -751,20 +773,19 @@ class LaneGrid(QtWidgets.QWidget):
 
 
 class _LaneTable(RowDragTable):
-    """QTableWidget whose mouse events drive the owning LaneGrid's
-    paint-drag, hover-preview, and double-click-edit-with-rollback
-    behavior. Qt delivers a double-click as mousePress+mouseRelease (first
-    click) followed by mouseDoubleClick+mouseRelease (second click) rather
-    than a second mousePress -- so the first click's own snapshot/paint
-    (from _begin_paint) is exactly the state mouseDoubleClickEvent rolls
-    back to before opening the editor.
-
-    Mouse tracking is enabled so mouseMoveEvent fires even without a
-    button held; that drives the faded hover-preview stroke."""
+    """Separate pending clicks, paint drags, and native double-click edits."""
 
     def __init__(self, grid):
         super().__init__(drag_columns={0})
         self._grid = grid
+        self._press_pos = None
+        self._pending_cell = None
+        self._click_cell = None
+        self._click_preview = None
+        self._click_timer = QtCore.QTimer(self)
+        self._click_timer.setSingleShot(True)
+        self._click_timer.setTimerType(QtCore.Qt.PreciseTimer)
+        self._click_timer.timeout.connect(self._commit_single_click)
         self.setMouseTracking(True)
         self.viewport().setMouseTracking(True)
 
@@ -779,11 +800,20 @@ class _LaneTable(RowDragTable):
         if event.button() == QtCore.Qt.LeftButton:
             cell = self._grid._cell_at(event.pos())
             if cell is not None:
-                self._grid._begin_paint(*cell)
+                self._commit_single_click()
+                self._press_pos = QtCore.QPoint(event.pos())
+                self._pending_cell = cell
                 return  # don't let the base class turn this into a selection drag
         super().mousePressEvent(event)
 
     def mouseMoveEvent(self, event):
+        if self._pending_cell is not None and event.buttons() & QtCore.Qt.LeftButton:
+            if (event.pos() - self._press_pos).manhattanLength() >= QtWidgets.QApplication.startDragDistance():
+                self._grid._begin_paint(*self._pending_cell)
+                self._pending_cell = None
+                self._press_pos = None
+            else:
+                return
         if self._grid._drag_active:
             cell = self._grid._cell_at(event.pos())
             if cell is not None:
@@ -801,17 +831,51 @@ class _LaneTable(RowDragTable):
         if self._grid._drag_active:
             self._grid._end_paint()
             return
+        if event.button() == QtCore.Qt.LeftButton and self._pending_cell is not None:
+            self._click_cell = self._pending_cell
+            self._pending_cell = None
+            self._press_pos = None
+            # Show the new assignment immediately without touching the
+            # model. A subsequent double click still edits the original value.
+            if self._grid.active_ctrl_id is not None:
+                self._click_preview = (*self._click_cell, self._grid.active_ctrl_id)
+                self.viewport().update()
+            # Qt sends the first release before the double-click event.
+            # Wait for that decision so editing never sees a painted value.
+            self._click_timer.start(QtWidgets.QApplication.doubleClickInterval() + 1)
+            return
         super().mouseReleaseEvent(event)
 
     def mouseDoubleClickEvent(self, event):
+        self._cancel_pending_paint()
         cell = self._grid._cell_at(event.pos())
         if cell is not None:
-            self._grid._rollback_to_snapshot()
             item = self.itemAt(event.pos())
             if item is not None:
                 self.editItem(item)
             return
         super().mouseDoubleClickEvent(event)
+
+    def _cancel_pending_paint(self):
+        self._click_timer.stop()
+        self._press_pos = None
+        self._pending_cell = None
+        self._click_cell = None
+        self._click_preview = None
+        self.viewport().update()
+
+    def _commit_single_click(self):
+        cell = self._click_cell
+        preview = self._click_preview
+        self._click_cell = None
+        self._click_preview = None
+        self._click_timer.stop()
+        if (cell is not None and preview is not None
+                and self.state() != QtWidgets.QAbstractItemView.EditingState):
+            self._grid._begin_paint(*cell)
+            self._grid._end_paint()
+        else:
+            self.viewport().update()
 
     def leaveEvent(self, event):
         self._grid._on_cell_leave()

@@ -1,53 +1,50 @@
-import inspect
 import os
-import shutil
 import tempfile
+import shutil
 import unittest
 from pathlib import Path
-from unittest import mock
+from unittest.mock import patch
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
+from qt_test_support import (
+    dispose_new_widgets, isolate_host_formatter, preserve_application_state, wait_for_idle,
+)
+from sample_data import SAMPLES_DIR
 from PyQt5 import QtCore, QtGui, QtTest, QtWidgets
 
-from plm.frontend.qt import main_window
-from plm.frontend.qt.main import APP_ICON_PATH
-from plm.frontend.qt.main_window import MainWindow, _NewWorkspaceDialog
-from plm.frontend.qt.widgets.lanegrid import LaneGrid
-from plm.frontend.qt.widgets.settings import DEFAULT_SETTINGS, SettingsDialog
-from plm.frontend.qt.widgets.tables import EditableTable
-from plm.frontend.qt.widgets import theme
-from plm.frontend.qt.widgets.theme import (
-    BG,
-    BG_ELEVATED,
-    BG_SIDEBAR,
-    VisibleCheckBox,
-    build_stylesheet,
+from plm.frontend.qt.controllers import AppController
+from plm.frontend.qt.services import ProjectService, SettingsStore
+from plm.frontend.qt.styles.tokens import (
+    BG_ARTIFACTS, BG_FOCUS, BG_HOVER, BG_SIDEBAR_INACTIVE, BG_SUBTLE, BG_SURFACE, BORDER, BORDER_HOVER, CONTROL_HEIGHT, FONT_CODE_PRIMARY, FONT_MONO, FONT_SCALE, FONT_SIZE_BODY, FONT_SIZE_LG,
+    FONT_SIZE_SM, ICON_GLYPH_SIZE, NAV_ITEM_GAP, PRIMARY_LIGHT, TEXT_MAIN, scale_content_size, scale_font_size,
 )
-from plm.core.validation import ValidationError, ValidationIssue
-from plm.core.gen_flags import GenerationOptions
-from plm.core.service import generate
+from plm.frontend.qt.models import ProjectInfo
+from plm.frontend.qt.main_window import MainWindow
+from plm.frontend.qt.styles import APP_QSS
+from plm.frontend.qt.views.artifacts_panel import ArtifactsPanel
+from plm.frontend.qt.views.config_page import ConfigHeader
+from plm.frontend.qt.views.log_panel import LogPanel
+from plm.frontend.qt.views.nav_panel import NavPanel
+from plm.frontend.qt.widgets.common import ICON_SIZE, LUCIDE_ICON_DIR, button_height, load_lucide_icon
+from plm.frontend.qt.widgets.project_item import ProjectItemWidget
+from plm.frontend.qt.widgets.project_list import ProjectList
 
 
-class QtFrontendTests(unittest.TestCase):
+class QtFrontendLayoutTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+        preserve_application_state(cls, cls.app)
         cls.app.setStyle("Fusion")
-        cls.app.setFont(QtGui.QFont("Segoe UI", 13))
-        cls.app.setStyleSheet(build_stylesheet())
+        cls.app.setFont(QtGui.QFont("Segoe UI", 10))
+        cls.app.setStyleSheet(APP_QSS)
 
-        # Opening a modal QMessageBox under the offscreen platform is an
-        # access violation in this Qt build -- verified with a three-line
-        # repro, no application code involved. That kills the interpreter
-        # mid-test, so unittest never reports the test AND silently skips
-        # every one after it: the suite looks like it passed because most
-        # of it never ran. Reaching a dialog unmocked is a test bug either
-        # way, so make it raise instead of taking the process down. Tests
-        # that mean to exercise a prompt patch it themselves, which wins
-        # over this for the duration.
+        # Under the Windows offscreen Qt platform an unexpected modal
+        # QMessageBox can terminate the interpreter before unittest can report
+        # a traceback. Turn accidental dialogs into normal assertion failures.
         for name in ("about", "critical", "information", "question", "warning"):
-            patcher = mock.patch.object(
+            patcher = patch.object(
                 QtWidgets.QMessageBox,
                 name,
                 side_effect=AssertionError(
@@ -58,963 +55,1315 @@ class QtFrontendTests(unittest.TestCase):
             cls.addClassCleanup(patcher.stop)
 
     def setUp(self):
+        isolate_host_formatter(self, self.app)
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
-        state = mock.patch.object(main_window, "STATE_FILE", Path(self.temp.name) / "state.json")
-        state.start()
-        self.addCleanup(state.stop)
-        self.addCleanup(self.destroy_test_widgets)
+        self.addCleanup(dispose_new_widgets, self.app, set(self.app.topLevelWidgets()))
+        self.root = Path(self.temp.name)
+        for config in SAMPLES_DIR.glob("*/config"):
+            shutil.copytree(config, self.root / "test" / config.parent.name / "config")
+        self.store = SettingsStore(QtCore.QSettings(
+            str(self.root / "settings.ini"), QtCore.QSettings.IniFormat
+        ))
+        factory = patch("plm.frontend.qt.main_window.AppController",
+                        side_effect=lambda: AppController(ProjectService(self.root), self.store))
+        factory.start()
+        self.addCleanup(factory.stop)
+        self.window = MainWindow()
+        wait_for_idle(self.app)
+        self.window.show()
+        wait_for_idle(self.app)
 
-    def destroy_test_widgets(self):
-        # close() only hides a QWidget. Destroy test windows (including
-        # standalone tables/dialogs) before the next test changes app styles;
-        # otherwise their timers and event filters remain active across tests.
-        for widget in self.app.topLevelWidgets():
-            widget.deleteLater()
-        QtCore.QCoreApplication.sendPostedEvents(None, QtCore.QEvent.DeferredDelete)
-
-    def make_window(self):
-        """A MainWindow that tears down without the unsaved-changes prompt.
-
-        close() runs that guard, and a test that left edits behind would
-        otherwise open a modal from cleanup. Clearing the saved-payload
-        snapshot makes _is_dirty() false, so the guard returns immediately.
-        Cleanups run last-registered-first, so this is registered after the
-        close it has to precede."""
-        window = MainWindow()
-        self.addCleanup(window.close)
-        self.addCleanup(setattr, window, "_saved_payload", None)
-        return window
-
-    def process_events(self):
-        self.app.processEvents()
-        self.app.processEvents()
-
-    def test_font_settings_only_reapply_styles_when_changed(self):
-        window = self.make_window()
-        with mock.patch.object(
-            self.app, "setStyleSheet", wraps=self.app.setStyleSheet
-        ) as apply_style:
-            window._apply_font(DEFAULT_SETTINGS)
-            apply_style.assert_not_called()
-            window._apply_font({**DEFAULT_SETTINGS, "fontSize": 16})
-            self.process_events()
-            self.assertEqual(self.app.font().pixelSize(), 16)
-            apply_style.assert_called_once()
-            window._apply_font({**DEFAULT_SETTINGS, "fontSize": 16})
-            apply_style.assert_called_once()
-            window._apply_font(DEFAULT_SETTINGS)
-            self.process_events()
-
-    def test_window_tabs_headers_and_preview_snap(self):
-        window = self.make_window()
-        window.show()
-        self.process_events()
-
-        for index in range(window.tabs.count()):
-            window.tabs.setCurrentIndex(index)
-            self.process_events()
-
-        window._on_toggle_rtl_preview(True)
-        self.process_events()
-        tab_bar = window.tabs.tabBar()
-        tab_rect = tab_bar.tabRect(window.tabs.currentIndex())
-        pill_rect = tab_rect.adjusted(
-            0,
-            main_window.TAB_VERTICAL_GAP,
-            0,
-            -main_window.TAB_VERTICAL_GAP,
+    def test_frameless_window_with_immersive_sidebar_and_log_splitter(self):
+        self.assertTrue(self.window.windowFlags() & QtCore.Qt.FramelessWindowHint)
+        self.assertEqual(self.window.windowTitle(), "plmConsultant")
+        self.assertIsInstance(self.window.nav_panel, NavPanel)
+        self.assertEqual(self.window.nav_panel.width(), 260)
+        self.assertIs(self.window.centralWidget(), self.window.window_backdrop)
+        self.assertIs(self.window.view_stack.widget(0), self.window.main_container)
+        shell_layout = self.window.window_shell.layout()
+        self.assertIsInstance(shell_layout, QtWidgets.QVBoxLayout)
+        self.assertEqual(shell_layout.spacing(), 0)
+        self.assertEqual(shell_layout.contentsMargins(), QtCore.QMargins(0, 0, 0, 0))
+        self.assertEqual(shell_layout.count(), 2)
+        self.assertIs(shell_layout.itemAt(0).widget(), self.window.title_bar)
+        self.assertIs(shell_layout.itemAt(1).widget(), self.window.body_container)
+        body_layout = self.window.body_container.layout()
+        self.assertIsInstance(body_layout, QtWidgets.QHBoxLayout)
+        self.assertEqual(body_layout.spacing(), 0)
+        self.assertEqual(body_layout.contentsMargins(), QtCore.QMargins(0, 0, 0, 0))
+        self.assertIs(body_layout.itemAt(0).widget(), self.window.nav_panel)
+        self.assertIs(body_layout.itemAt(1).widget(), self.window.view_stack)
+        self.assertEqual(self.window.title_bar.height(), 44)
+        self.assertEqual(self.window.title_bar.logo_label.size(), QtCore.QSize(ICON_SIZE, ICON_SIZE))
+        self.assertEqual(self.window.title_bar.title_label.text(), "plmConsultant")
+        self.assertIs(
+            self.window.nav_panel.collapse_btn.parentWidget(),
+            self.window.title_bar,
         )
-        tab_top = tab_bar.mapTo(window.centralWidget(), pill_rect.topLeft()).y()
-        root_top = window.preview_root_btn.mapTo(
-            window.centralWidget(), QtCore.QPoint()
-        ).y()
-        root_center_y = window.preview_root_btn.mapTo(
-            window.centralWidget(), window.preview_root_btn.rect().center()
-        ).y()
-        self.assertLessEqual(abs(root_top - tab_top), 1)
-        self.assertEqual(window.preview_root_btn.height(), pill_rect.height())
-        self.assertLessEqual(
-            abs(window.preview_controls.geometry().center().y() - root_center_y),
+        self.assertEqual(len(self.window._resize_handles), 8)
+        self.assertEqual(
+            self.window.title_bar.minimize_btn.iconSize(), QtCore.QSize(ICON_SIZE, ICON_SIZE)
+        )
+        self.assertEqual(
+            self.window.title_bar.maximize_btn.iconSize(), QtCore.QSize(ICON_SIZE, ICON_SIZE)
+        )
+        self.assertEqual(
+            self.window.title_bar.close_btn.iconSize(), QtCore.QSize(ICON_SIZE, ICON_SIZE)
+        )
+        self.assertEqual(
+            self.window.config_page.header.log_btn.size(), QtCore.QSize(32, CONTROL_HEIGHT)
+        )
+        self.assertEqual(
+            self.window.config_page.header.artifacts_btn.size(), QtCore.QSize(32, CONTROL_HEIGHT)
+        )
+        self.assertEqual(self.window.content_splitter.orientation(), QtCore.Qt.Vertical)
+        self.assertEqual(self.window.nav_panel.minimumWidth(), 260)
+        self.assertEqual(self.window.nav_panel.maximumWidth(), 260)
+        self.assertEqual(self.window.content_splitter.handleWidth(), 4)
+        self.assertEqual(self.window.content_splitter.contentsMargins(), QtCore.QMargins())
+        for panel in (
+            self.window.config_page,
+            self.window.log_panel,
+            self.window.config_page.artifacts_panel,
+        ):
+            self.assertIsNone(panel.graphicsEffect())
+        self.assertIsInstance(self.window.log_panel, LogPanel)
+        self.assertEqual(
+            self.window.nav_panel.collapse_btn.iconSize(),
+            QtCore.QSize(ICON_SIZE, ICON_SIZE),
+        )
+
+    def test_all_font_tokens_are_sixteen_pixels(self):
+        self.assertEqual(FONT_SCALE, 1.0)
+        self.assertEqual((FONT_SIZE_BODY, FONT_SIZE_SM, FONT_SIZE_LG), (16, 16, 16))
+        self.assertEqual(scale_font_size(10), 16)
+        preview_font = self.window.config_page.artifacts_panel.preview.font()
+        self.assertEqual(preview_font.pixelSize(), 16)
+        self.assertTrue(preview_font.fixedPitch())
+        self.assertNotEqual(FONT_CODE_PRIMARY, self.window.font().family())
+        self.assertIn("monospace", FONT_MONO)
+
+    def test_global_button_heights_use_the_shared_token(self):
+        from plm.frontend.qt.views.new_project_dialog import NewProjectDialog
+
+        dialog = NewProjectDialog(str(self.root), self.window)
+        for page_button in (self.window.nav_panel.settings_btn, self.window.nav_panel.docs_btn):
+            page_button.click()
+            wait_for_idle(self.app)
+            for button in self.window.findChildren(QtWidgets.QPushButton):
+                button.ensurePolished()
+                with self.subTest(button=button.objectName(), text=button.text()):
+                    self.assertEqual(button.height(), button_height(button))
+        dialog.close()
+        button = QtWidgets.QPushButton("重新载入")
+        button.ensurePolished()
+        font = QtGui.QFont(button.font())
+        font.setPixelSize(22)
+        button.setFont(font)
+        self.assertEqual(button.height(), CONTROL_HEIGHT)
+        button.deleteLater()
+
+    def test_project_menu_capsules_have_four_pixel_spacing(self):
+        widget = self.window.nav_panel.project_list.project_widgets[0]
+        menu = widget.build_more_menu()
+        menu.ensurePolished()
+        menu.sizeHint()  # Lay out the actions before measuring their rectangles.
+        previous = None
+        for action in menu.actions():
+            if action.isSeparator():
+                self.assertFalse(action.isVisible())
+                continue
+            rect = menu.actionGeometry(action)
+            if previous is not None:
+                self.assertEqual(rect.top(), previous.bottom() + 1)
+            self.assertEqual(rect.height() - 4, CONTROL_HEIGHT)
+            previous = rect
+        menu.deleteLater()
+
+    def test_controller_table_fixed_dimensions_and_whole_row_hover(self):
+        table = self.window.config_page.controllers_editor.table
+        widths = [table.columnWidth(i) for i in range(3)]
+        metrics = table.horizontalHeader().fontMetrics()
+        for index in (0, 2):
+            heading = table.horizontalHeaderItem(index).text()
+            self.assertGreaterEqual(
+                widths[index], metrics.horizontalAdvance(heading) + 24,
+            )
+        self.assertEqual(widths[1], table.viewport().width() - widths[0] - widths[2])
+        self.assertEqual(table.horizontalHeader().height(), CONTROL_HEIGHT)
+        for row in range(table.rowCount()):
+            self.assertEqual(table.rowHeight(row), CONTROL_HEIGHT)
+        table.clearSelection()
+        point = table.visualRect(table.model().index(1, 1)).center()
+        QtTest.QTest.mouseMove(table.viewport(), point)
+        self.app.processEvents()
+        image = table.viewport().grab().toImage()
+        for column in range(3):
+            rect = table.visualRect(table.model().index(1, column))
+            self.assertEqual(image.pixelColor(rect.right() - 4, point.y()).name(), BG_SUBTLE.lower())
+
+    def test_settings_button_groups_have_no_internal_gap(self):
+        self.window.nav_panel.settings_btn.click()
+        wait_for_idle(self.app)
+        page = self.window.view_stack.currentWidget()
+        self.assertTrue(all(
+            section.parentWidget().objectName() == "SecondaryTabs"
+            for section in page.menu_buttons
+        ))
+        for section in page.menu_buttons:
+            section.click()
+            wait_for_idle(self.app)
+            self.assertEqual(section.height(), CONTROL_HEIGHT)
+            for group in page.findChildren(QtWidgets.QFrame, "ButtonGroup"):
+                if not group.isVisible():
+                    continue
+                self.assertEqual(group.height(), CONTROL_HEIGHT)
+                buttons = [group.layout().itemAt(i).widget() for i in range(group.layout().count())]
+                for left, right in zip(buttons, buttons[1:]):
+                    self.assertEqual(left.geometry().right() + 1, right.geometry().left())
+
+    def test_tooltip_has_transparent_rounded_corners_and_preserves_focus(self):
+        button = self.window.nav_panel.save_btn
+        self.window.activateWindow()
+        button.setFocus()
+        self.app.processEvents()
+        controller = self.app._rounded_tooltips
+        point = button.rect().center()
+        event = QtGui.QHelpEvent(QtCore.QEvent.ToolTip, point, button.mapToGlobal(point))
+        self.app.sendEvent(button, event)
+        self.app.processEvents()
+        popup = controller.popup
+        self.assertTrue(popup.isVisible())
+        self.assertEqual(popup.label.text(), "保存")
+        self.assertTrue(button.hasFocus())
+        image = popup.grab().toImage()
+        self.assertEqual(image.pixelColor(0, 0).alpha(), 0)
+        self.assertEqual(image.pixelColor(image.width() - 1, image.height() - 1).alpha(), 0)
+        self.assertTrue(any(
+            0 < image.pixelColor(x, y).alpha() < 255
+            for x in range(10) for y in range(10)
+        ))
+        self.assertEqual(image.pixelColor(image.width() // 2, 2).name(), "#202123")
+        self.app.sendEvent(button, QtCore.QEvent(QtCore.QEvent.Leave))
+        self.assertFalse(popup.isVisible())
+
+    def test_nav_actions_show_visible_focus_and_pressed_backgrounds(self):
+        nav = self.window.nav_panel
+        self.window.activateWindow()
+        for button in (
+            nav.new_chat_btn, nav.open_project_btn, nav.save_btn,
+            nav.settings_btn, nav.docs_btn,
+        ):
+            self.assertEqual(button.focusPolicy(), QtCore.Qt.StrongFocus)
+            button.setFocus(QtCore.Qt.TabFocusReason)
+            wait_for_idle(self.app)
+            self.assertTrue(button.hasFocus())
+            point = QtCore.QPoint(button.width() - 12, button.height() // 2)
+            self.assertEqual(button.grab().toImage().pixelColor(point).name(), BG_FOCUS.lower())
+            button.setDown(True)
+            self.assertEqual(button.grab().toImage().pixelColor(point).name(), "#cbd5e1")
+            button.setDown(False)
+        for button, page in ((nav.settings_btn, "settings"), (nav.docs_btn, "docs")):
+            nav.set_active(page)
+            button.setFocus(QtCore.Qt.TabFocusReason)
+            wait_for_idle(self.app)
+            point = QtCore.QPoint(button.width() - 12, button.height() // 2)
+            self.assertEqual(button.grab().toImage().pixelColor(point).name(), BG_FOCUS.lower())
+        nav.set_active(None)
+
+    def test_nav_toggle_collapses_and_restores_sidebar(self):
+        nav = self.window.nav_panel
+        stable_y_positions = {
+            "new": nav.new_chat_btn.mapTo(nav, QtCore.QPoint()).y(),
+            "save": nav.save_btn.mapTo(nav, QtCore.QPoint()).y(),
+            "settings": nav.settings_btn.mapTo(nav, QtCore.QPoint()).y(),
+            "docs": nav.docs_btn.mapTo(nav, QtCore.QPoint(0, nav.docs_btn.height())).y(),
+        }
+        collapse_finished = QtTest.QSignalSpy(nav.animation_group.finished)
+        nav.collapse_btn.click()
+        self.assertTrue(nav.is_animating)
+        nav.collapse_btn.click()
+        self.assertTrue(nav._target_collapsed)
+        self.assertTrue(collapse_finished.wait(1000))
+        self.assertFalse(nav.is_animating)
+        self.assertTrue(nav.is_collapsed)
+        self.assertEqual(nav.width(), 56)
+        self.assertFalse(nav.project_list.isVisible())
+        self.assertEqual(nav.new_chat_btn.objectName(), "NavActionButton")
+        self.assertEqual(nav.save_btn.objectName(), "NavActionButton")
+        self.assertEqual(nav.new_chat_btn.height(), CONTROL_HEIGHT)
+        self.assertEqual(nav.save_btn.height(), CONTROL_HEIGHT)
+        self.assertEqual(
+            self.window.content_splitter.mapTo(self.window.body_container, QtCore.QPoint()).x()
+            - (nav.geometry().right() + 1),
+            0,
+        )
+        aligned_widgets = [
+            nav.new_chat_btn,
+            nav.save_btn,
+            nav.settings_btn,
+            nav.docs_btn,
+        ]
+        center_positions = {
+            widget.mapTo(nav, widget.rect().center()).x() for widget in aligned_widgets
+        }
+        self.assertEqual(len(center_positions), 1)
+        self.assertEqual(center_positions, {(nav.width() - 1) // 2})
+        self.assertEqual(
+            nav.new_chat_btn.mapTo(nav, QtCore.QPoint()).y(),
+            stable_y_positions["new"],
+        )
+        self.assertEqual(
+            nav.save_btn.mapTo(nav, QtCore.QPoint()).y(),
+            stable_y_positions["save"],
+        )
+        self.assertEqual(
+            nav.docs_btn.mapTo(nav, QtCore.QPoint(0, nav.docs_btn.height())).y(),
+            stable_y_positions["docs"],
+        )
+        self.assertLess(
+            nav.settings_btn.mapTo(nav, QtCore.QPoint()).y(),
+            nav.docs_btn.mapTo(nav, QtCore.QPoint()).y(),
+        )
+        self.assertEqual(nav.settings_btn.mapTo(nav, QtCore.QPoint()).y(), stable_y_positions["settings"])
+        self.assertTrue(nav.footer.isVisible())
+        self.assertEqual(nav.settings_btn.text(), "")
+        self.assertEqual(nav.docs_btn.text(), "")
+
+        expand_finished = QtTest.QSignalSpy(nav.animation_group.finished)
+        nav.collapse_btn.click()
+        self.assertFalse(nav.project_list.isVisible())
+        self.assertTrue(expand_finished.wait(1000))
+        self.assertTrue(nav.project_list.isVisible())
+        self.assertEqual(nav.settings_btn.text(), "设置")
+        self.assertEqual(nav.docs_btn.text(), "文档")
+        self.assertFalse(nav.is_collapsed)
+        self.assertEqual(nav.width(), 260)
+        self.assertEqual(nav.minimumWidth(), 260)
+        self.assertEqual(nav.maximumWidth(), 260)
+        self.assertEqual(nav.new_chat_btn.objectName(), "NavActionButton")
+        self.assertEqual(nav.save_btn.objectName(), "NavActionButton")
+
+    def test_nav_section_dividers_remain_visible_when_collapsed(self):
+        nav = self.window.nav_panel
+        for collapsed in (False, True):
+            if collapsed:
+                finished = QtTest.QSignalSpy(nav.animation_group.finished)
+                nav.toggle_collapse()
+                self.assertTrue(finished.wait(1000))
+            for separator in (nav.project_separator, nav.footer_separator):
+                self.assertTrue(separator.isVisible())
+                image = separator.grab().toImage()
+                self.assertEqual(image.pixelColor(image.width() // 2, 0).name(), BORDER_HOVER.lower())
+
+    def test_nav_width_stays_fixed_when_window_resizes(self):
+        nav = self.window.nav_panel
+        self.window.resize(1200, 760)
+        wait_for_idle(self.app)
+        self.assertEqual(nav.width(), 260)
+
+        self.window.resize(1600, 1000)
+        wait_for_idle(self.app)
+        self.assertEqual(nav.width(), 260)
+
+        nav.collapse_btn.click()
+        QtTest.QTest.qWait(250)
+        self.window.resize(1200, 760)
+        wait_for_idle(self.app)
+        self.assertEqual(nav.width(), 56)
+
+    def test_nav_actions_projects_and_drag_configuration(self):
+        nav = self.window.nav_panel
+        self.assertFalse(hasattr(nav, "actionRequested"))
+        self.assertEqual(nav.new_chat_btn.text(), "新对话")
+        self.assertEqual(nav.save_btn.text(), "保存")
+        self.assertEqual(nav.docs_btn.text(), "文档")
+        self.assertEqual(nav.settings_btn.text(), "设置")
+        self.assertIsInstance(nav.project_list, ProjectList)
+        self.assertEqual(
+            nav.project_list.dragDropMode(), QtWidgets.QAbstractItemView.InternalMove
+        )
+        self.assertEqual(nav.project_list.defaultDropAction(), QtCore.Qt.MoveAction)
+        self.assertGreater(nav.project_list.count(), 0)
+        project_names = {
+            widget.project_name for widget in nav.project_list.project_widgets
+        }
+        first_project = nav.project_list.project_widgets[0]
+        self.assertEqual(first_project.folder_icon.size(), QtCore.QSize(ICON_SIZE, ICON_SIZE))
+        self.assertEqual(
+            first_project.header.layout().contentsMargins(),
+            QtCore.QMargins(16, 0, 16, 0),
+        )
+        self.assertEqual(
+            first_project.header.layout().itemAt(1).spacerItem().sizeHint().width(), 6
+        )
+        self.assertEqual(first_project.project_name_label.text(), first_project.project_name)
+        self.assertEqual(first_project.header.text(), "")
+        self.assertFalse(first_project.header.isCheckable())
+        self.assertFalse(hasattr(first_project, "session_buttons"))
+        self.assertEqual(
+            first_project.findChildren(QtWidgets.QPushButton, "SessionButton"), []
+        )
+        self.assertEqual(first_project.more_btn.size(), QtCore.QSize(28, 28))
+        self.assertTrue(first_project.more_btn.isHidden())
+        self.assertFalse(hasattr(nav.project_list, "hover_card"))
+        self.assertEqual(first_project.findChildren(QtWidgets.QPushButton, "ProjectArchiveBtn"), [])
+        self.assertEqual(first_project.findChildren(QtWidgets.QPushButton, "ProjectOpenBtn"), [])
+        for icon_name in ("folder", "folder-open", "pin"):
+            self.assertTrue((LUCIDE_ICON_DIR / f"{icon_name}.svg").is_file())
+        expected_configs = {"bifurcate", "dpr", "finegrain", "maxpclk", "quad"}
+        self.assertTrue(expected_configs.issubset(project_names))
+        self.assertNotIn("__pycache__", project_names)
+        self.assertNotIn("ffe", project_names)
+        nav.set_active("docs")
+        self.assertTrue(nav.docs_btn.property("selected"))
+        nav.set_active("settings")
+        self.assertTrue(nav.settings_btn.property("selected"))
+
+    def test_nav_panel_uses_supplied_projects_without_discovery(self):
+        self.assertEqual(NavPanel.__module__, "plm.frontend.qt.views.nav_panel")
+        missing_config_dir = Path(tempfile.gettempdir()) / "plm-fake-project"
+        project = ProjectInfo(
+            name="demo",
+            config_dir=missing_config_dir,
+            controllers_csv=missing_config_dir / "controllers.csv",
+            lane_mapping_csv=missing_config_dir / "lane_mapping.csv",
+            pipe_signals_csv=missing_config_dir / "pipe_signals.csv",
+        )
+        nav = NavPanel(projects=[project], recent_project="missing")
+        try:
+            self.assertEqual(nav.project_list.count(), 1)
+            self.assertEqual(nav.current_project_name, "demo")
+            selected_spy = QtTest.QSignalSpy(nav.project_selected)
+            nav.project_list.project_widgets[0].header.click()
+            wait_for_idle(self.app)
+            self.assertEqual(selected_spy[0][0], "demo")
+        finally:
+            nav.close()
+            nav.deleteLater()
+
+    def test_nav_action_buttons_emit_semantic_signals(self):
+        nav = self.window.nav_panel
+        new_chat_spy = QtTest.QSignalSpy(nav.new_chat_requested)
+        save_spy = QtTest.QSignalSpy(nav.save_requested)
+        settings_spy = QtTest.QSignalSpy(nav.settings_requested)
+        docs_spy = QtTest.QSignalSpy(nav.docs_requested)
+
+        with patch("plm.frontend.qt.controllers.project_navigation.NewProjectDialog") as dialog:
+            dialog.return_value.exec_.return_value = QtWidgets.QDialog.Rejected
+            nav.new_chat_btn.click()
+        wait_for_idle(self.app)
+        nav.save_btn.click()
+        wait_for_idle(self.app)
+        nav.settings_btn.click()
+        wait_for_idle(self.app)
+        self.assertEqual(self.window.view_stack.currentWidget().page, "settings")
+        self.window._close_secondary_page()
+        nav.docs_btn.click()
+        wait_for_idle(self.app)
+        self.assertEqual(self.window.view_stack.currentWidget().page, "docs")
+
+        self.assertEqual(len(new_chat_spy), 1)
+        self.assertEqual(len(save_spy), 1)
+        self.assertEqual(len(settings_spy), 1)
+        self.assertEqual(len(docs_spy), 1)
+
+    def test_project_focus_feedback_preserves_active_project_highlight(self):
+        widget = self.window.nav_panel.project_list.project_widgets[-1]
+        self.window.activateWindow()
+        widget.set_selected(False)
+        widget.header.setFocus(QtCore.Qt.TabFocusReason)
+        wait_for_idle(self.app)
+        point = QtCore.QPoint(widget.header.width() - 8, widget.header.height() // 2)
+        self.assertEqual(widget.header.grab().toImage().pixelColor(point).name(), BG_FOCUS.lower())
+        widget.set_selected(True)
+        self.assertEqual(widget.header.grab().toImage().pixelColor(point).name(), BG_FOCUS.lower())
+        for button in (widget.more_btn,):
+            button.show()
+            button.setFocus(QtCore.Qt.TabFocusReason)
+            self.app.processEvents()
+            pixel = QtCore.QPoint(button.width() // 2, 2)
+            self.assertEqual(button.grab().toImage().pixelColor(pixel).name(), BG_FOCUS.lower())
+            button.setDown(True)
+            pressed = button.grab().toImage()
+            self.assertEqual(pressed.pixelColor(pixel).name(), "#cbd5e1")
+            self.assertNotEqual(pressed.pixelColor(0, 0), pressed.pixelColor(pixel))
+            button.setDown(False)
+
+    def test_project_folder_action_remains_in_more_menu(self):
+        project_list = self.window.nav_panel.project_list
+        widget = project_list.project_widgets[0]
+        self.app.sendEvent(widget.header, QtCore.QEvent(QtCore.QEvent.Enter))
+        self.app.processEvents()
+        self.assertTrue(widget.more_btn.isVisible())
+        self.assertFalse(hasattr(widget, "archive_btn"))
+        self.assertFalse(hasattr(widget, "open_folder_btn"))
+        selected = QtTest.QSignalSpy(widget.projectSelected)
+        with patch("plm.frontend.qt.widgets.project_item.open_in_file_manager") as open_folder:
+            menu = widget.build_more_menu()
+            next(action for action in menu.actions() if action.text() == "打开所在目录").trigger()
+            open_folder.assert_called_once_with(widget.project_path)
+            menu.deleteLater()
+        self.assertEqual(len(selected), 0)
+        self.app.sendEvent(widget.header, QtCore.QEvent(QtCore.QEvent.Leave))
+        self.assertTrue(widget.more_btn.isHidden())
+        self.assertFalse(hasattr(project_list, "hover_card"))
+        self.assertFalse(hasattr(project_list, "_hover_timer"))
+
+    def test_project_list_is_flat_and_project_click_does_not_expand(self):
+        project_list = self.window.nav_panel.project_list
+        self.assertEqual(
+            ProjectList.__module__, "plm.frontend.qt.widgets.project_list"
+        )
+        self.assertFalse(hasattr(project_list, "hover_card"))
+        initial_count = project_list.count()
+        self.assertGreater(initial_count, 0)
+        for row, widget in enumerate(project_list.project_widgets):
+            self.assertEqual(project_list.item(row).sizeHint().height(), CONTROL_HEIGHT + NAV_ITEM_GAP)
+            self.assertEqual(widget.header.height(), CONTROL_HEIGHT)
+            self.assertEqual(widget.layout().count(), 2)
+            self.assertIs(widget.layout().itemAt(0).widget(), widget.header)
+            self.assertFalse(widget.header.isCheckable())
+
+        target = project_list.project_widgets[-1]
+        target.header.click()
+        wait_for_idle(self.app)
+        self.assertEqual(project_list.count(), initial_count)
+        self.assertEqual(project_list.selected_project_name, target.project_name)
+        self.assertTrue(target.header.property("selected"))
+
+    def test_expanded_nav_icons_share_one_left_edge(self):
+        nav = self.window.nav_panel
+        first_project = nav.project_list.project_widgets[0]
+        margins = nav.layout().contentsMargins()
+        self.assertEqual(
+            (margins.left(), margins.top(), margins.right(), margins.bottom()),
+            (12, 12, 12, 8),
+        )
+        for layout in (
+            nav.new_chat_row_layout,
+            nav.save_row_layout,
+            nav.settings_row_layout,
+            nav.docs_row_layout,
+        ):
+            margins = layout.contentsMargins()
+            self.assertEqual(
+                (margins.left(), margins.top(), margins.right(), margins.bottom()),
+                (0, 0, 0, 0),
+            )
+        self.assertEqual(
+            first_project.header.layout().contentsMargins(),
+            QtCore.QMargins(16, 0, 16, 0),
+        )
+
+        nav_buttons = (
+            nav.new_chat_btn,
+            nav.save_btn,
+            nav.settings_btn,
+            nav.docs_btn,
+        )
+        self.assertEqual(
+            {widget.mapTo(nav, QtCore.QPoint()).x() for widget in nav_buttons},
+            {12},
+        )
+        self.assertEqual(
+            first_project.folder_icon.mapTo(nav, QtCore.QPoint()).x(),
+            28,
+        )
+        next_project = nav.project_list.project_widgets[1]
+        gap = (
+            next_project.header.mapTo(nav, QtCore.QPoint()).y()
+            - first_project.header.mapTo(nav, QtCore.QPoint()).y()
+            - first_project.header.height()
+        )
+        self.assertEqual(gap, NAV_ITEM_GAP)
+        icon_pixmaps = (
+            nav.new_chat_btn.icon().pixmap(ICON_SIZE, ICON_SIZE),
+            nav.save_btn.icon().pixmap(ICON_SIZE, ICON_SIZE),
+            first_project.folder_icon.pixmap(),
+            nav.settings_btn.icon().pixmap(ICON_SIZE, ICON_SIZE),
+            nav.docs_btn.icon().pixmap(ICON_SIZE, ICON_SIZE),
+        )
+        for pixmap in icon_pixmaps:
+            self.assertEqual(pixmap.size(), QtCore.QSize(20, 20))
+            bounds = QtGui.QRegion(pixmap.mask()).boundingRect()
+            inset = (ICON_SIZE - ICON_GLYPH_SIZE) // 2
+            self.assertGreaterEqual(bounds.left(), inset)
+            self.assertLessEqual(bounds.right(), ICON_SIZE - inset - 1)
+
+    def test_nav_panel_layout_contract(self):
+        nav = self.window.nav_panel
+        root = nav.layout()
+        first_project = nav.project_list.project_widgets[0]
+
+        self.assertIsInstance(root, QtWidgets.QVBoxLayout)
+        self.assertEqual(root.spacing(), 0)
+        self.assertEqual(nav.expanded_width, 260)
+        self.assertEqual(nav.collapsed_width, 56)
+        self.assertEqual(nav.minimumWidth(), 260)
+        self.assertEqual(nav.maximumWidth(), 260)
+        self.assertEqual(nav.collapse_btn.size(), QtCore.QSize(32, CONTROL_HEIGHT))
+
+        for row_layout in (
+            nav.new_chat_row_layout,
+            nav.save_row_layout,
+            first_project.header.layout(),
+            nav.settings_row_layout,
+            nav.docs_row_layout,
+        ):
+            self.assertEqual(row_layout.spacing(), 0)
+
+        for button in (
+            nav.new_chat_btn,
+            nav.save_btn,
+            nav.settings_btn,
+            nav.docs_btn,
+        ):
+            self.assertEqual(button.height(), CONTROL_HEIGHT)
+
+        project_index = root.indexOf(nav.project_list)
+        collapsed_project_index = root.indexOf(nav.collapsed_projects)
+        self.assertEqual(root.stretch(project_index), 1)
+        self.assertEqual(root.stretch(collapsed_project_index), 1)
+        self.assertEqual(first_project.header.height(), CONTROL_HEIGHT)
+
+        footer_layout = nav.footer.layout()
+        self.assertIsInstance(footer_layout, QtWidgets.QVBoxLayout)
+        self.assertEqual(footer_layout.spacing(), 0)
+        self.assertIs(footer_layout.itemAt(0).widget(), nav.settings_row)
+        self.assertIs(footer_layout.itemAt(1).widget(), nav.docs_row)
+        self.assertEqual(nav.collapsed_projects.layout().spacing(), 0)
+
+        for animation in (nav.animation_min, nav.animation_max):
+            self.assertEqual(animation.duration(), 200)
+            self.assertEqual(
+                animation.easingCurve().type(), QtCore.QEasingCurve.OutCubic
+            )
+
+    def test_project_selection_updates_header_and_recent_project(self):
+        nav = self.window.nav_panel
+        project_list = nav.project_list
+        self.assertIsNotNone(nav.current_project_name)
+        self.assertEqual(
+            self.window.config_page.header.title_label.text(),
+            nav.current_project_name,
+        )
+        self.assertEqual(
+            sum(
+                bool(widget.header.property("selected"))
+                for widget in project_list.project_widgets
+            ),
             1,
         )
-        root_left = window.preview_root_btn.mapTo(
-            window.rtl_preview_panel, QtCore.QPoint()
-        ).x()
-        code_left = window.preview_code.mapTo(
-            window.rtl_preview_panel, QtCore.QPoint()
-        ).x()
-        self.assertEqual(root_left, code_left)
-        self.assertEqual(window.preview_toggle_btn.toolTip(), "Preview")
-        self.assertEqual(window.preview_toggle_btn.accessibleName(), "Preview")
-        self.assertEqual(window.log_tab_btn.height(), window.log_more.height())
-        self.assertEqual(window.report_tab_btn.height(), window.log_toggle.height())
 
-        def widget_bottom(widget):
-            point = widget.mapTo(
-                window.centralWidget(), QtCore.QPoint(0, widget.height())
+        target = next(
+            widget
+            for widget in project_list.project_widgets
+            if widget.project_name != nav.current_project_name
+        )
+        selected_spy = QtTest.QSignalSpy(nav.project_selected)
+        target.header.click()
+        wait_for_idle(self.app)
+        self.assertEqual(nav.current_project_name, target.project_name)
+        self.assertEqual(project_list.selected_project_name, target.project_name)
+        self.assertEqual(
+            self.window.config_page.header.title_label.text(), target.project_name
+        )
+        self.assertTrue(target.header.property("selected"))
+        self.assertEqual(len(selected_spy), 1)
+        self.assertEqual(selected_spy[0][0], target.project_name)
+        self.assertEqual(
+            sum(
+                bool(widget.header.property("selected"))
+                for widget in project_list.project_widgets
+            ),
+            1,
+        )
+
+    def test_recent_project_is_restored_or_falls_back_to_first(self):
+        settings = self.store._settings
+        key = "navigation/recent_project"
+        original = settings.value(key, None)
+        original_path = settings.value("navigation/recent_path", None)
+        try:
+            settings.remove("navigation/recent_path")
+            settings.setValue(key, "dpr")
+            restored = MainWindow()
+            wait_for_idle(self.app)
+            self.assertEqual(restored.nav_panel.current_project_name, "dpr")
+            self.assertEqual(restored.config_page.header.title_label.text(), "dpr")
+            restored.close()
+            restored.deleteLater()
+
+            settings.setValue(key, "missing-project")
+            settings.remove("navigation/recent_path")
+            fallback = MainWindow()
+            wait_for_idle(self.app)
+            first_name = fallback.nav_panel.project_list.project_widgets[0].project_name
+            self.assertEqual(fallback.nav_panel.current_project_name, first_name)
+            self.assertEqual(
+                fallback.config_page.header.title_label.text(), first_name
             )
-            return point.y()
+            fallback.close()
+            fallback.deleteLater()
+        finally:
+            if original is None:
+                settings.remove(key)
+            else:
+                settings.setValue(key, original)
 
-        doc_button = next(
-            button for button, label in window.sidebar_bottom_buttons if label == "Doc"
-        )
-        self.assertEqual(widget_bottom(doc_button), widget_bottom(window.log_card))
-        self.assertEqual(widget_bottom(window.log_card), widget_bottom(window.preview_code))
+            if original_path is None:
+                settings.remove("navigation/recent_path")
+            else:
+                settings.setValue("navigation/recent_path", original_path)
 
-        window.content_splitter.moveSplitter(int(window.content_splitter.width() * 0.20), 1)
-        QtTest.QTest.qWait(main_window.PREVIEW_MAXIMIZE_ANIM_MS + 30)
-        self.process_events()
-        self.assertTrue(window._preview_maximized)
-        self.assertFalse(window.main_area.isVisible())
-        self.assertTrue(window.rtl_preview_panel.isVisible())
+    def test_config_header_inline_rename_save_and_cancel(self):
+        # Test the header in isolation so titleChanged cannot rename a bundled
+        # sample directory and pollute subsequent frontend tests.
+        header = ConfigHeader()
+        header.title_label.setText("原始名称")
+        header.show()
+        wait_for_idle(self.app)
+        changed_spy = QtTest.QSignalSpy(header.titleChanged)
 
-    def test_preview_file_tree_replaces_file_combo(self):
-        workspace = Path(self.temp.name) / "quad"
-        config = workspace / "config"
-        rtl = workspace / "rtl" / "common"
-        config.mkdir(parents=True)
-        rtl.mkdir(parents=True)
-        csv_path = config / "controllers.csv"
-        rtl_path = rtl / "pipe_lane_clk_gate.sv"
-        csv_path.write_text("ctrl_id,ctrl_name,max_width\n0,CtrlA,12\n", encoding="utf-8")
-        rtl_path.write_text("module pipe_lane_clk_gate;\nendmodule\n", encoding="utf-8")
+        header.enter_edit_mode()
+        self.assertTrue(header.title_edit.isVisible())
+        header.title_edit.setText("新的会话名称")
+        header.title_edit.returnPressed.emit()
+        self.assertEqual(header.title_label.text(), "新的会话名称")
+        self.assertEqual(len(changed_spy), 1)
+        self.assertEqual(changed_spy[0][0], "新的会话名称")
 
-        window = self.make_window()
-        window.current_workspace = workspace
-        window.show()
-        window._on_toggle_rtl_preview(True)
-        self.process_events()
+        header.enter_edit_mode()
+        header.title_edit.setText("不应保存")
+        header.title_edit.escapePressed.emit()
+        self.assertEqual(header.title_label.text(), "新的会话名称")
+        self.assertEqual(len(changed_spy), 1)
 
-        self.assertFalse(hasattr(window, "preview_file_combo"))
-        self.assertIsInstance(window.preview_root_btn, QtWidgets.QToolButton)
-        self.assertEqual(window.preview_root_btn.text(), "")
+    def test_project_row_actions_and_nav_signals(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            projects = [
+                ProjectInfo(name=name, config_dir=root / name / "config",
+                            controllers_csv=root / name / "config/controllers.csv",
+                            lane_mapping_csv=root / name / "config/lane_mapping.csv",
+                            pipe_signals_csv=root / name / "config/pipe_signals.csv")
+                for name in ("first", "second")
+            ]
+            for project in projects:
+                project.config_dir.mkdir(parents=True)
+            nav = NavPanel(projects)
+            nav.show()
+            wait_for_idle(self.app)
+            try:
+                project_list = nav.project_list
+                first = project_list.project_widgets[0]
+                QtWidgets.QApplication.sendEvent(
+                    first.header, QtCore.QEvent(QtCore.QEvent.Enter))
+                self.assertTrue(first.more_btn.isVisible())
+                QtWidgets.QApplication.sendEvent(
+                    first.header, QtCore.QEvent(QtCore.QEvent.Leave))
+                self.assertFalse(first.more_btn.isVisible())
+
+                pin_spy = QtTest.QSignalSpy(nav.project_pinned)
+                project_list.pin_project(project_list.project_widgets[1])
+                self.assertEqual(pin_spy[0][0], "second")
+                self.assertIs(project_list.project_widgets[0], first)
+                nav.apply_pin("second")
+                self.assertEqual(project_list.project_widgets[0].project_name, "second")
+
+                renamed_spy = QtTest.QSignalSpy(nav.project_renamed)
+                project_list.rename_project(first)
+                wait_for_idle(self.app)
+                first.project_name_edit.setText("renamed")
+                QtTest.QTest.keyClick(first.project_name_edit, QtCore.Qt.Key_Return)
+                self.assertEqual(first.project_name, "first")
+                self.assertEqual(renamed_spy[0], ["first", "renamed"])
+                nav.apply_rename("first", "renamed", root / "renamed/config")
+                self.assertEqual(first.project_name, "renamed")
+
+                archived_spy = QtTest.QSignalSpy(nav.project_archived)
+                with patch.object(QtWidgets.QMessageBox, "question",
+                                  return_value=QtWidgets.QMessageBox.Yes):
+                    project_list.archive_project(first)
+                    wait_for_idle(self.app)
+                self.assertEqual(archived_spy[0][0], "renamed")
+                self.assertEqual(project_list.count(), 2)
+                nav.apply_remove("renamed")
+                self.assertEqual(project_list.count(), 1)
+            finally:
+                nav.close()
+                nav.deleteLater()
+
+    def test_project_item_is_independent_and_keeps_its_action_menu(self):
         self.assertEqual(
-            window.preview_root_btn.toolButtonStyle(),
-            QtCore.Qt.ToolButtonIconOnly,
+            ProjectItemWidget.__module__,
+            "plm.frontend.qt.widgets.project_item",
         )
-        self.assertEqual(window.preview_root_btn.accessibleName(), "Files")
-        self.assertIsNone(window.preview_file_tree.graphicsEffect())
-        self.assertTrue(window.preview_highlight_btn.isChecked())
-        self.assertEqual(window.preview_diff_btn.accessibleName(), "Show diff")
-        self.assertEqual(window.preview_file_tree.topLevelItemCount(), 2)
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            widget = ProjectItemWidget("demo", temporary_directory)
+            pin_spy = QtTest.QSignalSpy(widget.pinRequested)
+            rename_spy = QtTest.QSignalSpy(widget.renameRequested)
+            archive_spy = QtTest.QSignalSpy(widget.archiveRequested)
+            delete_spy = QtTest.QSignalSpy(widget.deleteRequested)
+            menu = widget.build_more_menu()
+            actions = {action.text(): action for action in menu.actions()}
+
+            self.assertIn("置顶", actions)
+            self.assertIn("重命名", actions)
+            self.assertIn("打开所在目录", actions)
+            self.assertIn("归档", actions)
+            self.assertIn("删除", actions)
+            menu.ensurePolished()
+            longest_text = "打开所在目录"
+            text_width = menu.fontMetrics().horizontalAdvance(longest_text)
+            icon_width = menu.style().pixelMetric(QtWidgets.QStyle.PM_SmallIconSize)
+            self.assertGreaterEqual(menu.sizeHint().width(), text_width + icon_width + 32)
+            self.assertEqual(menu.maximumWidth(), QtWidgets.QWIDGETSIZE_MAX)
+
+            actions["置顶"].trigger()
+            wait_for_idle(self.app)
+            actions["重命名"].trigger()
+            wait_for_idle(self.app)
+            actions["归档"].trigger()
+            wait_for_idle(self.app)
+            actions["删除"].trigger()
+            wait_for_idle(self.app)
+
+            self.assertEqual(len(pin_spy), 1)
+            self.assertEqual(len(rename_spy), 1)
+            self.assertEqual(len(archive_spy), 1)
+            self.assertEqual(len(delete_spy), 1)
+
+            with patch(
+                "plm.frontend.qt.widgets.project_item.open_in_file_manager"
+            ) as open_path:
+                actions["打开所在目录"].trigger()
+                wait_for_idle(self.app)
+                open_path.assert_called_once_with(widget.project_path)
+
+            menu.deleteLater()
+            widget.deleteLater()
+
+    def test_table_pages_use_internal_scrolling_only(self):
+        tabs = self.window.config_page.tabs
+        self.assertEqual(tabs.count(), 4)
         self.assertEqual(
-            [window.preview_file_tree.topLevelItem(i).text(0) for i in range(2)],
-            ["config", "rtl"],
+            [tabs.tabText(index) for index in range(tabs.count())],
+            ["Controller", "LaneMapping", "Signals", "Generation"],
         )
+        for index in range(tabs.count()):
+            scroll = tabs.widget(index).findChild(QtWidgets.QScrollArea, "ConfigScroll")
+            if index in (0, 1, 2):
+                self.assertIsNone(scroll)
+                continue
+            self.assertIsNotNone(scroll)
+            self.assertTrue(scroll.widgetResizable())
+        tabs.setCurrentIndex(2)
+        self.window.resize(960, 640)
+        wait_for_idle(self.app)
+        table = self.window.config_page.signals_editor.table
+        header_top = table.horizontalHeader().mapTo(tabs, QtCore.QPoint()).y()
+        table.verticalScrollBar().setValue(table.verticalScrollBar().maximum())
+        wait_for_idle(self.app)
+        self.assertEqual(table.horizontalHeader().mapTo(tabs, QtCore.QPoint()).y(), header_top)
+        last_cell = table.visualRect(table.model().index(table.rowCount() - 1, 0))
+        self.assertTrue(table.viewport().rect().intersects(last_cell))
+        self.assertLessEqual(last_cell.bottom(), table.viewport().rect().bottom())
 
-        code_geometry = QtCore.QRect(window.preview_code.geometry())
-        window.preview_root_btn.click()
-        self.process_events()
-        self.assertTrue(window.preview_file_tree.isVisible())
-        self.assertIs(window.preview_file_tree.parent(), window.rtl_preview_panel)
-        self.assertEqual(window.preview_code.geometry(), code_geometry)
-        self.assertTrue(window.preview_file_tree.geometry().intersects(code_geometry))
+    def test_lane_mapping_shares_table_card_and_preserves_overflow_access(self):
+        page = self.window.config_page
+        page.tabs.setCurrentIndex(1)
+        editor = page.mapping_editor
+        self.assertEqual(editor.table_card.objectName(), "ConfigTableCard")
+        editor.lane_count.setValue(32)
+        wait_for_idle(self.app)
+        self.assertGreater(editor.table.horizontalScrollBar().maximum(), 0)
+        editor.table.horizontalScrollBar().setValue(editor.table.horizontalScrollBar().maximum())
+        last_lane = editor.table.visualRect(editor.table.model().index(0, 32))
+        self.assertTrue(editor.table.viewport().rect().intersects(last_lane))
+        editor.lane_count.setValue(2)
+        wait_for_idle(self.app)
+        self.assertEqual(editor.table.horizontalScrollBarPolicy(), QtCore.Qt.ScrollBarAlwaysOff)
+        self.assertEqual(editor.table.rowHeight(0), page.controllers_editor.table.rowHeight(0))
+        page.mark_saved()  # Discard this test's lane-count changes before closing.
+
+    def test_log_auto_scroll_clear_and_splitter_toggle(self):
+        log_panel = self.window.log_panel
+        for index in range(30):
+            log_panel.append_log(f"line {index}")
+        wait_for_idle(self.app)
+        bar = log_panel.output.verticalScrollBar()
+        self.assertEqual(bar.value(), bar.maximum())
+        log_panel.clear_btn.click()
+        wait_for_idle(self.app)
+        self.assertEqual(log_panel.output.toPlainText(), "")
+
+        self.window.toggle_log()
+        wait_for_idle(self.app)
+        self.assertEqual(self.window.content_splitter.sizes()[1], 0)
+        self.window.toggle_log()
+        wait_for_idle(self.app)
+        self.assertGreater(self.window.content_splitter.sizes()[1], 0)
+
+    def test_artifacts_is_pure_floating_drawer(self):
+        page = self.window.config_page
+        panel = page.artifacts_panel
+        self.assertIsInstance(panel, ArtifactsPanel)
+        self.assertIs(panel.parent(), page)
+        self.assertFalse(panel.isVisible())
+        shown = QtTest.QSignalSpy(page._artifacts_animation.finished)
+        page.toggle_artifacts()
+        self.assertTrue(shown.wait(1000))
+        self.assertEqual(panel.geometry().right(), page.rect().right())
+        self.assertEqual(panel.geometry().top(), 0)
+        self.assertEqual(panel.height(), page.height())
+        self.assertEqual(page.tabs.maximumWidth(), QtWidgets.QWIDGETSIZE_MAX)
+        self.assertEqual(len(panel.toolbar_buttons), 7)
+        toolbar = panel.findChild(QtWidgets.QWidget, "ArtifactsToolbar")
+        toolbar_margins = toolbar.layout().contentsMargins()
         self.assertEqual(
-            window.preview_file_tree.geometry().left(),
-            code_geometry.left(),
+            (
+                toolbar_margins.left(),
+                toolbar_margins.top(),
+                toolbar_margins.right(),
+                toolbar_margins.bottom(),
+            ),
+            (0, 0, 0, 0),
         )
-        QtTest.QTest.mouseClick(window.preview_code.viewport(), QtCore.Qt.LeftButton)
-        self.process_events()
-        self.assertFalse(window.preview_file_tree.isVisible())
-
-        window._set_preview_search_visible(True)
-        window.preview_root_btn.click()
-        self.process_events()
-        self.assertGreater(
-            window.preview_file_tree.geometry().top(),
-            window.preview_search_bar.geometry().bottom(),
+        self.assertEqual(toolbar.layout().spacing(), 0)
+        self.assertEqual(
+            panel.path_button.mapTo(panel, QtCore.QPoint()).x(),
+            panel.toolbar.mapTo(panel, QtCore.QPoint()).x(),
         )
-        window._set_preview_tree_visible(False)
-        window._set_preview_search_visible(False)
+        for button in panel.toolbar_buttons:
+            self.assertEqual(button.height(), button_height(button))
+            if button is not panel.path_button:
+                self.assertEqual(button.width(), button.height())
+            self.assertEqual(button.iconSize(), QtCore.QSize(ICON_SIZE, ICON_SIZE))
 
-        window.preview_root_btn.click()
-        self.process_events()
-        self.assertTrue(window.preview_file_tree.isVisible())
+        self.assertEqual(panel.content_layout.spacing(), 12)
+        self.assertIsInstance(panel.preview, QtWidgets.QPlainTextEdit)
+        self.assertIs(panel.path_button.parent(), toolbar)
 
-        def find_file(parent, target):
-            for index in range(parent.childCount()):
-                child = parent.child(index)
-                if child.data(0, QtCore.Qt.UserRole) == str(target):
-                    return child
-                found = find_file(child, target)
-                if found is not None:
-                    return found
-            return None
+    def test_artifact_toolbar_and_gutter_share_distinct_panel_surface(self):
+        page = self.window.config_page
+        shown = QtTest.QSignalSpy(page._artifacts_animation.finished)
+        page.toggle_artifacts()
+        self.assertTrue(shown.wait(1000))
+        toolbar = page.artifacts_panel.toolbar
+        self.assertTrue(toolbar.testAttribute(QtCore.Qt.WA_StyledBackground))
+        image = page.artifacts_panel.grab().toImage()
+        for y in (2, toolbar.height() - 1):
+            point = toolbar.mapTo(page.artifacts_panel, QtCore.QPoint(toolbar.width() // 2, y))
+            self.assertEqual(image.pixelColor(point).name(), BG_ARTIFACTS.lower())
+        gutter = page.artifacts_panel.preview.line_numbers
+        gutter_image = gutter.grab().toImage()
+        self.assertEqual(gutter_image.pixelColor(2, 2).name(), BG_ARTIFACTS.lower())
+        self.assertEqual(gutter_image.pixelColor(gutter.width() - 1, 2).name(), BG_ARTIFACTS.lower())
 
-        csv_item = find_file(window.preview_file_tree.invisibleRootItem(), csv_path)
-        self.assertIsNotNone(csv_item)
-        window._on_preview_tree_item_clicked(csv_item, 0)
-        self.assertEqual(window._selected_preview_file, csv_path)
-        self.assertIn("ctrl_id,ctrl_name,max_width", window.preview_code.toPlainText())
-        self.assertFalse(window.preview_file_tree.isVisible())
+    def test_config_header_has_twelve_pixel_gap_before_tabs(self):
+        page = self.window.config_page
+        gap = page.config_area.geometry().top() - (page.header.geometry().bottom() + 1)
+        self.assertEqual(gap, 12)
 
-        window._selected_preview_file = rtl_path
-        window._show_selected_preview_file()
-        self.assertEqual(window.preview_highlighter._language, "verilog")
-        self.assertFalse(window.preview_diff_btn.isEnabled())
-        rtl_path.write_text(
-            "module pipe_lane_clk_gate;\n  assign enabled = 1'b1;\nendmodule\n",
-            encoding="utf-8",
+    def test_config_tabs_fit_scaled_labels_including_generation(self):
+        tabs = self.window.config_page.tabs
+        bar = tabs.tabBar()
+        page = self.window.config_page
+        self.assertFalse(bar.drawBase())
+        self.assertEqual(bar.elideMode(), QtCore.Qt.ElideNone)
+        self.assertEqual(
+            bar.mapTo(page, QtCore.QPoint()).x(),
+            page.header.title_label.mapTo(page, QtCore.QPoint()).x(),
         )
-        window._refresh_rtl_preview()
-        self.assertTrue(window.preview_diff_btn.isEnabled())
-        window.preview_diff_btn.click()
-        self.assertEqual(window.preview_highlighter._language, "diff")
-        self.assertIn("--- previous/rtl/common/pipe_lane_clk_gate.sv", window.preview_code.toPlainText())
-        self.assertIn("+  assign enabled = 1'b1;", window.preview_code.toPlainText())
-
-    def test_generate_process_can_import_source_checkout(self):
-        window = self.make_window()
-        window._open_workspace(self._sample_workspace())
-        with mock.patch.object(
-            window, "_save_before_action", return_value=True
-        ), mock.patch.object(QtCore.QProcess, "start"):
-            window._run_tool()
-
-        process = window._active_processes[-1]
-        python_path = process.processEnvironment().value("PYTHONPATH").split(os.pathsep)
-        self.assertIn(str(main_window.PLM_ROOT / "src"), python_path)
-        window._set_generation_busy(False)
-
-    def test_modal_dialog_blurs_only_while_open(self):
-        window = self.make_window()
-        dialog = QtWidgets.QDialog(window)
-        blur_was_active = []
-
-        def fake_exec():
-            blur_was_active.append(
-                isinstance(
-                    window.centralWidget().graphicsEffect(),
-                    QtWidgets.QGraphicsBlurEffect,
+        for selected in range(tabs.count()):
+            tabs.setCurrentIndex(selected)
+            wait_for_idle(self.app)
+            for index in range(tabs.count()):
+                font = QtGui.QFont(bar.font())
+                font.setBold(True)
+                width = QtGui.QFontMetrics(font).horizontalAdvance(tabs.tabText(index))
+                self.assertGreaterEqual(
+                    bar.tabRect(index).width(), width + (16 if index == 0 else 32),
                 )
-            )
-            return QtWidgets.QDialog.Rejected
-
-        with mock.patch.object(dialog, "exec_", side_effect=fake_exec):
-            result = window._exec_modal_blurred(dialog)
-
-        self.assertEqual(result, QtWidgets.QDialog.Rejected)
-        self.assertEqual(blur_was_active, [True])
-        self.assertIsNone(window.centralWidget().graphicsEffect())
-
-    def test_signal_enum_values_survive_render_and_can_be_corrected(self):
-        table = EditableTable([
-            {"key": "signal_type", "heading": "Type", "options": main_window.SIGNAL_TYPES},
-            {"key": "direction", "heading": "Direction", "options": main_window.DIRECTIONS},
-        ])
-        self.addCleanup(table.close)
-        rows = [
-            {"signal_type": "unknown_type", "direction": "unknown_direction"},
-            {"signal_type": "", "direction": ""},
-            {"signal_type": "shared", "direction": "mac2phy"},
-        ]
-        table.set_rows(rows)
-        self.assertEqual(table.get_rows(), rows)
-        table.set_rows(table.get_rows())
-        self.assertEqual(table.get_rows(), rows)
-        table.table.cellWidget(0, 0).setCurrentText("perlane")
-        table.table.cellWidget(0, 1).setCurrentText("mac2phy")
-        self.assertEqual(table.get_rows()[0], {
-            "signal_type": "perlane", "direction": "mac2phy",
-        })
-        self.assertEqual(table.get_rows()[1:], rows[1:])
-
-    def test_table_context_menu_inserts_and_deletes(self):
-        table = EditableTable([
-            {"key": "id", "heading": "ID"},
-            {"key": "name", "heading": "NAME"},
-        ])
-        table.set_rows([{"id": "0", "name": "A"}, {"id": "1", "name": "B"}])
-
-        with mock.patch.object(QtWidgets.QMenu, "exec_", lambda menu, _pos: menu.actions()[0]):
-            table._show_row_context_menu(1, QtCore.QPoint())
-        self.assertEqual(table.table.rowCount(), 3)
-        self.assertEqual(table.get_rows()[1], {"id": "", "name": ""})
-
-        with mock.patch.object(QtWidgets.QMenu, "exec_", lambda menu, _pos: menu.actions()[3]):
-            table._show_row_context_menu(1, QtCore.QPoint())
-        self.assertEqual(table.table.rowCount(), 2)
-
-        table.set_rows([])
-        with mock.patch.object(QtWidgets.QMenu, "exec_", lambda menu, _pos: menu.actions()[0]):
-            table._show_row_context_menu(-1, QtCore.QPoint())
-        self.assertEqual(table.table.rowCount(), 1)
-
-    def test_signal_dropdown_values_fit_without_elision(self):
-        window = self.make_window()
-        window.resize(1200, 780)
-        window.signals_table.set_rows([{
-            "signal_name": "phy_mac_rxvalid",
-            "signal_type": "perlane",
-            "direction": "phy2mac",
-            "width": "1",
-            "safe_state": "0",
-            "tie_off": "0",
-        }])
-        window.show()
-        self.process_events()
-
-        for column, options in ((1, main_window.SIGNAL_TYPES), (2, main_window.DIRECTIONS)):
-            combo = window.signals_table.table.cellWidget(0, column)
-            style_option = QtWidgets.QStyleOptionComboBox()
-            combo.initStyleOption(style_option)
-            text_rect = combo.style().subControlRect(
-                QtWidgets.QStyle.CC_ComboBox,
-                style_option,
-                QtWidgets.QStyle.SC_ComboBoxEditField,
-                combo,
-            )
-            widest = max(combo.fontMetrics().horizontalAdvance(value) for value in options)
-            self.assertGreaterEqual(text_rect.width(), widest)
-            combo.showPopup()
-            self.process_events()
-            self.assertGreaterEqual(combo.view().minimumWidth(), widest + 30)
-            combo.hidePopup()
-
-    def test_collapsed_log_does_not_overlap_editor(self):
-        window = self.make_window()
-        window.resize(1200, 780)
-        window.show()
-        window.log_toggle.click()
-        self.process_events()
-        window._position_floating_log()
-
-        shell_bottom = window.editor_shell.mapTo(
-            window.main_area, QtCore.QPoint(0, window.editor_shell.height())
-        ).y()
-        self.assertLessEqual(shell_bottom, window.log_card.geometry().top())
-        shell_rect = window.editor_shell.geometry()
-        self.assertLess(window.log_card.width(), shell_rect.width())
-        self.assertEqual(window.log_card.geometry().right(), shell_rect.right())
-
-    def test_recent_menu_labels_and_actions(self):
-        window = self.make_window()
-        item = QtWidgets.QListWidgetItem()
-        item.setData(QtCore.Qt.UserRole, str(Path(self.temp.name) / "quad"))
-        captured = {}
-
-        def choose_clear(menu, _pos):
-            actions = [action for action in menu.actions() if not action.isSeparator()]
-            captured["labels"] = [action.text() for action in actions]
-            captured["delete_widget"] = actions[-1].defaultWidget()
-            # Chosen by label, not by index: picking actions[1] silently
-            # started selecting Reveal when that entry was added, so the
-            # test drove a different code path than it claimed to.
-            return next(a for a in actions if a.text() == "Clear")
-
-        with mock.patch.object(QtWidgets.QMenu, "exec_", choose_clear), mock.patch.object(
-            window, "_remove_recent_entry"
-        ) as clear:
-            window._show_recent_menu(item, QtCore.QPoint())
-
-        self.assertEqual(
-            captured["labels"], ["Rename", main_window.REVEAL_LABEL, "Clear", "Delete"]
-        )
-        self.assertEqual(captured["delete_widget"].objectName(), "destructiveMenuItem")
-        clear.assert_called_once()
-
-    def test_startup_restore_does_not_restore_a_cleared_recent_entry(self):
-        workspace = self._sample_workspace().resolve()
-        main_window.save_last_workspace(workspace)
-        self.assertEqual(main_window.load_recent_workspaces(), [])
-
-        window = self.make_window()
-
-        self.assertEqual(window.current_workspace, workspace)
-        self.assertEqual(main_window.load_recent_workspaces(), [])
-
-        # Explicitly opening it later makes it recent again.
-        window._open_workspace(workspace)
-        self.assertEqual(main_window.load_recent_workspaces(), [workspace])
-
-    def test_lane_grid_context_menu_and_x32_layout(self):
-        grid = LaneGrid()
-        grid.resize(1000, 500)
-        grid.set_columns(32)
-        grid.set_rows([{"mode": "0"}, {"mode": "1"}])
-        grid.show()
-        self.process_events()
-        self.assertEqual(grid.table.horizontalScrollBar().maximum(), 0)
-
-        with mock.patch.object(QtWidgets.QMenu, "exec_", lambda menu, _pos: menu.actions()[1]):
-            grid._on_row_context_menu(1, QtCore.QPoint())
-        self.assertEqual(grid.table.rowCount(), 3)
-
-    def test_checkbox_and_packaged_icon(self):
-        checkbox = VisibleCheckBox()
-        checkbox.resize(32, 28)
-        checkbox.setChecked(True)
-        checkbox.show()
-        self.process_events()
-        image = checkbox.grab().toImage()
-        self.assertFalse(image.isNull())
-        self.assertTrue(checkbox.isChecked())
-        self.assertTrue(APP_ICON_PATH.is_file(), APP_ICON_PATH)
-
-    def test_palette_matches_sap_horizon_tokens(self):
-        """Pins the palette to Horizon's published values, so a stray tweak
-        to one colour shows up as a failing test rather than as a slow
-        drift away from the design system. Names are the upstream tokens in
-        theming-base-content's sap_horizon/variables.json."""
-        self.assertEqual(BG, "#ffffff")  # sapBaseColor
-        self.assertEqual(BG_ELEVATED, "#ffffff")  # sapGroup_ContentBackground
-        self.assertEqual(BG_SIDEBAR, "#f5f6f7")  # sapBackgroundColor
-        self.assertEqual(theme.ACCENT, "#0070f2")  # sapBrandColor
-        self.assertEqual(theme.TEXT, "#131e29")  # sapTextColor
-        self.assertEqual(theme.DANGER, "#aa0808")  # sapNegativeColor
-
-    def test_sap_icon_font_backs_every_named_icon(self):
-        from plm.frontend.qt.widgets import sap_icons
-
-        self.assertTrue(sap_icons.ICON_FONT_PATH.is_file(), sap_icons.ICON_FONT_PATH)
-        self.assertEqual(sap_icons.text_font_family(), "72")
-        blank = []
-        for name in sap_icons.CODEPOINTS:
-            image = sap_icons.icon(name, "#131e29", 24).pixmap(24, 24).toImage()
-            inked = sum(
-                1
-                for y in range(image.height())
-                for x in range(image.width())
-                if image.pixelColor(x, y).alpha() > 0
-            )
-            if inked < 8:
-                blank.append(name)
-        # A wrong codepoint renders as nothing (or as .notdef), which is easy
-        # to miss by eye across a toolbar of small glyphs.
-        self.assertEqual(blank, [], f"icons resolved to no glyph: {blank}")
-
-    def test_preview_tree_and_drag_handle_use_official_sap_icons(self):
-        from plm.frontend.qt.widgets import sap_icons, tables
-
-        self.assertEqual(
-            {
-                name: sap_icons.CODEPOINTS[name]
-                for name in (
-                    "document",
-                    "folder-blank",
-                    "navigation-left-arrow",
-                    "vertical-grip",
+                option = QtWidgets.QStyleOptionTab()
+                bar.initStyleOption(option, index)
+                text_rect = bar.style().subElementRect(
+                    QtWidgets.QStyle.SE_TabBarTabText, option, bar,
                 )
-            },
-            {
-                "document": 0xE172,
-                "folder-blank": 0xE08E,
-                "navigation-left-arrow": 0xE067,
-                "vertical-grip": 0xE1FA,
-            },
-        )
-        self.assertEqual(main_window._SVG_TREE_FILE, "document")
-        self.assertEqual(main_window._SVG_TREE_FOLDER, "folder-blank")
-        self.assertNotIn(
-            "standardIcon", inspect.getsource(MainWindow._refresh_rtl_preview)
-        )
-        self.assertIn("sap_icons.icon", inspect.getsource(tables.drag_handle_icon))
-        main_source = inspect.getsource(main_window)
-        self.assertNotIn('setText("⋮")', main_source)
-        self.assertNotIn('setText("›" if collapsed else "‹")', main_source)
+                self.assertGreaterEqual(text_rect.width(), width)
+                self.assertGreaterEqual(
+                    text_rect.height(), QtGui.QFontMetrics(font).height() + 4,
+                )
+            self.assertLessEqual(bar.tabRect(tabs.count() - 1).right(), bar.width() - 1)
 
-    # Deliberately not "quad": that sample is a *negative* fixture -- see
-    # NEGATIVE_SAMPLES in test_core, which pins the two topology errors it
-    # is meant to raise. Tests here need a workspace that validates, or
-    # anything reading the topology report gets an error page instead.
-    SAMPLE = "bifurcate"
+    def test_controller_card_alignment_and_context_insertion_undo(self):
+        page = self.window.config_page
+        editor = page.controllers_editor
+        table = editor.table
+        original_count = table.rowCount()
+        self.assertLess(table.columnWidth(0), table.columnWidth(1))
+        self.assertLess(table.columnWidth(2), table.columnWidth(1))
+        self.assertEqual(table.item(0, 0).textAlignment(), int(QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter))
+        self.assertEqual(table.horizontalHeaderItem(1).textAlignment(),
+                         int(QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter))
+        original_height = table.height()
+        self.assertFalse(hasattr(editor, "add_row_btn"))
+        editor.add_row()
+        wait_for_idle(self.app)
+        self.assertEqual(table.rowCount(), original_count + 1)
+        self.assertGreater(table.height(), original_height)
+        self.assertTrue(page.dirty)
+        self.assertTrue(page.header.status_badge.isVisible())
+        self.assertEqual(page.header.status_badge.text(), "")
+        self.assertEqual(page.header.status_badge.size(), QtCore.QSize(8, 8))
+        page.undo()
+        wait_for_idle(self.app)
+        self.assertEqual(table.rowCount(), original_count)
+        self.assertFalse(page.dirty)
+        self.assertTrue(page.header.status_badge.isHidden())
+        editor.set_rows([
+            {"ctrl_id": index, "ctrl_name": f"Ctrl{index}", "max_width": 4}
+            for index in range(15)
+        ])
+        wait_for_idle(self.app)
+        self.assertEqual(table.rowCount(), 15)
+        self.assertGreater(table.verticalScrollBar().maximum(), 0)
 
-    def _sample_workspace(self):
-        """A copy of a bundled sample that the real loader accepts."""
-        workspace = Path(self.temp.name) / self.SAMPLE
-        shutil.copytree(
-            Path(main_window.PLM_ROOT) / "test" / self.SAMPLE / "config",
-            workspace / "config",
-        )
-        return workspace
+    def test_selected_table_cells_use_dark_text_on_blue_for_both_row_colors(self):
+        table = self.window.config_page.signals_editor.table
+        table.ensurePolished()
 
-    def test_unsaved_edits_mark_the_title_and_gate_switching(self):
-        workspace = self._sample_workspace()
-        window = self.make_window()
-        window._open_workspace(workspace)
-        self.process_events()
+        class RecordingPainter(QtGui.QPainter):
+            def drawText(self, *args):
+                self.text_color = self.pen().color().name()
+                return super().drawText(*args)
 
-        self.assertFalse(window._is_dirty())
-        self.assertNotIn("*", window.windowTitle())
+        for row in (0, 1):
+            option = QtWidgets.QStyleOptionViewItem()
+            option.initFrom(table)
+            option.widget = table
+            option.rect = QtCore.QRect(0, 0, 400, 48)
+            option.state |= QtWidgets.QStyle.State_Selected | QtWidgets.QStyle.State_Active
+            option.palette.setColor(QtGui.QPalette.HighlightedText, QtCore.Qt.white)
+            if row:
+                option.features |= QtWidgets.QStyleOptionViewItem.Alternate
+            image = QtGui.QImage(400, 48, QtGui.QImage.Format_ARGB32)
+            image.fill(QtCore.Qt.transparent)
+            painter = RecordingPainter(image)
+            try:
+                table.itemDelegate().paint(painter, option, table.model().index(row, 0))
+                self.assertEqual(painter.text_color, TEXT_MAIN.lower())
+            finally:
+                painter.end()
+            self.assertEqual(image.pixelColor(397, 24).name(), PRIMARY_LIGHT.lower())
 
-        window.controllers_table.insert_row_below(0)
-        self.process_events()
-        self.assertTrue(window._is_dirty())
-        window._poll_dirty_state()
-        self.assertIn("*", window.windowTitle())
+    def test_artifacts_drag_visibility_and_maximize(self):
+        page = self.window.config_page
+        self.assertFalse(page.artifacts_panel.isVisible())
+        shown = QtTest.QSignalSpy(page._artifacts_animation.finished)
+        page.toggle_artifacts()
+        self.assertTrue(page.artifacts_panel.isVisible())
+        self.assertTrue(shown.wait(1000))
+        original_width = page.artifacts_panel.width()
+        page.artifacts_panel.widthRequested.emit(original_width + 60)
+        self.assertEqual(page.artifacts_panel.width(), original_width + 60)
 
-        # Cancel must leave both the edit and the open workspace alone.
-        with mock.patch.object(
-            QtWidgets.QMessageBox, "question", return_value=QtWidgets.QMessageBox.Cancel
-        ):
-            self.assertFalse(window._confirm_discard_changes())
-        self.assertTrue(window._is_dirty())
+        page.toggle_artifacts_maximized()
+        self.assertEqual(page.artifacts_panel.width(), page.width())
+        self.window.resize(self.window.width() + 60, self.window.height() + 40)
+        wait_for_idle(self.app)
+        self.assertEqual(page.artifacts_panel.geometry(), page.rect())
+        page.toggle_artifacts_maximized()
+        self.assertEqual(page.artifacts_panel.width(), original_width + 60)
+        hidden = QtTest.QSignalSpy(page._artifacts_animation.finished)
+        page.header.artifacts_btn.click()
+        self.assertTrue(hidden.wait(1000))
+        self.assertFalse(page.artifacts_panel.isVisible())
+        self.assertEqual(page._artifacts_animation.duration(), 200)
 
-        # Discard drops them without writing anything.
-        with mock.patch.object(
-            QtWidgets.QMessageBox, "question", return_value=QtWidgets.QMessageBox.Discard
-        ):
-            self.assertTrue(window._confirm_discard_changes())
+    def test_header_panel_button_feedback_has_rounded_corners(self):
+        button = self.window.config_page.header.artifacts_btn
+        self.window.activateWindow()
+        button.setFocus(QtCore.Qt.TabFocusReason)
+        wait_for_idle(self.app)
+        self.assertTrue(button.hasFocus())
+        image = button.grab().toImage()
+        self.assertEqual(image.pixelColor(2, button.height() // 2).name(), BG_FOCUS.lower())
+        self.assertNotEqual(image.pixelColor(0, 0), image.pixelColor(2, button.height() // 2))
+        button.setDown(True)
+        image = button.grab().toImage()
+        self.assertEqual(image.pixelColor(2, button.height() // 2).name(), BORDER.lower())
+        self.assertNotEqual(image.pixelColor(0, 0), image.pixelColor(2, button.height() // 2))
+        button.setDown(False)
 
-        # Save clears the marker.
-        with mock.patch.object(
-            QtWidgets.QMessageBox, "question", return_value=QtWidgets.QMessageBox.Save
-        ):
-            self.assertTrue(window._confirm_discard_changes())
-        self.assertFalse(window._is_dirty())
-        window._poll_dirty_state()
-        self.assertNotIn("*", window.windowTitle())
+    def test_header_panel_buttons_stay_fixed_and_clickable_above_drawer(self):
+        page = self.window.config_page
+        buttons = (self.window.nav_panel.collapse_btn, self.window.log_toggle_button,
+                   self.window.artifacts_toggle_button)
+        title_bar = self.window.title_bar
+        log_button = self.window.log_toggle_button
+        sidebar_button = self.window.nav_panel.collapse_btn
+        self.assertIs(log_button.parentWidget(), title_bar)
+        self.assertGreater(log_button.x(), sidebar_button.geometry().right())
+        self.assertEqual(log_button.geometry().center().y(), sidebar_button.geometry().center().y())
+        self.assertIs(buttons[2].parentWidget(), title_bar)
+        self.assertGreater(buttons[2].x(), log_button.geometry().right())
+        self.assertEqual(buttons[2].geometry().center().y(), sidebar_button.geometry().center().y())
+        positions = [button.mapTo(title_bar, QtCore.QPoint()) for button in buttons]
+        shown = QtTest.QSignalSpy(page._artifacts_animation.finished)
+        page.header.artifacts_btn.click()
+        self.assertTrue(shown.wait(1000))
+        self.assertFalse(hasattr(page.artifacts_panel, "close_button"))
+        for maximized in (False, True):
+            if maximized:
+                page.toggle_artifacts_maximized()
+            page.tabs.setCurrentIndex(2)
+            wait_for_idle(self.app)
+            for button, position in zip(buttons, positions):
+                self.assertEqual(button.mapTo(title_bar, QtCore.QPoint()), position)
+                point = button.mapTo(title_bar, button.rect().center())
+                self.assertIs(title_bar.childAt(point), button)
+            action_y = page.artifacts_panel.maximize_button.mapTo(page, page.artifacts_panel.maximize_button.rect().center()).y()
+            for button in page.artifacts_panel.toolbar_buttons:
+                if button.isVisible():
+                    self.assertEqual(button.mapTo(page, button.rect().center()).y(), action_y)
+                    point = button.mapTo(page, button.rect().center())
+                    self.assertIs(page.childAt(point), button)
+        hidden = QtTest.QSignalSpy(page._artifacts_animation.finished)
+        QtTest.QTest.mouseClick(page.header.artifacts_btn, QtCore.Qt.LeftButton)
+        self.assertTrue(hidden.wait(1000))
+        self.assertFalse(page.artifacts_panel.isVisible())
 
-    def test_revert_restores_the_version_on_disk(self):
-        workspace = self._sample_workspace()
-        window = self.make_window()
-        window._open_workspace(workspace)
-        self.process_events()
-        before = [row["ctrl_name"] for row in window.controllers_table.get_rows()]
+        log_visible = self.window.log_panel.isVisible()
+        log_button.click()
+        wait_for_idle(self.app)
+        self.assertNotEqual(self.window.log_panel.isVisible(), log_visible)
+        log_button.click()
+        wait_for_idle(self.app)
+        self.assertEqual(self.window.log_panel.isVisible(), log_visible)
 
-        window.controllers_table.insert_row_below(0)
-        self.process_events()
-        self.assertTrue(window._is_dirty())
+    def test_artifact_file_selection_and_copy_path(self):
+        panel = self.window.config_page.artifacts_panel
+        with tempfile.TemporaryDirectory() as directory:
+            generated = Path(directory).resolve() / "generated.sv"
+            generated.write_text("module generated; endmodule\n", encoding="utf-8")
+            panel.set_files([generated], Path(directory).resolve())
+            wait_for_idle(self.app)
+            self.assertEqual(len(panel.selection.files), 1)
+            self.assertEqual(panel.preview.toPlainText(), generated.read_text())
+            panel.copy_path()
+            self.assertEqual(QtWidgets.QApplication.clipboard().text(), str(generated))
 
-        with mock.patch.object(
-            QtWidgets.QMessageBox, "question", return_value=QtWidgets.QMessageBox.Yes
-        ):
-            window._on_revert()
-        self.process_events()
+    def test_artifact_open_uses_configured_editor(self):
+        settings = self.store._settings
+        original = settings.value("tools/editor_path")
+        try:
+            with tempfile.TemporaryDirectory() as directory:
+                editor = Path(directory).resolve() / "custom-editor"
+                editor.write_text("editor", encoding="utf-8")
+                settings.setValue("tools/editor_path", str(editor))
+                generated = Path(directory).resolve() / "generated.sv"
+                generated.write_text("module generated; endmodule\n", encoding="utf-8")
+                self.window.config_page.artifacts_panel.set_files([generated], Path(directory).resolve())
+                wait_for_idle(self.app)
+                panel = self.window.config_page.artifacts_panel
+                with patch("subprocess.Popen") as popen:
+                    panel.open_in_editor()
+                    wait_for_idle(self.app)
+                popen.assert_called_once_with([str(editor), str(generated)])
+        finally:
+            if original is None:
+                settings.remove("tools/editor_path")
+            else:
+                settings.setValue("tools/editor_path", original)
+            settings.sync()
+
+    def test_settings_and_docs_open_secondary_pages(self):
+        nav = self.window.nav_panel
+        nav.settings_btn.click()
+        wait_for_idle(self.app)
+        overlay = self.window.view_stack.currentWidget()
+        self.assertIsNotNone(overlay)
+        self.assertTrue(overlay.isVisible())
+        self.assertEqual(overlay.page, "settings")
+        self.assertEqual(overlay.title_label.text(), "设置")
+        self.assertEqual(overlay.size(), self.window.view_stack.contentsRect().size())
+        self.assertEqual(overlay.back_btn.text(), "设置")
+        self.assertEqual(overlay.back_btn.height(), CONTROL_HEIGHT)
+        self.assertGreater(overlay.back_btn.width(), 32)
+        self.assertEqual(overlay.back_btn.iconSize(), QtCore.QSize(ICON_SIZE, ICON_SIZE))
+        panel = overlay.findChild(QtWidgets.QWidget, "SecondaryPagePanel")
+        self.assertEqual(panel.width(), min(1040, overlay.width() - 48))
+        self.assertEqual(panel.mapTo(overlay, QtCore.QPoint()).y(), 72)
         self.assertEqual(
-            [row["ctrl_name"] for row in window.controllers_table.get_rows()], before
+            panel.mapTo(overlay, panel.rect().center()).x(),
+            overlay.rect().center().x(),
         )
-        self.assertFalse(window._is_dirty())
+        divider = overlay.findChild(QtWidgets.QFrame, "SecondaryTabDivider")
+        self.assertEqual(divider.height(), 1)
+        for row in overlay.setting_rows.values():
+            self.assertEqual(row.height(), CONTROL_HEIGHT)
 
-    def test_generation_buttons_lock_while_a_run_is_in_flight(self):
-        window = self.make_window()
-        self.assertEqual(
-            [button.text() for button in window.generation_buttons],
-            ["Generate"],
-        )
-        self.assertTrue(all(button.isEnabled() for button in window.generation_buttons))
+        nav.docs_btn.click()
+        wait_for_idle(self.app)
+        overlay = self.window.view_stack.currentWidget()
+        self.assertIsNotNone(overlay)
+        self.assertEqual(overlay.page, "docs")
+        self.assertEqual(overlay.title_label.text(), "文档")
+        overlay.back_btn.click()
+        wait_for_idle(self.app)
+        self.assertIs(self.window.view_stack.currentWidget(), self.window.main_container)
 
-        window._set_generation_busy(True)
-        self.assertFalse(any(button.isEnabled() for button in window.generation_buttons))
-        self.assertFalse(
-            any(button.isEnabled() for button, _label in window.sidebar_action_buttons)
-        )
-        self.assertFalse(window.recent_list.isEnabled())
-        # A second click while busy must not start another writer.
-        with mock.patch.object(window, "_save_before_action") as save:
-            window._run_tool()
-        save.assert_not_called()
+        nav.settings_btn.click()
+        wait_for_idle(self.app)
+        overlay = self.window.view_stack.currentWidget()
+        QtTest.QTest.keyClick(overlay, QtCore.Qt.Key_Escape)
+        wait_for_idle(self.app)
+        self.assertIs(self.window.view_stack.currentWidget(), self.window.main_container)
 
-        window._set_generation_busy(False)
-        self.assertTrue(all(button.isEnabled() for button in window.generation_buttons))
-        self.assertTrue(
-            all(button.isEnabled() for button, _label in window.sidebar_action_buttons)
-        )
-        self.assertTrue(window.recent_list.isEnabled())
-
-    def test_generation_state_machine_has_visible_terminal_states(self):
-        window = self.make_window()
-        expected = [
-            ("IDLE", "Ready"),
-            ("GENERATING", "Generating..."),
-            ("STALE", "Out of date"),
-            ("UP_TO_DATE", "Up to date"),
-            ("FAILED", "Generation failed"),
-        ]
-        for state, label in expected:
-            window._set_generation_state(state)
-            self.assertEqual(window._generation_state, state)
-            self.assertEqual(window.generation_state_label.text(), label)
-
-        for removed_state in (
-            "SAVING", "VALIDATING", "REFRESHING_PREVIEW", "DONE", "CANCELLED"
-        ):
-            with self.subTest(state=removed_state), self.assertRaises(ValueError):
-                window._set_generation_state(removed_state)
-
-    def test_application_activation_rechecks_output_hashes(self):
-        window = self.make_window()
-        with mock.patch.object(window, "_update_generation_freshness") as refresh:
-            window.eventFilter(
-                self.app, QtCore.QEvent(QtCore.QEvent.ApplicationActivate)
+    def test_settings_are_saved(self):
+        settings = self.store._settings
+        original = {
+            key: settings.value(key)
+            for key in (
+                "tools/editor_path",
             )
-            self.process_events()
-        refresh.assert_called_with(verify_files=True)
+        }
+        try:
+            self.window.nav_panel.settings_btn.click()
+            wait_for_idle(self.app)
+            wait_for_idle(self.app)
+            overlay = self.window.view_stack.currentWidget()
+            overlay.editor_path_edit.setText("custom-editor")
+            overlay.save_settings_btn.click()
+            wait_for_idle(self.app)
+            wait_for_idle(self.app)
 
-    def test_application_activation_marks_externally_edited_output_stale(self):
-        workspace = self._sample_workspace()
-        generate(
-            workspace / "config",
-            workspace / "rtl",
-            GenerationOptions(quiet=True),
-        )
-        window = self.make_window()
-        window._open_workspace(workspace)
-        self.assertEqual(window._generation_state, "UP_TO_DATE")
-
-        generated = workspace / "rtl" / "src" / "pipe_lane_mapper.sv"
-        generated.write_text(
-            generated.read_text(encoding="utf-8") + "// external edit\n",
-            encoding="utf-8",
-        )
-        window.eventFilter(
-            self.app, QtCore.QEvent(QtCore.QEvent.ApplicationActivate)
-        )
-        self.process_events()
-
-        self.assertEqual(window._generation_state, "STALE")
-
-    def test_bottom_panel_is_log_and_report(self):
-        """Two pages, one widget each: the activity log and Config.report().
-        The topology used to share the REPORT page under its own sub-header,
-        and there used to be a third PROBLEMS page -- both are gone."""
-        window = self.make_window()
-
-        self.assertEqual(window.log_tab_btn.text(), "LOG")
-        self.assertEqual(window.report_tab_btn.text(), "REPORT")
-        self.assertEqual(window.bottom_panel_stack.count(), 2)
-        self.assertIs(window.bottom_panel_stack.widget(0), window.log)
-        self.assertIs(window.bottom_panel_stack.widget(1), window.topology_summary)
-        # LOG is what a fresh window shows -- it is where Generate writes.
-        self.assertIs(window.bottom_panel_stack.currentWidget(), window.log)
-        self.assertFalse(hasattr(window, "problem_tree"))
-        self.assertIsNone(
-            window._generation_page.findChild(
-                QtWidgets.QPlainTextEdit, "topologySummary"
+            self.assertEqual(
+                settings.value("tools/editor_path", type=str), "custom-editor"
             )
+            self.assertEqual(overlay.settings_status.text(), "设置已保存")
+        finally:
+            for key, value in original.items():
+                if value is None:
+                    settings.remove(key)
+                else:
+                    settings.setValue(key, value)
+            settings.sync()
+
+    def test_docs_menu_loads_real_markdown_sections(self):
+        with tempfile.TemporaryDirectory() as directory:
+            docs_dir = Path(directory).resolve()
+            (docs_dir / "qt_frontend_guide.md").write_text(
+                "# Frontend Guide\n\n"
+                "| Name | Meaning |\n|---|---|\n| ctrl_id | Controller ID |\n\n"
+                "操作：右键菜单增删行。\n\n"
+                "```text\nmode=0  lane0=0-0\n        ↓\n       CtrlA[0]\n```\n",
+                encoding="utf-8",
+            )
+            (docs_dir / "tool_usage.md").write_text(
+                "# Tool Usage\n\n"
+                "## 2. 配置文件格式（`config/` 下三个 CSV）\n\n"
+                "Controller configuration content.\n\n"
+                "## 3. `plm generate`：生成匹配的 RTL 与 testbench\n\n"
+                "Generation command content.\n",
+                encoding="utf-8",
+            )
+            with patch("plm.frontend.qt.views.documentation_page.DOCS_DIR", docs_dir):
+                self.window.nav_panel.docs_btn.click()
+                wait_for_idle(self.app)
+                wait_for_idle(self.app)
+                overlay = self.window.view_stack.currentWidget()
+                self.assertIn("Frontend Guide", overlay.doc_browser.toPlainText())
+                tables = [
+                    frame
+                    for frame in overlay.doc_browser.document()
+                    .rootFrame()
+                    .childFrames()
+                    if isinstance(frame, QtGui.QTextTable)
+                ]
+                self.assertTrue(tables)
+                self.assertEqual(tables[0].format().width().type(), QtGui.QTextLength.PercentageLength)
+                self.assertEqual(tables[0].format().width().rawValue(), 100)
+                self.assertEqual(
+                    overlay.doc_browser.verticalScrollBarPolicy(),
+                    QtCore.Qt.ScrollBarAsNeeded,
+                )
+
+                overlay.menu_buttons[1].click()
+                wait_for_idle(self.app)
+                self.assertIn(
+                    "Controller configuration content",
+                    overlay.doc_browser.toPlainText(),
+                )
+                self.assertNotIn("Tool Usage", overlay.doc_browser.toPlainText())
+
+                overlay.menu_buttons[2].click()
+                wait_for_idle(self.app)
+                self.assertIn(
+                    "Generation command content", overlay.doc_browser.toPlainText()
+                )
+                self.assertNotIn(
+                    "Controller configuration content",
+                    overlay.doc_browser.toPlainText(),
+                )
+
+    def test_required_lucide_assets_exist_and_render(self):
+        icon_names = (
+            "layout-dashboard",
+            "arrow-left",
+            "panel-left",
+            "x",
+            "panel-bottom",
+            "panel-right",
+            "square-pen",
+            "save",
+            "file-text",
+            "settings",
+            "trash-2",
+            "archive",
+            "folder",
+            "folder-open",
+            "pin",
+            "pencil",
+            "refresh-cw",
+            "git-compare",
+            "search",
+            "link",
+            "file-x",
+            "more-horizontal",
+            "maximize",
+            "rocket",
+            "minus",
+            "square",
+            "copy",
+            "chevron-down",
+            "chevron-right",
+            "tree-chevron-down",
         )
-
-    def test_report_page_shows_the_topology_report(self):
-        workspace = self._sample_workspace()
-        window = self.make_window()
-        window._open_workspace(workspace)
-        self.process_events()
-
-        window.report_tab_btn.click()
-        self.process_events()
-        self.assertIs(window.bottom_panel_stack.currentWidget(), window.topology_summary)
-        self.assertIn("Lane groups", window.topology_summary.toPlainText())
-
-    def test_reset_defaults_button_is_compact(self):
-        dialog = SettingsDialog(None, DEFAULT_SETTINGS)
-        self.addCleanup(dialog.close)
-
+        self.assertEqual(len(icon_names), 30)
         self.assertEqual(
-            dialog.reset_defaults_btn.sizePolicy().horizontalPolicy(),
-            QtWidgets.QSizePolicy.Fixed,
+            {path.stem for path in LUCIDE_ICON_DIR.glob("*.svg")},
+            set(icon_names),
         )
-        self.assertEqual(dialog.reset_defaults_btn.objectName(), "resetDefaultsBtn")
+        for name in icon_names:
+            self.assertTrue((LUCIDE_ICON_DIR / f"{name}.svg").is_file())
+            self.assertFalse(load_lucide_icon(name).isNull())
 
-    def test_topology_summary_reports_lane_groups(self):
-        workspace = self._sample_workspace()
-        window = self.make_window()
-        window._open_workspace(workspace)
-        self.process_events()
-
-        text = window.topology_summary.toPlainText()
-        self.assertIn("Lane groups", text)
-        # Built from the live widgets, not the file on disk.
-        self.assertNotEqual(text, "Open a workspace to see its lane topology.")
-
-    def test_external_config_change_is_not_overwritten(self):
-        workspace = self._sample_workspace()
-        window = self.make_window()
-        window._open_workspace(workspace)
-        controllers = workspace / "config" / "controllers.csv"
-        external_text = controllers.read_text(encoding="utf-8") + "\n"
-        controllers.write_text(external_text, encoding="utf-8")
-
-        with mock.patch.object(QtWidgets.QMessageBox, "warning") as warning:
-            self.assertFalse(window._on_save())
-
-        warning.assert_called_once()
-        self.assertEqual(controllers.read_text(encoding="utf-8"), external_text)
-
-    def test_new_workspace_prompts_for_unsaved_changes_only_once(self):
-        workspace = self._sample_workspace()
-        window = self.make_window()
-        window._open_workspace(workspace)
-
-        target_parent = Path(self.temp.name) / "chosen-location"
-        with mock.patch.object(
-            window, "_confirm_discard_changes", return_value=True
-        ) as confirm, mock.patch.object(
-            _NewWorkspaceDialog, "exec_", return_value=QtWidgets.QDialog.Accepted
-        ), mock.patch.object(
-            _NewWorkspaceDialog,
-            "values",
-            return_value=("new_quad", str(target_parent)),
-        ):
-            window._on_new()
-
-        confirm.assert_called_once()
-        self.assertEqual(window.current_workspace.name, "new_quad")
-        self.assertEqual(window.current_workspace.parent, target_parent)
-
-    def test_new_workspace_dialog_browses_for_a_custom_parent(self):
-        initial = Path(self.temp.name) / "initial"
-        selected = Path(self.temp.name) / "selected"
-        dialog = _NewWorkspaceDialog(initial)
-        self.addCleanup(dialog.close)
-
-        self.assertEqual(dialog.location_edit.text(), str(initial))
-        with mock.patch.object(
-            QtWidgets.QFileDialog,
-            "getExistingDirectory",
-            return_value=str(selected),
-        ) as browse:
-            dialog.browse_btn.click()
-
-        browse.assert_called_once()
-        self.assertEqual(dialog.location_edit.text(), str(selected))
-
-    def test_invalid_topology_is_reported_without_calling_report(self):
-        workspace = self._sample_workspace()
-        window = self.make_window()
-        window._open_workspace(workspace)
-        rows = window.lane_grid.get_rows()
-        rows[0]["lane0"] = "99-0"
-        window.lane_grid.set_rows(rows)
-        window._topology_payload = None
-
-        window._refresh_topology_summary()
-
-        summary = window.topology_summary.toPlainText()
-        self.assertIn("Config is not valid yet", summary)
-        self.assertIn("undefined ctrl_id=99", summary)
-
-    def test_preview_toolbar_compacts_before_it_can_overlap_files_button(self):
-        window = self.make_window()
-
-        window._apply_preview_control_density(300)
-        self.assertFalse(window.preview_more_btn.isHidden())
-        self.assertTrue(window.preview_edit_btn.isHidden())
-        self.assertTrue(window.preview_search_btn.isHidden())
-        self.assertFalse(window.preview_refresh_btn.isHidden())
-        self.assertFalse(window.preview_expand_btn.isHidden())
-
-        window._apply_preview_control_density(150)
-        self.assertFalse(window.preview_more_btn.isHidden())
-        self.assertTrue(window.preview_refresh_btn.isHidden())
-        self.assertTrue(window.preview_expand_btn.isHidden())
-        self.assertFalse(window.preview_toggle_btn.isHidden())
-
-        window._apply_preview_control_density(800)
-        self.assertTrue(window.preview_more_btn.isHidden())
-        self.assertFalse(window.preview_edit_btn.isHidden())
-        self.assertFalse(window.preview_search_btn.isHidden())
-
-    def test_floating_log_stays_inside_a_narrow_main_pane(self):
-        window = self.make_window()
-        window.show()
-        window._on_toggle_rtl_preview(True)
-        window.content_splitter.setSizes([120, 700])
-        self.process_events()
-
-        window._position_floating_log()
-
-        self.assertLessEqual(window.log_card.width(), window.main_area.width())
-        self.assertLessEqual(
-            window.log_card.geometry().right(),
-            window.main_area.rect().right(),
-        )
-
-    def test_close_is_blocked_during_generation(self):
-        window = self.make_window()
-        event = mock.Mock()
-        window._set_generation_busy(True)
-
-        with mock.patch.object(QtWidgets.QMessageBox, "warning"):
-            window.closeEvent(event)
-
-        event.ignore.assert_called_once()
-        window._set_generation_busy(False)
-
-    def test_preview_search_finds_matches_and_jumps_to_a_line(self):
-        workspace = self._sample_workspace()
-        rtl = workspace / "rtl" / "src"
-        rtl.mkdir(parents=True)
-        (rtl / "pipe_lane_mapper.sv").write_text(
-            "module pipe_lane_mapper;\n  logic Marker_Signal;\nendmodule\n",
-            encoding="utf-8",
-        )
-        window = self.make_window()
-        window._open_workspace(workspace)
-        window.show()
-        window._on_toggle_rtl_preview(True)
-        self.process_events()
-
-        window._selected_preview_file = rtl / "pipe_lane_mapper.sv"
-        window._show_selected_preview_file()
-        self.process_events()
-
-        self.assertFalse(window.preview_search_bar.isVisible())
-        window._on_preview_search_open()
-        self.assertTrue(window.preview_search_bar.isVisible())
-
-        window.preview_search_edit.setText("marker_signal")
-        self.assertEqual(window.preview_search_status.text(), "1 found")
-        window._preview_find_next()
-        self.assertEqual(window.preview_code.textCursor().selectedText(), "Marker_Signal")
-
-        window.preview_search_edit.setText("nothing_here")
-        window._preview_find_next()
-        self.assertEqual(window.preview_search_status.text(), "no match")
-
-        window.preview_search_edit.setText(":3")
-        window._preview_find_next()
-        self.assertEqual(window.preview_search_status.text(), "line 3")
-        self.assertEqual(window.preview_code.textCursor().blockNumber(), 2)
-
-        window._copy_preview_path()
-        self.assertEqual(
-            QtWidgets.QApplication.clipboard().text(),
-            str(rtl / "pipe_lane_mapper.sv"),
-        )
-
-        window._set_preview_search_visible(False)
-        self.assertFalse(window.preview_search_bar.isVisible())
-
-
-    def test_live_validation_marks_duplicate_controller_ids(self):
-        workspace = self._sample_workspace()
-        window = self.make_window()
-        window._open_workspace(workspace)
-        first = window.controllers_table.table.item(0, 0)
-        second = window.controllers_table.table.item(1, 0)
-        original = second.text()
-
-        second.setText(first.text())
-        window._process_live_edits()
-
-        self.assertIn("Duplicate ctrl_id", first.toolTip())
-        self.assertIn("Duplicate ctrl_id", second.toolTip())
-        self.assertGreater(window._live_validation_error_count, 0)
-
-        second.setText(original)
-        window._process_live_edits()
-        self.assertNotIn("Duplicate ctrl_id", first.toolTip())
-
-    def test_generate_focuses_first_invalid_cell(self):
-        workspace = self._sample_workspace()
-        window = self.make_window()
-        window._open_workspace(workspace)
-        table = window.controllers_table.table
-        table.item(1, 0).setText(table.item(0, 0).text())
-        window._process_live_edits()
-
-        with mock.patch.object(
-            window, "_save_before_action"
-        ) as save, mock.patch.object(QtCore.QProcess, "start") as start:
-            window._run_tool()
-
-        save.assert_not_called()
-        start.assert_not_called()
-        self.assertEqual(window.tabs.currentIndex(), 0)
-        self.assertEqual((table.currentRow(), table.currentColumn()), (0, 0))
-        self.assertEqual(window._generation_state, "FAILED")
-        self.assertIn("highlighted configuration cell", window.log.toPlainText())
-
-    def test_generate_blocks_unlocated_validation_issue(self):
-        workspace = self._sample_workspace()
-        window = self.make_window()
-        window._open_workspace(workspace)
-        issue = ValidationIssue("generation", "formatter settings are invalid")
-
-        with mock.patch.object(
-            main_window,
-            "load_generation_plan_from_payload",
-            side_effect=ValidationError([issue]),
-        ), mock.patch.object(
-            window, "_save_before_action"
-        ) as save, mock.patch.object(QtCore.QProcess, "start") as start:
-            window._run_tool()
-
-        save.assert_not_called()
-        start.assert_not_called()
-        self.assertEqual(window._generation_state, "FAILED")
-        self.assertIn("formatter settings are invalid", window.log.toPlainText())
-
-    def test_live_validation_rejects_shared_phy2mac(self):
-        workspace = self._sample_workspace()
-        window = self.make_window()
-        window._open_workspace(workspace)
-        rows = window.signals_table.get_rows()
-        row = next(i for i, value in enumerate(rows) if value["direction"] == "phy2mac")
-        signal_type = window.signals_table.table.cellWidget(row, 1)
-        direction = window.signals_table.table.cellWidget(row, 2)
-
-        signal_type.setCurrentText("shared")
-        window._process_live_edits()
-        self.assertIn("must be perlane", signal_type.toolTip())
-        self.assertIn("must be perlane", direction.toolTip())
-
-        signal_type.setCurrentText("perlane")
-        window._process_live_edits()
-        self.assertNotIn("must be perlane", signal_type.toolTip())
-
-    def test_undo_redo_restores_complete_editor_snapshot(self):
-        workspace = self._sample_workspace()
-        window = self.make_window()
-        window._open_workspace(workspace)
-        item = window.controllers_table.table.item(0, 1)
-        original = item.text()
-
-        item.setText("RenamedCtrl")
-        window._process_live_edits()
-        self.assertTrue(window.undo_action.isEnabled())
-
-        window._undo_edit()
-        self.assertEqual(
-            window.controllers_table.table.item(0, 1).text(), original
-        )
-        self.assertTrue(window.redo_action.isEnabled())
-
-        window._redo_edit()
-        self.assertEqual(
-            window.controllers_table.table.item(0, 1).text(), "RenamedCtrl"
-        )
-        window._undo_edit()
-        self.assertFalse(window._is_dirty())
-
-    def test_generation_status_is_rendered_in_preview_tree(self):
-        workspace = self._sample_workspace()
-        rtl = workspace / "rtl"
-        rtl.mkdir()
-        modified = rtl / "modified.sv"
-        unchanged = rtl / "unchanged.sv"
-        modified.write_text("module old; endmodule\n", encoding="utf-8")
-        unchanged.write_text("module same; endmodule\n", encoding="utf-8")
-
-        window = self.make_window()
-        window._open_workspace(workspace)
-        window.show()
-        window._on_toggle_rtl_preview(True)
-        self.process_events()
-
-        before = window._output_signature(workspace)
-        modified.write_text("module new; endmodule\n", encoding="utf-8")
-        created = rtl / "created.sv"
-        created.write_text("module created; endmodule\n", encoding="utf-8")
-        after = window._output_signature(workspace)
-        window._show_generation_results(workspace, before, after)
-        self.process_events()
-
-        labels = []
-
-        def collect(parent):
-            for index in range(parent.childCount()):
-                child = parent.child(index)
-                if child.data(0, QtCore.Qt.UserRole):
-                    labels.append(child.text(0))
-                collect(child)
-
-        collect(window.preview_file_tree.invisibleRootItem())
-        self.assertIn("modified.sv   Modified", labels)
-        self.assertIn("created.sv   New", labels)
-        self.assertIn("unchanged.sv   Unchanged", labels)
-        self.assertFalse(hasattr(window, "outputs_tab_btn"))
+    def test_global_stylesheet_contains_key_visual_rules(self):
+        self.assertIn("background-color: #FFFFFF", APP_QSS)
+        self.assertIn("border-radius: 16px", APP_QSS)
+        self.assertIn("QSplitter::handle", APP_QSS)
+        self.assertIn("QTabWidget#ConfigTabs QTabBar::tab:selected", APP_QSS)
+        self.assertIn("QScrollBar::handle:vertical", APP_QSS)
+        self.assertIn('QWidget#WindowShell[maximized="true"]', APP_QSS)
+        self.assertIn("QFrame#WindowTitleBar", APP_QSS)
+        self.assertIn("background-color: #DCFCE7", APP_QSS)
+        self.assertIn("background-color: #F2F4F7", APP_QSS)
+        self.assertEqual(self.window.config_page.CORNER_RADII[0], 16)
 
 
 if __name__ == "__main__":

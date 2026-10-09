@@ -4,10 +4,13 @@ generated SystemVerilog text.
 """
 
 import hashlib
+import re
 import shutil
 import subprocess
+from collections import OrderedDict
 from functools import lru_cache
 from pathlib import Path
+from threading import Lock
 
 
 def find_verible(verible_path=None):
@@ -56,29 +59,46 @@ VERIBLE_INT_PARAMS = (
     "column_limit", "indentation_spaces", "line_break_penalty",
     "over_column_limit_penalty", "max_search_states",
 )
-VERIBLE_STR_PARAMS = ("lines", "line_terminator", "stdin_name")  # free-form -- "lines" e.g. "3-5,10-12"
+# Only user-facing formatting controls belong in the Settings table.
+# ``lines`` (partial formatting) and ``stdin_name`` (diagnostics only) are
+# invocation details and are intentionally not exposed by PLM.
+VERIBLE_STR_PARAMS = ("line_terminator",)
 
-# This project's own long-standing defaults (not verible's own out-of-the-box
-# defaults) -- unlisted params are simply never passed, so verible's own
-# built-in default applies. --inplace/stdin plumbing stays hardcoded below,
-# not exposed here (changing it would break the stdin-pipe invocation itself).
+# PLM's formatter preset.  Every parameter exposed by the UI has one explicit
+# value here; ``(default)`` in Settings always means this PLM preset, never a
+# second Verible-internal default system.  Values that were previously omitted
+# use Verible's effective defaults so existing generated formatting is stable.
 DEFAULT_VERIBLE_FLAGS = {
     "assignment_statement_alignment": "align",
     "case_items_alignment": "align",
+    "class_member_variable_alignment": "infer",
     "distribution_items_alignment": "align",
+    "enum_assignment_statement_alignment": "infer",
     "formal_parameters_alignment": "align",
-    "formal_parameters_indentation": "indent",
+    "module_net_variable_alignment": "infer",
     "named_parameter_alignment": "align",
-    "named_parameter_indentation": "indent",
     "named_port_alignment": "align",
-    "named_port_indentation": "indent",
     "port_declarations_alignment": "align",
-    "port_declarations_indentation": "indent",
-    "port_declarations_right_align_packed_dimensions": "true",
     "struct_union_members_alignment": "align",
+    "formal_parameters_indentation": "indent",
+    "named_parameter_indentation": "indent",
+    "named_port_indentation": "indent",
+    "port_declarations_indentation": "indent",
+    "compact_indexing_and_selections": "true",
+    "expand_coverpoints": "false",
+    "port_declarations_right_align_packed_dimensions": "true",
+    "port_declarations_right_align_unpacked_dimensions": "false",
+    "try_wrap_long_lines": "false",
     "wrap_end_else_clauses": "true",
-    "indentation_spaces": "4",
+    "verify": "false",
+    "verify_convergence": "true",
+    "failsafe_success": "true",
     "column_limit": "120",
+    "indentation_spaces": "4",
+    "line_break_penalty": "2",
+    "over_column_limit_penalty": "100",
+    "max_search_states": "100000",
+    "line_terminator": "auto",
 }
 
 
@@ -124,7 +144,91 @@ def formatter_identity(verible_path=None, verible_flags=None):
     }
 
 
-def format_sv(text, verible_path=None, verible_flags=None):
+# Only config-independent common modules opt in. Bound both the entry count
+# and stored UTF-8 bytes so changing formatter settings cannot grow the cache
+# indefinitely during a long-running GUI session.
+_FORMAT_CACHE_MAX_ENTRIES = 32
+_FORMAT_CACHE_MAX_BYTES = 8 * 1024 * 1024
+_FORMAT_CACHE = OrderedDict()
+_FORMAT_CACHE_BYTES = 0
+_FORMAT_CACHE_LOCK = Lock()
+_FORMAT_WRAPPER_SUFFIXES = {".bat", ".cmd", ".ps1", ".py", ".sh"}
+_SV_FORMAT_TOKEN = re.compile(
+    r'//[^\r\n]*|/\*.*?\*/|"(?:\\.|[^"\\])*"|\\[^\s]+'
+    r"|[A-Za-z_$][A-Za-z0-9_$]*|[0-9][A-Za-z0-9_$]*"
+    r"|<<<=|>>>=|===|!==|==\?|!=\?|<<<|>>>|<<=|>>=|\*\*>|\|->|\|=>"
+    r"|&&&|<->|::|:=|:/|\+\+|--|\*\*|&&|\|\||<<|>>|<=|>="
+    r"|==|!=|\+=|-=|\*=|/=|%=|&=|\|=|\^=|~&|~\||~\^|\^~|->|=>|\*\>|``|\S",
+    re.DOTALL,
+)
+
+
+def _format_tokens(text):
+    """Keep literal contents and lexical boundaries intact for cache safety.
+
+    Comments may have their spacing changed, but remain separate tokens so
+    swallowing subsequent code into a line comment is detected. This is a
+    conservative formatting check, not a complete SystemVerilog parser.
+    """
+    return tuple(
+        "".join(token.split()) if token.startswith(("//", "/*")) else token
+        for token in _SV_FORMAT_TOKEN.findall(text)
+    )
+
+
+def _format_cache_key(source, executable, flags):
+    # A wrapper's content does not identify the program it invokes. Avoid
+    # reusing its output after the underlying formatter changes independently.
+    resolved = shutil.which(executable) or executable
+    if Path(resolved).suffix.lower() in _FORMAT_WRAPPER_SUFFIXES:
+        return None
+    try:
+        with Path(resolved).open("rb") as handle:
+            if handle.read(2) == b"#!":
+                return None
+        identity = formatter_identity(executable, flags)
+    except OSError:
+        return None
+    if identity["engine"] != "verible-verilog-format":
+        return None
+    return (
+        hashlib.sha256(source).hexdigest(),
+        identity["binary_sha256"],
+        tuple(identity["flags"].items()),
+    )
+
+
+def _cached_format(key):
+    if key is None:
+        return None
+    with _FORMAT_CACHE_LOCK:
+        entry = _FORMAT_CACHE.get(key)
+        if entry is not None:
+            _FORMAT_CACHE.move_to_end(key)
+            return entry[0]
+    return None
+
+
+def _cache_format(key, formatted):
+    global _FORMAT_CACHE_BYTES
+    size = len(formatted.encode("utf-8"))
+    if key is None or size > _FORMAT_CACHE_MAX_BYTES:
+        return
+    with _FORMAT_CACHE_LOCK:
+        old = _FORMAT_CACHE.pop(key, None)
+        if old is not None:
+            _FORMAT_CACHE_BYTES -= old[1]
+        _FORMAT_CACHE[key] = (formatted, size)
+        _FORMAT_CACHE_BYTES += size
+        while (
+            len(_FORMAT_CACHE) > _FORMAT_CACHE_MAX_ENTRIES
+            or _FORMAT_CACHE_BYTES > _FORMAT_CACHE_MAX_BYTES
+        ):
+            _, (_, removed_size) = _FORMAT_CACHE.popitem(last=False)
+            _FORMAT_CACHE_BYTES -= removed_size
+
+
+def format_sv(text, verible_path=None, verible_flags=None, *, cache=False):
     """Best-effort auto-format via verible-verilog-format, if it can be found.
 
     The generators build .sv content as hand-typed Python string literals,
@@ -145,11 +249,22 @@ def format_sv(text, verible_path=None, verible_flags=None):
     DEFAULT_VERIBLE_FLAGS entirely -- not merged with it -- so the caller
     controls the full set. None (the default) uses this project's own
     long-standing defaults, unchanged from before verible_flags existed.
+
+    ``cache=True`` lets the exporter reuse successful formatting of common
+    modules across configurations. Generated files and ordinary callers keep
+    the uncached behavior. A missing or failing tool is always retried, and
+    output is cached only after the whitespace and token checks pass. Script
+    wrappers cannot identify their downstream binary and remain uncached.
     """
     exe = find_verible(verible_path)
     if exe is None:
         return text
     flags = DEFAULT_VERIBLE_FLAGS if verible_flags is None else verible_flags
+    source = text.encode("utf-8")
+    cache_key = _format_cache_key(source, exe, flags) if cache else None
+    cached = _cached_format(cache_key)
+    if cached is not None:
+        return cached
     args = [exe]
     for key, val in flags.items():
         if val is None or val == "":
@@ -167,7 +282,7 @@ def format_sv(text, verible_path=None, verible_flags=None):
         # internal "formatted output doesn't match input" self-check on
         # those injected \r's and returns the input unformatted. Encoding
         # ourselves sends exactly the bytes we mean to send.
-        r = subprocess.run(args, input=text.encode("utf-8"), capture_output=True, timeout=10)
+        r = subprocess.run(args, input=source, capture_output=True, timeout=10)
         if r.returncode == 0 and r.stdout:
             formatted = r.stdout.decode("utf-8")
             # Formatting must only touch whitespace -- the token stream has
@@ -178,8 +293,14 @@ def format_sv(text, verible_path=None, verible_flags=None):
             # still 0 -- no exception, no nonzero exit, just quietly
             # corrupted RTL. Comparing token streams catches that (and any
             # other misbehavior) before it can reach disk.
-            if "".join(formatted.split()) == "".join(text.split()):
+            same_whitespace = "".join(formatted.split()) == "".join(text.split())
+            same_tokens = not cache or _format_tokens(formatted) == _format_tokens(text)
+            if same_whitespace and same_tokens:
+                # A replaced executable must not poison the old binary's
+                # cache entry with the new binary's output.
+                if cache_key is not None and cache_key == _format_cache_key(source, exe, flags):
+                    _cache_format(cache_key, formatted)
                 return formatted
-    except (OSError, subprocess.SubprocessError):
+    except (OSError, subprocess.SubprocessError, UnicodeError):
         pass
     return text

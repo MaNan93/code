@@ -5,23 +5,11 @@ dragged to reorder them, while a context menu inserts or deletes rows.
 Controller IDs remain editable and retain their values after reordering.
 """
 
-from PyQt5 import QtCore, QtGui, QtWidgets
+from PyQt5 import QtCore, QtGui, QtWidgets, sip
 
-from plm.frontend.qt.widgets import sap_icons
-from plm.frontend.qt.widgets.theme import ACCENT, RoundedComboBox
+from plm.frontend.qt.widgets.common import StyledMenu
+from plm.frontend.qt.styles.tokens import CONTROL_HEIGHT, CONTROL_PADDING_X, LINE_HEIGHT, DANGER, PRIMARY, TEXT_MAIN
 
-
-_DRAG_HANDLE_ICON = None
-
-
-def drag_handle_icon():
-    """Return the shared six-dot row-reorder handle icon."""
-    global _DRAG_HANDLE_ICON
-    if _DRAG_HANDLE_ICON is None:
-        _DRAG_HANDLE_ICON = sap_icons.icon(
-            "vertical-grip", color="#758ca4", size=18
-        )
-    return _DRAG_HANDLE_ICON
 
 
 def _ui_scale():
@@ -50,11 +38,41 @@ class RowDragTable(QtWidgets.QTableWidget):
         self._row_drag_start = None
         self._row_drag_source = -1
         self._drop_before_row = -1
+        self._hovered_row = -1
+        self.setShowGrid(False)
+        self.setMouseTracking(True)
+        self.entered.connect(self._hover_index)
+        self.viewportEntered.connect(lambda: self._hover_index(QtCore.QModelIndex()))
+        self.viewport().installEventFilter(self)
+        rows = self.verticalHeader()
+        rows.setSectionResizeMode(QtWidgets.QHeaderView.Fixed)
+        rows.setMinimumSectionSize(CONTROL_HEIGHT)
+        rows.setMaximumSectionSize(CONTROL_HEIGHT)
+        rows.setDefaultSectionSize(CONTROL_HEIGHT)
+        self.horizontalHeader().setFixedHeight(CONTROL_HEIGHT)
         self.setSelectionBehavior(QtWidgets.QAbstractItemView.SelectRows)
         self.setSelectionMode(QtWidgets.QAbstractItemView.SingleSelection)
         self.setAcceptDrops(True)
         self.viewport().setAcceptDrops(True)
         self.setDropIndicatorShown(False)
+
+    def sizeHint(self):
+        size = super().sizeHint()
+        content_height = self.property("contentHeight")
+        if content_height is not None:
+            size.setHeight(int(content_height))
+        return size
+
+    def _hover_index(self, index):
+        row = index.row() if index.isValid() else -1
+        if row != self._hovered_row:
+            self._hovered_row = row
+            self.viewport().update()
+
+    def eventFilter(self, watched, event):
+        if watched is self.viewport() and event.type() == QtCore.QEvent.Leave:
+            self._hover_index(QtCore.QModelIndex())
+        return super().eventFilter(watched, event)
 
     def mousePressEvent(self, event):
         index = self.indexAt(event.pos())
@@ -153,35 +171,46 @@ class RowDragTable(QtWidgets.QTableWidget):
             rect = self.visualRect(self.model().index(self._drop_before_row, 0))
             y = rect.top()
         painter = QtGui.QPainter(self.viewport())
-        painter.setPen(QtGui.QPen(QtGui.QColor(ACCENT), 2))
+        painter.setPen(QtGui.QPen(QtGui.QColor(PRIMARY), 2))
         painter.drawLine(0, y, self.viewport().width(), y)
 
 
 class _PaddedItemDelegate(QtWidgets.QStyledItemDelegate):
-    """Paint table text with a reliable two-space visual inset."""
+    """Paint table text with a compact, consistent visual inset."""
 
-    HORIZONTAL_PADDING = 12
+    HORIZONTAL_PADDING = CONTROL_PADDING_X
 
     def paint(self, painter, option, index):
         styled = QtWidgets.QStyleOptionViewItem(option)
         self.initStyleOption(styled, index)
+        if index.row() == getattr(styled.widget, "_hovered_row", -1):
+            styled.state |= QtWidgets.QStyle.State_MouseOver
         text = styled.text
         styled.text = ""
         style = styled.widget.style() if styled.widget else QtWidgets.QApplication.style()
         style.drawControl(QtWidgets.QStyle.CE_ItemViewItem, styled, painter, styled.widget)
 
         text_rect = option.rect.adjusted(self.HORIZONTAL_PADDING, 0, -self.HORIZONTAL_PADDING, 0)
+        text_rect.setTop(option.rect.top() + (option.rect.height() - LINE_HEIGHT) // 2)
+        text_rect.setHeight(LINE_HEIGHT)
         selected = bool(option.state & QtWidgets.QStyle.State_Selected)
-        role = QtGui.QPalette.HighlightedText if selected else QtGui.QPalette.Text
         painter.save()
-        painter.setPen(styled.palette.color(role))
+        # Native HighlightedText is white even when QSS uses a pale selection.
+        painter.setPen(QtGui.QColor(TEXT_MAIN) if selected
+                       else styled.palette.color(QtGui.QPalette.Text))
         text = option.fontMetrics.elidedText(text, styled.textElideMode, max(0, text_rect.width()))
         painter.drawText(text_rect, styled.displayAlignment | QtCore.Qt.AlignVCenter, text)
         painter.restore()
 
     def updateEditorGeometry(self, editor, option, index):
-        editor.setGeometry(option.rect.adjusted(self.HORIZONTAL_PADDING, 1, -self.HORIZONTAL_PADDING, -1))
-
+        # Row rebuilds can delete cell widgets before a queued relayout runs.
+        if editor is None or sip.isdeleted(editor):
+            return
+        rect = option.rect.adjusted(self.HORIZONTAL_PADDING, 0, -self.HORIZONTAL_PADDING, 0)
+        height = min(editor.maximumHeight(), rect.height())
+        rect.setTop(option.rect.top() + (option.rect.height() - height) // 2)
+        rect.setHeight(height)
+        editor.setGeometry(rect)
 
 class EditableTable(QtWidgets.QWidget):
     changed = QtCore.pyqtSignal()
@@ -198,14 +227,19 @@ class EditableTable(QtWidgets.QWidget):
         super().__init__(parent)
         self.columns = columns
         self.id_column = id_column
-        self._data = []  # seed values; live data always read from the widgets via get_rows()
+        self._data = []
         self._building = False  # guards _on_row_moved against signals fired by our own re-render
         self._column_resize_pending = False
+        self._column_resize_timer = QtCore.QTimer(self)
+        self._column_resize_timer.setSingleShot(True)
+        self._column_resize_timer.timeout.connect(self._resize_columns)
 
         layout = QtWidgets.QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
 
         self.table = RowDragTable()
+        self.table.viewport().installEventFilter(self)
+        self.table.setObjectName("ConfigDataTable")
         self.table.setItemDelegate(_PaddedItemDelegate(self.table))
         self.table.setColumnCount(len(columns))
         self.table.setHorizontalHeaderLabels([c.get("heading", c["key"]) for c in columns])
@@ -213,19 +247,35 @@ class EditableTable(QtWidgets.QWidget):
         header.setTextElideMode(QtCore.Qt.ElideRight)
         for index, column in enumerate(columns):
             header.setSectionResizeMode(index, QtWidgets.QHeaderView.Fixed)
+            self.table.horizontalHeaderItem(index).setTextAlignment(
+                column.get("alignment", QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter)
+            )
         self.table.setHorizontalScrollMode(QtWidgets.QAbstractItemView.ScrollPerPixel)
         self.table.setAlternatingRowColors(True)
         self.table.rowContextMenuRequested.connect(self._on_row_context_menu)
         row_header = self.table.verticalHeader()
+        row_header.setDefaultSectionSize(CONTROL_HEIGHT)
         row_header.hide()
         self.table.rowMoveRequested.connect(self._on_row_drop)
         self.table.itemChanged.connect(self._on_item_changed)
         layout.addWidget(self.table)
+        self._option_probes = {}
+        for index, column in enumerate(columns):
+            if column.get("options"):
+                probe = QtWidgets.QComboBox(self.table)
+                probe.addItems(column["options"])
+                probe.hide()
+                self._option_probes[index] = probe
         self._schedule_column_resize()
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
         self._schedule_column_resize()
+
+    def eventFilter(self, watched, event):
+        if watched is self.table.viewport() and event.type() == QtCore.QEvent.Resize:
+            self._schedule_column_resize()
+        return super().eventFilter(watched, event)
 
     def changeEvent(self, event):
         super().changeEvent(event)
@@ -237,7 +287,7 @@ class EditableTable(QtWidgets.QWidget):
         if self._column_resize_pending:
             return
         self._column_resize_pending = True
-        QtCore.QTimer.singleShot(0, self._resize_columns)
+        self._column_resize_timer.start(0)
 
     def _resize_columns(self):
         self._column_resize_pending = False
@@ -248,8 +298,6 @@ class EditableTable(QtWidgets.QWidget):
         flexible = []
 
         header.setMinimumSectionSize(int(48 * scale))
-        self.table.verticalHeader().setDefaultSectionSize(int(38 * scale))
-        self.table.verticalHeader().setMinimumSectionSize(int(34 * scale))
 
         for index, column in enumerate(self.columns):
             heading = column.get("heading", column["key"])
@@ -259,21 +307,23 @@ class EditableTable(QtWidgets.QWidget):
                 else metrics.width(heading)
             )
             design_width = int(column.get("width", 0) * scale)
-            minimum = max(design_width, text_width + int(28 * scale))
+            minimum = max(design_width, text_width + 2 * CONTROL_PADDING_X + 12)
+            if column.get("fixed_width"):
+                # Fixed means no distribution of spare width, not clipping
+                # the heading when font metrics or DPI change.
+                minimum = max(column["width"], text_width + 2 * CONTROL_PADDING_X + 12)
             if column.get("options"):
                 # QComboBox.sizeHint() includes its text padding and drop-down
                 # button. The table delegate then insets the cell widget on
                 # both sides, so include that space too; otherwise a column
                 # can fit its heading while clipping values such as
                 # "perlane" in the editor below it.
-                probe = RoundedComboBox(self.table)
-                probe.addItems(column["options"])
+                probe = self._option_probes[index]
                 probe.ensurePolished()
                 minimum = max(
                     minimum,
                     probe.sizeHint().width() + 2 * _PaddedItemDelegate.HORIZONTAL_PADDING,
                 )
-                probe.deleteLater()
             minimums.append(minimum)
             if not column.get("width"):
                 flexible.append(index)
@@ -292,32 +342,37 @@ class EditableTable(QtWidgets.QWidget):
 
     # ------------------------------------------------------------ public data interface
     def get_rows(self):
-        """Read current values straight out of the live widgets (not
-        self._data, which only ever seeds a render) so an in-progress edit
-        is captured even without a focus-out event."""
-        rows = []
-        for r in range(self.table.rowCount()):
-            row = {}
-            for c, col in enumerate(self.columns):
-                w = self.table.cellWidget(r, c)
-                if isinstance(w, QtWidgets.QComboBox):
-                    row[col["key"]] = w.currentText()
-                else:
-                    item = self.table.item(r, c)
-                    row[col["key"]] = item.text() if item else ""
-            rows.append(row)
+        """Return a model snapshot, including the one active text editor."""
+        rows = [dict(row) for row in self._data]
+        editor = QtWidgets.QApplication.focusWidget()
+        if (
+            isinstance(editor, QtWidgets.QLineEdit)
+            and editor.parentWidget() is self.table.viewport()
+            and self.table.state() == QtWidgets.QAbstractItemView.EditingState
+        ):
+            row, column = self.table.currentRow(), self.table.currentColumn()
+            if 0 <= row < len(rows) and 0 <= column < len(self.columns):
+                rows[row][self.columns[column]["key"]] = editor.text()
         return rows
 
     def set_rows(self, rows):
-        self._data = [dict(r) for r in (rows or [])]
+        self._data = [
+            {column["key"]: str(row.get(column["key"], "")) for column in self.columns}
+            for row in (rows or [])
+        ]
         self._render_body()
 
-    def _on_item_changed(self, _item):
+    def _on_item_changed(self, item):
         if not self._building:
-            self.changed.emit()
+            self._update_value(item.row(), self.columns[item.column()]["key"], item.text())
 
-    def _on_combo_changed(self, _text):
+    def _on_combo_changed(self, row, key, text):
         if not self._building:
+            self._update_value(row, key, text)
+
+    def _update_value(self, row, key, value):
+        if 0 <= row < len(self._data) and self._data[row].get(key) != value:
+            self._data[row][key] = value
             self.changed.emit()
 
     def set_cell_errors(self, errors):
@@ -340,8 +395,10 @@ class EditableTable(QtWidgets.QWidget):
                             continue
                         item.setToolTip(message)
                         if message:
-                            item.setBackground(QtGui.QColor("#fff0f0"))
-                            item.setForeground(QtGui.QColor("#bb0000"))
+                            error_bg = QtGui.QColor(DANGER)
+                            error_bg.setAlpha(20)
+                            item.setBackground(error_bg)
+                            item.setForeground(QtGui.QColor(DANGER))
                         else:
                             item.setData(QtCore.Qt.BackgroundRole, None)
                             item.setData(QtCore.Qt.ForegroundRole, None)
@@ -395,7 +452,7 @@ class EditableTable(QtWidgets.QWidget):
                 key = col["key"]
                 value = row.get(key, "")
                 if col.get("options"):
-                    combo = RoundedComboBox()
+                    combo = QtWidgets.QComboBox()
                     combo.addItems(col["options"])
                     # Preserve invalid CSV values so validation can report them
                     # instead of silently replacing them with the first option.
@@ -407,10 +464,14 @@ class EditableTable(QtWidgets.QWidget):
                         lambda pos, widget=combo, row_index=r:
                         self._show_row_context_menu(row_index, widget.mapToGlobal(pos))
                     )
-                    combo.currentTextChanged.connect(self._on_combo_changed)
+                    combo.currentTextChanged.connect(
+                        lambda text, row_index=r, key=key:
+                        self._on_combo_changed(row_index, key, text)
+                    )
                     self.table.setCellWidget(r, c, combo)
                 else:
                     item = QtWidgets.QTableWidgetItem(str(value))
+                    item.setTextAlignment(col.get("alignment", QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter))
                     self.table.setItem(r, c, item)
         self._building = False
 
@@ -424,15 +485,15 @@ class EditableTable(QtWidgets.QWidget):
     def _show_row_context_menu(self, row, global_pos):
         if row >= 0:
             self.table.selectRow(row)
-        menu = QtWidgets.QMenu(self.table)
+        menu = StyledMenu(self.table)
         if row >= 0:
-            insert_above = menu.addAction("Insert row above")
-            insert_below = menu.addAction("Insert row below")
+            insert_above = menu.addAction("在上方插入行")
+            insert_below = menu.addAction("在下方插入行")
             menu.addSeparator()
-            delete_current = menu.addAction("Delete current row")
+            delete_current = menu.addAction("删除当前行")
         else:
             insert_above = None
-            insert_below = menu.addAction("Insert row")
+            insert_below = menu.addAction("插入行")
             delete_current = None
         chosen = menu.exec_(global_pos)
         if insert_above is not None and chosen == insert_above:

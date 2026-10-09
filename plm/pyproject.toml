@@ -4,8 +4,9 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "plm"
-version = "1.0.4"
+version = "2.0.5"
 description = "PIPE Lane Mapper RTL/testbench generator and config editors"
+readme = "README.md"
 requires-python = ">=3.9"
 dependencies = []
 
@@ -14,6 +15,7 @@ qt = ["PyQt5>=5.15"]
 
 [project.scripts]
 plm = "plm.cli.main:main"
+plm-gui = "plm.frontend.qt.main:main"
 
 [tool.uv]
 required-environments = [
@@ -23,8 +25,13 @@ required-environments = [
 
 [tool.setuptools.packages.find]
 where = ["src"]
+include = ["plm", "plm.*"]
+namespaces = false
+
+[tool.setuptools]
+include-package-data = false
 
 [tool.setuptools.package-data]
 "plm" = ["docs/*.md"]
 "plm.core" = ["common/*.sv", "config/*.csv", "tb_makefile.mk"]
-"plm.frontend.qt" = ["assets/*.png", "assets/*.svg", "assets/fonts/*.ttf", "assets/fonts/*.txt", "assets/fonts/*.md"]
+"plm.frontend.qt" = ["assets/*.png", "assets/*.svg", "assets/icons/*.svg", "styles/*.qss"]

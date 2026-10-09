@@ -178,12 +178,14 @@ def _self_check_output_set(plan, workspace):
     testbench = workspace / "tb" / "tb_pipe_lane_mapper.sv"
     if top.is_file():
         text = top.read_text(encoding="utf-8")
-        for expected in (
-            "module pipe_lane_mapper #(",
-            f"parameter int NL = {plan.lane_count}",
-            f"parameter int NC = {plan.num_ctrl}",
+        for expected, pattern in (
+            ("module pipe_lane_mapper #(", r"\bmodule\s+pipe_lane_mapper\s*#\s*\("),
+            (f"parameter int NL = {plan.lane_count}",
+             rf"\bparameter\s+int\s+NL\s*=\s*{plan.lane_count}\s*(?=[,)])"),
+            (f"parameter int NC = {plan.num_ctrl}",
+             rf"\bparameter\s+int\s+NC\s*=\s*{plan.num_ctrl}\s*(?=[,)])"),
         ):
-            if expected not in text:
+            if not re.search(pattern, text):
                 issues.append(ValidationIssue("output", f"top-level port/width check failed: {expected}"))
     if testbench.is_file() and "module tb_pipe_lane_mapper;" not in testbench.read_text(encoding="utf-8"):
         issues.append(ValidationIssue("output", "testbench module declaration is missing"))
@@ -334,7 +336,9 @@ def _export_rtl_into(plan, out_dir, *, display_out=None):
     # sibling common/ directory. .sv files go through format_sv() too,
     # same as generated files -- otherwise their formatting only ever
     # reflects whoever hand-edited them last, same problem format_sv()
-    # exists to solve for the generated files.
+    # exists to solve for the generated files. Only these config-independent
+    # modules opt into its bounded cache; generated text is still formatted
+    # on each export.
     for f in COMMON_DIR.iterdir():
         if f.is_file():
             if f.suffix == ".sv":
@@ -344,6 +348,7 @@ def _export_rtl_into(plan, out_dir, *, display_out=None):
                         f.read_text(encoding="utf-8"),
                         options.verible_path,
                         options.verible_flags,
+                        cache=True,
                     ),
                 )
             else:
@@ -371,7 +376,7 @@ def _export_rtl_into(plan, out_dir, *, display_out=None):
             plan, options.pclk_mode, options.sel_mode, options.dpr
         ),
         src / "pipe_lane_mapper_connection.sv": rtl.gen_connection(
-            plan, options.pclk_mode, options.dpr
+            plan, options.pclk_mode, options.dpr, sel_mode=options.sel_mode
         ),
         out_dir / "flist.f": rtl.gen_filelist(plan),
     }

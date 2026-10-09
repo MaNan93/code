@@ -1,3012 +1,628 @@
-"""
-plm.frontend.qt.main_window -- MainWindow, the PyQt5 desktop front end's
-main window.
-
-This is a thin desktop front end over the three config CSVs that
-plm.core.generator reads, and over that generation pipeline itself. Config
-access goes straight through plm.core.workspace. Editing writes the same
-plain CSV files a human would edit; Generate runs
-`python -m plm.cli.main generate ...` with the Generation page's flags on
-the command line. The CLI validates the saved configuration before writing
-RTL or testbench outputs. See plm.frontend.qt.widgets.theme
-for the QSS and plm.frontend.qt.widgets.settings for the Settings dialog.
-"""
-
-import copy
-import difflib
-import hashlib
-import json
-import os
-import shutil
-import subprocess
-import sys
-import time
-from pathlib import Path
+"""Frameless PLM desktop window with a full-width custom title bar."""
 
 from PyQt5 import QtCore, QtGui, QtWidgets
 
-from plm.core.gen_flags import (
-    ARCH_PCLK_MODE,
-    ARCH_VALUES,
-    PCLK_MODE_ARCH,
-    PCLK_MODE_VALUES,
-    SEL_MODE_VALUES,
-    GenerationOptions,
+from plm.frontend.qt.controllers import AppController
+from plm.frontend.qt.exceptions import install_exception_handler
+from plm.frontend.qt.styles import APP_QSS
+from plm.frontend.qt.styles.tokens import (
+    BG_SIDEBAR,
+    BG_SIDEBAR_INACTIVE,
+    BG_SURFACE,
+    FONT_SIZE_BODY,
+    FONT_UI_PRIMARY,
+    ICON_SIZE,
+    RADIUS_WINDOW,
+    PRIMARY,
+    TEXT_SUB,
 )
-from plm.core.exporter import output_set_matches_plan
-from plm.core.paths import CONFIGS_ROOT, DOCS_DIR, PLM_ROOT, is_deletable_workspace, is_workspace_root
-from plm.core.validation import (
-    ValidationError,
-    ValidationIssue,
-    load_generation_plan_from_payload,
+from plm.frontend.qt.views.config_page import ConfigPage
+from plm.frontend.qt.views.log_panel import LogPanel
+from plm.frontend.qt.widgets.common import (
+    ContentIconStyle, install_button_sizing, load_lucide_icon,
 )
-from plm.core.workspace import save_workspace_content, scaffold_default_content, workspace_content
-from plm.frontend.qt.widgets import sap_icons
-from plm.frontend.qt.widgets.lanegrid import LaneGrid
-from plm.frontend.qt.widgets.code_highlighter import CodeHighlighter
-from plm.frontend.qt.widgets.settings import DEFAULT_SETTINGS, SettingsDialog
-from plm.frontend.qt.widgets.tables import EditableTable
-from plm.frontend.qt.widgets.theme import (
-    BG_HOVER,
-    TEXT_SECONDARY,
-    TEXT_TERTIARY,
-    RoundedComboBox,
-    VisibleCheckBox,
-    add_shadow,
-    apply_titlebar_theme,
-    build_stylesheet,
-)
+from plm.frontend.qt.widgets.tooltip import install_tooltips
 
-STATE_FILE = Path.home() / ".plm_qt_settings.json"
-MAX_RECENT_WORKSPACES = 10
-# The file manager's own name, so the menu entry matches what the user will
-# actually see open. This project targets Windows and Linux only.
-REVEAL_LABEL = (
-    "Reveal in Explorer" if sys.platform == "win32" else "Open Containing Folder"
-)
-DIRECTIONS = ["mac2phy", "phy2mac"]
-SIGNAL_TYPES = ["perlane", "shared"]
-# Placeholder-carrying dropdown value lists (Qt-widget-specific display
-# concern -- see plm.core.gen_flags.ARCH_VALUES/PCLK_MODE_VALUES/
-# SEL_MODE_VALUES for the plain, front-end-agnostic value tuples
-# _gen_flag_args() filters the combo's current text against).
-ARCH_MODES = ["(default: original_pipe)", "original_pipe", "serdes"]
-PCLK_MODES = ["(default: pclk_as_phy_output)", "pclk_as_phy_output", "pclk_as_phy_input"]
-SEL_MODES = ["(default: sync)", "sync", "comb"]
-LANE_COUNTS = ["x2", "x4", "x8", "x16", "x32"]
-# The Doc button shows this one guide, read from DOCS_DIR (src/plm/docs) so a
-# source checkout and an installed wheel show the same file. tool_usage.md still ships in the
-# wheel alongside it (it documents the CLI, which this window is not), it
-# just is not what someone clicking Doc in the GUI is asking for.
-DOC_PATH = DOCS_DIR / "qt_frontend_guide.md"
-# Lives here rather than in main.py because both the window icon and the
-# sidebar brand mark need it, and main.py already imports this module.
-APP_ICON_PATH = Path(__file__).resolve().parent / "assets" / "app_icon.svg"
-PREVIEW_MAXIMIZE_ANIM_MS = 180
-BOTTOM_EDGE_INSET = 12
-TAB_VERTICAL_GAP = 4
-GENERATION_STATE_LABELS = {
-    "IDLE": "Ready",
-    "GENERATING": "Generating...",
-    "STALE": "Out of date",
-    "UP_TO_DATE": "Up to date",
-    "FAILED": "Generation failed",
-}
-
-def _ui_scale():
-    """Return a scaling factor relative to the 13 px design baseline so
-    fixed-size UI chrome (sidebar, table columns, lane grid)
-    stays proportional when the user changes the app font."""
-    app = QtWidgets.QApplication.instance()
-    px = app.font().pixelSize() if app else 13
-    return max(px, 11) / 13.0
+__all__ = ["MainWindow"]
 
 
-def _svg_icon(name, color=TEXT_SECONDARY, size=22):
-    """Build a monochrome QIcon for an SAP icon name.
+class WindowBackdrop(QtWidgets.QWidget):
+    """Paint only the outer shadow without filtering child widgets."""
 
-    Kept under the old name and signature so every call site reads the
-    same; only the artwork source changed, from hand-drawn inline SVG to
-    the SAP icon font (see plm.frontend.qt.widgets.sap_icons)."""
-    return sap_icons.icon(name, color=color, size=size)
+    SHADOW_MARGIN = 24
+    SHADOW_LAYER_ALPHA = 6
 
-
-# SAP icon names (upstream's own, e.g. the web library's `sap-icon--add`).
-_SVG_NEW = "add"
-_SVG_SAVE = "save"
-_SVG_REVERT = "undo"
-_SVG_OPEN = "open-folder"
-_SVG_PREVIEW_PANEL = "screen-split-two"
-_SVG_PREVIEW_EXPAND = "full-screen"
-_SVG_MORE = "overflow"
-_SVG_CHEVRON_DOWN = "navigation-down-arrow"
-_SVG_CHEVRON_LEFT = "navigation-left-arrow"
-_SVG_CHEVRON_RIGHT = "navigation-right-arrow"
-_SVG_REFRESH = "refresh"
-_SVG_EDIT = "edit"
-_SVG_HIGHLIGHT = "syntax"
-_SVG_DIFF = "compare"
-_SVG_SEARCH = "search"
-_SVG_COPY = "copy"
-_SVG_SETTINGS = "action-settings"
-_SVG_DOC = "document-text"
-_SVG_TREE_FILE = "document"
-_SVG_TREE_FOLDER = "folder-blank"
-
-
-class _StableTabBar(QtWidgets.QTabBar):
-    """Keep tab labels separated under Windows DPI/font scaling."""
-
-    def tabSizeHint(self, index):
-        hint = super().tabSizeHint(index)
-        metrics = self.fontMetrics()
-        text = self.tabText(index)
-        text_width = (
-            metrics.horizontalAdvance(text)
-            if hasattr(metrics, "horizontalAdvance")
-            else metrics.width(text)
-        )
-        # Must cover the QSS pill's own horizontal padding (16px each side)
-        # + tab margin (2px each side) + border (1px each side) = 38px, with
-        # real slack -- horizontalAdvance() alone runs right up against that
-        # budget and clips the first/last glyph (seen with "Pipe Signals").
-        pad = int(48 * _ui_scale())
-        # The tab rect must also reserve transparent space above and below
-        # the painted pill. QTabBar padding is not consistently included in
-        # Qt 5's geometry on Windows, so the gap belongs to each tab itself.
-        tab_height = max(
-            32 + 2 * TAB_VERTICAL_GAP,
-            metrics.height() + 18 + 2 * TAB_VERTICAL_GAP,
-        )
-        return QtCore.QSize(max(hint.width(), text_width + pad), tab_height)
-
-
-class _RecentItemRow(QtWidgets.QWidget):
-    """A Recent-list row: name + an always-visible "more options" (kebab)
-    button that opens the same menu right-click already offered, so the
-    action isn't only discoverable by right-clicking."""
-
-    open_requested = QtCore.pyqtSignal()
-    rename_requested = QtCore.pyqtSignal()
-    menu_requested = QtCore.pyqtSignal(QtCore.QPoint)
-
-    def __init__(self, text, alignment, parent=None):
+    def __init__(self, parent=None):
         super().__init__(parent)
-        self.setAttribute(QtCore.Qt.WA_StyledBackground, False)
+        self.setObjectName("WindowBackdrop")
+        self.shadow_enabled = True
+
+    def paintEvent(self, event):
+        painter = QtGui.QPainter(self)
+        painter.setCompositionMode(QtGui.QPainter.CompositionMode_Source)
+        painter.fillRect(self.rect(), QtCore.Qt.transparent)
+        painter.setCompositionMode(QtGui.QPainter.CompositionMode_SourceOver)
+        if not self.shadow_enabled:
+            painter.end()
+            return
+        painter.setRenderHint(QtGui.QPainter.Antialiasing)
+        margin = self.SHADOW_MARGIN
+        rect = QtCore.QRectF(self.rect()).adjusted(margin, margin, -margin, -margin)
+        # Soft overlapping fills avoid nested graphics effects on text/previews.
+        color = QtGui.QColor(QtCore.Qt.black)
+        for spread in range(margin, 0, -1):
+            falloff = 1.0 - spread / margin
+            color.setAlpha(round(self.SHADOW_LAYER_ALPHA * falloff * falloff))
+            path = QtGui.QPainterPath()
+            path.addRoundedRect(
+                rect.adjusted(-spread, -spread, spread, spread),
+                WindowShell.RADIUS + spread, WindowShell.RADIUS + spread,
+            )
+            painter.fillPath(path, color)
+        painter.end()
+
+
+class WindowShell(QtWidgets.QWidget):
+    """Paint the window perimeter with translucent, antialiased edges."""
+
+    RADIUS = float(RADIUS_WINDOW)
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setObjectName("WindowShell")
+        self.setProperty("maximized", False)
+
+    def paintEvent(self, event):
+        maximized = self.property("maximized") in (True, "true")
+        inactive = self.property("windowActive") in (False, "false")
+        color = BG_SIDEBAR_INACTIVE if inactive else BG_SIDEBAR
+        painter = QtGui.QPainter(self)
+        painter.setRenderHint(QtGui.QPainter.Antialiasing)
+        rect = QtCore.QRectF(self.rect())
+        if maximized:
+            painter.fillRect(rect, QtGui.QColor(color))
+        else:
+            # No QRegion mask: retain the partially transparent edge pixels.
+            path = QtGui.QPainterPath()
+            path.addRoundedRect(rect, self.RADIUS, self.RADIUS)
+            painter.fillPath(path, QtGui.QColor(color))
+        painter.end()
+
+
+class WindowTitleBar(QtWidgets.QFrame):
+    """Full-width brand, drag surface, and frameless window controls."""
+
+    HEIGHT = 44
+
+    def __init__(self, window, sidebar_button=None):
+        super().__init__(window)
+        self._window = window
+        self._drag_offset = None
+        self.setObjectName("WindowTitleBar")
+        self.setFixedHeight(self.HEIGHT)
+
         layout = QtWidgets.QHBoxLayout(self)
-        layout.setContentsMargins(10, 0, 2, 0)
-        layout.setSpacing(2)
-        self.label = QtWidgets.QLabel(text)
-        self.label.setAttribute(QtCore.Qt.WA_TransparentForMouseEvents, True)
-        self.label.setAlignment(alignment)
-        layout.addWidget(self.label, stretch=1)
-        self.menu_btn = QtWidgets.QToolButton()
-        self.menu_btn.setObjectName("recentMenuBtn")
-        self.menu_btn.setIcon(_svg_icon(_SVG_MORE, size=18))
-        self.menu_btn.setIconSize(QtCore.QSize(18, 18))
-        self.menu_btn.setCursor(QtCore.Qt.PointingHandCursor)
-        self.menu_btn.setToolTip("More options")
-        self.menu_btn.clicked.connect(self._emit_menu_requested)
-        layout.addWidget(self.menu_btn)
+        layout.setContentsMargins(12, 0, 0, 0)
+        layout.setSpacing(0)
 
-        # Delay single-click opening just long enough to distinguish it from
-        # a double-click rename. Otherwise the first press of a double click
-        # opens the workspace before the rename dialog appears.
-        self._open_timer = QtCore.QTimer(self)
-        self._open_timer.setSingleShot(True)
-        self._open_timer.timeout.connect(self.open_requested.emit)
+        self.logo_label = QtWidgets.QLabel()
+        self.logo_label.setObjectName("WindowBrandLogo")
+        self.logo_label.setPixmap(
+            load_lucide_icon("layout-dashboard", PRIMARY, ICON_SIZE).pixmap(ICON_SIZE, ICON_SIZE)
+        )
+        self.logo_label.setFixedSize(ICON_SIZE, ICON_SIZE)
+        self.logo_label.setAttribute(QtCore.Qt.WA_TransparentForMouseEvents)
+        layout.addWidget(self.logo_label, 0, QtCore.Qt.AlignVCenter)
+        layout.addSpacing(8)
 
-    def _emit_menu_requested(self):
-        pos = self.menu_btn.mapToGlobal(QtCore.QPoint(0, self.menu_btn.height()))
-        self.menu_requested.emit(pos)
+        self.title_label = QtWidgets.QLabel(window.windowTitle())
+        self.title_label.setObjectName("WindowBrandName")
+        self.title_label.setAlignment(QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter)
+        self.title_label.setAttribute(QtCore.Qt.WA_TransparentForMouseEvents)
+        layout.addWidget(self.title_label, 0, QtCore.Qt.AlignVCenter)
+        if sidebar_button is not None:
+            layout.addSpacing(8)
+            layout.addWidget(sidebar_button, 0, QtCore.Qt.AlignVCenter)
+            sidebar_button.show()
+        layout.addStretch(1)
+
+        self.minimize_btn = WindowControlButton("minimize", "最小化", self)
+        self.maximize_btn = WindowControlButton("maximize", "最大化", self)
+        self.close_btn = WindowControlButton("close", "关闭", self)
+        self.minimize_btn.clicked.connect(window.showMinimized)
+        self.maximize_btn.clicked.connect(self.toggle_maximized)
+        self.close_btn.clicked.connect(window.close)
+        for button in (self.minimize_btn, self.maximize_btn, self.close_btn):
+            layout.addWidget(button, 0, QtCore.Qt.AlignVCenter)
+        window.windowTitleChanged.connect(self.title_label.setText)
+
+    def toggle_maximized(self):
+        if self._window.isMaximized():
+            self._window.showNormal()
+        else:
+            self._window.showMaximized()
+        self.update_window_state()
+
+    def update_window_state(self):
+        maximized = self._window.isMaximized()
+        self.maximize_btn.setRestoredIcon(maximized)
+        self.maximize_btn.setToolTip("还原" if maximized else "最大化")
 
     def mousePressEvent(self, event):
-        # Only the label/background area falls through to here -- clicks on
-        # menu_btn are consumed by the button itself before reaching this.
         if event.button() == QtCore.Qt.LeftButton:
-            self._open_timer.start(QtWidgets.QApplication.doubleClickInterval())
+            self._drag_offset = (
+                event.globalPos() - self._window.frameGeometry().topLeft()
+            )
+            event.accept()
+            return
         super().mousePressEvent(event)
+
+    def mouseMoveEvent(self, event):
+        if self._drag_offset is not None and event.buttons() & QtCore.Qt.LeftButton:
+            if self._window.isMaximized():
+                ratio = event.pos().x() / max(1, self.width())
+                self._window.showNormal()
+                self.update_window_state()
+                title_left = self.mapTo(self._window, QtCore.QPoint()).x()
+                self._drag_offset = QtCore.QPoint(
+                    title_left + int(self.width() * ratio),
+                    min(event.pos().y(), self.HEIGHT),
+                )
+            self._window.move(event.globalPos() - self._drag_offset)
+            event.accept()
+            return
+        super().mouseMoveEvent(event)
+
+    def mouseReleaseEvent(self, event):
+        if event.button() == QtCore.Qt.LeftButton:
+            self._drag_offset = None
+        super().mouseReleaseEvent(event)
 
     def mouseDoubleClickEvent(self, event):
         if event.button() == QtCore.Qt.LeftButton:
-            self._open_timer.stop()
-            self.rename_requested.emit()
+            self._drag_offset = None
+            self.toggle_maximized()
             event.accept()
             return
         super().mouseDoubleClickEvent(event)
 
 
-class _LineNumberArea(QtWidgets.QWidget):
-    def __init__(self, editor):
-        super().__init__(editor)
-        self._editor = editor
+class WindowControlButton(QtWidgets.QPushButton):
+    """Fixed-size title-bar button using centered Lucide vector icons."""
 
-    def sizeHint(self):
-        return QtCore.QSize(self._editor.line_number_area_width(), 0)
+    ICONS = {
+        "minimize": "minus",
+        "maximize": "square",
+        "close": "x",
+    }
 
-    def paintEvent(self, event):
-        self._editor.paint_line_number_area(event)
-
-
-class _CodePreviewEdit(QtWidgets.QPlainTextEdit):
-    """Read-only code view with a synchronized, non-copyable line gutter."""
-
-    def __init__(self, parent=None):
+    def __init__(self, role, tooltip, parent=None):
         super().__init__(parent)
-        self.line_number_area = _LineNumberArea(self)
-        self.blockCountChanged.connect(self._update_line_number_area_width)
-        self.updateRequest.connect(self._update_line_number_area)
-        self._update_line_number_area_width()
+        self._role = role
+        self._restored_icon = False
+        self._icon_name = self.ICONS[role]
+        self._icon_size = ICON_SIZE
+        self.setObjectName("WindowControlButton")
+        self.setProperty("role", role)
+        self.setFixedWidth(46)
+        self.setIconSize(QtCore.QSize(self._icon_size, self._icon_size))
+        self.setToolTip(tooltip)
+        self.setCursor(QtCore.Qt.ArrowCursor)
+        self._refresh_icon()
 
-    def line_number_area_width(self):
-        digits = max(2, len(str(max(1, self.blockCount()))))
-        return 14 + self.fontMetrics().horizontalAdvance("9") * digits
+    def setRestoredIcon(self, restored):
+        restored = bool(restored)
+        if self._restored_icon != restored:
+            self._restored_icon = restored
+            self._icon_name = "copy" if restored else "square"
+            self._refresh_icon()
 
-    def _update_line_number_area_width(self, _count=0):
-        self.setViewportMargins(self.line_number_area_width(), 0, 0, 0)
+    def _refresh_icon(self, hovered=False):
+        color = BG_SURFACE if self._role == "close" and hovered else TEXT_SUB
+        self.setIcon(load_lucide_icon(self._icon_name, color, self._icon_size))
 
-    def _update_line_number_area(self, rect, dy):
-        if dy:
-            self.line_number_area.scroll(0, dy)
-        else:
-            self.line_number_area.update(0, rect.y(), self.line_number_area.width(), rect.height())
-        if rect.contains(self.viewport().rect()):
-            self._update_line_number_area_width()
+    def enterEvent(self, event):
+        if self._role == "close":
+            self._refresh_icon(hovered=True)
+        super().enterEvent(event)
 
-    def resizeEvent(self, event):
-        super().resizeEvent(event)
-        contents = self.contentsRect()
-        self.line_number_area.setGeometry(
-            QtCore.QRect(contents.left(), contents.top(), self.line_number_area_width(), contents.height())
-        )
-
-    def paint_line_number_area(self, event):
-        painter = QtGui.QPainter(self.line_number_area)
-        painter.fillRect(event.rect(), QtGui.QColor(BG_HOVER))
-        painter.setPen(QtGui.QColor(TEXT_TERTIARY))
-
-        block = self.firstVisibleBlock()
-        number = block.blockNumber()
-        top = int(self.blockBoundingGeometry(block).translated(self.contentOffset()).top())
-        bottom = top + int(self.blockBoundingRect(block).height())
-        while block.isValid() and top <= event.rect().bottom():
-            if block.isVisible() and bottom >= event.rect().top():
-                painter.drawText(
-                    0,
-                    top,
-                    self.line_number_area.width() - 7,
-                    self.fontMetrics().height(),
-                    QtCore.Qt.AlignRight,
-                    str(number + 1),
-                )
-            block = block.next()
-            top = bottom
-            bottom = top + int(self.blockBoundingRect(block).height())
-            number += 1
+    def leaveEvent(self, event):
+        if self._role == "close":
+            self._refresh_icon()
+        super().leaveEvent(event)
 
 
-# ---------------------------------------------------------------- state file
-# Desktop state and settings (verible path/flags, editor, and font) live
-# outside workspaces so opening the UI never changes generated inputs.
+class WindowResizeHandle(QtWidgets.QWidget):
+    """Thin edge target that delegates resizing to the window system."""
 
+    def __init__(self, window, edges, cursor):
+        super().__init__(window)
+        self._window = window
+        self._edges = edges
+        self._start_global = None
+        self._start_geometry = None
+        self.setObjectName("WindowResizeHandle")
+        self.setCursor(cursor)
 
-def _read_state_file():
-    if not STATE_FILE.is_file():
-        return {}
-    try:
-        return json.loads(STATE_FILE.read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        return {}
+    def mousePressEvent(self, event):
+        if event.button() != QtCore.Qt.LeftButton or self._window.isMaximized():
+            super().mousePressEvent(event)
+            return
+        handle = self._window.windowHandle()
+        if handle is not None and hasattr(handle, "startSystemResize"):
+            try:
+                if handle.startSystemResize(self._edges):
+                    event.accept()
+                    return
+            except RuntimeError:
+                pass
+        self._start_global = event.globalPos()
+        self._start_geometry = QtCore.QRect(self._window.geometry())
+        event.accept()
 
-
-def _write_state_file(data):
-    try:
-        STATE_FILE.write_text(json.dumps(data), encoding="utf-8")
-    except OSError:
-        pass  # remembering workspace state is a convenience, not required
-
-
-def load_recent_workspaces():
-    raw = _read_state_file().get("recent", [])
-    return [p for p in (Path(r) for r in raw) if is_workspace_root(p)]
-
-
-def _absolute_path(path):
-    """Make a path absolute without rewriting its user-visible spelling.
-
-    Path.resolve() expands Windows 8.3 short names (RUNNER~1) to long names.
-    That made the same directory compare differently across the UI and tests,
-    and could suppress Preview generation-status refreshes.
-    """
-    return Path(os.path.abspath(os.path.expanduser(os.fspath(path))))
-
-
-def _same_path(left, right):
-    """Compare filesystem identity, falling back safely for missing paths."""
-    try:
-        return os.path.samefile(left, right)
-    except (OSError, TypeError, ValueError):
-        def normalize(value):
-            return os.path.normcase(
-                os.path.abspath(os.path.expanduser(os.fspath(value)))
+    def mouseMoveEvent(self, event):
+        if self._start_global is None or not event.buttons() & QtCore.Qt.LeftButton:
+            super().mouseMoveEvent(event)
+            return
+        delta = event.globalPos() - self._start_global
+        rect = QtCore.QRect(self._start_geometry)
+        minimum = self._window.minimumSize()
+        if self._edges & QtCore.Qt.LeftEdge:
+            rect.setLeft(
+                min(rect.left() + delta.x(), rect.right() - minimum.width() + 1)
             )
-        return normalize(left) == normalize(right)
+        if self._edges & QtCore.Qt.RightEdge:
+            rect.setRight(
+                max(rect.right() + delta.x(), rect.left() + minimum.width() - 1)
+            )
+        if self._edges & QtCore.Qt.TopEdge:
+            rect.setTop(
+                min(rect.top() + delta.y(), rect.bottom() - minimum.height() + 1)
+            )
+        if self._edges & QtCore.Qt.BottomEdge:
+            rect.setBottom(
+                max(rect.bottom() + delta.y(), rect.top() + minimum.height() - 1)
+            )
+        self._window.setGeometry(rect)
+        event.accept()
 
-
-def add_recent_workspace(path):
-    """Append path once, including across Windows short/long aliases."""
-    data = _read_state_file()
-    path_str = str(path)
-    recent = data.get("recent", [])
-    if not any(_same_path(path_str, item) for item in recent):
-        recent.append(path_str)
-    data["recent"] = recent[-MAX_RECENT_WORKSPACES:]
-    _write_state_file(data)
-
-
-def remove_recent_workspace(path):
-    data = _read_state_file()
-    data["recent"] = [
-        item for item in data.get("recent", []) if not _same_path(item, path)
-    ]
-    _write_state_file(data)
-
-
-def rename_recent_workspace(old_path, new_path):
-    """Replace a renamed workspace path everywhere it is persisted."""
-    old_path = _absolute_path(old_path)
-    new_path = _absolute_path(new_path)
-    data = _read_state_file()
-    recent = []
-    for raw_path in data.get("recent", []):
-        replacement = str(new_path) if _same_path(raw_path, old_path) else raw_path
-        if not any(_same_path(replacement, item) for item in recent):
-            recent.append(replacement)
-    data["recent"] = recent[-MAX_RECENT_WORKSPACES:]
-    last = data.get("workspace")
-    if last and _same_path(last, old_path):
-        data["workspace"] = str(new_path)
-    _write_state_file(data)
-
-
-def save_last_workspace(path):
-    data = _read_state_file()
-    data["workspace"] = str(path)
-    _write_state_file(data)
-
-
-def clear_last_workspace():
-    data = _read_state_file()
-    data.pop("workspace", None)
-    _write_state_file(data)
-
-
-def load_last_workspace():
-    raw = _read_state_file().get("workspace")
-    if not raw:
-        return None
-    path = Path(raw)
-    return path if is_workspace_root(path) else None
-
-
-def load_settings():
-    return {**DEFAULT_SETTINGS, **_read_state_file().get("settings", {})}
-
-
-def save_settings(settings):
-    data = _read_state_file()
-    data["settings"] = settings
-    _write_state_file(data)
-
-
-def _wrap_output(view):
-    """Wrap long lines in a read-only output view instead of scrolling sideways.
-
-    WrapAtWordBoundaryOrAnywhere rather than plain word wrapping: these views
-    carry absolute paths and long identifiers with no spaces to break on, and a
-    "word" wider than the panel would otherwise still force a horizontal
-    scrollbar. The topology report's column alignment does suffer when a line
-    folds, but that only happens in a pane too narrow to have shown the line
-    anyway.
-    """
-    view.setLineWrapMode(QtWidgets.QPlainTextEdit.WidgetWidth)
-    view.setWordWrapMode(QtGui.QTextOption.WrapAtWordBoundaryOrAnywhere)
-    view.setHorizontalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOff)
-
-
-def reveal_in_file_manager(path):
-    """Open the OS file manager on path. Returns True on success.
-
-    Windows selects the entry itself; Linux opens the containing directory,
-    because there is no one invocation that selects an entry across the
-    desktop environments (Nautilus, Dolphin and Thunar each want their own).
-
-    subprocess rather than QDesktopServices.openUrl(): openUrl on a directory
-    opens it, but cannot highlight the entry itself, which is most of the point
-    on a Recent list where the useful answer is "which folder is this one".
-    """
-    path = Path(path)
-    target = path if path.exists() else path.parent
-    try:
-        if sys.platform == "win32":
-            # explorer returns a nonzero exit code even when it succeeds, so
-            # its result is deliberately not checked.
-            subprocess.run(["explorer", f"/select,{os.path.normpath(str(target))}"])
-        else:
-            directory = target if target.is_dir() else target.parent
-            subprocess.run(["xdg-open", str(directory)], check=True)
-        return True
-    except (OSError, subprocess.SubprocessError):
-        return False
-
-
-def valid_name(name):
-    name = (name or "").strip()
-    if not name or any(c in name for c in ' /\\:*?"<>|'):
-        raise ValueError('Use a plain folder name, no spaces or path characters.')
-    return name
-
-
-class _NewWorkspaceDialog(QtWidgets.QDialog):
-    """Collect a workspace name and parent directory in one place."""
-
-    def __init__(self, default_location, parent=None):
-        super().__init__(parent)
-        self.setWindowTitle("New workspace")
-        self.setModal(True)
-        self.setMinimumWidth(520)
-
-        layout = QtWidgets.QVBoxLayout(self)
-        form = QtWidgets.QFormLayout()
-        form.setFieldGrowthPolicy(QtWidgets.QFormLayout.AllNonFixedFieldsGrow)
-
-        self.name_edit = QtWidgets.QLineEdit()
-        self.name_edit.setObjectName("newWorkspaceName")
-        self.name_edit.setPlaceholderText("Project name")
-        form.addRow("Project name", self.name_edit)
-
-        location_row = QtWidgets.QWidget()
-        location_layout = QtWidgets.QHBoxLayout(location_row)
-        location_layout.setContentsMargins(0, 0, 0, 0)
-        location_layout.setSpacing(6)
-        self.location_edit = QtWidgets.QLineEdit(str(default_location))
-        self.location_edit.setObjectName("newWorkspaceLocation")
-        self.location_edit.setPlaceholderText("Parent directory")
-        location_layout.addWidget(self.location_edit, stretch=1)
-        self.browse_btn = QtWidgets.QPushButton("Browse")
-        self.browse_btn.setObjectName("newWorkspaceBrowse")
-        self.browse_btn.setIcon(_svg_icon(_SVG_OPEN, size=18))
-        self.browse_btn.clicked.connect(self._browse)
-        location_layout.addWidget(self.browse_btn)
-        form.addRow("Location", location_row)
-        layout.addLayout(form)
-
-        self.buttons = QtWidgets.QDialogButtonBox(
-            QtWidgets.QDialogButtonBox.Ok | QtWidgets.QDialogButtonBox.Cancel
-        )
-        self.buttons.accepted.connect(self.accept)
-        self.buttons.rejected.connect(self.reject)
-        layout.addWidget(self.buttons)
-        self.name_edit.setFocus()
-
-    def _browse(self):
-        start = self.location_edit.text().strip() or str(Path.home())
-        selected = QtWidgets.QFileDialog.getExistingDirectory(
-            self, "Choose workspace location", start
-        )
-        if selected:
-            self.location_edit.setText(selected)
-
-    def values(self):
-        return self.name_edit.text(), self.location_edit.text()
+    def mouseReleaseEvent(self, event):
+        self._start_global = None
+        self._start_geometry = None
+        super().mouseReleaseEvent(event)
 
 
 class MainWindow(QtWidgets.QMainWindow):
+    """Frameless window with full-width chrome and routed body content."""
+
+    SHADOW_MARGIN = WindowBackdrop.SHADOW_MARGIN
+
     def __init__(self):
         super().__init__()
-        self.current_workspace = None  # Path | None
-        self._saved_payload = None  # last UI state saved to disk
-        self._saved_disk_signature = None  # config bytes at the last load/save
-        self._title_shows_dirty = False
-        self._generation_busy = False
-        self._generation_state = "IDLE"
-        self._topology_payload = None
-        self._history_payload = None
-        self._undo_history = []
-        self._redo_history = []
-        self._restoring_history = False
-        self._generation_file_status = {}
+        self.setWindowFlags(self.windowFlags() | QtCore.Qt.FramelessWindowHint)
+        self.setAttribute(QtCore.Qt.WA_TranslucentBackground, True)
+        install_exception_handler()
+        self.controller = AppController()
+        app = QtWidgets.QApplication.instance()
+        font = QtGui.QFont(FONT_UI_PRIMARY)
+        font.setPixelSize(round(FONT_SIZE_BODY))
+        font.setStyleStrategy(QtGui.QFont.PreferAntialias)
+        font.setHintingPreference(QtGui.QFont.PreferFullHinting)
+        app.setFont(font)
+        palette = app.palette()
+        palette.setColor(QtGui.QPalette.Window, QtGui.QColor(BG_SURFACE))
+        app.setPalette(palette)
+        if not isinstance(app.style(), ContentIconStyle):
+            app.setStyle(ContentIconStyle(app.style().objectName()))
+        app.setStyleSheet(APP_QSS)
+        install_button_sizing(app)
+        install_tooltips(app)
         self.setWindowTitle("plmConsultant")
-        self.resize(1200, 780)
-        self.setMinimumSize(900, 620)
-        self._build_ui()
+        self.resize(1400, 900)
+        self.setMinimumSize(960, 640)
+        self.setWindowIcon(load_lucide_icon("layout-dashboard", PRIMARY))
+        self._log_sizes = [700, 200]
+        self._activation_connected = False
+
+        self.window_shell = WindowShell(self)
+        self.window_backdrop = WindowBackdrop(self)
+        self._backdrop_layout = QtWidgets.QVBoxLayout(self.window_backdrop)
+        self._backdrop_layout.setContentsMargins(*([self.SHADOW_MARGIN] * 4))
+        self._backdrop_layout.setSpacing(0)
+        self._backdrop_layout.addWidget(self.window_shell)
+        shell_layout = QtWidgets.QVBoxLayout(self.window_shell)
+        shell_layout.setContentsMargins(0, 0, 0, 0)
+        shell_layout.setSpacing(0)
+
+        self.nav_panel = self.controller.create_navigation()
+        self.title_bar = WindowTitleBar(self, self.nav_panel.collapse_btn)
+        shell_layout.addWidget(self.title_bar)
+
+        self.body_container = QtWidgets.QWidget()
+        self.body_container.setObjectName("BodyContainer")
+        body_layout = QtWidgets.QHBoxLayout(self.body_container)
+        body_layout.setContentsMargins(0, 0, 0, 0)
+        body_layout.setSpacing(0)
+        body_layout.addWidget(self.nav_panel)
+
+        self.content_splitter = QtWidgets.QSplitter(QtCore.Qt.Vertical)
+        self.content_splitter.setObjectName("ContentSplitter")
+        self.content_splitter.setContentsMargins(0, 0, 0, 0)
+        self.content_splitter.setHandleWidth(4)
+        self.content_splitter.setChildrenCollapsible(True)
+        self.config_page = ConfigPage(
+            editor_path_provider=self.controller.settings.editor_path
+        )
+        self.log_toggle_button = self.config_page.take_log_button()
+        self.log_toggle_button.setFixedWidth(32)
+        title_layout = self.title_bar.layout()
+        button_index = title_layout.indexOf(self.nav_panel.collapse_btn) + 1
+        title_layout.insertSpacing(button_index, 8)
+        title_layout.insertWidget(
+            button_index + 1, self.log_toggle_button, 0, QtCore.Qt.AlignVCenter,
+        )
+        self.artifacts_toggle_button = self.config_page.take_artifacts_button()
+        self.artifacts_toggle_button.setFixedWidth(32)
+        title_layout.insertSpacing(button_index + 2, 8)
+        title_layout.insertWidget(
+            button_index + 3, self.artifacts_toggle_button, 0, QtCore.Qt.AlignVCenter,
+        )
+        self.log_panel = LogPanel()
+        self.config_page.logToggleRequested.connect(self.toggle_log)
+        self.log_panel.closeRequested.connect(self.hide_log)
+        self.content_splitter.addWidget(self.config_page)
+        self.content_splitter.addWidget(self.log_panel)
+        self.content_splitter.setStretchFactor(0, 3)
+        self.content_splitter.setStretchFactor(1, 1)
+        self.main_container = QtWidgets.QWidget()
+        self.main_container.setObjectName("MainContainer")
+        main_layout = QtWidgets.QVBoxLayout(self.main_container)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.setSpacing(0)
+        main_layout.addWidget(self.content_splitter)
+
+        self.view_stack = QtWidgets.QStackedWidget(self.body_container)
+        self.view_stack.setObjectName("ViewStack")
+        self.view_stack.setContentsMargins(0, 0, 0, 0)
+        self.view_stack.addWidget(self.main_container)
+        self.view_stack.setCurrentWidget(self.main_container)
+        body_layout.addWidget(self.view_stack, 1)
+        shell_layout.addWidget(self.body_container, 1)
+        self.setCentralWidget(self.window_backdrop)
+        self._create_resize_handles()
+
+        QtCore.QTimer.singleShot(0, self._apply_initial_sizes)
+
+        self.controller.connect_navigation(
+            self.nav_panel, self.config_page, self.log_panel, self
+        )
+        self.undo_action = QtWidgets.QAction("撤销", self)
+        self.undo_action.setShortcuts([QtGui.QKeySequence("Ctrl+Z")])
+        self.undo_action.triggered.connect(self.config_page.undo)
+        self.redo_action = QtWidgets.QAction("重做", self)
+        self.redo_action.setShortcuts(
+            [QtGui.QKeySequence("Ctrl+Y"), QtGui.QKeySequence("Ctrl+Shift+Z")]
+        )
+        self.redo_action.triggered.connect(self.config_page.redo)
+        self.addActions([self.undo_action, self.redo_action])
+        self.config_page.historyChanged.connect(self._update_history_actions)
+        self._update_history_actions()
+        self._enable_background_focus(self.main_container)
+
+    def _create_resize_handles(self):
+        horizontal = QtCore.Qt.SizeHorCursor
+        vertical = QtCore.Qt.SizeVerCursor
+        diagonal_forward = QtCore.Qt.SizeFDiagCursor
+        diagonal_backward = QtCore.Qt.SizeBDiagCursor
+        self._resize_handles = {
+            "left": WindowResizeHandle(self, QtCore.Qt.LeftEdge, horizontal),
+            "right": WindowResizeHandle(self, QtCore.Qt.RightEdge, horizontal),
+            "top": WindowResizeHandle(self, QtCore.Qt.TopEdge, vertical),
+            "bottom": WindowResizeHandle(self, QtCore.Qt.BottomEdge, vertical),
+            "top_left": WindowResizeHandle(
+                self, QtCore.Qt.TopEdge | QtCore.Qt.LeftEdge, diagonal_forward
+            ),
+            "top_right": WindowResizeHandle(
+                self, QtCore.Qt.TopEdge | QtCore.Qt.RightEdge, diagonal_backward
+            ),
+            "bottom_left": WindowResizeHandle(
+                self, QtCore.Qt.BottomEdge | QtCore.Qt.LeftEdge, diagonal_backward
+            ),
+            "bottom_right": WindowResizeHandle(
+                self, QtCore.Qt.BottomEdge | QtCore.Qt.RightEdge, diagonal_forward
+            ),
+        }
+
+    def _update_resize_handles(self):
+        border = 6
+        corner = 10
+        shell_rect = self.window_shell.geometry()
+        origin = self.window_shell.mapTo(self, QtCore.QPoint())
+        width, height = shell_rect.width(), shell_rect.height()
+        geometries = {
+            "left": (0, corner, border, max(0, height - 2 * corner)),
+            "right": (width - border, corner, border, max(0, height - 2 * corner)),
+            "top": (corner, 0, max(0, width - 2 * corner), border),
+            "bottom": (corner, height - border, max(0, width - 2 * corner), border),
+            "top_left": (0, 0, corner, corner),
+            "top_right": (width - corner, 0, corner, corner),
+            "bottom_left": (0, height - corner, corner, corner),
+            "bottom_right": (width - corner, height - corner, corner, corner),
+        }
+        visible = not self.isMaximized() and not self.isFullScreen()
+        for name, handle in self._resize_handles.items():
+            x, y, w, h = geometries[name]
+            handle.setGeometry(origin.x() + x, origin.y() + y, w, h)
+            handle.setVisible(visible)
+            if visible:
+                handle.raise_()
+
+    def _connect_application_state(self):
+        if self._activation_connected:
+            return
         app = QtWidgets.QApplication.instance()
         if app is not None:
-            app.installEventFilter(self)
-        self._apply_font(load_settings())
-        self._refresh_recent()
-        QtWidgets.QShortcut(
-            QtGui.QKeySequence.Find, self, self._on_preview_search_open
-        )
-        self.undo_action = QtWidgets.QAction("Undo", self)
-        self.undo_action.setShortcuts(
-            [QtGui.QKeySequence.Undo]
-        )
-        self.undo_action.triggered.connect(self._undo_edit)
-        self.addAction(self.undo_action)
-        self.redo_action = QtWidgets.QAction("Redo", self)
-        self.redo_action.setShortcuts(
-            [QtGui.QKeySequence.Redo, QtGui.QKeySequence("Ctrl+Shift+Z")]
-        )
-        self.redo_action.triggered.connect(self._redo_edit)
-        self.addAction(self.redo_action)
-        self._update_history_actions()
-        self._edit_timer = QtCore.QTimer(self)
-        self._edit_timer.setSingleShot(True)
-        self._edit_timer.setInterval(300)
-        self._edit_timer.timeout.connect(self._process_live_edits)
-        self._dirty_timer = QtCore.QTimer(self)
-        self._dirty_timer.setInterval(700)
-        self._dirty_timer.timeout.connect(self._poll_dirty_state)
-        self._dirty_timer.start()
-        last = load_last_workspace()
-        if last:
-            # Session restoration must not undo an explicit Clear from Recent.
-            # A later user-initiated open still records the workspace normally.
-            self._open_workspace(last, add_to_recent=False)
+            app.applicationStateChanged.connect(self._application_state_changed)
+            self._activation_connected = True
 
-    # ------------------------------------------------------------ UI shell
-    def _build_ui(self):
-        central = QtWidgets.QWidget()
-        self.setCentralWidget(central)
-        root = QtWidgets.QHBoxLayout(central)
-        root.setContentsMargins(0, 0, 0, 0)
-        root.setSpacing(0)
+    def _disconnect_application_state(self):
+        if not self._activation_connected:
+            return
+        app = QtWidgets.QApplication.instance()
+        if app is not None:
+            app.applicationStateChanged.disconnect(self._application_state_changed)
+        self._activation_connected = False
 
-        self.sidebar = self._build_sidebar()
-        root.addWidget(self.sidebar)
+    @staticmethod
+    def _enable_background_focus(container):
+        # Blank areas take focus through Qt's normal mouse dispatch. Editors
+        # and item views keep their native focus-out commit behavior.
+        for widget in [container, *container.findChildren(QtWidgets.QWidget)]:
+            if type(widget) in (QtWidgets.QWidget, QtWidgets.QFrame) or widget is container:
+                if widget.focusPolicy() == QtCore.Qt.NoFocus:
+                    widget.setFocusPolicy(QtCore.Qt.ClickFocus)
 
-        self.content_splitter = QtWidgets.QSplitter(QtCore.Qt.Horizontal)
-        self.content_splitter.setObjectName("contentSplitter")
-        self.content_splitter.setChildrenCollapsible(False)
-        self.content_splitter.setHandleWidth(1)
-        self.content_splitter.splitterMoved.connect(self._on_content_splitter_moved)
-        self.content_splitter.addWidget(self._build_main())
-        self.rtl_preview_panel = self._build_rtl_preview_panel()
-        self.content_splitter.addWidget(self.rtl_preview_panel)
-        self.content_splitter.setCollapsible(0, True)
-        self.content_splitter.setCollapsible(1, False)
-        self.main_area.installEventFilter(self)
-        self.editor_shell.installEventFilter(self)
-        self.rtl_preview_panel.installEventFilter(self)
-        self.content_splitter.setStretchFactor(0, 1)
-        self.content_splitter.setStretchFactor(1, 1)
-        self.rtl_preview_panel.hide()
-        self._preview_maximized = False
-        self._preview_maximize_pending = False
-        self._splitter_animation = None
-        root.addWidget(self.content_splitter, stretch=1)
+    def _application_state_changed(self, state):
+        self._sync_window_chrome(state == QtCore.Qt.ApplicationActive)
+        if state == QtCore.Qt.ApplicationActive:
+            QtCore.QTimer.singleShot(0, self._refresh_after_activation)
+        else:
+            self._finish_focused_edit()
 
-        self.preview_controls = self._build_preview_controls(central)
+    def showEvent(self, event):
+        self._connect_application_state()
+        super().showEvent(event)
+        self._sync_window_chrome()
+        self._sync_window_frame_state()
 
-        # Edge toggle: a small button sitting on the seam between sidebar
-        # and main content. It is not part of either layout
-        # (Qt layouts can't place a widget "on the border" between two
-        # siblings), so it's a plain child of `central` positioned by
-        # hand in _position_sidebar_toggle(), called on every resize and
-        # every collapse/expand.
-        self.sidebar_toggle = QtWidgets.QToolButton(central)
-        self.sidebar_toggle.setObjectName("edgeToggle")
-        self.sidebar_toggle.setFixedSize(16, 56)
-        self.sidebar_toggle.setCursor(QtCore.Qt.PointingHandCursor)
-        self.sidebar_toggle.clicked.connect(self._on_toggle_sidebar)
-        self._sidebar_collapsed = bool(_read_state_file().get("sidebarCollapsed"))
-        self._apply_sidebar_collapsed()
-        self._position_preview_controls()
-        QtCore.QTimer.singleShot(0, self._position_preview_controls)
-
-    def eventFilter(self, watched, event):
-        if event.type() == QtCore.QEvent.ApplicationActivate:
-            QtCore.QTimer.singleShot(
-                0, lambda: self._update_generation_freshness(verify_files=True)
-            )
-        if (
-            getattr(self, "preview_file_tree", None)
-            and self.preview_file_tree.isVisible()
-        ):
-            if event.type() == QtCore.QEvent.MouseButtonPress:
-                global_pos = event.globalPos()
-                tree_rect = QtCore.QRect(
-                    self.preview_file_tree.mapToGlobal(QtCore.QPoint()),
-                    self.preview_file_tree.size(),
-                )
-                button_rect = QtCore.QRect(
-                    self.preview_root_btn.mapToGlobal(QtCore.QPoint()),
-                    self.preview_root_btn.size(),
-                )
-                if not tree_rect.contains(global_pos) and not button_rect.contains(global_pos):
-                    QtCore.QTimer.singleShot(
-                        0, lambda: self._set_preview_tree_visible(False)
-                    )
-            elif event.type() == QtCore.QEvent.ApplicationDeactivate:
-                self._set_preview_tree_visible(False)
-        if watched in (
-            getattr(self, "main_area", None),
-            getattr(self, "editor_shell", None),
-            getattr(self, "rtl_preview_panel", None),
-        ) and event.type() in (QtCore.QEvent.Resize, QtCore.QEvent.Move, QtCore.QEvent.Show):
-            QtCore.QTimer.singleShot(0, self._position_preview_controls)
-            QtCore.QTimer.singleShot(0, self._position_preview_file_tree)
-        return super().eventFilter(watched, event)
+    def changeEvent(self, event):
+        super().changeEvent(event)
+        if event.type() == QtCore.QEvent.ActivationChange:
+            if hasattr(self, "nav_panel"):
+                self._sync_window_chrome()
+        elif event.type() == QtCore.QEvent.WindowStateChange:
+            if hasattr(self, "window_shell"):
+                QtCore.QTimer.singleShot(0, self._sync_window_frame_state)
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
-        self._position_sidebar_toggle()
-        self._position_floating_log()
-        self._position_preview_controls()
-        self._position_preview_file_tree()
+        if hasattr(self, "_resize_handles"):
+            self._update_resize_handles()
 
-    def closeEvent(self, event):
-        if self._generation_busy:
-            QtWidgets.QMessageBox.warning(
-                self,
-                "Generation in progress",
-                "Wait for generation to finish before closing the application.",
+    def _sync_window_chrome(self, active=None):
+        if active is None:
+            app = QtWidgets.QApplication.instance()
+            active = self.isActiveWindow() and (
+                app is None or app.applicationState() == QtCore.Qt.ApplicationActive
             )
-            event.ignore()
-            return
-        if not self._confirm_discard_changes():
-            event.ignore()
-            return
-        app = QtWidgets.QApplication.instance()
-        if app is not None:
-            app.removeEventFilter(self)
-        super().closeEvent(event)
-
-    def _position_preview_controls(self):
-        if not getattr(self, "preview_controls", None):
-            return
-        central = self.centralWidget()
-        margin = max(10, int(12 * _ui_scale()))
-        tab_bar = self.tabs.tabBar()
-        header_aligned = self.main_area.isVisible() and tab_bar.isVisible()
-        if header_aligned:
-            tab_index = max(0, self.tabs.currentIndex())
-            tab_rect = tab_bar.tabRect(tab_index)
-            if not tab_rect.isValid():
-                tab_rect = tab_bar.rect()
-            pill_rect = tab_rect.adjusted(
-                0, TAB_VERTICAL_GAP, 0, -TAB_VERTICAL_GAP
-            )
-            if not pill_rect.isValid() or pill_rect.height() < 20:
-                pill_rect = tab_rect
-            # QSS padding is resolved only after the window is shown, so the
-            # final tab-bar height can differ from its construction-time hint.
-            # Keep the preview file button on that exact live header geometry.
-            self.preview_header.setFixedHeight(tab_bar.height())
-            self.preview_root_btn.setFixedSize(pill_rect.height(), pill_rect.height())
-            # Align the Preview controls to the actual tab pill rather than
-            # the padded QTabBar container.
-            self.preview_controls.setFixedHeight(pill_rect.height())
-            side = max(20, pill_rect.height() - 2)
-            for button in self.preview_buttons:
-                button.setFixedSize(side, side)
-                button.setIconSize(QtCore.QSize(round(side * 0.6), round(side * 0.6)))
-        if getattr(self, "rtl_preview_panel", None) and not self.rtl_preview_panel.isHidden():
-            anchor = self.rtl_preview_panel
-            self._apply_preview_control_density(anchor.width())
-        else:
-            anchor = getattr(self, "editor_shell", central)
-            self.preview_more_btn.hide()
-        self.preview_controls.adjustSize()
-        origin = anchor.mapTo(central, QtCore.QPoint(0, 0))
-        inset = 8
-        x = origin.x() + anchor.width() - self.preview_controls.width() - inset
-        if header_aligned:
-            tab_origin = tab_bar.mapTo(central, QtCore.QPoint(0, 0))
-            tab_center_y = tab_origin.y() + pill_rect.center().y()
-            y = tab_center_y - self.preview_controls.height() // 2
-        elif (
-            getattr(self, "preview_root_btn", None)
-            and self.rtl_preview_panel.isVisible()
-        ):
-            root_center = self.preview_root_btn.mapTo(
-                central, self.preview_root_btn.rect().center()
-            )
-            y = root_center.y() - self.preview_controls.height() // 2
-        else:
-            y = origin.y() + inset
-        self.preview_controls.move(max(margin, x), max(0, y))
-        self.preview_controls.raise_()
-
-    def _position_preview_file_tree(self):
-        if not getattr(self, "preview_file_tree", None):
-            return
-        panel = self.rtl_preview_panel
-        root_bottom = self.preview_root_btn.mapTo(
-            panel, QtCore.QPoint(0, self.preview_root_btn.height())
-        )
-        content_top = root_bottom.y()
-        if self.preview_search_bar.isVisible():
-            search_bottom = self.preview_search_bar.mapTo(
-                panel, QtCore.QPoint(0, self.preview_search_bar.height())
-            )
-            content_top = max(content_top, search_bottom.y())
-        gap = max(4, int(6 * _ui_scale()))
-        x = root_bottom.x()
-        y = content_top + gap
-        available_width = max(1, panel.width() - x - 18)
-        width = min(
-            max(int(320 * _ui_scale()), self.preview_root_btn.width()),
-            available_width,
-        )
-        available_height = max(1, panel.height() - y - BOTTOM_EDGE_INSET)
-        height = min(
-            getattr(self, "_preview_tree_content_height", int(220 * _ui_scale())),
-            available_height,
-        )
-        self.preview_file_tree.setGeometry(x, y, width, height)
-        if self.preview_file_tree.isVisible():
-            self.preview_file_tree.raise_()
-
-    def _position_sidebar_toggle(self):
-        if getattr(self, "editor_shell", None) and self.editor_shell.isVisible():
-            x = self.editor_shell.mapTo(self.centralWidget(), QtCore.QPoint(0, 0)).x()
-        elif not self.sidebar.isVisible():
-            x = 0
-        else:
-            seam = self.sidebar.mapTo(self.centralWidget(), self.sidebar.rect().topRight())
-            x = seam.x() + 1
-        y = (self.centralWidget().height() - self.sidebar_toggle.height()) // 2
-        self.sidebar_toggle.move(x - self.sidebar_toggle.width() // 2, max(0, y))
-        self.sidebar_toggle.raise_()
-
-    def _on_toggle_sidebar(self):
-        self._sidebar_collapsed = not self._sidebar_collapsed
-        self._apply_sidebar_collapsed()
-        data = _read_state_file()
-        data["sidebarCollapsed"] = self._sidebar_collapsed
-        _write_state_file(data)
-
-    def _apply_sidebar_collapsed(self):
-        """Collapse the navigation sidebar to its icon rail."""
-        collapsed = self._sidebar_collapsed
-        scale = _ui_scale()
-        # Scale sidebar widths from their 13 px baseline so larger fonts still
-        # fit button labels and the brand name.
-        self.sidebar.setFixedWidth(64 if collapsed else int(260 * scale))
-        self.brand_name.setVisible(not collapsed)
-        self.section_header.setVisible(not collapsed)
-        self.brand_layout.setContentsMargins(16, 14, 16, 14)
-        self.brand_left_spacer.changeSize(
-            0, 0,
-            QtWidgets.QSizePolicy.Fixed,
-            QtWidgets.QSizePolicy.Minimum,
-        )
-        # Keep the logo on the same fixed left icon rail in both states.
-        self.brand_layout.setStretch(0, 0)
-        self.brand_layout.setStretch(3, 1)
-        self.brand_layout.invalidate()
-        self.brand_layout.activate()
-        self.recent_list.setHorizontalScrollBarPolicy(
-            QtCore.Qt.ScrollBarAlwaysOff if collapsed else QtCore.Qt.ScrollBarAsNeeded
-        )
-        self.recent_list.setProperty("collapsed", collapsed)
-        self.recent_list.style().unpolish(self.recent_list)
-        self.recent_list.style().polish(self.recent_list)
-        rail_button_width = self.sidebar.width() - 16
-        for button, label in self.sidebar_action_buttons + self.sidebar_bottom_buttons:
-            button.setText("" if collapsed else f" {label}")
-            # A tooltip repeating the label is only useful once the label
-            # itself is hidden (collapsed, icon-only rail).
-            button.setToolTip(label if collapsed else "")
-            button.setProperty("collapsed", collapsed)
-            button.setIconSize(QtCore.QSize(22, 22))
-            button.setFixedHeight(42)
-            button.style().unpolish(button)
-            button.style().polish(button)
-            if collapsed:
-                button.setFixedWidth(rail_button_width)
-            else:
-                button.setMinimumWidth(0)
-                button.setMaximumWidth(16777215)
-        self._refresh_recent()
-        self.sidebar_toggle.setText("")
-        self.sidebar_toggle.setIcon(
-            _svg_icon(_SVG_CHEVRON_RIGHT if collapsed else _SVG_CHEVRON_LEFT, size=14)
-        )
-        self.sidebar_toggle.setIconSize(QtCore.QSize(14, 14))
-        self._position_sidebar_toggle()
-        QtCore.QTimer.singleShot(0, self._position_sidebar_toggle)
-        QtCore.QTimer.singleShot(0, self._position_floating_log)
-
-    def _build_sidebar(self):
-        sidebar = QtWidgets.QWidget()
-        sidebar.setObjectName("sidebar")
-        sidebar.setFixedWidth(260)
-        sb = QtWidgets.QVBoxLayout(sidebar)
-        sb.setContentsMargins(0, 0, 0, 0)
-        sb.setSpacing(0)
-
-        header = QtWidgets.QWidget()
-        hl = QtWidgets.QHBoxLayout(header)
-        self.brand_layout = hl
-        hl.setContentsMargins(16, 14, 16, 14)
-        self.brand_left_spacer = QtWidgets.QSpacerItem(
-            0, 0, QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Minimum
-        )
-        hl.addItem(self.brand_left_spacer)
-        brand_mark = QtWidgets.QLabel()
-        self.brand_mark = brand_mark
-        # Rendered through QIcon at the exact target size rather than
-        # QPixmap(...).scaled(): the source is vector, so asking for 28px
-        # rasterises at 28px instead of downsampling a 512px bitmap.
-        if APP_ICON_PATH.is_file():
-            brand_mark.setPixmap(QtGui.QIcon(str(APP_ICON_PATH)).pixmap(28, 28))
-        brand_mark.setFixedSize(28, 28)
-        hl.addWidget(brand_mark)
-        self.brand_name = QtWidgets.QLabel("plmConsultant")
-        self.brand_name.setObjectName("brandName")
-        hl.addWidget(self.brand_name)
-        hl.addStretch(1)
-        sb.addWidget(header)
-
-        actions = QtWidgets.QWidget()
-        al = QtWidgets.QVBoxLayout(actions)
-        al.setContentsMargins(8, 4, 8, 8)
-        al.setSpacing(4)
-        btn_new = QtWidgets.QPushButton(" New")
-        btn_save = QtWidgets.QPushButton(" Save")
-        btn_revert = QtWidgets.QPushButton(" Revert")
-        btn_open = QtWidgets.QPushButton(" Open")
-        self.sidebar_action_buttons = [
-            (btn_new, "New"), (btn_save, "Save"), (btn_revert, "Revert"), (btn_open, "Open")
-        ]
-        for b, icon_svg, handler in (
-            (btn_new, _SVG_NEW, self._on_new),
-            (btn_save, _SVG_SAVE, self._on_save),
-            (btn_revert, _SVG_REVERT, self._on_revert),
-            (btn_open, _SVG_OPEN, self._on_open),
-        ):
-            b.setObjectName("sidebarBtn")
-            icon = _svg_icon(icon_svg)
-            if not icon.isNull():
-                b.setIcon(icon)
-                b.setIconSize(QtCore.QSize(22, 22))
-                b.setLayoutDirection(QtCore.Qt.LeftToRight)
-                b.setStyleSheet(b.styleSheet() + "" if b.styleSheet() else "")
-            add_shadow(b, blur=8, offset=(0, 1), alpha=30)
-            b.clicked.connect(handler)
-            al.addWidget(b)
-        sb.addWidget(actions)
-
-        section = QtWidgets.QWidget()
-        sl = QtWidgets.QVBoxLayout(section)
-        sl.setContentsMargins(8, 8, 8, 16)
-        self.section_header = QtWidgets.QLabel("最近")
-        self.section_header.setObjectName("sectionHeader")
-        self.section_header.setContentsMargins(2, 0, 0, 6)
-        sl.addWidget(self.section_header)
-        self.recent_list = QtWidgets.QListWidget()
-        self.recent_list.setObjectName("recentList")
-        self.recent_list.setFrameShape(QtWidgets.QFrame.NoFrame)
-        self.recent_list.itemClicked.connect(self._on_recent_clicked)
-        self.recent_list.setContextMenuPolicy(QtCore.Qt.CustomContextMenu)
-        self.recent_list.customContextMenuRequested.connect(self._on_recent_context_menu)
-        sl.addWidget(self.recent_list, stretch=1)
-        sb.addWidget(section, stretch=1)
-
-        bottom = QtWidgets.QWidget()
-        bl = QtWidgets.QVBoxLayout(bottom)
-        bl.setContentsMargins(8, 8, 8, BOTTOM_EDGE_INSET)
-        bl.setSpacing(4)
-        btn_settings = QtWidgets.QPushButton(" Settings")
-        btn_doc = QtWidgets.QPushButton(" Doc")
-        self.sidebar_bottom_buttons = [
-            (btn_settings, "Settings"), (btn_doc, "Doc")
-        ]
-        for b, icon_svg, handler in (
-            (btn_settings, _SVG_SETTINGS, self._on_settings),
-            (btn_doc, _SVG_DOC, self._on_doc),
-        ):
-            b.setObjectName("sidebarBtn")
-            icon = _svg_icon(icon_svg)
-            if not icon.isNull():
-                b.setIcon(icon)
-                b.setIconSize(QtCore.QSize(22, 22))
-            add_shadow(b, blur=8, offset=(0, 1), alpha=30)
-            b.clicked.connect(handler)
-            bl.addWidget(b)
-        sb.addWidget(bottom)
-
-        return sidebar
-
-    def _build_main(self):
-        main = QtWidgets.QWidget()
-        # Let the splitter shrink this pane below the tab bar's size hint so
-        # a leftward drag can reach the preview-maximize snap threshold.
-        main.setSizePolicy(QtWidgets.QSizePolicy.Ignored, QtWidgets.QSizePolicy.Expanding)
-        self.main_area = main
-        mv = QtWidgets.QVBoxLayout(main)
-        mv.setContentsMargins(0, 0, 0, 0)
-        mv.setSpacing(0)
-
-        content = QtWidgets.QWidget()
-        cv = QtWidgets.QVBoxLayout(content)
-        self.main_content_layout = cv
-        # Fill the main content width and meet the title bar at the top.  Keep
-        # the bottom breathing room used by the floating log card. Once the
-        # card exists, _position_floating_log expands this margin by the
-        # collapsed header height so the editor cannot run underneath it.
-        cv.setContentsMargins(0, 0, 0, BOTTOM_EDGE_INSET)
-
-        self.tabs = QtWidgets.QTabWidget()
-        self.tabs.setObjectName("tabs")
-        tab_bar = _StableTabBar(self.tabs)
-        tab_bar.setExpanding(False)
-        tab_bar.setUsesScrollButtons(False)
-        tab_bar.setElideMode(QtCore.Qt.ElideNone)
-        add_shadow(tab_bar, blur=10, offset=(0, 2), alpha=30)
-        self.tabs.setTabBar(tab_bar)
-        self.tabs.addTab(self._build_controllers_tab(), "Controllers")
-        self._lane_mapping_page = self._build_lane_mapping_tab()
-        self.tabs.addTab(self._lane_mapping_page, "Lane Mapping")
-        self.tabs.addTab(self._build_signals_tab(), "Pipe Signals")
-        self._generation_page = self._build_generation_tab()
-        self.tabs.addTab(self._generation_page, "Generation")
-        self.tabs.currentChanged.connect(self._on_tab_changed)
-
-        editor_shell = QtWidgets.QFrame()
-        editor_shell.setObjectName("editorShell")
-        self.editor_shell = editor_shell
-        editor_layout = QtWidgets.QVBoxLayout(editor_shell)
-        editor_layout.setContentsMargins(0, 0, 0, 0)
-        editor_layout.setSpacing(0)
-        editor_layout.addWidget(self.tabs, stretch=1)
-        cv.addWidget(editor_shell, stretch=1)
-
-        mv.addWidget(content, stretch=1)
-
-        # The log is an overlay: it never consumes vertical space from the
-        # active editor. Expanded it floats across the bottom of the main
-        # area; collapsed it becomes a compact button in the lower-right.
-        self.log_card = self._build_log_panel()
-        self.log_card.setParent(main)
-        self.log_card.raise_()
-        QtCore.QTimer.singleShot(0, self._position_floating_log)
-
-        return main
-
-    def _build_preview_controls(self, parent):
-        controls = QtWidgets.QWidget(parent)
-        controls.setObjectName("previewControls")
-        layout = QtWidgets.QHBoxLayout(controls)
-        # The frame already contributes its own 1 px border, and the buttons
-        # are sized to fill the rest of the tab-bar height exactly (see
-        # _position_preview_controls), so any padding here would push this
-        # group taller than the tab bar and break the centre-line match.
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(2)
-
-        self.preview_refresh_btn = QtWidgets.QToolButton(controls)
-        self.preview_refresh_btn.setObjectName("previewControlBtn")
-        self.preview_refresh_btn.setIcon(_svg_icon(_SVG_REFRESH, size=18))
-        self.preview_refresh_btn.setIconSize(QtCore.QSize(18, 18))
-        self.preview_refresh_btn.setToolTip("Refresh generated files")
-        self.preview_refresh_btn.clicked.connect(self._refresh_rtl_preview)
-        self.preview_refresh_btn.hide()
-
-        self.preview_edit_btn = QtWidgets.QToolButton(controls)
-        self.preview_edit_btn.setObjectName("previewControlBtn")
-        self.preview_edit_btn.setIcon(_svg_icon(_SVG_EDIT, size=18))
-        self.preview_edit_btn.setIconSize(QtCore.QSize(18, 18))
-        self.preview_edit_btn.setToolTip("Edit current file in gvim")
-        self.preview_edit_btn.clicked.connect(self._edit_selected_rtl_file)
-        self.preview_edit_btn.hide()
-
-        self.preview_highlight_btn = QtWidgets.QToolButton(controls)
-        self.preview_highlight_btn.setObjectName("previewControlBtn")
-        self.preview_highlight_btn.setCheckable(True)
-        self.preview_highlight_btn.setChecked(True)
-        self.preview_highlight_btn.setIcon(_svg_icon(_SVG_HIGHLIGHT, size=18))
-        self.preview_highlight_btn.setIconSize(QtCore.QSize(18, 18))
-        self.preview_highlight_btn.setToolTip("Syntax highlighting")
-        self.preview_highlight_btn.setAccessibleName("Syntax highlighting")
-        self.preview_highlight_btn.toggled.connect(self._on_preview_highlight_toggled)
-        self.preview_highlight_btn.hide()
-
-        self.preview_diff_btn = QtWidgets.QToolButton(controls)
-        self.preview_diff_btn.setObjectName("previewControlBtn")
-        self.preview_diff_btn.setCheckable(True)
-        self.preview_diff_btn.setIcon(_svg_icon(_SVG_DIFF, size=18))
-        self.preview_diff_btn.setIconSize(QtCore.QSize(18, 18))
-        self.preview_diff_btn.setToolTip("Show changes since previous preview")
-        self.preview_diff_btn.setAccessibleName("Show diff")
-        self.preview_diff_btn.setEnabled(False)
-        self.preview_diff_btn.toggled.connect(self._on_preview_diff_toggled)
-        self.preview_diff_btn.hide()
-
-        self.preview_search_btn = QtWidgets.QToolButton(controls)
-        self.preview_search_btn.setObjectName("previewControlBtn")
-        self.preview_search_btn.setIcon(_svg_icon(_SVG_SEARCH, size=18))
-        self.preview_search_btn.setIconSize(QtCore.QSize(18, 18))
-        self.preview_search_btn.setToolTip("Find in file (Ctrl+F)")
-        self.preview_search_btn.setAccessibleName("Find")
-        self.preview_search_btn.clicked.connect(self._on_preview_search_open)
-        self.preview_search_btn.hide()
-
-        self.preview_copy_path_btn = QtWidgets.QToolButton(controls)
-        self.preview_copy_path_btn.setObjectName("previewControlBtn")
-        self.preview_copy_path_btn.setIcon(_svg_icon(_SVG_COPY, size=18))
-        self.preview_copy_path_btn.setIconSize(QtCore.QSize(18, 18))
-        self.preview_copy_path_btn.setToolTip("Copy this file's path")
-        self.preview_copy_path_btn.setAccessibleName("Copy path")
-        self.preview_copy_path_btn.clicked.connect(self._copy_preview_path)
-        self.preview_copy_path_btn.hide()
-
-        self.preview_more_btn = QtWidgets.QToolButton(controls)
-        self.preview_more_btn.setObjectName("previewControlBtn")
-        self.preview_more_btn.setIcon(_svg_icon(_SVG_MORE, size=18))
-        self.preview_more_btn.setIconSize(QtCore.QSize(18, 18))
-        self.preview_more_btn.setToolTip("More preview actions")
-        self.preview_more_btn.setAccessibleName("More preview actions")
-        self.preview_more_btn.clicked.connect(self._show_preview_more_menu)
-        self.preview_more_btn.hide()
-
-        self.preview_expand_btn = QtWidgets.QToolButton(controls)
-        self.preview_expand_btn.setObjectName("previewControlBtn")
-        self.preview_expand_btn.setIcon(_svg_icon(_SVG_PREVIEW_EXPAND, size=18))
-        self.preview_expand_btn.setIconSize(QtCore.QSize(18, 18))
-        self.preview_expand_btn.setToolTip("Maximize RTL preview")
-        self.preview_expand_btn.clicked.connect(self._on_toggle_preview_maximized)
-        self.preview_expand_btn.hide()
-
-        self.preview_toggle_btn = QtWidgets.QToolButton(controls)
-        self.preview_toggle_btn.setObjectName("previewControlBtn")
-        self.preview_toggle_btn.setCheckable(True)
-        self.preview_toggle_btn.setIcon(_svg_icon(_SVG_PREVIEW_PANEL, size=18))
-        self.preview_toggle_btn.setIconSize(QtCore.QSize(18, 18))
-        self.preview_toggle_btn.setToolTip("Preview")
-        self.preview_toggle_btn.setAccessibleName("Preview")
-        self.preview_toggle_btn.clicked.connect(self._on_toggle_rtl_preview)
-
-        self.preview_buttons = [
-            self.preview_refresh_btn,
-            self.preview_edit_btn,
-            self.preview_highlight_btn,
-            self.preview_diff_btn,
-            self.preview_search_btn,
-            self.preview_copy_path_btn,
-            self.preview_more_btn,
-            self.preview_expand_btn,
-            self.preview_toggle_btn,
-        ]
-        for b in self.preview_buttons:
-            layout.addWidget(b)
-        return controls
-
-    def _build_preview_search_bar(self):
-        bar = QtWidgets.QWidget()
-        bar.setObjectName("previewSearchBar")
-        row = QtWidgets.QHBoxLayout(bar)
-        row.setContentsMargins(0, 0, 0, 0)
-        row.setSpacing(4)
-
-        self.preview_search_edit = QtWidgets.QLineEdit()
-        self.preview_search_edit.setObjectName("previewSearchEdit")
-        self.preview_search_edit.setPlaceholderText("Find in file  (:42 jumps to a line)")
-        self.preview_search_edit.setClearButtonEnabled(True)
-        self.preview_search_edit.returnPressed.connect(self._preview_find_next)
-        self.preview_search_edit.textChanged.connect(self._on_preview_search_text_changed)
-        row.addWidget(self.preview_search_edit, stretch=1)
-
-        self.preview_search_status = QtWidgets.QLabel("")
-        self.preview_search_status.setObjectName("previewSearchStatus")
-        row.addWidget(self.preview_search_status)
-
-        for text, tip, handler in (
-            ("↑", "Previous match (Shift+Enter)", self._preview_find_previous),
-            ("↓", "Next match (Enter)", self._preview_find_next),
-            ("✕", "Close (Esc)", lambda: self._set_preview_search_visible(False)),
-        ):
-            button = QtWidgets.QToolButton()
-            button.setObjectName("previewSearchBtn")
-            button.setText(text)
-            button.setToolTip(tip)
-            button.setCursor(QtCore.Qt.PointingHandCursor)
-            button.clicked.connect(handler)
-            row.addWidget(button)
-
-        for sequence, handler in (
-            (QtGui.QKeySequence("Shift+Return"), self._preview_find_previous),
-            (QtGui.QKeySequence("Shift+Enter"), self._preview_find_previous),
-            (QtGui.QKeySequence(QtCore.Qt.Key_Escape), lambda: self._set_preview_search_visible(False)),
-        ):
-            shortcut = QtWidgets.QShortcut(sequence, bar, handler)
-            shortcut.setContext(QtCore.Qt.WidgetWithChildrenShortcut)
-
-        bar.hide()
-        return bar
-
-    def _set_preview_search_visible(self, visible):
-        self.preview_search_bar.setVisible(visible)
-        if visible:
-            self.preview_search_edit.setFocus()
-            self.preview_search_edit.selectAll()
-        else:
-            self.preview_search_edit.clear()
-            self.preview_code.setFocus()
-
-    def _on_preview_search_open(self):
-        """Ctrl+F: only meaningful while the preview is actually showing."""
-        if not self.rtl_preview_panel.isVisible():
-            return
-        self._set_preview_search_visible(True)
-
-    def _on_preview_search_text_changed(self, text):
-        if not text:
-            self.preview_search_status.setText("")
-            return
-        if text.startswith(":"):
-            self.preview_search_status.setText("line")
-            return
-        total = self.preview_code.toPlainText().casefold().count(text.casefold())
-        self.preview_search_status.setText(f"{total} found" if total else "no match")
-
-    def _preview_goto_line(self, number):
-        document = self.preview_code.document()
-        block = document.findBlockByLineNumber(max(0, number - 1))
-        if not block.isValid():
-            self.preview_search_status.setText("no such line")
-            return
-        cursor = QtGui.QTextCursor(block)
-        self.preview_code.setTextCursor(cursor)
-        self.preview_code.centerCursor()
-        self.preview_search_status.setText(f"line {number}")
-
-    def _preview_find(self, backwards):
-        query = self.preview_search_edit.text()
-        if not query:
-            return
-        if query.startswith(":"):
-            digits = query[1:].strip()
-            if digits.isdigit():
-                self._preview_goto_line(int(digits))
-            else:
-                self.preview_search_status.setText("expected :<line>")
-            return
-        flags = QtGui.QTextDocument.FindFlags()
-        if backwards:
-            flags |= QtGui.QTextDocument.FindBackward
-        if self.preview_code.find(query, flags):
-            self.preview_code.centerCursor()
-            return
-        # Wrap around: restart from the far end and try once more, so the
-        # last match does not look like "no match".
-        cursor = self.preview_code.textCursor()
-        cursor.movePosition(
-            QtGui.QTextCursor.End if backwards else QtGui.QTextCursor.Start
-        )
-        self.preview_code.setTextCursor(cursor)
-        if self.preview_code.find(query, flags):
-            self.preview_code.centerCursor()
-        else:
-            self.preview_search_status.setText("no match")
-
-    def _preview_find_next(self):
-        self._preview_find(backwards=False)
-
-    def _preview_find_previous(self):
-        self._preview_find(backwards=True)
-
-    def _copy_preview_path(self):
-        path = self._selected_preview_file
-        if not path:
-            self._log("No preview file selected.")
-            return
-        QtWidgets.QApplication.clipboard().setText(str(path))
-        self._log(f"Copied {path} to the clipboard.")
-
-    def _show_preview_more_menu(self):
-        menu = QtWidgets.QMenu(self.preview_more_btn)
-        refresh_action = menu.addAction("Refresh generated files")
-        edit_action = menu.addAction("Edit current file")
-        highlight_action = menu.addAction("Syntax highlighting")
-        highlight_action.setCheckable(True)
-        highlight_action.setChecked(self.preview_highlight_btn.isChecked())
-        diff_action = menu.addAction("Show diff")
-        diff_action.setCheckable(True)
-        diff_action.setChecked(self.preview_diff_btn.isChecked())
-        diff_action.setEnabled(self.preview_diff_btn.isEnabled())
-        menu.addSeparator()
-        search_action = menu.addAction("Find in file")
-        copy_action = menu.addAction("Copy file path")
-        menu.addSeparator()
-        maximize_action = menu.addAction(
-            "Restore split preview" if self._preview_maximized else "Maximize preview"
-        )
-        chosen = menu.exec_(
-            self.preview_more_btn.mapToGlobal(
-                QtCore.QPoint(0, self.preview_more_btn.height())
-            )
-        )
-        if chosen == refresh_action:
-            self._refresh_rtl_preview()
-        elif chosen == edit_action:
-            self._edit_selected_rtl_file()
-        elif chosen == highlight_action:
-            self.preview_highlight_btn.setChecked(highlight_action.isChecked())
-        elif chosen == diff_action:
-            self.preview_diff_btn.setChecked(diff_action.isChecked())
-        elif chosen == search_action:
-            self._on_preview_search_open()
-        elif chosen == copy_action:
-            self._copy_preview_path()
-        elif chosen == maximize_action:
-            self._on_toggle_preview_maximized()
-
-    def _apply_preview_control_density(self, available_width):
-        """Collapse preview actions in two stages before they can cover Files."""
-        scale = _ui_scale()
-        compact = available_width < int(430 * scale)
-        narrow = available_width < int(190 * scale)
-        for button in (
-            self.preview_edit_btn,
-            self.preview_highlight_btn,
-            self.preview_diff_btn,
-            self.preview_search_btn,
-            self.preview_copy_path_btn,
-        ):
-            button.setVisible(not compact)
-        self.preview_refresh_btn.setVisible(not narrow)
-        self.preview_expand_btn.setVisible(not narrow)
-        self.preview_more_btn.setVisible(compact)
-
-    def _build_rtl_preview_panel(self):
-        panel = QtWidgets.QFrame()
-        panel.setObjectName("rtlPreviewPanel")
-        layout = QtWidgets.QVBoxLayout(panel)
-        layout.setContentsMargins(18, 0, 18, BOTTOM_EDGE_INSET)
-        layout.setSpacing(10)
-
-        self.preview_header = QtWidgets.QWidget()
-        self.preview_header.setObjectName("previewHeader")
-        header_layout = QtWidgets.QHBoxLayout(self.preview_header)
-        header_layout.setContentsMargins(0, 0, 0, 0)
-        header_layout.setSpacing(0)
-        self.preview_root_btn = QtWidgets.QToolButton()
-        self.preview_root_btn.setObjectName("previewRootBtn")
-        self.preview_root_btn.setCheckable(True)
-        self.preview_root_btn.setText("")
-        self.preview_root_btn.setToolButtonStyle(QtCore.Qt.ToolButtonIconOnly)
-        self.preview_root_btn.setIcon(_svg_icon(_SVG_OPEN, size=17))
-        self.preview_root_btn.setIconSize(QtCore.QSize(17, 17))
-        self.preview_root_btn.setCursor(QtCore.Qt.PointingHandCursor)
-        self.preview_root_btn.setToolTip("Files")
-        self.preview_root_btn.setAccessibleName("Files")
-        self.preview_root_btn.clicked.connect(self._set_preview_tree_visible)
-        header_layout.addWidget(self.preview_root_btn, alignment=QtCore.Qt.AlignVCenter)
-        header_layout.addStretch(1)
-        layout.addWidget(self.preview_header)
-
-        self.preview_search_bar = self._build_preview_search_bar()
-        layout.addWidget(self.preview_search_bar)
-
-        self.preview_file_tree = QtWidgets.QTreeWidget(panel)
-        self.preview_file_tree.setObjectName("previewFileTree")
-        self.preview_file_tree.setHeaderHidden(True)
-        self.preview_file_tree.setRootIsDecorated(True)
-        self.preview_file_tree.setUniformRowHeights(True)
-        self.preview_file_tree.itemClicked.connect(self._on_preview_tree_item_clicked)
-        self.preview_file_tree.hide()
-        self._selected_preview_file = None
-
-        self.preview_status = QtWidgets.QLabel("Generate RTL to preview the output.")
-        self.preview_status.setObjectName("previewStatus")
-        self.preview_status.setWordWrap(True)
-        layout.addWidget(self.preview_status)
-
-        self.preview_code = _CodePreviewEdit()
-        self.preview_code.setObjectName("rtlPreviewCode")
-        self.preview_code.setReadOnly(True)
-        self.preview_code.setLineWrapMode(QtWidgets.QPlainTextEdit.NoWrap)
-        self.preview_highlighter = CodeHighlighter(self.preview_code.document())
-        self._preview_current_contents = {}
-        self._preview_previous_contents = {}
-        layout.addWidget(self.preview_code, stretch=1)
-        return panel
-
-    def _on_toggle_rtl_preview(self, checked):
-        if getattr(self, "_splitter_animation", None) is not None:
-            self._splitter_animation.stop()
-            self._splitter_animation = None
-        self._preview_maximized = False
-        self._preview_maximize_pending = False
-        self.main_area.setVisible(True)
-        self.rtl_preview_panel.setVisible(checked)
-        self.preview_toggle_btn.setChecked(checked)
-        self.preview_refresh_btn.setVisible(checked)
-        self.preview_edit_btn.setVisible(checked)
-        self.preview_highlight_btn.setVisible(checked)
-        self.preview_diff_btn.setVisible(checked)
-        self.preview_search_btn.setVisible(checked)
-        self.preview_copy_path_btn.setVisible(checked)
-        self.preview_expand_btn.setVisible(checked)
-        self.preview_toggle_btn.setToolTip("Preview")
-        self.preview_expand_btn.setToolTip("Maximize RTL preview")
-        if not checked:
-            self._set_preview_search_visible(False)
-        if checked:
-            self._refresh_rtl_preview()
-            total = max(800, self.content_splitter.width())
-            self.content_splitter.setSizes([int(total * 0.56), int(total * 0.44)])
-        self._position_preview_controls()
-        QtCore.QTimer.singleShot(0, self._position_floating_log)
-
-    def _last_tab_reveal_width(self):
-        """Width the tab bar (flush with main_area's left/right edges) needs
-        so its last tab -- Generation -- is fully visible and not clipped by
-        a narrower left splitter pane."""
-        tab_bar = self.tabs.tabBar()
-        count = tab_bar.count()
-        if count == 0:
-            return 0
-        rect = tab_bar.tabRect(count - 1)
-        return rect.x() + rect.width()
-
-    def _on_content_splitter_moved(self, position, _index):
-        self._position_floating_log()
-        if (
-            getattr(self, "_preview_maximized", False)
-            or getattr(self, "_preview_maximize_pending", False)
-            or self.rtl_preview_panel.isHidden()
-            or not self.main_area.isVisible()
-        ):
-            return
-        snap_position = self._last_tab_reveal_width()
-        if position <= snap_position:
-            # Drag can fire splitterMoved several times before this deferred
-            # call runs; latch immediately so a fast drag doesn't queue the
-            # toggle twice and cancel itself back out.
-            self._preview_maximize_pending = True
-            QtCore.QTimer.singleShot(0, self._trigger_preview_maximize_from_snap)
-
-    def _trigger_preview_maximize_from_snap(self):
-        self._preview_maximize_pending = False
-        if not self._preview_maximized:
-            self._on_toggle_preview_maximized()
-
-    def _animate_splitter_sizes(self, target_sizes, on_finished=None):
-        splitter = self.content_splitter
-        start_sizes = splitter.sizes()
-        if getattr(self, "_splitter_animation", None) is not None:
-            self._splitter_animation.stop()
-        if len(start_sizes) != len(target_sizes):
-            splitter.setSizes(target_sizes)
-            if on_finished:
-                on_finished()
-            return
-
-        anim = QtCore.QVariantAnimation(self)
-        anim.setDuration(PREVIEW_MAXIMIZE_ANIM_MS)
-        anim.setStartValue(0.0)
-        anim.setEndValue(1.0)
-        anim.setEasingCurve(QtCore.QEasingCurve.OutCubic)
-
-        def _apply(t):
-            sizes = [int(round(s + (target - s) * t)) for s, target in zip(start_sizes, target_sizes)]
-            splitter.setSizes(sizes)
-            self._position_preview_controls()
-            self._position_floating_log()
-
-        anim.valueChanged.connect(_apply)
-
-        def _cleanup():
-            self._splitter_animation = None
-            if on_finished:
-                on_finished()
-
-        anim.finished.connect(_cleanup)
-        self._splitter_animation = anim
-        anim.start()
-
-    def _on_toggle_preview_maximized(self):
-        total = max(800, self.content_splitter.width())
-        if not self._preview_maximized:
-            self._preview_maximized = True
-            self.preview_toggle_btn.setChecked(True)
-            self.preview_refresh_btn.show()
-            self.preview_edit_btn.show()
-            self.preview_highlight_btn.show()
-            self.preview_diff_btn.show()
-            self.preview_search_btn.show()
-            self.preview_copy_path_btn.show()
-            self.preview_expand_btn.show()
-            self.rtl_preview_panel.show()
-            self.preview_expand_btn.setToolTip("Restore split preview")
-            self.preview_toggle_btn.setToolTip("Preview")
-            self._refresh_rtl_preview()
-
-            def _finish_maximize():
-                # Only actually remove main_area from the layout once it has
-                # visually shrunk to nothing, so the collapse reads as a
-                # slide rather than an instant cut.
-                if self._preview_maximized:
-                    self.main_area.hide()
-                self._position_preview_controls()
-                self._position_floating_log()
-
-            self._animate_splitter_sizes([0, total], on_finished=_finish_maximize)
-        else:
-            self._preview_maximized = False
-            self.main_area.show()
-            self.rtl_preview_panel.show()
-            self.preview_expand_btn.setToolTip("Maximize RTL preview")
-            self._animate_splitter_sizes(
-                [int(total * 0.56), int(total * 0.44)],
-                on_finished=lambda: (self._position_preview_controls(), self._position_floating_log()),
-            )
-        self._position_preview_controls()
-        QtCore.QTimer.singleShot(0, self._position_floating_log)
-
-    def _set_preview_tree_visible(self, visible):
-        visible = bool(visible and self.preview_file_tree.topLevelItemCount())
-        self._position_preview_file_tree()
-        self.preview_file_tree.setVisible(visible)
-        self.preview_root_btn.setChecked(visible)
-        if visible:
-            self.preview_file_tree.raise_()
-
-    def _on_preview_tree_item_clicked(self, item, _column):
-        path_text = item.data(0, QtCore.Qt.UserRole)
-        if not path_text:
-            return
-        self._selected_preview_file = Path(path_text)
-        self._show_selected_preview_file()
-        self._set_preview_tree_visible(False)
-
-    def _refresh_rtl_preview(self):
-        previous = str(self._selected_preview_file) if self._selected_preview_file else None
-        tree_was_visible = self.preview_root_btn.isChecked()
-        self.preview_file_tree.blockSignals(True)
-        self.preview_file_tree.clear()
-        files = []
-        if self.current_workspace:
-            preview_roots = (
-                (self.current_workspace / "config", {".csv"}),
-                (self.current_workspace / "rtl", {".sv", ".svh", ".v", ".vh", ".f"}),
-                (self.current_workspace / "tb", {".sv", ".svh", ".v", ".vh", ".f"}),
-            )
-            for root, extensions in preview_roots:
-                if root.is_dir():
-                    files.extend(
-                        path
-                        for path in root.rglob("*")
-                        if path.is_file() and path.suffix.lower() in extensions
-                    )
-            files.sort(key=lambda path: str(path.relative_to(self.current_workspace)).lower())
-
-        old_contents = self._preview_current_contents
-        current_contents = {}
-        for path in files:
-            try:
-                current_contents[str(path)] = path.read_text(
-                    encoding="utf-8", errors="replace"
-                )
-            except OSError:
-                continue
-        for path_text, current_text in current_contents.items():
-            previous_text = old_contents.get(path_text)
-            if previous_text is not None and previous_text != current_text:
-                self._preview_previous_contents[path_text] = previous_text
-        self._preview_current_contents = current_contents
-
-        file_items = {}
-        directory_items = {}
-        directory_icon = _svg_icon(_SVG_TREE_FOLDER, size=18)
-        file_icon = _svg_icon(_SVG_TREE_FILE, size=18)
-        for path in files:
-            relative = path.relative_to(self.current_workspace)
-            parent = self.preview_file_tree.invisibleRootItem()
-            for index, part in enumerate(relative.parts):
-                is_file = index == len(relative.parts) - 1
-                key = relative.parts[: index + 1]
-                if is_file:
-                    status = self._generation_file_status.get(relative.as_posix(), "")
-                    label = f"{part}   {status}" if status else part
-                    item = QtWidgets.QTreeWidgetItem(parent, [label])
-                    item.setIcon(0, file_icon)
-                    item.setData(0, QtCore.Qt.UserRole, str(path))
-                    tooltip = str(relative)
-                    if status:
-                        tooltip += f"\nGeneration result: {status}"
-                        color = {
-                            "New": "#107e3e",
-                            "Modified": "#0a6ed1",
-                            "Unchanged": TEXT_TERTIARY,
-                        }[status]
-                        item.setForeground(0, QtGui.QBrush(QtGui.QColor(color)))
-                    item.setToolTip(0, tooltip)
-                    file_items[str(path)] = item
-                else:
-                    item = directory_items.get(key)
-                    if item is None:
-                        item = QtWidgets.QTreeWidgetItem(parent, [part])
-                        item.setIcon(0, directory_icon)
-                        directory_items[key] = item
-                    parent = item
-        self.preview_file_tree.expandAll()
-        self.preview_file_tree.blockSignals(False)
-
-        self.preview_root_btn.setToolTip(
-            str(self.current_workspace) if self.current_workspace else "No workspace open"
-        )
-        self.preview_root_btn.setEnabled(bool(files))
-        row_count = len(files) + len(directory_items)
-        self._preview_tree_content_height = min(
-            int(260 * _ui_scale()),
-            max(int(120 * _ui_scale()), row_count * int(26 * _ui_scale())),
-        )
-        self._position_preview_file_tree()
-        if files:
-            selected = previous if previous in file_items else str(files[0])
-            self._selected_preview_file = Path(selected)
-            self.preview_file_tree.setCurrentItem(file_items[selected])
-            self.preview_status.hide()
-            self._show_selected_preview_file()
-            self._set_preview_tree_visible(tree_was_visible)
-        else:
-            self._selected_preview_file = None
-            self.preview_diff_btn.setChecked(False)
-            self.preview_diff_btn.setEnabled(False)
-            self._set_preview_tree_visible(False)
-            self.preview_status.setText("Generate RTL to preview the output.")
-            self.preview_status.show()
-            self.preview_code.clear()
-        self._update_generation_freshness(verify_files=True)
-
-    def _show_selected_preview_file(self):
-        if not self._selected_preview_file:
-            self.preview_code.clear()
-            return
-        path = self._selected_preview_file
-        path_text = str(path)
-        text = self._preview_current_contents.get(path_text)
-        if text is None:
-            try:
-                text = path.read_text(encoding="utf-8", errors="replace")
-            except OSError as error:
-                self.preview_code.setPlainText(f"Could not read {path}:\n{error}")
-                return
-            self._preview_current_contents[path_text] = text
-        previous = self._preview_previous_contents.get(path_text)
-        has_diff = previous is not None and previous != text
-        self.preview_diff_btn.setEnabled(has_diff)
-        if not has_diff and self.preview_diff_btn.isChecked():
-            self.preview_diff_btn.setChecked(False)
-
-        if self.preview_diff_btn.isChecked() and has_diff:
-            relative = self._preview_diff_label(path)
-            text = "".join(
-                difflib.unified_diff(
-                    previous.splitlines(keepends=True),
-                    text.splitlines(keepends=True),
-                    fromfile=f"previous/{relative}",
-                    tofile=f"current/{relative}",
-                )
-            )
-            self.preview_highlighter.set_language("diff")
-        else:
-            self.preview_highlighter.set_language(path.suffix)
-        self.preview_code.setPlainText(text)
-        self.preview_code.moveCursor(QtGui.QTextCursor.Start)
-        if self.preview_search_edit.text():
-            self._on_preview_search_text_changed(self.preview_search_edit.text())
-
-    def _preview_diff_label(self, path):
-        """Workspace-relative path for a unified-diff header.
-
-        as_posix() because a diff header is forward-slashed everywhere, and
-        a guarded relative_to() because an unguarded one raises ValueError
-        for a selection left over from another workspace -- and raising
-        inside a Qt slot makes PyQt call qFatal(), killing the app outright
-        rather than surfacing a traceback."""
-        if not self.current_workspace:
-            return path.name
-        try:
-            return path.relative_to(self.current_workspace).as_posix()
-        except ValueError:
-            return path.name
-
-    def _on_preview_highlight_toggled(self, checked):
-        self.preview_highlighter.set_enabled(checked)
-
-    def _on_preview_diff_toggled(self, _checked):
-        self._show_selected_preview_file()
-
-    def _edit_selected_rtl_file(self):
-        path = self._selected_preview_file
-        if not path:
-            QtWidgets.QMessageBox.information(self, "No file", "Select a generated RTL file first.")
-            return
-        editor = load_settings().get("editorPath") or "gvim"
-        result = QtCore.QProcess.startDetached(editor, [str(path)])
-        started = result[0] if isinstance(result, tuple) else result
-        if not started:
-            QtWidgets.QMessageBox.warning(
-                self,
-                "Editor launch failed",
-                f"Could not start '{editor}'. Set the editor path in Settings.",
-            )
-
-    def _position_floating_log(self):
-        if not getattr(self, "main_area", None) or not getattr(self, "log_card", None):
-            return
-        scale = _ui_scale()
-        margin = max(12, int(14 * scale))
-        expanded = self.log_toggle.isChecked()
-        collapsed_height = self.log_header.sizeHint().height() + 16
-        content_layout = getattr(self, "main_content_layout", None)
-        if content_layout is not None:
-            margins = content_layout.contentsMargins()
-            clearance = BOTTOM_EDGE_INSET + collapsed_height
-            if margins.bottom() != clearance:
-                content_layout.setContentsMargins(
-                    margins.left(), margins.top(), margins.right(), clearance
-                )
-        # Use the editor shell's real geometry so the floating card fills the
-        # same left-to-right boundary at every DPI/font size.
-        if getattr(self, "editor_shell", None):
-            shell_origin = self.editor_shell.mapTo(self.main_area, QtCore.QPoint(0, 0))
-            shell_x = shell_origin.x()
-            shell_width = max(
-                1, min(self.editor_shell.width(), self.main_area.width() - shell_x)
-            )
-        else:
-            shell_x = margin
-            shell_width = max(1, self.main_area.width() - 2 * margin)
-        bottom = self.main_area.height() - BOTTOM_EDGE_INSET
-        if expanded:
-            x = shell_x
-            width = shell_width
-            height = min(int(260 * scale), max(190, int(self.main_area.height() * 0.38)))
-        else:
-            margins = self.log_layout.contentsMargins()
-            height = self.log_header.sizeHint().height() + margins.top() + margins.bottom()
-            width = min(shell_width, self.log_card.sizeHint().width())
-            x = shell_x + shell_width - width
-        y = max(margin, bottom - height)
-        self.log_card.setGeometry(x, y, width, height)
-        self.log_card.raise_()
-
-    @classmethod
-    def _card(cls):
-        """Create a card frame and return it with its content layout."""
-        frame = QtWidgets.QFrame()
-        frame.setObjectName("card")
-        add_shadow(frame)
-        layout = QtWidgets.QVBoxLayout(frame)
-        layout.setContentsMargins(22, 22, 22, 22)
-        return frame, layout
-
-    def _build_controllers_tab(self):
-        frame, layout = self._card()
-        layout.setContentsMargins(0, 0, 0, 0)
-        self.controllers_table = EditableTable(
-            columns=[{"key": "ctrl_id", "heading": "ctrl_id"},
-                     {"key": "ctrl_name", "heading": "ctrl_name"},
-                     {"key": "max_width", "heading": "max_width"}],
-            id_column="ctrl_id",
-        )
-        self.controllers_table.changed.connect(self._schedule_live_edit_processing)
-        layout.addWidget(self.controllers_table)
-        return frame
-
-    def _build_signals_tab(self):
-        frame, layout = self._card()
-        layout.setContentsMargins(0, 0, 0, 0)
-        self.signals_table = EditableTable(
-            columns=[
-                {"key": "signal_name", "heading": "signal_name"},
-                {"key": "signal_type", "heading": "signal_type", "options": SIGNAL_TYPES, "width": 108},
-                {"key": "direction", "heading": "direction", "options": DIRECTIONS, "width": 128},
-                {"key": "width", "heading": "width", "width": 66},
-                {"key": "safe_state", "heading": "safe_state", "width": 84},
-                {"key": "tie_off", "heading": "tie_off", "width": 66},
-            ],
-        )
-        self.signals_table.changed.connect(self._schedule_live_edit_processing)
-        layout.addWidget(self.signals_table)
-        return frame
-
-    def _build_lane_mapping_tab(self):
-        frame, layout = self._card()
-        top = QtWidgets.QHBoxLayout()
-        top.addWidget(QtWidgets.QLabel("Num of Lanes"))
-        self.lane_count_combo = RoundedComboBox()
-        self.lane_count_combo.addItems(LANE_COUNTS)
-        self.lane_count_combo.currentTextChanged.connect(self._on_lane_count_changed)
-        self.lane_count_combo.currentTextChanged.connect(
-            self._schedule_live_edit_processing
-        )
-        top.addWidget(self.lane_count_combo)
-        top.addStretch(1)
-        layout.addLayout(top)
-
-        self.lane_grid = LaneGrid()
-        self.lane_grid.changed.connect(self._schedule_live_edit_processing)
-        layout.addWidget(self.lane_grid, stretch=1)
-        return frame
-
-    def _build_generation_tab(self):
-        frame, layout = self._card()
-        form = QtWidgets.QFormLayout()
-        form.setLabelAlignment(QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter)
-        form.setFormAlignment(QtCore.Qt.AlignTop)
-
-        self.arch_combo = RoundedComboBox()
-        self.arch_combo.addItems(ARCH_MODES)
-        form.addRow("arch", self.arch_combo)
-
-        self.pclk_mode_combo = RoundedComboBox()
-        self.pclk_mode_combo.addItems(PCLK_MODES)
-        form.addRow("pclk-mode", self.pclk_mode_combo)
-
-        # arch and pclk-mode are two views of the same one choice (see
-        # ARCH_PCLK_MODE) -- keep them in sync in both directions, guarded
-        # against the recursive re-trigger a currentTextChanged inside the
-        # other's handler would otherwise cause.
-        self._arch_pclk_sync_active = False
-
-        def on_arch_changed(text):
-            if self._arch_pclk_sync_active:
-                return
-            if text in ARCH_PCLK_MODE:
-                self._arch_pclk_sync_active = True
-                try:
-                    self.pclk_mode_combo.setCurrentText(ARCH_PCLK_MODE[text])
-                finally:
-                    self._arch_pclk_sync_active = False
-
-        def on_pclk_changed(text):
-            if self._arch_pclk_sync_active:
-                return
-            if text in PCLK_MODE_ARCH:
-                self._arch_pclk_sync_active = True
-                try:
-                    self.arch_combo.setCurrentText(PCLK_MODE_ARCH[text])
-                finally:
-                    self._arch_pclk_sync_active = False
-
-        self.arch_combo.currentTextChanged.connect(on_arch_changed)
-        self.pclk_mode_combo.currentTextChanged.connect(on_pclk_changed)
-        # These are part of _gather_payload() again, so changing one is a real
-        # unsaved edit: it has to reach the dirty marker and the undo history.
-        for combo in (self.arch_combo, self.pclk_mode_combo):
-            combo.currentTextChanged.connect(self._schedule_live_edit_processing)
-
-        self.sel_mode_combo = RoundedComboBox()
-        self.sel_mode_combo.addItems(SEL_MODES)
-        self.sel_mode_combo.currentTextChanged.connect(self._schedule_live_edit_processing)
-        form.addRow("sel-mode", self.sel_mode_combo)
-
-        self.dpr_check = VisibleCheckBox()
-
-        def on_dpr_toggled(checked):
-            # DPR needs sel-mode=sync (comb is only safe when every branch
-            # shares one clock domain, which DPR can't guarantee) -- force
-            # it and lock the control while dpr is checked, rather than
-            # let the user pick an unsafe combination that `plm generate
-            # rtl`'s own --dpr/--sel-mode check would only reject at
-            # generation time.
-            if checked:
-                self.sel_mode_combo.setCurrentText("sync")
-                self.sel_mode_combo.setEnabled(False)
-            else:
-                self.sel_mode_combo.setEnabled(True)
-
-        self.dpr_check.toggled.connect(on_dpr_toggled)
-        self.dpr_check.toggled.connect(self._schedule_live_edit_processing)
-        form.addRow("dpr", self.dpr_check)
-
-        layout.addLayout(form)
-
-        actions_row = QtWidgets.QHBoxLayout()
-        self.generation_state_label = QtWidgets.QLabel(
-            GENERATION_STATE_LABELS[self._generation_state]
-        )
-        self.generation_state_label.setObjectName("generationState")
-        actions_row.addWidget(self.generation_state_label)
-        actions_row.addStretch(1)
-        btn_generate = QtWidgets.QPushButton("Generate")
-        btn_generate.setObjectName("primaryBtn")
-        btn_generate.clicked.connect(self._run_tool)
-        self.generation_buttons = [btn_generate]
-        for b in self.generation_buttons:
-            actions_row.addWidget(b)
-        layout.addLayout(actions_row)
-        layout.addStretch(1)
-
-        return frame
-
-    def _build_log_panel(self):
-        card = QtWidgets.QFrame()
-        card.setObjectName("logCard")
-        card.setContentsMargins(0, 0, 0, 0)
-        add_shadow(card)
-        self.log_layout = QtWidgets.QVBoxLayout(card)
-        self.log_layout.setContentsMargins(18, 14, 18, 16)
-        self.log_layout.setSpacing(10)
-
-        header = QtWidgets.QWidget()
-        header.setObjectName("logHeader")
-        self.log_header = header
-        header_layout = QtWidgets.QHBoxLayout(header)
-        header_layout.setContentsMargins(0, 0, 0, 0)
-        header_layout.setSpacing(4)
-
-        # Two pages, split by question rather than by source:
-        #   LOG    -- "what just happened": the command's own progress, the
-        #             files it wrote, errors, timings. Transient, timestamped.
-        #   REPORT -- "what is this config": Config.report() for whatever is in
-        #             the tabs above right now. Rebuilt live as you edit; it
-        #             does not wait for, or depend on, a generate run.
-        # Generate therefore runs with --quiet (see _run_tool): without it the
-        # generator echoes its own copy of Config.report() and LOG ends up
-        # holding a stale duplicate of REPORT.
-        #
-        # There used to be a third view (a PROBLEMS tree that parsed error lines
-        # back out of the generator's output and made them double-clickable).
-        # It was dropped: this tool's failures are a handful of validation
-        # messages that read fine as plain text, and the config files they point
-        # at are already open in the tabs above.
-        self.log_tab_btn = QtWidgets.QToolButton()
-        self.log_tab_btn.setObjectName("bottomPanelTab")
-        self.log_tab_btn.setText("LOG")
-        self.log_tab_btn.setToolTip(
-            "What the last run did: files written, errors, timings."
-        )
-        self.log_tab_btn.setCheckable(True)
-        self.log_tab_btn.setChecked(True)
-        self.log_tab_btn.setFixedHeight(26)
-        header_layout.addWidget(self.log_tab_btn, alignment=QtCore.Qt.AlignVCenter)
-
-        self.report_tab_btn = QtWidgets.QToolButton()
-        self.report_tab_btn.setObjectName("bottomPanelTab")
-        self.report_tab_btn.setText("REPORT")
-        self.report_tab_btn.setToolTip(
-            "What the current config looks like: lane groups, NOV, pclk sources. "
-            "Follows the tabs above live -- no need to generate first."
-        )
-        self.report_tab_btn.setCheckable(True)
-        self.report_tab_btn.setFixedHeight(26)
-        header_layout.addWidget(self.report_tab_btn, alignment=QtCore.Qt.AlignVCenter)
-
-        panel_tabs = QtWidgets.QButtonGroup(card)
-        panel_tabs.setExclusive(True)
-        panel_tabs.addButton(self.log_tab_btn, 0)
-        panel_tabs.addButton(self.report_tab_btn, 1)
-        self.log_tab_btn.clicked.connect(lambda: self._set_bottom_panel_page(0))
-        self.report_tab_btn.clicked.connect(lambda: self._set_bottom_panel_page(1))
-
-        header_layout.addStretch(1)
-        self.log_more = QtWidgets.QToolButton()
-        self.log_more.setObjectName("logHeaderBtn")
-        self.log_more.setIcon(_svg_icon(_SVG_MORE, size=16))
-        self.log_more.setIconSize(QtCore.QSize(16, 16))
-        self.log_more.setToolTip("Panel options")
-        self.log_more.clicked.connect(self._show_log_menu)
-        header_layout.addWidget(self.log_more, alignment=QtCore.Qt.AlignVCenter)
-        self.log_toggle = QtWidgets.QToolButton()
-        self.log_toggle.setObjectName("logToggle")
-        self.log_toggle.setIcon(_svg_icon(_SVG_CHEVRON_DOWN, size=16))
-        self.log_toggle.setIconSize(QtCore.QSize(16, 16))
-        self.log_toggle.setCheckable(True)
-        self.log_toggle.setChecked(True)
-        self.log_toggle.setToolButtonStyle(QtCore.Qt.ToolButtonIconOnly)
-        self.log_toggle.setCursor(QtCore.Qt.PointingHandCursor)
-        self.log_toggle.clicked.connect(self._on_toggle_log)
-        header_layout.addWidget(self.log_toggle, alignment=QtCore.Qt.AlignVCenter)
-        self.log_layout.addWidget(header)
-
-        self.bottom_panel_stack = QtWidgets.QStackedWidget()
-        self.bottom_panel_stack.setObjectName("bottomPanelStack")
-
-        # Page 0 -- LOG. Was one half of a split REPORT page under its own
-        # "ACTIVITY LOG" sub-header; it is a whole tab now, so the header is
-        # gone and it gets the full height.
-        self.log = QtWidgets.QPlainTextEdit()
-        self.log.setObjectName("logConsole")
-        self.log.setReadOnly(True)
-        self.log.setMaximumBlockCount(2000)
-        self.log.setMinimumHeight(70)
-        _wrap_output(self.log)
-        self.bottom_panel_stack.addWidget(self.log)
-
-        # Page 1 -- REPORT: Config.report() for whatever is currently in the
-        # tabs above. Also its own whole tab now, no "TOPOLOGY" sub-header
-        # wrapper, so a wide topology table is readable without scrolling in a
-        # half-height box.
-        self.topology_summary = QtWidgets.QPlainTextEdit()
-        self.topology_summary.setObjectName("topologySummary")
-        self.topology_summary.setReadOnly(True)
-        self.topology_summary.setMinimumHeight(70)
-        _wrap_output(self.topology_summary)
-        self.topology_summary.setPlainText("Open a workspace to see its lane topology.")
-        self.bottom_panel_stack.addWidget(self.topology_summary)
-
-        self.bottom_panel_stack.setCurrentWidget(self.log)
-        self.log_layout.addWidget(self.bottom_panel_stack, stretch=1)
-        return card
-
-    def _set_bottom_panel_page(self, index):
-        self.bottom_panel_stack.setCurrentIndex(index)
-        self.log_tab_btn.setChecked(index == 0)
-        self.report_tab_btn.setChecked(index == 1)
-
-    def _clear_generation_results(self):
-        self._generation_file_status = {}
-
-    @staticmethod
-    def _output_signature(workspace):
-        roots = (workspace / "rtl", workspace / "tb")
-        signature = {}
-        for root in roots:
-            if not root.is_dir():
-                continue
-            for path in sorted(root.rglob("*")):
-                if not path.is_file():
-                    continue
-                try:
-                    digest = hashlib.sha256(path.read_bytes()).hexdigest()
-                except OSError:
-                    continue
-                signature[path.relative_to(workspace).as_posix()] = digest
-        return signature
-
-    def _show_generation_results(self, workspace, before, after):
-        statuses = {}
-        counts = {"New": 0, "Modified": 0, "Unchanged": 0}
-        for relative_path, digest in after.items():
-            if relative_path not in before:
-                status = "New"
-            elif before[relative_path] != digest:
-                status = "Modified"
-            else:
-                status = "Unchanged"
-            statuses[relative_path] = status
-            counts[status] += 1
-        self._generation_file_status = statuses
-        self._log(
-            "Generated files: "
-            f"{counts['New']} new, {counts['Modified']} modified, "
-            f"{counts['Unchanged']} unchanged."
-        )
-        if (
-            self.current_workspace is not None
-            and _same_path(self.current_workspace, workspace)
-            and self.rtl_preview_panel.isVisible()
-        ):
-            self._refresh_rtl_preview()
-
-    def _on_toggle_log(self, checked):
-        chevron = _SVG_CHEVRON_DOWN if checked else _SVG_CHEVRON_RIGHT
-        self.log_toggle.setIcon(_svg_icon(chevron, size=16))
-        self.log_more.setVisible(checked)
-        self.bottom_panel_stack.setVisible(checked)
-        self.log_layout.setContentsMargins(18, 14 if checked else 8, 18, 16 if checked else 8)
-        self._position_floating_log()
-
-    def _show_log_menu(self):
-        menu = QtWidgets.QMenu(self.log_more)
-        clear_action = menu.addAction("Clear log")
-        chosen = menu.exec_(
-            self.log_more.mapToGlobal(QtCore.QPoint(0, self.log_more.height()))
-        )
-        if chosen == clear_action:
-            self.log.clear()
-
-    def _log(self, text):
-        ts = QtCore.QTime.currentTime().toString("HH:mm:ss")
-        self.log.appendPlainText(f"[{ts}] {text}")
-
-    # ------------------------------------------------------------ recent list
-    def _refresh_recent(self):
-        self.recent_list.clear()
-        collapsed = getattr(self, "_sidebar_collapsed", False)
-        current = str(self.current_workspace) if self.current_workspace else None
-        for p in load_recent_workspaces():
-            parts = [part for part in p.name.replace("-", "_").split("_") if part]
-            initials = (
-                "".join(part[0] for part in parts[:2]).upper()
-                if len(parts) > 1 else p.name[:2].upper()
-            )
-            alignment = QtCore.Qt.AlignCenter if collapsed else QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter
-            item = QtWidgets.QListWidgetItem()
-            item.setData(QtCore.Qt.UserRole, str(p))
-            self.recent_list.addItem(item)
-            if collapsed:
-                item.setText(initials)
-                item.setTextAlignment(alignment)
-                item.setToolTip(str(p))
-            else:
-                row = _RecentItemRow(p.name, alignment)
-                row.label.setToolTip(str(p))
-                row.open_requested.connect(lambda path=str(p): self._open_workspace(Path(path)))
-                row.rename_requested.connect(lambda path=str(p): self._rename_workspace_at(path))
-                row.menu_requested.connect(lambda pos, it=item: self._show_recent_menu(it, pos))
-                # QListWidget#recentList::item's QSS padding/margin (9px/12px
-                # + 1px, 20px total vertical) shrinks a widget-item's
-                # allocated height instead of adding to it -- an explicit
-                # sizeHint smaller than that just collapses to 0 and the row
-                # renders blank. Pad past it with real slack.
-                hint = row.sizeHint()
-                item.setSizeHint(QtCore.QSize(hint.width(), hint.height() + 28))
-                self.recent_list.setItemWidget(item, row)
-            if str(p) == current:
-                item.setSelected(True)
-
-    def _on_recent_clicked(self, item):
-        # Only fires for the collapsed (icon-rail) rows -- expanded rows use
-        # a custom _RecentItemRow widget that handles its own click instead.
-        if self.recent_list.itemWidget(item) is None:
-            self._open_workspace(Path(item.data(QtCore.Qt.UserRole)))
-
-    def _on_recent_context_menu(self, pos):
-        item = self.recent_list.itemAt(pos)
-        if item is None:
-            return
-        self._show_recent_menu(item, self.recent_list.mapToGlobal(pos))
-
-    def _show_recent_menu(self, item, global_pos):
-        path = item.data(QtCore.Qt.UserRole)
-        menu = QtWidgets.QMenu(self)
-        rename_action = menu.addAction("Rename")
-        reveal_action = menu.addAction(REVEAL_LABEL)
-        menu.addSeparator()
-        remove_action = menu.addAction("Clear")
-
-        delete_action = QtWidgets.QWidgetAction(menu)
-        delete_action.setText("Delete")
-        delete_button = QtWidgets.QPushButton("Delete")
-        delete_button.setObjectName("destructiveMenuItem")
-        delete_button.setCursor(QtCore.Qt.PointingHandCursor)
-        delete_button.setMinimumWidth(140)
-        delete_action.setDefaultWidget(delete_button)
-        menu.addAction(delete_action)
-        delete_requested = [False]
-
-        def request_delete():
-            delete_requested[0] = True
-            menu.close()
-
-        delete_button.clicked.connect(request_delete)
-        chosen = menu.exec_(global_pos)
-        if chosen == rename_action:
-            self._rename_workspace_at(path)
-        elif chosen == reveal_action:
-            self._reveal_workspace_at(path)
-        elif chosen == remove_action:
-            self._remove_recent_entry(path)
-        elif chosen == delete_action or delete_requested[0]:
-            self._delete_workspace_at(path)
-
-    def _reveal_workspace_at(self, path):
-        path = Path(path)
-        if not path.exists():
-            QtWidgets.QMessageBox.warning(
-                self, REVEAL_LABEL, f"This folder no longer exists:\n{path}"
-            )
-            return
-        if not reveal_in_file_manager(path):
-            QtWidgets.QMessageBox.warning(
-                self, REVEAL_LABEL, f"Could not open a file manager for:\n{path}"
-            )
-
-    def _rename_workspace_at(self, path):
-        path = Path(path).resolve()
-        if not is_workspace_root(path):
-            QtWidgets.QMessageBox.warning(
-                self,
-                "Rename failed",
-                f"Not a PLM workspace (missing config CSVs): {path}",
-            )
-            return
-        name, ok = QtWidgets.QInputDialog.getText(
-            self,
-            "Rename workspace",
-            "New name:",
-            QtWidgets.QLineEdit.Normal,
-            path.name,
-        )
-        if not ok:
-            return
-        try:
-            name = valid_name(name)
-        except ValueError as error:
-            QtWidgets.QMessageBox.warning(self, "Invalid name", str(error))
-            return
-        target = path.with_name(name)
-        if target == path:
-            return
-        if target.exists():
-            QtWidgets.QMessageBox.warning(
-                self,
-                "Rename workspace",
-                f"{target} already exists.",
-            )
-            return
-        was_current = bool(self.current_workspace and self.current_workspace.resolve() == path)
-        try:
-            path.rename(target)
-        except OSError as error:
-            QtWidgets.QMessageBox.critical(self, "Rename failed", str(error))
-            self._log(f"Rename failed: {error}")
-            return
-        rename_recent_workspace(path, target)
-        if was_current:
-            self.current_workspace = target
-            self._update_workspace_label()
-            if self.rtl_preview_panel.isVisible():
-                self._refresh_rtl_preview()
-        self._refresh_recent()
-        self._log(f"Renamed workspace {path} -> {target}.")
-
-    def _remove_recent_entry(self, path):
-        remove_recent_workspace(path)
-        self._log(f"Removed {path} from Recent.")
-        self._refresh_recent()
-
-    def _delete_workspace_at(self, path):
-        path = Path(path).resolve()
-        if not is_deletable_workspace(path):
-            QtWidgets.QMessageBox.warning(
-                self,
-                "Delete refused",
-                "This directory is not a marked PLM workspace. Open and Save a "
-                "legacy workspace once before deleting it.",
-            )
-            return
-        resp = QtWidgets.QMessageBox.question(
-            self,
-            "Delete workspace",
-            f"Permanently delete '{path}' and everything under it (config, generated rtl/tb)? "
-            "This cannot be undone.",
-        )
-        if resp != QtWidgets.QMessageBox.Yes:
-            return
-        try:
-            shutil.rmtree(path)
-        except OSError as e:
-            QtWidgets.QMessageBox.critical(self, "Delete failed", str(e))
-            self._log(f"Delete failed: {e}")
-            return
-        remove_recent_workspace(path)
-        self._log(f"Deleted workspace {path}.")
-        if self.current_workspace and str(self.current_workspace) == str(path):
-            self.current_workspace = None
-            self._saved_payload = None
-            self._saved_disk_signature = None
-            self._topology_payload = None
-            self._clear_generation_results()
-            clear_last_workspace()
-            self.controllers_table.set_rows([])
-            self.signals_table.set_rows([])
-            self._load_gen_flags({})
-            self._set_lane_count_display(4)
-            self.lane_grid.set_columns(4)
-            self.lane_grid.set_rows([])
-            self.lane_grid.set_controllers([])
-            self._update_workspace_label()
-            self._refresh_topology_summary()
-            self._preview_current_contents = {}
-            self._preview_previous_contents = {}
-            self._selected_preview_file = None
-            self._refresh_rtl_preview()
-            self._reset_edit_history()
-        self._refresh_recent()
-
-    def _update_workspace_label(self):
-        if self.current_workspace:
-            marker = "*" if self._is_dirty() else ""
-            self.setWindowTitle(f"plmConsultant - {self.current_workspace.name}{marker}")
-        else:
-            self.setWindowTitle("plmConsultant")
-
-    # ------------------------------------------------------------ edit history / live validation
-    def _schedule_live_edit_processing(self, *_args):
-        if (
-            not self._restoring_history
-            and self.current_workspace is not None
-            and hasattr(self, "_edit_timer")
-        ):
-            self._edit_timer.start()
-
-    def _process_live_edits(self):
-        if self._restoring_history or self.current_workspace is None:
-            return
-        if not self._generation_busy:
-            self._set_generation_state("IDLE")
-        self._capture_edit_snapshot()
-        self._validate_live_tables()
-        self._poll_dirty_state()
-
-    def _reset_edit_history(self):
-        self._undo_history = []
-        self._redo_history = []
-        self._history_payload = (
-            copy.deepcopy(self._gather_payload())
-            if self.current_workspace is not None else None
-        )
-        self._update_history_actions()
-
-    def _capture_edit_snapshot(self):
-        if self.current_workspace is None:
-            return
-        current = copy.deepcopy(self._gather_payload())
-        if self._history_payload is None:
-            self._history_payload = current
-        elif current != self._history_payload:
-            self._undo_history.append(copy.deepcopy(self._history_payload))
-            del self._undo_history[:-100]
-            self._history_payload = current
-            self._redo_history = []
-        self._update_history_actions()
+        for widget in (self.window_shell, self.nav_panel, self.title_bar):
+            widget.setProperty("windowActive", "true" if active else "false")
+            widget.style().unpolish(widget)
+            widget.style().polish(widget)
+            widget.update()
+
+    def _sync_window_frame_state(self):
+        maximized = self.isMaximized() or self.isFullScreen()
+        margin = 0 if maximized else self.SHADOW_MARGIN
+        self._backdrop_layout.setContentsMargins(margin, margin, margin, margin)
+        self._backdrop_layout.activate()
+        self.window_backdrop.shadow_enabled = not maximized
+        self.window_backdrop.update()
+        self.window_shell.setProperty("maximized", "true" if maximized else "false")
+        self.window_shell.style().unpolish(self.window_shell)
+        self.window_shell.style().polish(self.window_shell)
+        for widget in (self.title_bar, self.title_bar.close_btn, self.nav_panel):
+            widget.style().unpolish(widget)
+            widget.style().polish(widget)
+            widget.update()
+        self.window_shell.update()
+        self.title_bar.update_window_state()
+        self._update_resize_handles()
 
     def _update_history_actions(self):
-        if hasattr(self, "undo_action"):
-            self.undo_action.setEnabled(bool(self._undo_history))
-        if hasattr(self, "redo_action"):
-            self.redo_action.setEnabled(bool(self._redo_history))
+        self.undo_action.setEnabled(self.config_page.can_undo())
+        self.redo_action.setEnabled(self.config_page.can_redo())
 
-    def _apply_history_payload(self, payload):
-        self._restoring_history = True
-        try:
-            self.controllers_table.set_rows(payload["controllers"])
-            self.signals_table.set_rows(payload["signals"])
-            self._load_gen_flags(payload["gen_flags"])
-            mapping = payload["mapping"]
-            lane_count = mapping["lane_count"]
-            self._set_lane_count_display(lane_count)
-            self.lane_grid.set_columns(lane_count)
-            self.lane_grid.set_rows(mapping["rows"])
-            self.lane_grid.set_controllers(self.controllers_table.get_rows())
-        finally:
-            self._restoring_history = False
-        self._history_payload = copy.deepcopy(payload)
-        self._topology_payload = None
-        self._validate_live_tables()
-        self._refresh_topology_summary()
-        self._poll_dirty_state()
-        self._update_history_actions()
-
-    def _undo_edit(self):
-        if self.current_workspace is None:
+    def closeEvent(self, event):
+        if not self.controller.confirm_switch(on_saved=self.close):
+            event.ignore()
             return
-        if hasattr(self, "_edit_timer") and self._edit_timer.isActive():
-            self._edit_timer.stop()
-            self._capture_edit_snapshot()
-        if not self._undo_history:
-            return
-        current = copy.deepcopy(self._gather_payload())
-        target = self._undo_history.pop()
-        self._redo_history.append(current)
-        self._apply_history_payload(target)
+        self._disconnect_application_state()
+        super().closeEvent(event)
 
-    def _redo_edit(self):
-        if self.current_workspace is None or not self._redo_history:
-            return
-        current = copy.deepcopy(self._gather_payload())
-        target = self._redo_history.pop()
-        self._undo_history.append(current)
-        self._apply_history_payload(target)
-
-    def _validate_live_tables(self, *, verify_outputs=False):
-        """Render the core validator's structured issues in the editors."""
-        errors = {"controllers": {}, "signals": {}, "mapping": {}}
-        issues = ()
-        self._live_plan = None
-        try:
-            self._live_plan = load_generation_plan_from_payload(
-                self._gather_payload(), self._current_generation_options()
-            )
-        except ValidationError as error:
-            issues = error.issues
-        except (OSError, ValueError) as error:
-            issues = (ValidationIssue("format", str(error)),)
-        self._live_validation_issues = tuple(issues)
-
-        for issue in issues:
-            if issue.table not in errors or issue.row is None or issue.column is None:
-                continue
-            errors[issue.table].setdefault((issue.row, issue.column), str(issue))
-
-        controller_errors = errors["controllers"]
-        signal_errors = errors["signals"]
-        lane_errors = errors["mapping"]
-        self.controllers_table.set_cell_errors(controller_errors)
-        self.signals_table.set_cell_errors(signal_errors)
-        self.lane_grid.set_cell_errors(lane_errors)
-        self._live_validation_error_count = len(issues)
-
-        self._first_live_validation_error = None
-        for tab_index, editor, table_errors in (
-            (0, self.controllers_table, controller_errors),
-            (1, self.lane_grid, lane_errors),
-            (2, self.signals_table, signal_errors),
+    def _finish_focused_edit(self):
+        editor = QtWidgets.QApplication.focusWidget()
+        if not isinstance(
+            editor,
+            (
+                QtWidgets.QLineEdit,
+                QtWidgets.QAbstractSpinBox,
+                QtWidgets.QComboBox,
+            ),
         ):
-            if not table_errors:
-                continue
-            row, column = min(table_errors, key=lambda cell: (cell[0], str(cell[1])))
-            if isinstance(column, str):
-                column = next(
-                    index
-                    for index, definition in enumerate(editor.columns)
-                    if definition["key"] == column
-                )
-            self._first_live_validation_error = (
-                tab_index,
-                editor.table,
-                row,
-                column,
-            )
-            break
-        self._update_generation_freshness(verify_files=verify_outputs)
-
-    def _update_generation_freshness(self, *, verify_files=False):
-        if self._generation_busy or self.current_workspace is None:
             return
-        plan = getattr(self, "_live_plan", None)
-        current = plan is not None and output_set_matches_plan(
-            plan,
-            self.current_workspace,
-            verify_files=verify_files,
-        )
-        self._set_generation_state("UP_TO_DATE" if current else "STALE")
-
-    def _focus_first_live_validation_error(self):
-        target = getattr(self, "_first_live_validation_error", None)
-        if target is None:
-            return False
-        tab_index, table, row, column = target
-        self.tabs.setCurrentIndex(tab_index)
-        table.setCurrentCell(row, column)
-        item = table.item(row, column)
-        if item is not None:
-            table.scrollToItem(item)
-        editor = table.cellWidget(row, column)
-        (editor or table).setFocus()
-        return True
-    # ------------------------------------------------------------ dirty state
-    def _config_disk_signature(self):
-        """Return exact config bytes so external edits cannot be overwritten."""
-        if self.current_workspace is None:
-            return None
-        signature = []
-        config_dir = self.current_workspace / "config"
-        for name in (
-            "controllers.csv",
-            "lane_mapping.csv",
-            "pipe_signals.csv",
-            "gen_flags.txt",
-        ):
-            path = config_dir / name
-            try:
-                content = path.read_bytes()
-            except OSError:
-                content = None
-            signature.append((name, content))
-        return tuple(signature)
-
-    def _mark_saved(self):
-        """Snapshot both the UI state and exact config files now on disk."""
-        self._saved_payload = self._gather_payload() if self.current_workspace else None
-        self._saved_disk_signature = self._config_disk_signature()
-        self._title_shows_dirty = False
-        self._update_workspace_label()
-
-    def _is_dirty(self):
-        if self.current_workspace is None or self._saved_payload is None:
-            return False
-        return self._gather_payload() != self._saved_payload
-
-    def _has_external_config_changes(self):
-        return (
-            self.current_workspace is not None
-            and self._saved_disk_signature is not None
-            and self._config_disk_signature() != self._saved_disk_signature
-        )
-
-    def _ensure_external_config_unchanged(self):
-        if not self._has_external_config_changes():
-            return True
-        QtWidgets.QMessageBox.warning(
-            self,
-            "Config changed outside plmConsultant",
-            "One or more config files changed on disk. Reload the workspace "
-            "with Revert before saving, validating, or generating, so those "
-            "external edits are not overwritten.",
-        )
-        return False
-
-    def _poll_dirty_state(self):
-        """Drive the title's modified marker.
-
-        Polled rather than signal-driven on purpose: the three editors are
-        a table, a paint grid and a form, each with its own set of change
-        signals, and a missed connection would silently show a workspace as
-        saved while it is not. _gather_payload() costs well under a
-        millisecond even on the widest bundled sample."""
-        if self.current_workspace is None:
+        if not self.isAncestorOf(editor):
             return
-        dirty = self._is_dirty()
-        if dirty != self._title_shows_dirty:
-            self._title_shows_dirty = dirty
-            self._update_workspace_label()
+        # A spin box or editable combo owns its internal line edit's focus.
+        if isinstance(editor.parentWidget(), (QtWidgets.QAbstractSpinBox, QtWidgets.QComboBox)):
+            editor = editor.parentWidget()
+        editor.clearFocus()
 
-    def _confirm_discard_changes(self):
-        """Ask before dropping unsaved edits. True = caller may proceed."""
-        if not self._is_dirty():
-            return True
-        answer = QtWidgets.QMessageBox.question(
-            self,
-            "Unsaved changes",
-            f"{self.current_workspace.name} has unsaved changes.\nSave them first?",
-            QtWidgets.QMessageBox.Save
-            | QtWidgets.QMessageBox.Discard
-            | QtWidgets.QMessageBox.Cancel,
-            QtWidgets.QMessageBox.Save,
-        )
-        if answer == QtWidgets.QMessageBox.Cancel:
-            return False
-        if answer == QtWidgets.QMessageBox.Save:
-            return self._on_save()
-        return True
+    def _refresh_after_activation(self):
+        if self.isVisible():
+            self.controller.validate_current()
 
-    def _on_revert(self):
-        """Reload the workspace from disk, dropping in-memory edits."""
-        if self.current_workspace is None:
-            QtWidgets.QMessageBox.warning(self, "No workspace", "Open or create a workspace first.")
-            return
-        if not self._is_dirty() and not self._has_external_config_changes():
-            self._log("Nothing to revert.")
-            return
-        answer = QtWidgets.QMessageBox.question(
-            self,
-            "Revert",
-            f"Discard unsaved changes and reload {self.current_workspace.name} from disk?",
-            QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No,
-            QtWidgets.QMessageBox.No,
-        )
-        if answer != QtWidgets.QMessageBox.Yes:
-            return
-        target = self.current_workspace
-        self._saved_payload = None  # the confirmation above already handled edits
-        self._saved_disk_signature = None
-        self._open_workspace(target, confirm_discard=False)
-        self._log(f"Reverted to the version on disk: {target}.")
+    def _apply_initial_sizes(self):
+        self.content_splitter.setSizes(self._log_sizes)
 
-    # ------------------------------------------------------------ workspace lifecycle
-    def _open_workspace(self, path, confirm_discard=True, add_to_recent=True):
-        path = _absolute_path(path)
-        if not is_workspace_root(path):
-            QtWidgets.QMessageBox.warning(
-                self, "Open failed", f"Not a PLM workspace (missing config CSVs): {path}"
-            )
-            return
-        if confirm_discard and not self._confirm_discard_changes():
-            return
-        try:
-            content = workspace_content(path)
-        except (ValueError, OSError) as e:
-            QtWidgets.QMessageBox.critical(self, "Load failed", f"Could not load {path}:\n{e}")
-            return
-        if self.current_workspace != path:
-            # Preview state is keyed by absolute path and only ever means
-            # anything for the open workspace: carrying it across keeps every
-            # file of every workspace opened this session in memory, and
-            # leaves a selection pointing outside current_workspace.
-            self._preview_current_contents = {}
-            self._preview_previous_contents = {}
-            self._selected_preview_file = None
-        self.current_workspace = path
-        self._clear_generation_results()
-        self.controllers_table.set_rows(content["controllers"])
-        self.signals_table.set_rows(content["signals"])
-        self._load_gen_flags(content["gen_flags"])
-        mapping = content["mapping"]
-        self._set_lane_count_display(mapping["lane_count"])
-        self.lane_grid.set_columns(mapping["lane_count"])
-        self.lane_grid.set_rows(mapping["rows"])
-        self.lane_grid.set_controllers(self.controllers_table.get_rows())
-        if add_to_recent:
-            add_recent_workspace(path)
-        save_last_workspace(path)
-        self._refresh_recent()
-        self._update_workspace_label()
-        self._log(f"Loaded {path}.")
-        self._mark_saved()
-        self._reset_edit_history()
-        self._validate_live_tables(verify_outputs=True)
-        self._refresh_topology_summary()
-        if getattr(self, "rtl_preview_panel", None) and self.rtl_preview_panel.isVisible():
-            self._refresh_rtl_preview()
-
-    def _load_gen_flags(self, flags):
-        """Put the workspace's remembered generation choices on the page.
-
-        workspace.read_gen_flags() returns None for an unset/unrecognized
-        arch/pclk-mode/sel-mode (its front-end-agnostic shape) -- translate
-        that to this GUI's own "(default: ...)" placeholder option.
-
-        These are remembered per workspace, but they still reach the generator
-        only as command-line arguments: _gen_flag_args() builds them from these
-        widgets at Generate time, and the CLI never reads gen_flags.txt itself.
-        """
-        self.arch_combo.setCurrentText(flags.get("arch") or ARCH_MODES[0])
-        self.pclk_mode_combo.setCurrentText(flags.get("pclk-mode") or PCLK_MODES[0])
-        self.sel_mode_combo.setCurrentText(flags.get("sel-mode") or SEL_MODES[0])
-        self.dpr_check.setChecked(bool(flags.get("dpr")))
-
-    def _gen_flag_args(self):
-        """Return the Generation page's non-placeholder CLI arguments."""
-        combos = [
-            ("--arch", self.arch_combo, ARCH_VALUES),
-            ("--pclk-mode", self.pclk_mode_combo, PCLK_MODE_VALUES),
-            ("--sel-mode", self.sel_mode_combo, SEL_MODE_VALUES),
-        ]
-        args = []
-        for flag, combo, values in combos:
-            value = combo.currentText()
-            if value in values:
-                args += [flag, value]
-        if self.dpr_check.isChecked():
-            args.append("--dpr")
-        return args
-
-    def _current_generation_options(self, **overrides):
-        """Return the same typed option set used by CLI and exporter."""
-        settings = load_settings()
-        values = {
-            "arch": self.arch_combo.currentText()
-            if self.arch_combo.currentText() in ARCH_VALUES
-            else "original_pipe",
-            "pclk_mode": self.pclk_mode_combo.currentText()
-            if self.pclk_mode_combo.currentText() in PCLK_MODE_VALUES
-            else "pclk_as_phy_output",
-            "sel_mode": self.sel_mode_combo.currentText()
-            if self.sel_mode_combo.currentText() in SEL_MODE_VALUES
-            else "sync",
-            "dpr": self.dpr_check.isChecked(),
-            "verible_path": settings.get("veriblePath"),
-            "verible_flags": settings.get("veribleFlags"),
-        }
-        values.update(overrides)
-        return GenerationOptions(**values)
-
-    def _gather_payload(self):
-        """Collect the workspace's content to write on Save, straight from
-        the live widgets."""
-        return {
-            "controllers": self.controllers_table.get_rows(),
-            "signals": self.signals_table.get_rows(),
-            "mapping": {
-                "lane_count": self.lane_grid.lane_count,
-                "rows": self.lane_grid.get_rows(),
-            },
-            # write_gen_flags() drops anything that isn't a real
-            # arch/pclk-mode/sel-mode choice, so passing the combo's raw
-            # currentText() straight through is safe even while it still shows
-            # its own "(default: ...)" placeholder option.
-            "gen_flags": {
-                "arch": self.arch_combo.currentText(),
-                "pclk-mode": self.pclk_mode_combo.currentText(),
-                "sel-mode": self.sel_mode_combo.currentText(),
-                "dpr": self.dpr_check.isChecked(),
-            },
-        }
-
-    def _on_open(self):
-        start_dir = str(CONFIGS_ROOT if CONFIGS_ROOT.is_dir() else Path.home())
-        d = QtWidgets.QFileDialog.getExistingDirectory(self, "Open workspace", start_dir)
-        if d:
-            self._open_workspace(d)
-
-    def _on_new(self):
-        if not self._confirm_discard_changes():
-            return
-        default_parent = self.current_workspace.parent if self.current_workspace else (
-            CONFIGS_ROOT if CONFIGS_ROOT.is_dir() else Path.home()
-        )
-        dialog = _NewWorkspaceDialog(default_parent, self)
-        if dialog.exec_() != QtWidgets.QDialog.Accepted:
-            return
-        name, location = dialog.values()
-        try:
-            name = valid_name(name)
-        except ValueError as e:
-            QtWidgets.QMessageBox.warning(self, "Invalid name", str(e))
-            return
-        location = location.strip()
-        if not location:
-            QtWidgets.QMessageBox.warning(
-                self, "Invalid location", "Choose a parent directory for the workspace."
-            )
-            return
-        parent = Path(location).expanduser()
-        ws = parent / name
-        if ws.exists():
-            QtWidgets.QMessageBox.warning(self, "New workspace", f"{ws} already exists.")
-            return
-        try:
-            ws.mkdir(parents=True)
-            scaffold_default_content(ws)
-        except (ValueError, OSError) as e:
-            shutil.rmtree(ws, ignore_errors=True)
-            QtWidgets.QMessageBox.critical(self, "New workspace failed", str(e))
-            self._log(f"New workspace failed: {e}")
-            return
-        self._open_workspace(ws, confirm_discard=False)
-
-    def _save_current_workspace(self, *, log_success):
-        """Persist the editor state, with one error-handling path for all callers."""
-        if self.current_workspace is None:
-            QtWidgets.QMessageBox.warning(
-                self, "No workspace", "Open or create a workspace first."
-            )
-            return False
-        if not self._ensure_external_config_unchanged():
-            return False
-        try:
-            save_workspace_content(self.current_workspace, self._gather_payload())
-        except (ValueError, OSError) as error:
-            QtWidgets.QMessageBox.critical(self, "Save failed", str(error))
-            self._log(f"Save failed: {error}")
-            return False
-        if log_success:
-            self._log(f"Saved {self.current_workspace}/config/*.")
-        self._mark_saved()
-        return True
-
-    def _on_save(self):
-        """Save explicitly; the discard guard relies on the boolean result."""
-        return self._save_current_workspace(log_success=True)
-
-    def _on_settings(self):
-        dlg = SettingsDialog(self, load_settings())
-        if self._exec_modal_blurred(dlg) == QtWidgets.QDialog.Accepted:
-            settings = dlg.get_settings()
-            save_settings(settings)
-            self._apply_font(settings)
-            self._validate_live_tables(verify_outputs=True)
-
-    def _exec_modal_blurred(self, dialog):
-        """Run a modal dialog while softly blurring the main application.
-
-        The dialog is a separate top-level window, so the effect only covers
-        the content behind it and is always removed when the dialog closes.
-        """
-        background = self.centralWidget()
-        effect = QtWidgets.QGraphicsBlurEffect(background)
-        effect.setBlurRadius(6)
-        effect.setBlurHints(QtWidgets.QGraphicsBlurEffect.PerformanceHint)
-        background.setGraphicsEffect(effect)
-        try:
-            return dialog.exec_()
-        finally:
-            background.setGraphicsEffect(None)
-
-    def _apply_font(self, settings):
-        family = settings.get("fontFamily")
-        size = settings.get("fontSize") or DEFAULT_SETTINGS["fontSize"]
-        # Clamp to the same range the Settings dialog exposes. Sizes above
-        # ~16 px blow up fixed-width UI parts (sidebar, lane grid, tables)
-        # that are sized against a 13 px baseline.
-        size = max(11, min(size, 16))
-        # QApplication.font()'s own untouched default is locale-dependent,
-        # not "the system UI font" -- on a Chinese-locale Windows install
-        # it can resolve to SimSun (a legacy bitmap CJK font) even for an
-        # otherwise-English UI, and asking that font to render Latin text
-        # at an arbitrary pixel size is what was producing badly garbled,
-        # overlapping glyphs app-wide. Naming a real UI font explicitly
-        # sidesteps that; Qt's own family-substitution falls back
-        # gracefully to the platform default on a machine that doesn't
-        # have "Segoe UI" (e.g. the CentOS target), so this is safe
-        # cross-platform, not a Windows-only fix.
-        font = QtGui.QFont(family) if family else QtGui.QFont("Segoe UI")
-        # setPointSizeF() with a fractional value (13.5, this app's own
-        # default) also garbles text on Windows independent of the family
-        # issue above -- setPixelSize() only takes an int and doesn't
-        # have that problem, and is the more literal match for a size
-        # that is stored as a CSS-like pixel size.
-        font.setPixelSize(round(size))
-        app = QtWidgets.QApplication.instance()
-        if app.font() != font:
-            app.setFont(font)
-        # The app font alone changes nothing the QSS names a font-size for,
-        # and it names one for QWidget -- so the sheet has to be rebuilt at
-        # the new size too, or this setting only ever moves padding around.
-        stylesheet = build_stylesheet(round(size))
-        if app.styleSheet() != stylesheet:
-            app.setStyleSheet(stylesheet)
-        self._apply_sidebar_collapsed()
-        QtCore.QTimer.singleShot(0, self._position_floating_log)
-        QtCore.QTimer.singleShot(0, self._position_preview_controls)
-
-    def _on_doc(self):
-        dlg = QtWidgets.QDialog(self)
-        dlg.setWindowTitle("Documentation")
-        dlg.setWindowFlag(QtCore.Qt.WindowContextHelpButtonHint, False)
-        dlg.resize(760, 640)
-        apply_titlebar_theme(dlg)
-        v = QtWidgets.QVBoxLayout(dlg)
-        viewer = QtWidgets.QTextBrowser()
-        try:
-            text = DOC_PATH.read_text(encoding="utf-8")
-        except OSError as e:
-            # Name the path rather than just failing quietly -- a missing doc
-            # here means the install is wrong, and the path says which one.
-            text = (
-                "Could not load this document.\n\nLooked for:\n"
-                f"{DOC_PATH}\n\n{e}"
-            )
-        if hasattr(viewer, "setMarkdown"):
-            viewer.setMarkdown(text)
+    def toggle_log(self):
+        sizes = self.content_splitter.sizes()
+        total = sum(sizes)
+        if self.log_panel.isVisible() and sizes[1] > 0:
+            self.hide_log()
         else:
-            viewer.setPlainText(text)
-        v.addWidget(viewer)
-        close_btn = QtWidgets.QPushButton("Close")
-        close_btn.clicked.connect(dlg.accept)
-        v.addWidget(close_btn, alignment=QtCore.Qt.AlignRight)
-        self._exec_modal_blurred(dlg)
+            self.log_panel.show()
+            self.content_splitter.setStretchFactor(1, 1)
+            bottom = max(140, int(total * 0.25))
+            self.content_splitter.setSizes([max(1, total - bottom), bottom])
 
-    # ------------------------------------------------------------ Lane Mapping tab
-    def _set_lane_count_display(self, n):
-        """Update the lane-count combobox to show n. The GUI uses x-prefix
-        labels (x1/x2/x4/...), but a config set
-        loaded from disk may legitimately have an arbitrary lane count --
-        plm itself supports any width, only this picker is narrowed for
-        usability -- so a value outside LANE_COUNTS is appended just so it
-        can be displayed, not offered as a normal choice going forward."""
-        self.lane_count_combo.blockSignals(True)
-        self.lane_count_combo.clear()
-        values = list(LANE_COUNTS)
-        label = f"x{n}"
-        if label not in values:
-            values.append(label)
-        self.lane_count_combo.addItems(values)
-        self.lane_count_combo.setCurrentText(label)
-        self.lane_count_combo.blockSignals(False)
+    def hide_log(self):
+        sizes = self.content_splitter.sizes()
+        self.content_splitter.setStretchFactor(1, 0)
+        if sizes[1] > 0:
+            self._log_sizes = sizes
+        # Collapsing to height zero leaves the splitter handle in the layout.
+        self.log_panel.hide()
+    def on_save(self):
+        self.nav_panel.set_active(None)
+        self.controller.save_current()
 
-    def _on_lane_count_changed(self, text):
-        # Text comes in "x2"/"x4"/... format (web parity). Strip the prefix.
-        text = text.lstrip("xX")
-        try:
-            n = int(text)
-            if n < 1:
-                raise ValueError
-        except ValueError:
-            return
-        self.lane_grid.set_columns(n)
+    def on_open_settings(self):
+        self._show_secondary_page("settings")
 
-    def _on_tab_changed(self, index):
-        # Refresh the palette from the Controllers table's live state
-        # whenever the Lane Mapping tab becomes active, so a controller
-        # renamed/added/removed there shows up without a separate manual
-        # sync step (mirrors plmConsultant.py's own _on_tab_changed).
-        if self.tabs.widget(index) is self._lane_mapping_page:
-            self.lane_grid.set_controllers(self.controllers_table.get_rows())
-        elif self.tabs.widget(index) is getattr(self, "_generation_page", None):
-            # Rebuilt on arrival rather than on every edit: the summary only
-            # has to be current when it is actually on screen.
-            self._refresh_topology_summary()
+    def on_open_docs(self):
+        self._show_secondary_page("docs")
 
-    # ---------------------------------------------------------------- generate
-    def _save_before_action(self):
-        """Save current edits before Generate."""
-        return self._save_current_workspace(log_success=False)
+    def _show_secondary_page(self, page):
+        self._close_secondary_page()
+        widget = self.controller.create_secondary_page(page, self)
+        self._enable_background_focus(widget)
+        widget.closeRequested.connect(self._close_secondary_page)
+        widget.preferencesSaved.connect(self.controller.save_preferences)
+        self.view_stack.addWidget(widget)
+        self.view_stack.setCurrentWidget(widget)
+        self._update_resize_handles()
+        self.nav_panel.set_active(page)
+        self.undo_action.setEnabled(False)
+        self.redo_action.setEnabled(False)
+        widget.setFocus(QtCore.Qt.OtherFocusReason)
 
-    def _set_generation_busy(self, busy):
-        """Lock Generate while a run is in flight.
-
-        Two overlapping runs write the same files, so a double click is not
-        just wasted work -- it can interleave two writers over one output
-        tree."""
-        self._generation_busy = bool(busy)
-        enabled = not busy
-        for button in getattr(self, "generation_buttons", []):
-            button.setEnabled(enabled)
-        for button, _label in getattr(self, "sidebar_action_buttons", []):
-            button.setEnabled(enabled)
-        # An empty QListWidget is false-y, so a truth-value check silently
-        # skips the lock exactly when the recent list has no rows.  Test
-        # object existence explicitly, like the other optional widgets.
-        if getattr(self, "recent_list", None) is not None:
-            self.recent_list.setEnabled(enabled)
-
-    def _set_generation_state(self, state):
-        if state not in GENERATION_STATE_LABELS:
-            raise ValueError(f"unknown generation state {state}")
-        self._generation_state = state
-        if getattr(self, "generation_state_label", None) is not None:
-            self.generation_state_label.setText(GENERATION_STATE_LABELS[state])
-
-    def _refresh_topology_summary(self):
-        """Render Config.report() for what would be generated right now.
-
-        Built directly from the editor's in-memory rows, so the summary
-        describes unsaved edits without touching the filesystem."""
-        if not getattr(self, "topology_summary", None):
-            return
-        if self.current_workspace is None:
-            self.topology_summary.setPlainText("Open a workspace to see its lane topology.")
-            return
-        payload = self._gather_payload()
-        if payload == getattr(self, "_topology_payload", None):
-            return
-        try:
-            plan = load_generation_plan_from_payload(
-                payload, self._current_generation_options()
-            )
-            text = plan.report()
-        except ValidationError as error:
-            text = "Config is not valid yet:\n" + "\n".join(
-                f"  - {issue}" for issue in error.issues
-            )
-        except Exception as error:
-            # This runs from Qt slots/timers: never let an unexpected model
-            # exception terminate the GUI.
-            text = f"Could not build the summary:\n{error}"
-        self._topology_payload = payload
-        self.topology_summary.setPlainText(text)
-
-    def _run_tool(self, then=None):
-        """QProcess runs `python -m plm.cli.main generate`
-        against the current workspace asynchronously. QProcess signals
-        deliver output on the Qt event loop as it arrives.
-
-        Every generation flag is passed on this command line and nowhere
-        else: arch/pclk-mode/sel-mode/dpr come from the Generation page via
-        _gen_flag_args(), verible-path/verible-flags from this app's own
-        Settings (see plm.frontend.qt.widgets.settings). None of them is
-        written into the workspace -- a workspace is its three CSVs."""
-        if self._generation_busy:
-            return
-        self._validate_live_tables()
-        if self._live_validation_issues:
-            focused = self._focus_first_live_validation_error()
-            self._set_bottom_panel_page(0)
-            self._set_generation_state("FAILED")
-            if focused:
-                self._log("Generate blocked: fix the highlighted configuration cell.")
-            else:
-                self._log("Generate blocked by validation errors:")
-            for issue in self._live_validation_issues:
-                if not focused or issue.table is None:
-                    self._log(str(issue))
-            return
-        if not self._save_before_action():
-            self._set_generation_state("FAILED")
-            return
-        self._clear_generation_results()
-        self._set_bottom_panel_page(0)  # LOG -- the run's output streams in here
-        self._set_generation_busy(True)
-        self._set_generation_state("GENERATING")
-        started_at = time.monotonic()
-        run_workspace = self.current_workspace
-        before_outputs = self._output_signature(run_workspace)
-        generated = []
-        output_buffer = ""
-        terminal_phase = None
-        # --quiet suppresses the generator's own copy of Config.report(), which
-        # would otherwise be echoed into the LOG on every run -- the REPORT page
-        # already shows exactly that, live. See the two tabs' tooltips for the
-        # split: LOG is what this run did, REPORT is what the config looks like.
-        cmd = [
-            sys.executable, "-m", "plm.cli.main", "generate",
-            "--config", str(run_workspace), "--quiet", "--events-json",
-        ]
-        cmd += self._gen_flag_args()
-        settings = load_settings()
-        verible_path = settings.get("veriblePath")
-        if verible_path:
-            cmd += ["--verible-path", verible_path]
-        verible_flags = settings.get("veribleFlags")
-        if verible_flags is not None:
-            cmd += ["--verible-flags", json.dumps(verible_flags)]
-        self._log(f"$ {' '.join(cmd)}")
-
-        proc = QtCore.QProcess(self)
-        proc.setWorkingDirectory(str(PLM_ROOT))
-        # run.py can import from a source checkout because it adjusts
-        # sys.path in-process. QProcess starts a fresh interpreter, so pass
-        # the src-layout package root explicitly as well. This keeps the GUI
-        # usable without requiring `pip install -e .`, while preserving any
-        # PYTHONPATH the user already configured.
-        environment = QtCore.QProcessEnvironment.systemEnvironment()
-        source_root = PLM_ROOT / "src"
-        if source_root.is_dir():
-            existing = environment.value("PYTHONPATH")
-            entries = [entry for entry in existing.split(os.pathsep) if entry]
-            source_text = str(source_root)
-            if source_text not in entries:
-                entries.insert(0, source_text)
-            environment.insert("PYTHONPATH", os.pathsep.join(entries))
-        proc.setProcessEnvironment(environment)
-        proc.setProcessChannelMode(QtCore.QProcess.MergedChannels)
-
-        def handle_output_line(line):
-            nonlocal terminal_phase
-            stripped = line.strip()
-            if stripped.startswith("PLM_EVENT "):
-                try:
-                    event = json.loads(stripped[len("PLM_EVENT ") :])
-                except (TypeError, ValueError):
-                    self._log(line)
-                    return
-                phase = event.get("phase")
-                if phase in ("VALIDATING", "GENERATING", "UP_TO_DATE"):
-                    if phase == "UP_TO_DATE":
-                        terminal_phase = phase
-                    return
-            if stripped.startswith("generated "):
-                generated.append(stripped[len("generated ") :])
-            self._log(line)
-
-        def on_ready_read():
-            nonlocal output_buffer
-            data = bytes(proc.readAllStandardOutput()).decode("utf-8", errors="replace")
-            output_buffer += data
-            while "\n" in output_buffer:
-                line, output_buffer = output_buffer.split("\n", 1)
-                handle_output_line(line.rstrip("\r"))
-
-        def on_finished(exit_code, _exit_status):
-            nonlocal output_buffer
-            on_ready_read()
-            if output_buffer:
-                handle_output_line(output_buffer.rstrip("\r"))
-                output_buffer = ""
-            self._set_generation_busy(False)
-            elapsed = time.monotonic() - started_at
-            self._log(f"[generate: {len(generated)} file(s), {elapsed:.1f}s]")
-            if exit_code == 0:
-                if terminal_phase == "UP_TO_DATE":
-                    self._log("[generate skipped: outputs are up to date]")
-                else:
-                    self._log("[generate finished]")
-                self._set_generation_state("UP_TO_DATE")
-                after_outputs = self._output_signature(run_workspace)
-                self._show_generation_results(
-                    run_workspace, before_outputs, after_outputs
-                )
-                if self.current_workspace == run_workspace:
-                    self._refresh_topology_summary()
-                    self._refresh_rtl_preview()
-            else:
-                self._log(f"[generate finished, exit code {exit_code}]")
-                self._set_generation_state("FAILED")
-            if proc in self._active_processes:
-                self._active_processes.remove(proc)
-            if then and exit_code == 0:
-                then()
-
-        def on_error(_error):
-            if proc.state() == QtCore.QProcess.NotRunning:
-                self._set_generation_busy(False)
-                self._set_generation_state("FAILED")
-                self._log(f"Failed to launch generate: {proc.errorString()}")
-                if proc in getattr(self, "_active_processes", []):
-                    self._active_processes.remove(proc)
-
-        proc.readyReadStandardOutput.connect(on_ready_read)
-        proc.finished.connect(on_finished)
-        proc.errorOccurred.connect(on_error)
-        # Keep a reference alive for the process's lifetime -- nothing
-        # else holds one once _run_tool() returns, and PyQt can garbage
-        # collect a QProcess with no live Python reference out from under
-        # a still-running child.
-        if not hasattr(self, "_active_processes"):
-            self._active_processes = []
-        self._active_processes.append(proc)
-        proc.start(cmd[0], cmd[1:])
+    def _close_secondary_page(self):
+        widget = self.view_stack.currentWidget()
+        if widget is not self.main_container:
+            self.view_stack.setCurrentWidget(self.main_container)
+            self.view_stack.removeWidget(widget)
+            widget.deleteLater()
+            self._update_resize_handles()
+        self.nav_panel.set_active(None)
+        self._update_history_actions()

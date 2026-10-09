@@ -115,10 +115,6 @@ def gen_pkg(cfg, dpr=False):
 
 def gen_decoder(cfg, dpr=False):
     nm = len(cfg.modes)
-    cp = cfg.ctrl_pclk_src()
-    cc = cfg.ctrl_pclk_cands()
-    muxed_c = [c for c in sorted(cfg.controllers) if len(cc[c]) > 1]
-
     L = [
         "// mode decoding: produces each lane group's target owner, and each",
         "// controller's target pclk source. Purely combinational, no state.",
@@ -132,32 +128,14 @@ def gen_decoder(cfg, dpr=False):
         ") (",
         f"    input logic [{mode_width(nm)-1}:0] mode,",
     ]
-    # Output port list: sel_tgt is always present, pclk_tgt appended as
-    # needed. The comma has to be inserted before the comment -- just
-    # appending "," to the end of the whole line would put the comma inside
-    # the "// ..." comment, leaving the actual code still missing it. So the
-    # "code" and "comment" parts are assembled separately here, with the
-    # comma attached to the end of the code and the comment appended after.
     sel_t = "mode_sel_t" if dpr else "lane_sel_t"
-    ports = [(f"    output {sel_t} sel_tgt", "")]
-    for c in muxed_c:
-        ports.append(
-            (
-                f"    output logic [{len(cc[c])-1}:0] pclk_tgt_c{c}",
-                f"   // pclk candidate selection for {cfg.controllers[c].name}",
-            )
-        )
-    for i, (code, comment) in enumerate(ports):
-        tail = "," if i != len(ports) - 1 else ""
-        L.append(code + tail + comment)
+    L.append(f"    output {sel_t} sel_tgt")
     L.append(");")
     L.append("")
 
     mux_groups = [g for g in cfg.groups if not g.is_direct]
     L.append("    always_comb begin")
     L.append("        sel_tgt = '0;")
-    for c in muxed_c:
-        L.append(f"        pclk_tgt_c{c} = '0;")
     L.append("")
     L.append("        unique case (mode)")
     for m in cfg.modes:
@@ -168,26 +146,9 @@ def gen_decoder(cfg, dpr=False):
                 f"                sel_tgt.g{g.gid} = {g.n}'b{1 << b:0{g.n}b};"
                 f"  // {cfg.controllers[g.owners[m]].name}"
             )
-        for c in muxed_c:
-            v = cp[c][m]
-            if v is None:
-                L.append(
-                    f"                // {cfg.controllers[c].name} isn't assigned a lane in this mode,"
-                )
-                L.append(
-                    "                // pclk_tgt stays 0; the downstream hold logic keeps the previous selection"
-                )
-            else:
-                b = cc[c].index(v)
-                L.append(
-                    f"                pclk_tgt_c{c} = "
-                    f"{len(cc[c])}'b{1 << b:0{len(cc[c])}b};  // phy_pclk[{v}]"
-                )
         L.append("            end")
     L.append("            default: begin")
     L.append("                sel_tgt = '0;")
-    for c in muxed_c:
-        L.append(f"                pclk_tgt_c{c} = '0;")
     L.append("            end")
     L.append("        endcase")
     L.append("    end")
@@ -233,11 +194,6 @@ def gen_sel_gen(cfg, sel_mode="sync", pclk_mode="pclk_as_phy_output", dpr=False)
     phy_pclk's per-lane treatment), which gen_data_m2p/gen_data_p2m
     select with per lane instead of the group-shared sel_tgt.
 
-    The controller-side pclk candidates (pclk_tgt_cX) are also produced by
-    the internal decoder, but that signal is meant for
-    pipe_lane_clk_mux's glitch-free controller pclk switching -- this
-    module doesn't consume it itself, just passes it through.
-
     In pclk_mode="pclk_as_phy_input", this module also houses every
     CDC synchronizer in the design, including ones whose output isn't the
     data-path sel_tgt: rxclk_en_g{gid}_l{lane_idx} synchronizes dec_tgt.gN into
@@ -278,9 +234,9 @@ def gen_sel_gen(cfg, sel_mode="sync", pclk_mode="pclk_as_phy_output", dpr=False)
     pipe_lane_sel_sync's branch_clk. In pclk_mode="pclk_as_phy_output", that's
     ctrl_pclk (pipe_lane_clk_mux's output) -- so the two submodules form a
     ring connection at the top level, but there's no combinational loop:
-    ctrl_pclk only depends on the decoder's pclk_tgt_cX (passed through by
-    this module), which has nothing to do with the sel_tgt this module
-    produces; and sel_tgt's dependency on ctrl_pclk goes entirely through
+    ctrl_pclk is a direct connection to a fixed PHY lane selected by the
+    validated topology, independent of the sel_tgt this module produces;
+    sel_tgt's dependency on ctrl_pclk goes entirely through
     flops inside pipe_lane_sel_sync, so there's no combinational feedback.
 
     In pclk_mode="pclk_as_phy_input", there's no separate ctrl_pclk signal
@@ -292,8 +248,6 @@ def gen_sel_gen(cfg, sel_mode="sync", pclk_mode="pclk_as_phy_output", dpr=False)
     nm = len(cfg.modes)
     NC = cfg.num_ctrl
     LC = cfg.lane_count
-    cc = cfg.ctrl_pclk_cands()
-    muxed_c = [c for c in sorted(cfg.controllers) if len(cc[c]) > 1]
     sync_lit = "1'b1" if sel_mode == "sync" else "1'b0"
     phy_input_mode = pclk_mode == "pclk_as_phy_input"
 
@@ -358,13 +312,6 @@ def gen_sel_gen(cfg, sel_mode="sync", pclk_mode="pclk_as_phy_output", dpr=False)
                 "   // final effective selection after pipe_lane_sel_sync synchronization; used by clk_mux/data mux",
             ),
         )
-    for c in muxed_c:
-        ports.append(
-            (
-                f"    output logic [{len(cc[c])-1}:0] pclk_tgt_c{c}",
-                f"   // pclk candidate for {cfg.controllers[c].name}, passed through to clk_mux",
-            )
-        )
     if phy_input_mode:
         for g in (cfg.groups if dpr else [g for g in cfg.groups if not g.is_direct]):
             eff_n = g.n + 1 if dpr else g.n
@@ -398,10 +345,7 @@ def gen_sel_gen(cfg, sel_mode="sync", pclk_mode="pclk_as_phy_output", dpr=False)
     L.append("        .NC (NC)")
     L.append("    ) u_mode_dec (")
     L.append("        .mode     (mode),")
-    L.append(f"        .sel_tgt  ({dec_out})" + ("," if muxed_c else ""))
-    for i, c in enumerate(muxed_c):
-        tail = "," if i != len(muxed_c) - 1 else ""
-        L.append(f"        .pclk_tgt_c{c} (pclk_tgt_c{c}){tail}")
+    L.append(f"        .sel_tgt  ({dec_out})")
     L.append("    );")
     L.append("")
 
@@ -581,22 +525,14 @@ def gen_clk_mux_phy_output(cfg, dpr=False):
 
     The final effective owner selection for each group (sel_tgt) is now
     produced by pipe_lane_sel_gen; this module only handles two things:
-      1. Glitch-free switching of controller pclk candidates:
-         pclk_tgt_cX is produced by the decoder inside sel_gen and passed
-         in here, but the actual switch is still performed in this module,
-         because the glitch-free switch needs this module's own
-         phy_pclk_out for cross-clock-domain synchronization.
+      1. A direct controller pclk connection to its validated, fixed PHY lane.
       2. Feedback clock: each lane's phy_pclk_in is selected, per sel_tgt
          (sel_gen's output, passed in here as an input), to be the current
          owner's ctrl_pclk.
 
-    Switching the controller pclk candidate always forces SYNC=1'b1 --
-    that's for glitch-free switching of the clock itself, unrelated to the
-    group's pipe_lane_sel_sync mode.
     """
     LC, NC = cfg.lane_count, cfg.num_ctrl
     cc = cfg.ctrl_pclk_cands()
-    muxed_c = [c for c in sorted(cfg.controllers) if len(cc[c]) > 1]
 
     L = [
         "// PIPE lane mapper clock-mux submodule.",
@@ -613,11 +549,6 @@ def gen_clk_mux_phy_output(cfg, dpr=False):
         "    input logic [NL-1:0] phy_pclk_out,",
         "    input logic [NC-1:0] ctrl_rst_n,",
     ]
-    for c in muxed_c:
-        L.append(
-            f"    input logic [{len(cc[c])-1}:0] pclk_tgt_c{c},"
-            f"   // pclk candidate target for {cfg.controllers[c].name}, from sel_gen"
-        )
     L.append(
         "    input lane_sel_t sel_tgt,   // each group's currently effective owner selection"
     )
@@ -639,24 +570,8 @@ def gen_clk_mux_phy_output(cfg, dpr=False):
     for cid in sorted(cfg.controllers):
         c = cfg.controllers[cid]
         cand = cc[cid]
-        if len(cand) == 1:
-            L.append(f"    // {c.name}: uses phy_pclk[{cand[0]}] in every mode, direct connection")
-            L.append(f"    assign ctrl_pclk[{cid}] = phy_pclk_out[{cand[0]}];")
-        else:
-            n = len(cand)
-            L.append(
-                f"    // {c.name}: {n}-way select, candidates "
-                f"{', '.join(f'phy_pclk[{v}]' for v in cand)}"
-            )
-            gen_glitch_free_clk_select(
-                L,
-                f"pclk_c{cid}",
-                [f"phy_pclk_out[{v}]" for v in cand],
-                f"ctrl_rst_n[{cid}]",
-                f"pclk_tgt_c{cid}",
-                0,
-                f"ctrl_pclk[{cid}]",
-            )
+        L.append(f"    // {c.name}: uses phy_pclk[{cand[0]}] in every mode, direct connection")
+        L.append(f"    assign ctrl_pclk[{cid}] = phy_pclk_out[{cand[0]}];")
         L.append("")
 
     if dpr:
@@ -1350,9 +1265,6 @@ def gen_top(cfg, pclk_mode="pclk_as_phy_output", sel_mode="sync", dpr=False):
     L.append(");")
     L.append("")
 
-    cc = cfg.ctrl_pclk_cands()
-    muxed_c = [c for c in sorted(cfg.controllers) if len(cc[c]) > 1]
-
     # ---- internal wiring
     L.append(
         "    logic [NC-1:0] ctrl_rst_n;   // reconstructed from each controller's own named port above"
@@ -1374,11 +1286,6 @@ def gen_top(cfg, pclk_mode="pclk_as_phy_output", sel_mode="sync", dpr=False):
         "    lane_sel_t dec_tgt;   // each group's raw decoder selection (unsynchronized"
         + (", DPR-combined), used by rst_mux" if dpr else "), used by rst_mux")
     )
-    for c in muxed_c:
-        L.append(
-            f"    logic [{len(cc[c])-1}:0] pclk_tgt_c{c};"
-            f"   // pclk candidate target for {cfg.controllers[c].name}"
-        )
     rxclk_lanes = []
     seltgt_lanes = []
     if phy_input_mode:
@@ -1429,11 +1336,8 @@ def gen_top(cfg, pclk_mode="pclk_as_phy_output", sel_mode="sync", dpr=False):
         L.append("        .dpr_rst_n   (dpr_rst_n),")
         L.append("        .dpr_pclk    (dpr_pclk),")
     L.append(
-        "        .dec_tgt    (dec_tgt)" + ("," if (muxed_c or seltgt_lanes or rxclk_lanes) else "")
+        "        .dec_tgt    (dec_tgt)" + ("," if (seltgt_lanes or rxclk_lanes) else "")
     )
-    for i, c in enumerate(muxed_c):
-        tail = "," if (i != len(muxed_c) - 1 or seltgt_lanes or rxclk_lanes) else ""
-        L.append(f"        .pclk_tgt_c{c} (pclk_tgt_c{c}){tail}")
     for i, (gid, lane_idx, _n) in enumerate(seltgt_lanes):
         tail = "," if (i != len(seltgt_lanes) - 1 or rxclk_lanes) else ""
         L.append(f"        .seltgt_g{gid}_l{lane_idx} (seltgt_g{gid}_l{lane_idx}){tail}")
@@ -1475,8 +1379,6 @@ def gen_top(cfg, pclk_mode="pclk_as_phy_output", sel_mode="sync", dpr=False):
     else:
         L.append("        .phy_pclk_out (phy_pclk_out),")
         L.append("        .ctrl_rst_n   (ctrl_rst_n),")
-        for c in muxed_c:
-            L.append(f"        .pclk_tgt_c{c} (pclk_tgt_c{c}),")
         L.append("        .sel_tgt      (sel_tgt),")
         if dpr:
             L.append("        .v_lane_mask  (v_lane_mask),")
@@ -1569,7 +1471,7 @@ def gen_top(cfg, pclk_mode="pclk_as_phy_output", sel_mode="sync", dpr=False):
     return "\n".join(L) + "\n"
 
 
-def gen_connection(cfg, pclk_mode="pclk_as_phy_output", dpr=False):
+def gen_connection(cfg, pclk_mode="pclk_as_phy_output", dpr=False, sel_mode="sync"):
     """pipe_lane_mapper_connection.sv: a pure struct<->flat bridge around
     pipe_lane_mapper. The mapper's two packed-struct-array ports per side
     (PHY, and one per controller) become individual flat ports here, one
@@ -1609,7 +1511,8 @@ def gen_connection(cfg, pclk_mode="pclk_as_phy_output", dpr=False):
     L.append("module pipe_lane_mapper_connection #(")
     L.append(f"    parameter int NL = {LC},")
     L.append(f"    parameter int NC = {NC},")
-    L.append("    parameter bit SEL_SYNC = 1'b1")
+    sync_lit = "1'b1" if sel_mode == "sync" else "1'b0"
+    L.append(f"    parameter bit SEL_SYNC = {sync_lit}")
     L.append(") (")
     if phy_input_mode:
         L.append(f"    input logic [{mode_width(nm)-1}:0] mode,")

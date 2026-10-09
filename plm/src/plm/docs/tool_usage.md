@@ -7,9 +7,10 @@
 不需要先 `pip install -e .`（它自己会把 `src/` 加进 `sys.path`）：
 
 ```bash
-python run.py generate --config <SET>
-python run.py validate --config <SET>
-python run.py -gui            # Qt 桌面前端，需要先 pip install -e ".[qt]"
+uv run python run.py generate --config <SET>
+uv run python run.py validate --config <SET>
+uv sync --extra qt
+uv run python run.py -gui     # Qt 桌面前端
 ```
 
 本文档下面用的 `plm generate ...`/`plm validate ...` 命令，等价于
@@ -18,11 +19,11 @@ console-script（这样任何目录下都能直接敲 `plm ...`），在仓库�
 （`pyproject.toml` 所在目录）跑一次：
 
 ```bash
-pip install -e .
+uv sync --extra qt
 ```
 
 这是一次性的（装成可编辑安装），装完之后 `plm` 包才能被 `python -m
-plm.cli.main` 或 `plm` console-script 找到。安装后也可以直接运行 `plm -gui`。
+plm.cli.main` 或 `plm` console-script 找到。安装后也可以直接运行 `plm -gui` 或 `plm-gui`。
 
 - `plm generate --config <SET>` —— 使用同一组参数生成 RTL 和 testbench
 - `plm validate --config <SET>` —— 只解析并校验配置，不生成文件
@@ -84,7 +85,7 @@ lane 归属要在运行时随 mode 切换，夹在 controller 和 PHY 中间的�
 | `lane_mapping.csv` | 每个 mode 下，每条 PHY lane 归哪个 controller 的哪条 lane |
 | `pipe_signals.csv` | 要经过 mapper 的 PIPE 信号，以及各自的 `safe_state` / `tie_off` |
 
-生成参数（`--arch` / `--pclk-mode` / `--sel-mode` / `--dpr`）只在命令行上给。
+CLI 的生成参数（`--arch` / `--pclk-mode` / `--sel-mode` / `--dpr`）需要显式传入。Qt 直接使用同样的 GenerationOptions 调用核心。
 同目录下的 `gen_flags.txt` 是 Qt 前端自己的记忆，CLI 不读，见 2.4 节。
 
 输出——`<SET>/rtl/` 和 `<SET>/tb/`：
@@ -265,6 +266,10 @@ ctrl_id,ctrl_name,max_width
 | `ctrl_name` | controller 名字，生成的信号名会用它的小写形式做前缀（如 `CtrlA` → `ctrla_mac2phy`） |
 | `max_width` | 这个 controller 真实支持的最大 lane 数（它在 RTL 上的端口数组按这个宽度声明，不做统一 padding） |
 
+名称必须是合法的 SystemVerilog 标识符，不能使用关键字。生成时还会检查展开后的
+端口和内部信号是否重名；例如 `PHY`、`CTRL` 会与固定信号冲突，启用 DPR 时
+`DPR` 也会冲突。诊断会指出引入冲突的名称。
+
 ### 2.2 `lane_mapping.csv`：每个 mode 下每条 PHY lane 分给哪个 controller 的哪条 lane
 
 ```csv
@@ -299,6 +304,10 @@ phy_mac_messagebus,perlane,phy2mac,8,0x50,0x50
 | `safe_state` | 该信号在"没有 owner"时应呈现的值（`pipe_lane_data_mux.safe()` 的取值）。整数字面量，支持 `int(x, 0)` 认得的写法：十进制、`0x..`、`0b..` |
 | `tie_off` | p2m 方向没分到 PHY lane 的那条 controller lane 应该 tie 成什么。要么是字面量 `lane0`（意为"跟随最低编号 lane 的值"），要么是整数字面量（同 `safe_state` 的格式），必须落在 `[0, 2^width)` 范围内 |
 
+两个方向各需要至少一个信号。`signal_name` 不能使用 SystemVerilog 关键字，
+也不能使展开后的端口重名，例如 `pclk`、`rst_n`。与架构或 DPR 有关的名称冲突
+会按实际生成选项检查。
+
 `safe_state` 与 `tie_off` 是两个方向各自独立生效的机制，不需要
 （也不应该假设）两者取值一致：前者用于 Group 的无 owner 空窗，后者用于
 某条 controller lane 在当前 mode 没分到 PHY lane 时的固定读值。
@@ -316,14 +325,14 @@ controller 一个）展开成一个个 flat 信号端口，方便不想处理 SV
 
 ### 2.4 生成参数不在配置文件里
 
-`--arch` / `--pclk-mode` / `--sel-mode` / `--dpr` 这四个参数**只能在命令行上给**。
+`--arch` / `--pclk-mode` / `--sel-mode` / `--dpr` 这四个参数在 CLI 中**必须显式从命令行传入**；Qt 从界面构造 GenerationOptions。
 CLI 不读任何文件来拿它们。
 
 | 谁来生成 | 参数从哪来 |
 |---|---|
 | 手敲命令行 | 自己写在命令里 |
 | `make <SET>` | 顶层 `Makefile` 里的 `SETFLAGS_<SET>` 变量（见 6.1 节） |
-| Qt 前端 | Generation 页上的三个下拉 + dpr 勾选框，点 Generate 时拼进命令行 |
+| Qt 前端 | Generation 页上的三个下拉 + dpr 勾选框，构造 GenerationOptions 后直接调用核心 |
 
 配置目录下还有个 `gen_flags.txt`，但那是 **Qt 前端自己的记忆**：前端保存时写、
 打开 workspace 时读回来恢复上次的选择。CLI 不看它，`make` 也不看它，
@@ -349,6 +358,10 @@ plm generate --config <SET> [其它参数]
 | `--verible-path PATH` | 自动搜索 | SystemVerilog 格式化器 |
 | `--verible-flags JSON` | 内置默认值 | 覆盖 Verible 参数 |
 | `--quiet` | 关闭 | 不打印拓扑报告 |
+
+同一进程内重复生成时，公共模块会复用成功的 Verible 格式化结果，缓存按
+源码、格式化器二进制和有效参数区分，并限制为 32 条、8MiB。使用包装脚本
+时不启用此缓存；可通过 `--verible-path` 或 Qt 设置直接指定格式化器可执行文件。
 
 两种 `pclk-mode` 的区别：
 

@@ -3,8 +3,8 @@ revision = 3
 requires-python = ">=3.9"
 resolution-markers = [
     "python_full_version >= '3.10' and sys_platform != 'win32'",
-    "python_full_version < '3.10' and sys_platform != 'win32'",
     "python_full_version >= '3.10' and sys_platform == 'win32'",
+    "python_full_version < '3.10' and sys_platform != 'win32'",
     "python_full_version < '3.10' and sys_platform == 'win32'",
 ]
 required-markers = [
@@ -14,7 +14,7 @@ required-markers = [
 
 [[package]]
 name = "plm"
-version = "1.0.4"
+version = "2.0.5"
 source = { editable = "." }
 
 [package.optional-dependencies]

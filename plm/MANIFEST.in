@@ -1,0 +1,11 @@
+include README.md CLAUDE.md run.py uv.lock
+recursive-include scripts *.py
+recursive-include tests *.py *.md
+recursive-include tests/fixtures *.csv *.txt *.json
+prune .venv
+prune .git
+prune .workbuddy
+prune build
+prune dist
+prune test
+global-exclude __pycache__ *.py[cod] *.log

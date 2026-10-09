@@ -37,7 +37,7 @@ list:
 clean: $(ALL_CONFIGS:%=clean-%)
 
 clean-%: FORCE
-	@echo "cleaning test/$*/rtl and test/$*/tb/tb_pipe_lane_mapper.sv"
-	rm -rf test/$*/rtl test/$*/tb/tb_pipe_lane_mapper.sv
+	@echo "cleaning test/$*/rtl and test/$*/tb"
+	rm -rf test/$*/rtl test/$*/tb
 
 FORCE:

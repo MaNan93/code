@@ -14,12 +14,12 @@ from plm.core.generator import rtl, tb
 from plm.core.model import Config
 from plm.core.plan import GenerationPlan
 
-ROOT = Path(__file__).resolve().parents[1]
+from sample_data import sample_config
 
 
 class DprClockTests(unittest.TestCase):
     def setUp(self):
-        self.cfg = Config(ROOT / "test" / "maxpclk" / "config")
+        self.cfg = Config(sample_config("maxpclk"))
 
     def test_input_mode_is_accepted_but_comb_stays_rejected(self):
         GenerationOptions(dpr=True, sel_mode="sync").validated()

@@ -1,0 +1,104 @@
+name: PLM functional smoke
+# Validate the current r4 UI and restored application workflows.
+
+on:
+  push:
+    branches:
+      - plm-ui-refactor
+    paths:
+      - "plm/src/plm/frontend/qt/**"
+      - "plm/src/plm/core/**"
+      - "plm/tests/test_qt_workflow.py"
+      - "plm/tests/test_qt_artifacts.py"
+      - "plm/tests/test_qt_generation.py"
+      - "plm/tests/test_qt_controls.py"
+      - ".github/workflows/plm-functional.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: plm-functional-v2-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  functional:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: plm
+    env:
+      QT_QPA_PLATFORM: offscreen
+      PYTHONPATH: tests
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v10.2.0
+        with:
+          python-version: "3.12"
+          working-directory: plm
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+      - run: sudo apt-get update && sudo apt-get install -y libgl1 libegl1
+      - run: uv sync --extra qt --locked
+      - name: Compile Python
+        run: uv run python -m compileall -q src run.py
+      - name: Unified UI controls and font contracts
+        timeout-minutes: 2
+        run: |
+          uv run python -u -m unittest -v \
+            tests.test_qt_frontend.QtFrontendLayoutTests.test_all_font_tokens_are_sixteen_pixels \
+            tests.test_qt_frontend.QtFrontendLayoutTests.test_controller_table_fixed_dimensions_and_whole_row_hover \
+            tests.test_qt_frontend.QtFrontendLayoutTests.test_settings_button_groups_have_no_internal_gap \
+            tests.test_qt_frontend.QtFrontendLayoutTests.test_project_menu_capsules_have_four_pixel_spacing \
+            tests.test_qt_menu_style \
+            tests.test_qt_regressions.QtRegressionTests.test_document_tables_and_code_blocks_have_adaptive_formats
+      - name: Core UI workflow logic
+        shell: bash
+        run: |
+          set -euo pipefail
+          tests=(
+            test_project_actions_flow_through_controller_and_keep_selection
+            test_switching_projects_preserves_or_discards_unsaved_edits
+            test_archiving_current_project_selects_remaining_and_empty_restart
+            test_new_project_uses_custom_location_and_restores_after_restart
+            test_duplicate_rename_and_delete_keep_other_project_usable
+            test_external_modification_and_deletion_block_save_and_generate
+            test_undo_redo_rows_lane_count_flags_and_saved_baseline
+            test_edit_save_validate_generate_and_show_real_artifacts
+            test_output_state_generation_integrity_and_noop
+            test_lane_grid_tracks_controllers_and_paints_ranges
+            test_lane_grid_manual_edit_is_preserved_and_undoable
+            test_table_editors_preserve_invalid_values_for_core_validation
+            test_live_errors_and_focus_use_core_coordinates_without_dirtying_data
+            test_new_project_uses_standard_projects_directory
+          )
+          for test_name in "${tests[@]}"; do
+            echo "=== $test_name ==="
+            timeout 30s uv run python -u -m unittest -v \
+              "tests.test_qt_workflow.QtWorkflowTests.${test_name}"
+          done
+      - name: Button and menu wiring
+        timeout-minutes: 2
+        run: uv run python -u -m unittest -v tests.test_qt_controls
+      - name: Artifacts functional controls
+        timeout-minutes: 1
+        run: |
+          uv run python -u -m unittest -v \
+            tests.test_qt_artifacts.ArtifactPreviewTests.test_file_tree_is_popup_managed_and_closes_after_selection \
+            tests.test_qt_artifacts.ArtifactPreviewTests.test_file_tree_blank_click_closes_overlay \
+            tests.test_qt_artifacts.ArtifactPreviewTests.test_search_supports_line_jump \
+            tests.test_qt_artifacts.ArtifactPreviewTests.test_diff_switches_between_unified_diff_and_current_file \
+            tests.test_qt_artifacts.ArtifactPreviewTests.test_toolbar_routes_to_selected_output_and_signals
+      - name: Core topology and generator golden outputs
+        timeout-minutes: 3
+        run: uv run python -u -m unittest -v tests.test_topology_indexes tests.test_generation_regressions
+      - name: Generation business linkage
+        timeout-minutes: 1
+        run: |
+          uv run python -u -m unittest -v \
+            tests.test_qt_generation.GenerationIntegrationTests.test_formatter_parameter_validation_and_detection \
+            tests.test_qt_generation.GenerationIntegrationTests.test_dpr_sync_linkage_is_one_undoable_edit_and_loaded_errors_survive \
+            tests.test_qt_generation.GenerationIntegrationTests.test_both_pclk_modes_generate_with_and_without_dpr
+      - name: External output activation check
+        timeout-minutes: 1
+        run: >-
+          uv run python -u -m unittest -v
+          tests.test_qt_workflow.QtWorkflowTests.test_application_activation_marks_modified_output_out_of_date

@@ -385,10 +385,14 @@ class EditableTable(QtWidgets.QWidget):
                     message = errors.get((row, column["key"]), "")
                     widget = self.table.cellWidget(row, column_index)
                     if isinstance(widget, QtWidgets.QComboBox):
-                        widget.setProperty("validationError", bool(message))
-                        widget.setToolTip(message)
-                        widget.style().unpolish(widget)
-                        widget.style().polish(widget)
+                        invalid = bool(message)
+                        was_invalid = widget.property("validationError") in (True, "true")
+                        if was_invalid != invalid:
+                            widget.setProperty("validationError", invalid)
+                            widget.style().unpolish(widget)
+                            widget.style().polish(widget)
+                        if widget.toolTip() != message:
+                            widget.setToolTip(message)
                     else:
                         item = self.table.item(row, column_index)
                         if item is None:
@@ -444,36 +448,43 @@ class EditableTable(QtWidgets.QWidget):
 
     # ------------------------------------------------------------ rendering
     def _render_body(self):
+        updates_enabled = self.table.updatesEnabled()
+        if updates_enabled:
+            self.table.setUpdatesEnabled(False)
         self._building = True
-        self.table.setRowCount(0)
-        self.table.setRowCount(len(self._data))
-        for r, row in enumerate(self._data):
-            for c, col in enumerate(self.columns):
-                key = col["key"]
-                value = row.get(key, "")
-                if col.get("options"):
-                    combo = QtWidgets.QComboBox()
-                    combo.addItems(col["options"])
-                    # Preserve invalid CSV values so validation can report them
-                    # instead of silently replacing them with the first option.
-                    if value not in col["options"]:
-                        combo.addItem(value)
-                    combo.setCurrentText(value)
-                    combo.setContextMenuPolicy(QtCore.Qt.CustomContextMenu)
-                    combo.customContextMenuRequested.connect(
-                        lambda pos, widget=combo, row_index=r:
-                        self._show_row_context_menu(row_index, widget.mapToGlobal(pos))
-                    )
-                    combo.currentTextChanged.connect(
-                        lambda text, row_index=r, key=key:
-                        self._on_combo_changed(row_index, key, text)
-                    )
-                    self.table.setCellWidget(r, c, combo)
-                else:
-                    item = QtWidgets.QTableWidgetItem(str(value))
-                    item.setTextAlignment(col.get("alignment", QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter))
-                    self.table.setItem(r, c, item)
-        self._building = False
+        try:
+            self.table.setRowCount(0)
+            self.table.setRowCount(len(self._data))
+            for r, row in enumerate(self._data):
+                for c, col in enumerate(self.columns):
+                    key = col["key"]
+                    value = row.get(key, "")
+                    if col.get("options"):
+                        combo = QtWidgets.QComboBox()
+                        combo.addItems(col["options"])
+                        # Preserve invalid CSV values so validation can report them
+                        # instead of silently replacing them with the first option.
+                        if value not in col["options"]:
+                            combo.addItem(value)
+                        combo.setCurrentText(value)
+                        combo.setContextMenuPolicy(QtCore.Qt.CustomContextMenu)
+                        combo.customContextMenuRequested.connect(
+                            lambda pos, widget=combo, row_index=r:
+                            self._show_row_context_menu(row_index, widget.mapToGlobal(pos))
+                        )
+                        combo.currentTextChanged.connect(
+                            lambda text, row_index=r, key=key:
+                            self._on_combo_changed(row_index, key, text)
+                        )
+                        self.table.setCellWidget(r, c, combo)
+                    else:
+                        item = QtWidgets.QTableWidgetItem(str(value))
+                        item.setTextAlignment(col.get("alignment", QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter))
+                        self.table.setItem(r, c, item)
+        finally:
+            self._building = False
+            if updates_enabled:
+                self.table.setUpdatesEnabled(True)
 
     def _on_row_context_menu(self, row, global_pos):
         if row < 0:

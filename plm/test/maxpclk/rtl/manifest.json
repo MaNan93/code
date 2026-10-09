@@ -1,5 +1,5 @@
 {
-  "config_hash": "e40c56d0678bd964e12e7409dc41c79143595f123b769c32a926cd584c6147aa",
+  "config_hash": "8e8574346473ab28d1511dc5a3b1ac0e8a24bf4e6780bda19e0d27a6cc58037c",
   "design": {
     "controller_count": 4,
     "group_count": 4,
@@ -58,10 +58,11 @@
       "wrap_end_else_clauses": "true"
     }
   },
-  "generation_key": "e90da7722580ff7284612082bab509374fe2324dd6454cee1b19ab18a7adad04",
-  "generator_fingerprint": "6f8ebf26e195c4c0c010eb2694b614082d89f3d33b5636bc2e3803871392f34a",
+  "generation_key": "f886441765650155979059bfe27823c46af22fa9c8b37848027ac45cbb75ea1d",
+  "generator_fingerprint": "52afb021e9cade636159ca1b938b40935baad3b8a377627df15291076cd6f58d",
   "options": {
     "arch": "serdes",
+    "bus_type": "bus",
     "dpr": false,
     "pclk_mode": "pclk_as_phy_input",
     "sel_mode": "sync"

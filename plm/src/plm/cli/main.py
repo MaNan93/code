@@ -18,6 +18,7 @@ import sys
 from plm import __version__
 from plm.core.gen_flags import (
     ARCH_VALUES,
+    BUS_TYPE_VALUES,
     PCLK_MODE_VALUES,
     SEL_MODE_VALUES,
     GenerationOptions,
@@ -46,6 +47,11 @@ def _add_config_arg(parser):
 
 
 def _add_generation_args(parser):
+    parser.add_argument(
+        "--bus-type", choices=list(BUS_TYPE_VALUES), default="bus",
+        help="Connection wrapper ports: flat=one-dimensional vectors; "
+        "bus=two-dimensional lane arrays (default).",
+    )
     parser.add_argument(
         "--sel-mode", choices=list(SEL_MODE_VALUES), default="sync",
         help="sync=break-before-make plus synchronization; "
@@ -107,6 +113,7 @@ def cmd_generate(argv):
         verible_path=args.verible_path,
         verible_flags=_parse_verible_flags(args.verible_flags),
         quiet=args.quiet,
+        bus_type=args.bus_type,
     )
     print(f"Config: {csv_dir}")
     try:

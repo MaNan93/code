@@ -42,6 +42,8 @@ class WorkspaceActions:
                 or self._load_running or self._project_operation_running):
             self.validation_timer.start()
             return
+        # This check consumes the pending edit debounce for the same snapshot.
+        self.validation_timer.stop()
         project = self.current_project
         payload = self.config_page.content()
         revision = self._validation_revision

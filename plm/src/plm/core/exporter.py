@@ -376,7 +376,8 @@ def _export_rtl_into(plan, out_dir, *, display_out=None):
             plan, options.pclk_mode, options.sel_mode, options.dpr
         ),
         src / "pipe_lane_mapper_connection.sv": rtl.gen_connection(
-            plan, options.pclk_mode, options.dpr, sel_mode=options.sel_mode
+            plan, options.pclk_mode, options.dpr, sel_mode=options.sel_mode,
+            bus_type=options.bus_type,
         ),
         out_dir / "flist.f": rtl.gen_filelist(plan),
     }

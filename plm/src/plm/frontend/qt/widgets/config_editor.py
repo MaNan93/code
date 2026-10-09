@@ -11,9 +11,11 @@ from PyQt5 import QtCore, QtWidgets
 from plm.core.gen_flags import (
     ARCH_PCLK_MODE,
     ARCH_VALUES,
+    BUS_TYPE_VALUES,
     PCLK_MODE_VALUES,
     SEL_MODE_VALUES,
 )
+from plm.frontend.qt.styles.tokens import TABLE_CARD_PADDING
 from plm.frontend.qt.widgets.lanegrid import LaneGrid
 from plm.frontend.qt.widgets.common import StatusBadge, StyledComboBox
 from plm.frontend.qt.widgets.tables import EditableTable
@@ -22,7 +24,6 @@ from plm.frontend.qt.widgets.tables import EditableTable
 LANE_COUNTS = (2, 4, 8, 16, 32)
 CONTROLLER_COLUMN_WIDTHS = {"ctrl_id": 96, "max_width": 128}
 TABLE_VISIBLE_ROWS = 10
-TABLE_CARD_PADDING = 8
 
 
 class LaneCountCombo(StyledComboBox):
@@ -247,10 +248,15 @@ class GenerationEditor(QtWidgets.QWidget):
         self.pclk_mode.setToolTip("PCLK 模式由 PHY 架构自动决定。")
         self.sel_mode = StyledComboBox()
         self.sel_mode.addItems(SEL_MODE_VALUES)
+        self.bus_type = StyledComboBox()
+        self.bus_type.addItems(BUS_TYPE_VALUES)
+        self.bus_type.setCurrentText("bus")
+        self.bus_type.setToolTip("flat：一维向量；bus：二维 lane 数组。")
         self.dpr = QtWidgets.QCheckBox("启用 DPR")
         layout.addRow("PHY 架构", self.arch)
         layout.addRow("PCLK 模式", self.pclk_mode)
         layout.addRow("选择方式", self.sel_mode)
+        layout.addRow("Connection 总线类型", self.bus_type)
         layout.addRow("DPR", self.dpr)
         self.generate_btn = QtWidgets.QPushButton("Generate")
         self.generate_btn.setObjectName("ConfigGenerateButton")
@@ -265,7 +271,7 @@ class GenerationEditor(QtWidgets.QWidget):
         actions.addWidget(self.generate_btn)
         layout.addRow("", actions)
         self.arch.currentIndexChanged.connect(self._sync_pclk)
-        for control in (self.arch, self.pclk_mode, self.sel_mode):
+        for control in (self.arch, self.pclk_mode, self.sel_mode, self.bus_type):
             control.currentIndexChanged.connect(self.changed.emit)
         self.dpr.toggled.connect(self._sync_dpr)
 
@@ -314,7 +320,7 @@ class GenerationEditor(QtWidgets.QWidget):
         self.pclk_mode.blockSignals(False)
 
     def set_flags(self, flags):
-        for widget in (self.arch, self.pclk_mode, self.sel_mode, self.dpr):
+        for widget in (self.arch, self.pclk_mode, self.sel_mode, self.bus_type, self.dpr):
             widget.blockSignals(True)
         arch = flags.get("arch") or (
             "serdes" if flags.get("pclk-mode") == "pclk_as_phy_input" else "original_pipe"
@@ -324,10 +330,11 @@ class GenerationEditor(QtWidgets.QWidget):
         if pclk_mode:
             self._set_combo_value(self.pclk_mode, pclk_mode)
         self._set_combo_value(self.sel_mode, flags.get("sel-mode") or "sync")
+        self._set_combo_value(self.bus_type, flags.get("bus-type") or "bus")
         self.dpr.setChecked(bool(flags.get("dpr")))
         self.sel_mode.setEnabled(not self.dpr.isChecked())
         self.sel_mode.setToolTip("DPR 需要 sync 选择方式。" if self.dpr.isChecked() else "")
-        for widget in (self.arch, self.pclk_mode, self.sel_mode, self.dpr):
+        for widget in (self.arch, self.pclk_mode, self.sel_mode, self.bus_type, self.dpr):
             widget.blockSignals(False)
 
     def flags(self):
@@ -336,4 +343,5 @@ class GenerationEditor(QtWidgets.QWidget):
             "pclk-mode": self.pclk_mode.currentText(),
             "sel-mode": self.sel_mode.currentText(),
             "dpr": self.dpr.isChecked(),
+            "bus-type": self.bus_type.currentText(),
         }

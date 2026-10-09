@@ -6,33 +6,65 @@ Controls use a 40 px grid; every 18 px Lucide glyph occupies a centered 20 px sl
 from pathlib import Path
 import sys
 
-PRIMARY = "#3B82F6"
-PRIMARY_HOVER = "#2563EB"
-PRIMARY_LIGHT = "#F2F4F7"
-BG_MAIN = "#FFFFFF"
-BG_SURFACE = "#FFFFFF"
-BG_SIDEBAR = "#F7F8FA"
-BG_SIDEBAR_INACTIVE = "#F7F8FA"
-BG_SUBTLE = "#F2F4F7"
-BG_ALTERNATE = "#FAFBFC"
-BG_HOVER = "#E9EDF2"
-BG_FOCUS = "#DDE3EB"
-BG_ARTIFACTS = "#F5F4F1"
-BORDER_ARTIFACTS = "#DDD9D1"
+# neutral ramp
+N0 = "#FFFFFF"
+N25 = "#FAFBFC"
+N50 = "#F6F7F9"
+N100 = "#EEF0F4"
+N200 = "#E1E5EB"
+N300 = "#CBD2DC"
+N400 = "#8B94A3"
+# N400 is too light for 16 px text; N450 meets 4.5:1 on all resting surfaces.
+N450 = "#656E7D"
+N500 = "#626C7B"
+N600 = "#4A5462"
+N800 = "#23272F"
+
+# primary ramp
+P50 = "#E8F0FE"
+P100 = "#D6E4FD"
+P500 = "#3B82F6"
+P600 = "#2563EB"
+P700 = "#1D4ED8"
+
+# semantic pairs (background, icon, text)
+SEMANTIC_COLORS = {
+    "info": ("#DBEAFE", P700, P700),
+    "success": ("#DCFCE7", "#16A34A", "#15803D"),
+    "warning": ("#FEF3C7", "#B45309", "#B45309"),
+    "danger": ("#FEE2E2", "#EF4444", "#B91C1C"),
+}
+INFO_BG, INFO, INFO_TEXT = SEMANTIC_COLORS["info"]
+SUCCESS_BG, SUCCESS, SUCCESS_TEXT = SEMANTIC_COLORS["success"]
+WARNING_BG, WARNING, WARNING_TEXT = SEMANTIC_COLORS["warning"]
+DANGER_BG, DANGER, DANGER_TEXT = SEMANTIC_COLORS["danger"]
+
+# derived roles
+PRIMARY = P500
+PRIMARY_HOVER = P600
+PRIMARY_SOFT = P50
+PRIMARY_PRESSED = P100
+BG_MAIN = N0
+BG_SURFACE = N0
+BG_SIDEBAR = N50
+BG_CARD = N50
+BG_SUBTLE = N100
+BG_ALTERNATE = N25
+BG_HOVER = N200
+BG_FOCUS = N200
+BG_ARTIFACTS = "#F0F1F4"
+BORDER_ARTIFACTS = "#D5D9E0"
+BORDER = "#E5E8ED"
+BORDER_HOVER = N300
+BORDER_FOCUS = P500
+TEXT_MAIN = N800
+TEXT_SUB = N500
+TEXT_HEADER = N600
+TEXT_MUTED = N450
+TOOLTIP_BG = N800
+TOOLTIP_TEXT = N0
+
 NAV_ITEM_GAP = 2
-INFO_BG, INFO_TEXT = "#DBEAFE", "#1D4ED8"
-SUCCESS_BG, SUCCESS_TEXT = "#DCFCE7", "#15803D"
-WARNING_BG, WARNING_TEXT = "#FEF3C7", "#B45309"
-DANGER_BG, DANGER_TEXT = "#FEE2E2", "#B91C1C"
-BORDER = "#EEF0F3"
-BORDER_HOVER = "#CBD5E1"
-BORDER_FOCUS = "#3B82F6"
-TEXT_MAIN = "#1F2328"
-TEXT_SUB = "#64748B"
-TEXT_HEADER = "#475569"
-TEXT_MUTED = "#94A3B8"
-DANGER = "#EF4444"
-SUCCESS = "#10B981"
 
 FONT_UI_PRIMARY = {"win32": "Segoe UI", "darwin": ".AppleSystemUIFont"}.get(sys.platform, "Roboto")
 FONT_FAMILY = '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang SC", "Microsoft YaHei", sans-serif'
@@ -42,6 +74,19 @@ ICON_DIR = Path(__file__).resolve().parents[1] / "assets" / "icons"
 UI_CONTENT_SCALE = 1.2
 FONT_SCALE = 1.0
 CONTROL_HEIGHT = 40
+TITLEBAR_HEIGHT = 44
+HEADER_HEIGHT = 48
+TITLEBAR_BUTTON_WIDTH = 46
+TITLEBAR_CONTROLS_WIDTH = 3 * TITLEBAR_BUTTON_WIDTH
+LOG_HEADER_HEIGHT = 32
+LOG_STATUS_HEIGHT = 24
+ARTIFACTS_TOOLBAR_HEIGHT = 40
+ARTIFACTS_FOOTER_HEIGHT = 28
+NAV_EXPANDED_WIDTH = 260
+NAV_COLLAPSED_WIDTH = 56
+ARTIFACTS_DEFAULT_WIDTH = 380
+ARTIFACTS_MIN_WIDTH = 300
+PANEL_ANIMATION_DURATION = 200
 LINE_HEIGHT = 24
 CONTROL_PADDING_Y = 8
 CONTROL_PADDING_X = 16
@@ -66,21 +111,8 @@ def scale_content_size(size):
     return round(size * UI_CONTENT_SCALE)
 
 
-def scale_font_size(size):
-    """Compatibility helper for the shared UI font size."""
-    return FONT_SIZE_BODY
-
-
-def shrink_font_size(size):
-    """Compatibility helper for the shared UI font size."""
-    return FONT_SIZE_BODY
-
-
 FONT_SIZE_BODY = 16
-FONT_SIZE_SM = FONT_SIZE_BODY
-FONT_SIZE_LG = FONT_SIZE_BODY
 ICON_SIZE = 20
-ICON_SIZE_SM = ICON_SIZE
 ICON_GLYPH_SIZE = 18
 ICON_STROKE_WIDTH = 2
 ICON_BUTTON_SIZE = 32
@@ -90,6 +122,8 @@ RADIUS_CONTROL = 12
 RADIUS_CARD = 16
 RADIUS_HOVER = CONTROL_HEIGHT // 2
 RADIUS_WINDOW = 16
+TABLE_CARD_PADDING = 8
+RADIUS_CARD_INNER = RADIUS_CARD - TABLE_CARD_PADDING
 
 SPACING_XS = 4
 SPACING_SM = 8
@@ -101,6 +135,7 @@ SHADOW_SM = {"blur_radius": 4, "offset": (0, 1), "rgba": (0, 0, 0, 20)}
 
 QSS_TOKENS = {
     "control_height": f"{CONTROL_HEIGHT}px",
+    "titlebar_button_width": f"{TITLEBAR_BUTTON_WIDTH}px",
     "control_padding_y": f"{CONTROL_PADDING_Y}px",
     "control_padding_x": f"{CONTROL_PADDING_X}px",
     "menu_radius": f"{MENU_RADIUS}px",
@@ -115,11 +150,12 @@ QSS_TOKENS = {
     "icon_button_radius": f"{ICON_BUTTON_SIZE // 2}px",
     "primary": PRIMARY,
     "primary_hover": PRIMARY_HOVER,
-    "primary_light": PRIMARY_LIGHT,
+    "primary_soft": PRIMARY_SOFT,
+    "primary_pressed": PRIMARY_PRESSED,
     "bg_main": BG_MAIN,
     "bg_surface": BG_SURFACE,
     "bg_sidebar": BG_SIDEBAR,
-    "bg_sidebar_inactive": BG_SIDEBAR_INACTIVE,
+    "bg_card": BG_CARD,
     "bg_subtle": BG_SUBTLE,
     "bg_alternate": BG_ALTERNATE,
     "bg_hover": BG_HOVER,
@@ -141,20 +177,19 @@ QSS_TOKENS = {
     "text_sub": TEXT_SUB,
     "text_header": TEXT_HEADER,
     "text_muted": TEXT_MUTED,
+    "tooltip_bg": TOOLTIP_BG,
+    "tooltip_text": TOOLTIP_TEXT,
     "danger": DANGER,
     "success": SUCCESS,
     "font_family": FONT_FAMILY,
     "font_mono": FONT_MONO,
     "font_size_body": f"{FONT_SIZE_BODY}px",
-    "font_size_sm": f"{FONT_SIZE_SM}px",
-    "font_size_lg": f"{FONT_SIZE_LG}px",
-    "font_size_12": f"{shrink_font_size(12)}px",
-    "font_size_13": f"{shrink_font_size(13)}px",
     "chevron_right_icon": (ICON_DIR / "chevron-right.svg").as_posix(),
     "chevron_down_icon": (ICON_DIR / "tree-chevron-down.svg").as_posix(),
     "radius_chip": f"{RADIUS_CHIP}px",
     "radius_control": f"{RADIUS_CONTROL}px",
     "radius_card": f"{RADIUS_CARD}px",
+    "radius_card_inner": f"{RADIUS_CARD_INNER}px",
     "radius_hover": f"{RADIUS_HOVER}px",
     "font_weight_normal": FONT_WEIGHT_NORMAL,
     "font_weight_medium": FONT_WEIGHT_MEDIUM,

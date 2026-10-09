@@ -12,7 +12,7 @@ from PyQt5 import QtCore, QtGui, QtTest, QtWidgets
 from plm.frontend.qt.views.artifacts_panel import ArtifactsPanel
 from plm.frontend.qt.views.artifact_chrome import ArtifactMetadataLabel
 from plm.frontend.qt.styles import APP_QSS
-from plm.frontend.qt.styles.tokens import BG_SUBTLE, CONTROL_HEIGHT, ICON_SIZE, RADIUS_HOVER
+from plm.frontend.qt.styles.tokens import PRIMARY_SOFT, CONTROL_HEIGHT, ICON_SIZE, RADIUS_HOVER
 from plm.frontend.qt.widgets.common import StyledMenu
 from plm.frontend.qt.widgets.code_preview import (
     CodePreview,
@@ -170,7 +170,7 @@ class ArtifactPreviewTests(unittest.TestCase):
         self.assertEqual(rect.height(), CONTROL_HEIGHT)
         image = tree.viewport().grab().toImage()
         self.assertEqual(image.pixelColor(2, rect.center().y()).name(), "#ffffff")
-        self.assertEqual(image.pixelColor(image.width() - 10, rect.center().y()).name(), BG_SUBTLE.lower())
+        self.assertEqual(image.pixelColor(image.width() - 10, rect.center().y()).name(), PRIMARY_SOFT.lower())
         self.assertIn(f"border-radius: {RADIUS_HOVER}px", APP_QSS)
         self.assertNotIn("border-left: 2px solid #3B82F6", APP_QSS)
         self.assertNotIn("$chevron_", APP_QSS)

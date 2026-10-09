@@ -131,7 +131,7 @@ from plm.core.workspace import scaffold_default_content
 from plm.core.verible import find_verible
 
 assert Path(plm.__file__).resolve().is_relative_to(Path(sys.argv[1]).resolve())
-assert plm.__version__ == '2.0.5'
+assert plm.__version__ == '2.0.6'
 assert find_spec('PyQt5') is None, 'The base CLI check must run without Qt'
 assert len(list(COMMON_DIR.glob('*.sv'))) == 5
 assert TB_MAKEFILE.is_file()
@@ -146,7 +146,7 @@ with tempfile.TemporaryDirectory(prefix='plm CLI wheel ') as temporary:
     scaffold_default_content(root)
     version = subprocess.run([sys.argv[2], '--version'], stdout=subprocess.PIPE,
                              stderr=subprocess.STDOUT, text=True, check=True)
-    assert version.stdout.strip() == 'plm 2.0.5'
+    assert version.stdout.strip() == 'plm 2.0.6'
     run_cli([sys.argv[2], 'validate', '--config', str(root)])
     for arch, pclk in (('original_pipe', 'pclk_as_phy_output'), ('serdes', 'pclk_as_phy_input')):
         for sel, dpr in (('sync', False), ('comb', False), ('sync', True)):
@@ -157,10 +157,13 @@ with tempfile.TemporaryDirectory(prefix='plm CLI wheel ') as temporary:
             run_cli(command)
             assert (root/'rtl/src/pipe_lane_mapper.sv').is_file()
             assert (root/'tb/tb_pipe_lane_mapper.sv').is_file()
+    run_cli([sys.argv[2], 'generate', '--config', str(root), '--bus-type', 'flat', '--quiet'])
+    connection = (root/'rtl/src/pipe_lane_mapper_connection.sv').read_text(encoding='utf-8')
+    assert '[NL * ' in connection and ' +: ' in connection
 for name, module in list(sys.modules.items()):
     if name == 'plm' or name.startswith('plm.'):
         assert Path(module.__file__).resolve().is_relative_to(Path(sys.argv[1]).resolve()), name
-print('Installed base wheel: console CLI, resources and 6 generation combinations passed without Qt.')
+print('Installed base wheel: console CLI, resources, 6 generation combinations and flat ports passed without Qt.')
 '''
 
 
@@ -229,6 +232,13 @@ with tempfile.TemporaryDirectory(prefix='plm wheel smoke ') as temporary:
             assert 'dft_mode' not in top
             assert (config/'tb/tb_pipe_lane_mapper.sv').is_file()
     print('Qt smoke: 4 generation combinations passed.', flush=True)
+    page.generation_editor.bus_type.setCurrentText('flat')
+    controller.generate_current()
+    wait_for_idle(app)
+    assert controller.generation_state == 'up_to_date', controller.generation_state
+    connection = (config/'rtl/src/pipe_lane_mapper_connection.sv').read_text(encoding='utf-8')
+    assert '[NL * ' in connection and ' +: ' in connection
+    print('Qt smoke: flat Connection ports passed.', flush=True)
     window.on_open_settings()
     window.view_stack.currentWidget().menu_buttons[1].click()
     app.processEvents()

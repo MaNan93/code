@@ -5,7 +5,6 @@ from PyQt5 import QtCore, QtWidgets
 from plm.frontend.qt.widgets.common import (
     ICON_SIZE,
     load_lucide_icon,
-    make_icon_button,
 )
 from plm.frontend.qt.widgets.project_list import ProjectList
 from plm.frontend.qt.styles.tokens import (
@@ -13,6 +12,9 @@ from plm.frontend.qt.styles.tokens import (
     SPACING_MD,
     SPACING_SM,
     TEXT_SUB,
+    NAV_EXPANDED_WIDTH,
+    NAV_COLLAPSED_WIDTH,
+    PANEL_ANIMATION_DURATION,
 )
 
 
@@ -20,6 +22,7 @@ class NavPanel(QtWidgets.QFrame):
     """Region 3: actions, draggable projects, and footer navigation."""
 
     new_chat_requested = QtCore.pyqtSignal()
+    collapsedChanged = QtCore.pyqtSignal(bool)
     open_project_requested = QtCore.pyqtSignal()
     save_requested = QtCore.pyqtSignal()
     settings_requested = QtCore.pyqtSignal()
@@ -34,8 +37,8 @@ class NavPanel(QtWidgets.QFrame):
     def __init__(self, projects=(), recent_project="", parent=None):
         super().__init__(parent)
         self.setObjectName("NavPanel")
-        self.expanded_width = 260
-        self.collapsed_width = 56
+        self.expanded_width = NAV_EXPANDED_WIDTH
+        self.collapsed_width = NAV_COLLAPSED_WIDTH
         self.is_collapsed = False
         self.is_animating = False
         self._target_collapsed = False
@@ -47,7 +50,7 @@ class NavPanel(QtWidgets.QFrame):
             self.animation_min,
             self.animation_max,
         ):
-            animation.setDuration(200)
+            animation.setDuration(PANEL_ANIMATION_DURATION)
             animation.setEasingCurve(QtCore.QEasingCurve.OutCubic)
         self.animation_group = QtCore.QParallelAnimationGroup(self)
         self.animation_group.addAnimation(self.animation_min)
@@ -58,17 +61,11 @@ class NavPanel(QtWidgets.QFrame):
         root.setContentsMargins(SPACING_MD, SPACING_MD, SPACING_MD, SPACING_SM)
         root.setSpacing(0)
 
-        self.collapse_btn = make_icon_button(
-            "panel-left", "收起侧边栏", "NavCollapseButton", 32, ICON_SIZE
-        )
-        self.collapse_btn.setParent(self)
-        self.collapse_btn.hide()
-        self.collapse_btn.clicked.connect(self.toggle_collapse)
-
         self.new_chat_btn = self._action_button(
-            "square-pen", "新对话", self.new_chat_requested
+            "square-pen", "新建项目", self.new_chat_requested
         )
         self.new_chat_btn.setToolTip("新建项目")
+        self.new_chat_btn.setAccessibleName("新建项目")
         self.open_project_btn = self._action_button(
             "folder-open", "打开项目", self.open_project_requested
         )
@@ -175,16 +172,8 @@ class NavPanel(QtWidgets.QFrame):
         if not self.is_collapsed:
             # Restore expanded content only after the panel has enough room.
             self._set_expanded_content_visible(True)
-        self.collapse_btn.setIcon(
-            load_lucide_icon(
-                "panel-right" if self.is_collapsed else "panel-left",
-                TEXT_SUB,
-            )
-        )
-        self.collapse_btn.setToolTip(
-            "展开侧边栏" if self.is_collapsed else "收起侧边栏"
-        )
         self.is_animating = False
+        self.collapsedChanged.emit(self.is_collapsed)
 
     def _set_expanded_content_visible(self, visible):
         self.setProperty("collapsed", not visible)
@@ -194,7 +183,7 @@ class NavPanel(QtWidgets.QFrame):
         if layout is not None:
             layout.activate()
 
-        self.new_chat_btn.setText("新对话" if visible else "")
+        self.new_chat_btn.setText("新建项目" if visible else "")
         self.open_project_btn.setText("打开项目" if visible else "")
         self.save_btn.setText("保存" if visible else "")
         self.settings_btn.setText("设置" if visible else "")

@@ -806,11 +806,39 @@ class QtWorkflowTests(unittest.TestCase):
             ["perlane", "shared", "unknown"],
         )
 
+        editor = page.signals_editor.editor
+        before = editor.get_rows()
+        changes = QtTest.QSignalSpy(editor.changed)
+        style = combo.style()
+        with patch.object(style, "polish", wraps=style.polish) as polish:
+            editor.set_cell_errors({(0, "signal_type"): "invalid signal type"})
+            self.assertTrue(combo.property("validationError"))
+            self.assertEqual(combo.toolTip(), "invalid signal type")
+            polish.reset_mock()
+            editor.set_cell_errors({(0, "signal_type"): "invalid signal type"})
+            self.assertEqual(polish.call_count, 0)
+            editor.set_cell_errors({(0, "signal_type"): "changed explanation"})
+            self.assertEqual(combo.toolTip(), "changed explanation")
+            self.assertEqual(polish.call_count, 0)
+            editor.set_cell_errors({})
+            self.assertFalse(combo.property("validationError"))
+            self.assertEqual(combo.toolTip(), "")
+        self.assertEqual(editor.get_rows(), before)
+        self.assertEqual(len(changes), 0)
+
+        editor.setUpdatesEnabled(False)
+        editor.set_rows(before)
+        self.assertFalse(editor.table.updatesEnabled())
+        editor.setUpdatesEnabled(True)
+        self.assertTrue(editor.table.updatesEnabled())
+
     def test_live_errors_and_focus_use_core_coordinates_without_dirtying_data(self):
         controller, window = self._editing_window()
         page = window.config_page
         self.assertFalse(page.dirty)
+        controller.validation_timer.start()
         controller.validate_current()
+        self.assertFalse(controller.validation_timer.isActive())
         wait_for_idle(self.app)
         self.assertFalse(page.dirty)
         page.mapping_editor.table.item(0, 1).setText("99-0")

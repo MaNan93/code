@@ -1,6 +1,6 @@
 from PyQt5 import QtCore, QtGui, QtWidgets
 from plm.frontend.qt.widgets.common import ICON_SIZE, load_lucide_icon
-from plm.frontend.qt.styles.tokens import SPACING_LG, SPACING_SM, SPACING_XL, TEXT_MAIN
+from plm.frontend.qt.styles.tokens import HEADER_HEIGHT, SPACING_LG, SPACING_SM, SPACING_XL, TEXT_MAIN
 
 
 class SecondaryMenuButton(QtWidgets.QPushButton):
@@ -36,7 +36,7 @@ class SecondaryPage(QtWidgets.QFrame):
         self.page = page
         self.setObjectName("SecondaryPage")
         self.setAttribute(QtCore.Qt.WA_StyledBackground, True)
-        self.setFocusPolicy(QtCore.Qt.StrongFocus)
+        self.setFocusPolicy(QtCore.Qt.ClickFocus)
 
         root = QtWidgets.QVBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
@@ -44,7 +44,7 @@ class SecondaryPage(QtWidgets.QFrame):
 
         header = QtWidgets.QFrame()
         header.setObjectName("SecondaryPageHeader")
-        header.setFixedHeight(48)
+        header.setFixedHeight(HEADER_HEIGHT)
         header_layout = QtWidgets.QHBoxLayout(header)
         header_layout.setContentsMargins(SPACING_LG, 0, SPACING_LG, 0)
         header_layout.setSpacing(SPACING_SM)

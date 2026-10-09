@@ -64,21 +64,21 @@ class QtControlLogicTests(unittest.TestCase):
         page = self.window.config_page
         self.assertFalse(page.artifacts_panel.isVisible())
         shown = QtTest.QSignalSpy(page._artifacts_animation.finished)
-        page.header.artifacts_btn.click()
+        self.window.artifacts_toggle_button.click()
         wait_for_idle(self.app)
         self.assertTrue(page.artifacts_panel.isVisible())
         self.assertTrue(shown.wait(1000))
         hidden = QtTest.QSignalSpy(page._artifacts_animation.finished)
-        page.header.artifacts_btn.click()
+        self.window.artifacts_toggle_button.click()
         wait_for_idle(self.app)
         self.assertTrue(hidden.wait(1000))
         self.assertFalse(page.artifacts_panel.isVisible())
 
         self.assertGreater(self.window.content_splitter.sizes()[1], 0)
-        page.header.log_btn.click()
+        self.window.log_toggle_button.click()
         wait_for_idle(self.app)
         self.assertEqual(self.window.content_splitter.sizes()[1], 0)
-        page.header.log_btn.click()
+        self.window.log_toggle_button.click()
         wait_for_idle(self.app)
         self.assertGreater(self.window.content_splitter.sizes()[1], 0)
 
@@ -115,7 +115,8 @@ class QtControlLogicTests(unittest.TestCase):
         self.assertEqual(page.settings_status.text(), "")
         self.assertFalse(any(button.text() == "自动检测"
                              for button in page.findChildren(QtWidgets.QPushButton)))
-        self.assertTrue(page.flag_table.horizontalHeader().isHidden())
+        self.assertIsNone(page.flag_table)
+        original_flags = page._formatter_flags()
 
         page.editor_path_edit.setText("custom-editor")
         page.save_settings_btn.click()
@@ -123,6 +124,15 @@ class QtControlLogicTests(unittest.TestCase):
         self.assertEqual(
             self.store.preferences()["editor_path"], "custom-editor"
         )
+        self.assertIsNone(page.flag_table)
+        self.assertEqual(self.store.formatter_preferences()["verible_flags"], original_flags)
+        page.menu_buttons[1].click()
+        wait_for_idle(self.app)
+        self.assertTrue(page.flag_table.horizontalHeader().isHidden())
+        table = page.flag_table
+        page.menu_buttons[0].click()
+        page.menu_buttons[1].click()
+        self.assertIs(page.flag_table, table)
 
 
     def test_new_project_button_opens_creation_dialog_directly(self):

@@ -45,10 +45,11 @@
       "wrap_end_else_clauses": "true"
     }
   },
-  "generation_key": "6ffa89fb70caef19b65fd991d0a1bf4d962d851a9a1a49c43f9513fed0407e57",
-  "generator_fingerprint": "6f8ebf26e195c4c0c010eb2694b614082d89f3d33b5636bc2e3803871392f34a",
+  "generation_key": "b200d6b54c032b9a6d2682403722b00704da1c5e42ae6e5593ed509cb9d8081b",
+  "generator_fingerprint": "52afb021e9cade636159ca1b938b40935baad3b8a377627df15291076cd6f58d",
   "options": {
     "arch": "original_pipe",
+    "bus_type": "bus",
     "dpr": true,
     "pclk_mode": "pclk_as_phy_output",
     "sel_mode": "sync"

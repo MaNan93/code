@@ -1,18 +1,18 @@
 from PyQt5 import QtCore, QtGui, QtWidgets
 from plm.frontend.qt.widgets.common import (
-    ICON_SIZE, RoundedCanvasFrame, make_icon_button,
+    RoundedCanvasFrame,
 )
 from plm.frontend.qt.widgets.config_editor import CsvTableEditor, GenerationEditor
 from plm.frontend.qt.views.artifacts_panel import ArtifactsPanel
 from plm.frontend.qt.styles.tokens import (
-    CONTROL_HEIGHT, SPACING_LG, SPACING_MD,
+    CONTROL_HEIGHT, HEADER_HEIGHT, SPACING_LG, SPACING_MD,
+    ARTIFACTS_DEFAULT_WIDTH, ARTIFACTS_MIN_WIDTH, TITLEBAR_CONTROLS_WIDTH,
+    PANEL_ANIMATION_DURATION,
 )
 
 
 class ConfigTabBar(QtWidgets.QTabBar):
     """Keep the full label visible when the selected tab becomes bold."""
-
-    TEXT_HORIZONTAL_SPACE = 48  # Padding, gap, and antialiased glyph allowance.
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -28,18 +28,11 @@ class ConfigTabBar(QtWidgets.QTabBar):
         metrics = QtGui.QFontMetrics(font)
         text_width = max(metrics.horizontalAdvance(option.text),
                          metrics.boundingRect(option.text).width())
-        horizontal_space = self.TEXT_HORIZONTAL_SPACE
-        if index == 0:
-            horizontal_space -= SPACING_LG  # First label starts at the title baseline.
         content_size = QtCore.QSize(text_width, metrics.height())
         styled_size = self.style().sizeFromContents(
             QtWidgets.QStyle.CT_TabBarTab, option, content_size, self,
         )
-        size = QtCore.QSize(
-            text_width + horizontal_space,
-            CONTROL_HEIGHT,
-        )
-        result = super().tabSizeHint(index).expandedTo(styled_size).expandedTo(size)
+        result = super().tabSizeHint(index).expandedTo(styled_size)
         result.setHeight(CONTROL_HEIGHT)
         return result
 
@@ -80,17 +73,15 @@ class DoubleClickLabel(QtWidgets.QLabel):
 
 
 class ConfigHeader(QtWidgets.QFrame):
-    """Region 2.1: editable session title and panel toggles."""
+    """Region 2.1: editable project title and dirty status."""
 
-    logToggleRequested = QtCore.pyqtSignal()
-    artifactsToggleRequested = QtCore.pyqtSignal()
     titleChanged = QtCore.pyqtSignal(str)
 
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setObjectName("ConfigHeader")
         self.setAttribute(QtCore.Qt.WA_StyledBackground, True)
-        self.setFixedHeight(48)
+        self.setFixedHeight(HEADER_HEIGHT)
         self._original_title = ""
         self._editing_title = False
         layout = QtWidgets.QHBoxLayout(self)
@@ -119,23 +110,6 @@ class ConfigHeader(QtWidgets.QFrame):
         self.status_badge.hide()
         layout.addWidget(self.status_badge, 0, QtCore.Qt.AlignVCenter)
         layout.addStretch(1)
-        self.log_btn = make_icon_button(
-            "panel-bottom", "显示/隐藏输出面板", "HeaderButton", 46, ICON_SIZE
-        )
-        self.artifacts_btn = make_icon_button(
-            "file-text", "显示/隐藏 Artifacts", "HeaderButton", 46, ICON_SIZE
-        )
-        self.log_btn.clicked.connect(self.logToggleRequested.emit)
-        self.artifacts_btn.clicked.connect(self.artifactsToggleRequested.emit)
-        self.panel_actions = QtWidgets.QWidget()
-        self.panel_actions.setObjectName("ConfigPanelActions")
-        self.panel_actions.setFixedSize(92, self.height())
-        actions_layout = QtWidgets.QHBoxLayout(self.panel_actions)
-        actions_layout.setContentsMargins(0, 0, 0, 0)
-        actions_layout.setSpacing(0)
-        actions_layout.addWidget(self.log_btn)
-        actions_layout.addWidget(self.artifacts_btn)
-        layout.addWidget(self.panel_actions, 0, QtCore.Qt.AlignVCenter)
 
     def set_dirty(self, dirty):
         self.status_badge.setProperty("dirty", bool(dirty))
@@ -175,6 +149,7 @@ class ConfigTabPage(QtWidgets.QWidget):
     def __init__(self, editor, fill_editor=False, parent=None):
         super().__init__(parent)
         self.setObjectName("ConfigTabPage")
+        self.scroll = None
         root = QtWidgets.QVBoxLayout(self)
         root.setContentsMargins(SPACING_LG, SPACING_LG, SPACING_LG, SPACING_LG)
         root.setSpacing(0)
@@ -185,6 +160,7 @@ class ConfigTabPage(QtWidgets.QWidget):
             return
 
         scroll = QtWidgets.QScrollArea()
+        self.scroll = scroll
         scroll.setObjectName("ConfigScroll")
         scroll.setWidgetResizable(True)
         scroll.setHorizontalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOff)
@@ -206,7 +182,6 @@ class ConfigPage(RoundedCanvasFrame):
     MAX_HISTORY = 50
     BORDER_WIDTH = 0.0  # Let the white canvas meet the gray underlay directly.
 
-    logToggleRequested = QtCore.pyqtSignal()
     dirtyChanged = QtCore.pyqtSignal(bool)
     generateRequested = QtCore.pyqtSignal()
     historyChanged = QtCore.pyqtSignal()
@@ -220,8 +195,8 @@ class ConfigPage(RoundedCanvasFrame):
         self._history = []
         self._history_index = -1
         self._saved_content = None
-        self.artifacts_width = 380
-        self.restore_artifacts_width = 380
+        self.artifacts_width = ARTIFACTS_DEFAULT_WIDTH
+        self.restore_artifacts_width = ARTIFACTS_DEFAULT_WIDTH
         self.artifacts_maximized = False
 
         root = QtWidgets.QVBoxLayout(self)
@@ -229,13 +204,7 @@ class ConfigPage(RoundedCanvasFrame):
         root.setContentsMargins(1, 1, 1, self.CORNER_RADII[2])
         root.setSpacing(0)
         self.header = ConfigHeader()
-        self.header.logToggleRequested.connect(self.logToggleRequested.emit)
-        self.header.artifactsToggleRequested.connect(self.toggle_artifacts)
         root.addWidget(self.header)
-        self.header_actions = self.header.panel_actions
-        self.header.layout().removeWidget(self.header_actions)
-        self.header_actions.setParent(self)
-        self.header_actions.show()
         root.addSpacing(SPACING_MD)
 
         self.config_area = QtWidgets.QWidget()
@@ -278,7 +247,7 @@ class ConfigPage(RoundedCanvasFrame):
         self._artifacts_animation = QtCore.QPropertyAnimation(
             self.artifacts_panel, b"geometry", self
         )
-        self._artifacts_animation.setDuration(200)
+        self._artifacts_animation.setDuration(PANEL_ANIMATION_DURATION)
         self._artifacts_animation.setEasingCurve(QtCore.QEasingCurve.OutCubic)
         self._hide_artifacts_after_animation = False
         self._artifacts_animation.finished.connect(
@@ -287,53 +256,17 @@ class ConfigPage(RoundedCanvasFrame):
         self.tabs.currentChanged.connect(self._raise_artifacts)
         self.artifacts_panel.hide()
         self.installEventFilter(self)
-        self.header.installEventFilter(self)
-
-    def take_log_button(self):
-        return self._take_panel_button(self.header.log_btn)
-
-    def take_artifacts_button(self):
-        return self._take_panel_button(self.header.artifacts_btn)
-
-    def _take_panel_button(self, button):
-        self.header_actions.layout().removeWidget(button)
-        remaining = self.header_actions.layout().count()
-        self.header_actions.setFixedWidth(46 * remaining)
-        self.header_actions.setVisible(bool(remaining))
-        self._configure_artifacts_toolbar()
-        self._position_header_actions()
-        return button
 
     def _configure_artifacts_toolbar(self):
         panel = self.artifacts_panel
-        panel.ensurePolished()
-        margins = panel.content_layout.contentsMargins()
-        toolbar_top = max(0, self.layout().contentsMargins().top() - panel.frameWidth())
-        panel.content_layout.setContentsMargins(
-            margins.left(), toolbar_top,
-            margins.right(), margins.bottom(),
-        )
-        panel.toolbar.setFixedHeight(self.header.height())
-        # Account for the drawer's existing inset instead of adding it twice.
-        right_inset = max(
-            0, self.header_actions.width() + panel.toolbar_layout.spacing()
-            + self.layout().contentsMargins().right() - panel.frameWidth() - margins.right(),
-        )
-        panel.toolbar_layout.setContentsMargins(0, 0, right_inset, 0)
-        panel.toolbar_reserved_width = self.header_actions.width()
+        panel.toolbar.setFixedHeight(HEADER_HEIGHT)
+        panel.toolbar_layout.setContentsMargins(0, 0, TITLEBAR_CONTROLS_WIDTH, 0)
+        panel.toolbar_reserved_width = TITLEBAR_CONTROLS_WIDTH
         panel._apply_toolbar_density(panel.width())
-
-    def _position_header_actions(self):
-        self.header_actions.move(
-            self.header.geometry().right() + 1 - self.header_actions.width(),
-            self.header.y(),
-        )
-        self.header_actions.raise_()
 
     def _raise_artifacts(self, *_args):
         if self.artifacts_panel.isVisible():
             self.artifacts_panel.raise_()
-        self.header_actions.raise_()
 
     def update_title(self, project_name):
         self.header.title_label.setText(project_name)
@@ -454,14 +387,12 @@ class ConfigPage(RoundedCanvasFrame):
         }
 
     def eventFilter(self, watched, event):
-        if event.type() == QtCore.QEvent.Resize and watched in (self, self.header):
-            self._position_header_actions()
-            if watched is self:
-                self.reposition_artifacts()
+        if event.type() == QtCore.QEvent.Resize and watched is self:
+            self.reposition_artifacts()
         return super().eventFilter(watched, event)
 
     def toggle_artifacts(self):
-        target = self._artifacts_target_geometry()
+        target = self._artifacts_rect("maximized" if self.artifacts_maximized else "expanded")
         if target is None:
             self.artifacts_panel.setVisible(not self.artifacts_panel.isVisible())
             return
@@ -473,18 +404,11 @@ class ConfigPage(RoundedCanvasFrame):
             start = (
                 self.artifacts_panel.geometry()
                 if reopening
-                else QtCore.QRect(
-                    self.width(), 0, 0, target.height()
-                )
+                else self._artifacts_rect("collapsed")
             )
             self._animate_artifacts(start, target, hide_after=False)
             return
-        end = QtCore.QRect(
-            self.width(),
-            0,
-            0,
-            self.height(),
-        )
+        end = self._artifacts_rect("collapsed")
         self._animate_artifacts(
             self.artifacts_panel.geometry(), end, hide_after=True
         )
@@ -501,16 +425,20 @@ class ConfigPage(RoundedCanvasFrame):
         self.artifacts_panel.set_maximized(self.artifacts_maximized)
         self.reposition_artifacts()
 
-    def _artifacts_target_geometry(self):
+    def _artifacts_rect(self, state):
+        """Return the drawer rectangle for one of its three layout states."""
         total_w = self.width()
         total_h = self.height()
         if total_w <= 0 or total_h <= 0:
             return None
-        panel_w = (
-            total_w
-            if self.artifacts_maximized
-            else min(self.artifacts_width, total_w)
-        )
+        if state == "collapsed":
+            panel_w = 0
+        elif state == "maximized":
+            panel_w = total_w
+        elif state == "expanded":
+            panel_w = min(total_w, max(ARTIFACTS_MIN_WIDTH, self.artifacts_width))
+        else:
+            raise ValueError(f"Unknown artifacts state: {state}")
         return QtCore.QRect(total_w - panel_w, 0, panel_w, total_h)
 
     def _animate_artifacts(self, start, end, hide_after):
@@ -536,7 +464,7 @@ class ConfigPage(RoundedCanvasFrame):
             self._hide_artifacts_after_animation = False
         if not self.artifacts_panel.isVisible():
             return
-        target = self._artifacts_target_geometry()
+        target = self._artifacts_rect("maximized" if self.artifacts_maximized else "expanded")
         if target is None:
             return
         self.artifacts_panel.setGeometry(target)
@@ -545,7 +473,8 @@ class ConfigPage(RoundedCanvasFrame):
     def _on_artifacts_width_requested(self, width):
         if self.artifacts_maximized:
             return
-        maximum = max(1, self.width())
-        minimum = min(300, maximum)
-        self.artifacts_width = max(minimum, min(int(width), maximum))
+        self.artifacts_width = int(width)
+        target = self._artifacts_rect("expanded")
+        if target is not None:
+            self.artifacts_width = target.width()
         self.reposition_artifacts()

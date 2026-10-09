@@ -11,7 +11,7 @@ from PyQt5 import QtCore, QtGui, QtSvg, QtWidgets
 from plm.core.paths import PLM_ROOT
 from plm.frontend.qt.styles.tokens import (
     BG_MAIN, BG_SUBTLE, BORDER, CONTROL_HEIGHT, CONTROL_PADDING_X, DANGER,
-    ICON_BUTTON_SIZE, ICON_GLYPH_SIZE, ICON_SIZE, ICON_SIZE_SM, ICON_TEXT_GAP,
+    ICON_BUTTON_SIZE, ICON_GLYPH_SIZE, ICON_SIZE, ICON_TEXT_GAP,
     LINE_HEIGHT, MENU_GAP, MENU_ICON_TEXT_GAP, MENU_ITEM_PADDING_X, MENU_PADDING, MENU_RADIUS,
     MENU_SHADOW_LAYER_ALPHA, MENU_SHADOW_MARGIN, MENU_SHADOW_OFFSET, MENU_SHADOW_SPREAD,
     MENU_MIN_WIDTH,
@@ -40,29 +40,34 @@ class FixedHeightItemDelegate(QtWidgets.QStyledItemDelegate):
 class ButtonSizingController(QtCore.QObject):
     """Apply the Medium control height throughout the application."""
 
+    SIZING_EVENTS = frozenset((
+        QtCore.QEvent.Polish, QtCore.QEvent.FontChange,
+        QtCore.QEvent.StyleChange, QtCore.QEvent.Show,
+    ))
+
     def __init__(self, app):
         super().__init__(app)
         self._applying = False
         app.installEventFilter(self)
 
     def eventFilter(self, watched, event):
-        if event.type() == QtCore.QEvent.Paint and isinstance(watched, QtWidgets.QDialog):
+        kind = event.type()
+        if kind != QtCore.QEvent.Paint and kind not in self.SIZING_EVENTS:
+            return False
+        if kind == QtCore.QEvent.Paint and isinstance(watched, QtWidgets.QDialog):
             # Native framed dialogs must have an opaque client surface even
             # when their owner is the translucent, frameless main window.
             painter = QtGui.QPainter(watched)
             painter.fillRect(event.rect(), QtGui.QColor(BG_MAIN))
             painter.end()
-        if (event.type() == QtCore.QEvent.Paint
+        if (kind == QtCore.QEvent.Paint
                 and isinstance(watched, QtWidgets.QPushButton)
                 and not watched.icon().isNull()
                 and (watched.text() or watched.objectName() in ("NavActionButton", "NavFooterButton")
                      or (watched.hasFocus() and watched.layout() is None))):
             paint_icon_text_button(watched)
             return True
-        if self._applying or event.type() not in (
-            QtCore.QEvent.Polish, QtCore.QEvent.FontChange,
-            QtCore.QEvent.StyleChange, QtCore.QEvent.Show,
-        ):
+        if self._applying or kind not in self.SIZING_EVENTS:
             return False
         self._applying = True
         try:
@@ -118,7 +123,7 @@ class ContentIconStyle(QtWidgets.QProxyStyle):
 
     def pixelMetric(self, metric, option=None, widget=None):
         if metric == QtWidgets.QStyle.PM_SmallIconSize:
-            return ICON_SIZE_SM
+            return ICON_SIZE
         return ICON_SIZE if metric in self.ICON_METRICS else super().pixelMetric(metric, option, widget)
 
     def drawControl(self, element, option, painter, widget=None):
@@ -406,7 +411,7 @@ class StyledMenu(QtWidgets.QMenu):
         action = event.action()
         if (event.type() == QtCore.QEvent.ActionAdded and action.icon().isNull()
                 and ("删除" in action.text() or action.text().lower().startswith("delete"))):
-            action.setIcon(load_lucide_icon("trash-2", DANGER, ICON_SIZE_SM))
+            action.setIcon(load_lucide_icon("trash-2", DANGER, ICON_SIZE))
 
     def sizeHint(self):
         result = super().sizeHint()

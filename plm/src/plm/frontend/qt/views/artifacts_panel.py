@@ -1,6 +1,7 @@
 """Generated-file drawer construction and public signals."""
 
 from collections import OrderedDict
+from plm.frontend.qt.styles.tokens import ARTIFACTS_TOOLBAR_HEIGHT, ARTIFACTS_FOOTER_HEIGHT
 from PyQt5 import QtCore, QtGui, QtWidgets
 from plm.frontend.qt.models.artifacts import ArtifactSelection
 from plm.frontend.qt.models.preferences import DEFAULT_EDITOR
@@ -111,7 +112,7 @@ class ArtifactsPanel(
         self.toolbar = toolbar
         toolbar.setObjectName("ArtifactsToolbar")
         toolbar.setAttribute(QtCore.Qt.WA_StyledBackground, True)
-        toolbar.setFixedHeight(40)
+        toolbar.setFixedHeight(ARTIFACTS_TOOLBAR_HEIGHT)
         toolbar_layout = QtWidgets.QHBoxLayout(toolbar)
         self.toolbar_layout = toolbar_layout
         toolbar_layout.setContentsMargins(0, 0, 16, 0)
@@ -215,7 +216,7 @@ class ArtifactsPanel(
         self.status.setObjectName("ArtifactStatus")
         self.footer = QtWidgets.QFrame()
         self.footer.setObjectName("ArtifactFooter")
-        self.footer.setFixedHeight(28)
+        self.footer.setFixedHeight(ARTIFACTS_FOOTER_HEIGHT)
         status_row = QtWidgets.QHBoxLayout(self.footer)
         status_row.setContentsMargins(12, 0, 12, 0)
         status_row.setSpacing(8)

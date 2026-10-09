@@ -83,6 +83,7 @@ class QtRegressionTests(unittest.TestCase):
         page = self.window.view_stack.currentWidget()
         self.assertEqual([button.text() for button in page.menu_buttons],
                          ["通用", "工具"])
+        page._select_section(1)
         control = page._flag_controls["column_limit"]
         control.setText("-1")
         page._select_section(0)
@@ -153,6 +154,44 @@ class QtRegressionTests(unittest.TestCase):
             self.assertGreater(block.blockFormat().leftMargin(), 0)
             self.assertGreater(block.blockFormat().rightMargin(), 0)
             self.assertIn(FONT_CODE_PRIMARY, block.charFormat().fontFamilies())
+
+    def test_document_formats_before_attachment_and_ignores_superseded_reads(self):
+        with patch("plm.frontend.qt.views.documentation_page.TaskRunner.submit") as submit:
+            self.window.on_open_docs()
+            page = self.window.view_stack.currentWidget()
+            first_finished, first_failed = submit.call_args.args[1:3]
+            previous = page.doc_browser.document()
+            font = previous.defaultFont()
+            stylesheet = previous.defaultStyleSheet()
+            undo_enabled = previous.isUndoRedoEnabled()
+            format_document = page._format_document
+
+            def check_detached(document):
+                self.assertIs(page.doc_browser.document(), previous)
+                self.assertIsNot(document, previous)
+                self.assertEqual(document.defaultFont(), font)
+                self.assertEqual(document.defaultStyleSheet(), stylesheet)
+                format_document(document)
+
+            with patch.object(page, "_format_document", side_effect=check_detached):
+                first_finished("# Initial\n\nBody")
+            displayed = page.doc_browser.document()
+            self.assertIn("Initial", page.doc_browser.toPlainText())
+            self.assertEqual(displayed.isUndoRedoEnabled(), undo_enabled)
+
+            page._select_section(1)
+            second_finished = submit.call_args.args[1]
+            first_finished("outdated result")
+            first_failed(RuntimeError("outdated error"))
+            self.assertIs(page.doc_browser.document(), displayed)
+            self.assertIn("Initial", page.doc_browser.toPlainText())
+
+            second_finished("# Configuration\n\nNew content")
+            self.assertIn("New content", page.doc_browser.toPlainText())
+            QtCore.QCoreApplication.sendPostedEvents(None, QtCore.QEvent.DeferredDelete)
+            self.assertTrue(sip.isdeleted(previous))
+            self.assertTrue(sip.isdeleted(displayed))
+            self.assertFalse(sip.isdeleted(page.doc_browser.document()))
 
     def test_missing_activated_project_keeps_current_selection(self):
         before = self.controller.current_project

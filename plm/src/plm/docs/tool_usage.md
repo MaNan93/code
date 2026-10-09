@@ -85,7 +85,7 @@ lane 归属要在运行时随 mode 切换，夹在 controller 和 PHY 中间的�
 | `lane_mapping.csv` | 每个 mode 下，每条 PHY lane 归哪个 controller 的哪条 lane |
 | `pipe_signals.csv` | 要经过 mapper 的 PIPE 信号，以及各自的 `safe_state` / `tie_off` |
 
-CLI 的生成参数（`--arch` / `--pclk-mode` / `--sel-mode` / `--dpr`）需要显式传入。Qt 直接使用同样的 GenerationOptions 调用核心。
+CLI 的生成参数（`--arch` / `--pclk-mode` / `--sel-mode` / `--dpr` / `--bus-type`）需要显式传入。Qt 直接使用同样的 GenerationOptions 调用核心。
 同目录下的 `gen_flags.txt` 是 Qt 前端自己的记忆，CLI 不读，见 2.4 节。
 
 输出——`<SET>/rtl/` 和 `<SET>/tb/`：
@@ -317,29 +317,35 @@ phy_mac_messagebus,perlane,phy2mac,8,0x50,0x50
 `pipe_lane_mapper_connection.sv` 是随 `pipe_lane_mapper.sv` 一起自动生成
 的一个纯包装模块：把 mapper 本体的两个 struct 数组端口（PHY 侧一个，每个
 controller 一个）展开成一个个 flat 信号端口，方便不想处理 SV struct 端口
-的下游流程/IP 直接对接。PHY 侧不管 `signal_type` 是什么，永远是 per-lane
-展开（`[NL]` 的 unpacked 数组）；controller 侧 `perlane` 信号同样展开成
-该 controller 自己 `max_width` 条 lane 的数组；`shared mac2phy` 信号则收缩成
+的下游流程/IP 直接对接。`--bus-type bus`（默认）使用现有二维数组形式，
+例如 `logic [W-1:0] phy_data [0:NL-1]`；`--bus-type flat` 使用一维向量，
+例如 `logic [NL * W - 1:0] phy_data`。lane 0 位于低位，lane `i` 对应
+`phy_data[i * W +: W]`。每个 controller 仍保留自己的命名端口，按该
+controller 的 `max_width * W` 展平，不合并 controller 维度。
+
+PHY 侧不管 `signal_type` 是什么，永远保持逐 lane 的独立值；controller
+侧 `perlane` 信号使用自己的 `max_width` 条 lane；`shared mac2phy` 信号则收缩成
 一个标量输入，由包装层把它复制到 controller 的每条 lane。`phy2mac` 始终
-展开为 per-lane 数组，不支持 `shared`。
+保持 per-lane，不支持 `shared`。DPR 使用相同 bus-type 规则。该选项只改变
+connection 的外部端口表示，mapper 内部的 struct 端口、时钟/复位和 testbench 不变。
 
 ### 2.4 生成参数不在配置文件里
 
-`--arch` / `--pclk-mode` / `--sel-mode` / `--dpr` 这四个参数在 CLI 中**必须显式从命令行传入**；Qt 从界面构造 GenerationOptions。
+`--arch` / `--pclk-mode` / `--sel-mode` / `--dpr` / `--bus-type` 在 CLI 中**必须显式从命令行传入**；Qt 从界面构造 GenerationOptions。
 CLI 不读任何文件来拿它们。
 
 | 谁来生成 | 参数从哪来 |
 |---|---|
 | 手敲命令行 | 自己写在命令里 |
 | `make <SET>` | 顶层 `Makefile` 里的 `SETFLAGS_<SET>` 变量（见 6.1 节） |
-| Qt 前端 | Generation 页上的三个下拉 + dpr 勾选框，构造 GenerationOptions 后直接调用核心 |
+| Qt 前端 | Generation 页上的架构、PCLK、选择方式、Connection 总线类型和 DPR 控件，构造 GenerationOptions 后直接调用核心 |
 
 配置目录下还有个 `gen_flags.txt`，但那是 **Qt 前端自己的记忆**：前端保存时写、
 打开 workspace 时读回来恢复上次的选择。CLI 不看它，`make` 也不看它，
 所以手敲命令行或跑 `make` 时改这个文件没有任何效果。
 
 不传就是 CLI 默认值：`--arch original_pipe --pclk-mode pclk_as_phy_output
---sel-mode sync`，不开 dpr。
+--sel-mode sync --bus-type bus`，不开 dpr。
 
 ## 3. `plm generate`：生成匹配的 RTL 与 testbench
 
@@ -354,6 +360,7 @@ plm generate --config <SET> [其它参数]
 | `--arch {original_pipe,serdes}` | `original_pipe` | PHY 宏类型，必须与 pclk-mode 匹配 |
 | `--pclk-mode {pclk_as_phy_output,pclk_as_phy_input}` | `pclk_as_phy_output` | PCLK 归属架构；方向名称以 PHY 端口为视角 |
 | `--sel-mode {sync,comb}` | `sync` | Group 选择同步方式；DPR 要求 sync |
+| `--bus-type {flat,bus}` | `bus` | Connection 信号端口：flat 为一维向量，bus 为二维 lane 数组 |
 | `--dpr` | 关闭 | 生成并例化 DPR overlay |
 | `--verible-path PATH` | 自动搜索 | SystemVerilog 格式化器 |
 | `--verible-flags JSON` | 内置默认值 | 覆盖 Verible 参数 |

@@ -8,7 +8,7 @@ safely. Each front end is responsible for translating its own widget state
 into the plain rows shapes these functions take, and back.
 
 A workspace holds those three CSVs plus gen_flags.txt, which remembers the
-generation flags (arch, pclk-mode, sel-mode, dpr) the front end last used for
+generation flags (arch, pclk-mode, sel-mode, dpr, bus-type) the front end last used for
 it. That file is read and written HERE ONLY, by and for the editor front end.
 The CLI never looks at it: the front end passes the flags it holds on the
 `plm generate ...` command line like any other caller, so there is exactly one
@@ -31,6 +31,7 @@ import tempfile
 
 from plm.core.gen_flags import (
     ARCH_VALUES,
+    BUS_TYPE_VALUES,
     PCLK_MODE_VALUES,
     SEL_MODE_VALUES,
     complete_arch_pclk,
@@ -148,7 +149,9 @@ def read_gen_flags(path):
 
     An unset or unrecognized arch/pclk-mode/sel-mode comes back as None (not a
     placeholder string -- each front end maps that to whatever its own "unset"
-    widget value is), dpr is already a bool. A missing file reads as all-unset
+    widget value is), dpr is already a bool. bus-type defaults to bus for old
+    workspaces; unknown explicit values survive for generation validation.
+    A missing file reads as all-unset except this compatibility default
     rather than raising: a workspace without one is normal, it just means
     nobody has picked anything for it yet.
     """
@@ -170,6 +173,7 @@ def read_gen_flags(path):
         "pclk-mode": pclk_mode_val,
         "sel-mode": sel_val if sel_val in SEL_MODE_VALUES else None,
         "dpr": flags.get("dpr", "").strip().lower() in ("1", "true", "yes", "on"),
+        "bus-type": flags.get("bus-type") or "bus",
     }
 
 
@@ -187,6 +191,7 @@ def write_gen_flags(path, flags):
         "# arch      = original_pipe | serdes",
         "# pclk-mode = pclk_as_phy_output | pclk_as_phy_input",
         "# sel-mode  = sync | comb",
+        "# bus-type  = flat | bus",
         "# dpr       = true | false (dpr=true requires sel-mode=sync)",
     ]
     header_lines = len(lines)
@@ -199,6 +204,9 @@ def write_gen_flags(path, flags):
         lines.append(f"pclk-mode = {pclk}")
     if sel in SEL_MODE_VALUES:
         lines.append(f"sel-mode = {sel}")
+    bus_type = flags.get("bus-type")
+    if bus_type in BUS_TYPE_VALUES:
+        lines.append(f"bus-type = {bus_type}")
     if flags.get("dpr"):
         lines.append("dpr = true")
     if len(lines) == header_lines:
@@ -355,7 +363,7 @@ def workspace_content(ws_root):
             "controllers": [],
             "signals": [],
             "mapping": {"lane_count": 4, "rows": []},
-            "gen_flags": {"arch": None, "pclk-mode": None, "sel-mode": None, "dpr": False},
+            "gen_flags": {"arch": None, "pclk-mode": None, "sel-mode": None, "dpr": False, "bus-type": "bus"},
             "empty": True,
         }
     ctrls = read_csv_rows(cfg_dir / "controllers.csv", ("ctrl_id", "ctrl_name", "max_width"))

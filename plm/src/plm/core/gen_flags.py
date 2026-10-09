@@ -1,7 +1,7 @@
 """
 Generation-flag vocabulary shared by the CLI and the Qt front end.
 
-These four flags -- arch, pclk-mode, sel-mode, dpr -- are generation
+These flags -- arch, pclk-mode, sel-mode, dpr, bus-type -- are generation
 *inputs*: they decide what the emitted RTL structurally looks like, not how
 it is displayed.
 
@@ -38,6 +38,7 @@ PCLK_MODE_ARCH = {v: k for k, v in ARCH_PCLK_MODE.items()}
 ARCH_VALUES = ("original_pipe", "serdes")
 PCLK_MODE_VALUES = ("pclk_as_phy_output", "pclk_as_phy_input")
 SEL_MODE_VALUES = ("sync", "comb")
+BUS_TYPE_VALUES = ("flat", "bus")
 
 
 @dataclass(frozen=True)
@@ -56,6 +57,7 @@ class GenerationOptions:
     verible_path: str = None
     verible_flags: dict = None
     quiet: bool = False
+    bus_type: str = "bus"
 
     def errors(self):
         errors = []
@@ -70,6 +72,11 @@ class GenerationOptions:
             errors.append(
                 f"sel_mode must be one of {', '.join(SEL_MODE_VALUES)} "
                 f"(got {self.sel_mode!r})"
+            )
+        if self.bus_type not in BUS_TYPE_VALUES:
+            errors.append(
+                f"bus_type must be one of {', '.join(BUS_TYPE_VALUES)} "
+                f"(got {self.bus_type!r})"
             )
         if self.arch in ARCH_PCLK_MODE and self.pclk_mode in PCLK_MODE_VALUES:
             required = ARCH_PCLK_MODE[self.arch]
@@ -96,6 +103,7 @@ class GenerationOptions:
             "pclk_mode": self.pclk_mode,
             "sel_mode": self.sel_mode,
             "dpr": bool(self.dpr),
+            "bus_type": self.bus_type,
         }
 
 

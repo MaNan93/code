@@ -13,8 +13,8 @@ from PyQt5 import QtCore, QtGui, QtWidgets
 from plm.frontend.qt.widgets.common import StyledMenu, apply_drop_shadow
 from plm.frontend.qt.widgets.tables import RowDragTable
 from plm.frontend.qt.styles.tokens import (
-    BG_MAIN, BG_SUBTLE, BG_SURFACE, BORDER, BORDER_HOVER, CONTROL_HEIGHT, DANGER, FONT_SIZE_SM,
-    PRIMARY_HOVER, PRIMARY_LIGHT,
+    BG_MAIN, BG_SUBTLE, BG_SURFACE, BORDER, BORDER_HOVER, CONTROL_HEIGHT, DANGER, FONT_SIZE_BODY,
+    PRIMARY_HOVER, PRIMARY_SOFT,
     RADIUS_CHIP, SHADOW_SM, SPACING_LG, SPACING_MD, SPACING_XS,
     TEXT_MAIN, TEXT_MUTED,
 )
@@ -150,7 +150,7 @@ class _LaneCellDelegate(QtWidgets.QStyledItemDelegate):
         else:
             painter.fillRect(rect, QtGui.QColor(LANE_GRID_UNASSIGNED_BG))
         if option.state & QtWidgets.QStyle.State_Selected:
-            painter.fillRect(rect, QtGui.QColor(PRIMARY_LIGHT))
+            painter.fillRect(rect, QtGui.QColor(PRIMARY_SOFT))
 
         # Adjacent cells assigned to the same controller join into one
         # continuous marker band. Only the two outer ends retain rounded caps.
@@ -445,7 +445,7 @@ class LaneGrid(QtWidgets.QWidget):
                 f"QPushButton#lgSwatch {{"
                 f"  background-color: {color};"
                 f"  color: {text_color};"
-                f"  font-size: {FONT_SIZE_SM}px;"
+                f"  font-size: {FONT_SIZE_BODY}px;"
                 f"  font-weight: 500;"
                 f"  border-radius: {RADIUS_CHIP}px;"
                 f"  padding: 0 {int(SPACING_MD * scale)}px;"

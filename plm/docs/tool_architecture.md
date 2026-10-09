@@ -68,7 +68,7 @@ Settings 分为 General（编辑器）和 Formatter；非法参数会
 
 ## 参数、入口与打包
 
-CLI 的生成参数显式传入；Qt 在 `config/gen_flags.txt` 保存自己的四项生成选择，
+CLI 的生成参数显式传入；Qt 在 `config/gen_flags.txt` 保存自己的五项生成选择（含 Connection 的 `bus-type`），
 CLI 不读取这个文件。Makefile 与核心样例测试各自显式指定样例所需参数。
 `test/quad` 是非法拓扑的负面样例，不应为让回归通过而改写。
 

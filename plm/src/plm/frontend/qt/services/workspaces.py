@@ -45,6 +45,7 @@ class WorkspaceService:
             pclk_mode=pclk_mode,
             sel_mode=flags.get("sel-mode") or "sync",
             dpr=bool(flags.get("dpr")),
+            bus_type=flags.get("bus-type") or "bus",
             verible_path=str(Path(formatter["verible_path"]).expanduser()) if formatter.get("verible_path") else None,
             verible_flags=formatter.get("verible_flags"),
         )

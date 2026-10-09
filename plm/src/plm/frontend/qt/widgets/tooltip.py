@@ -2,11 +2,13 @@
 
 from PyQt5 import QtCore, QtGui, QtWidgets
 
-from plm.frontend.qt.styles.tokens import FONT_FAMILY, RADIUS_CARD, shrink_font_size
+from plm.frontend.qt.styles.tokens import (
+    FONT_FAMILY, RADIUS_CARD, FONT_SIZE_BODY, TOOLTIP_BG, TOOLTIP_TEXT,
+)
 
 
 class RoundedToolTip(QtWidgets.QWidget):
-    BACKGROUND = "#202123"
+    BACKGROUND = TOOLTIP_BG
     RADIUS = RADIUS_CARD
     MAX_TEXT_WIDTH = 360
 
@@ -24,9 +26,9 @@ class RoundedToolTip(QtWidgets.QWidget):
         self.label.setWordWrap(True)
         self.label.setMaximumWidth(self.MAX_TEXT_WIDTH)
         self.label.setStyleSheet(
-            f'background: transparent; border: none; color: white; '
+            f'background: transparent; border: none; color: {TOOLTIP_TEXT}; '
             f'font-family: {FONT_FAMILY}; '
-            f'font-size: {shrink_font_size(12)}px; padding: 0;'
+            f'font-size: {FONT_SIZE_BODY}px; padding: 0;'
         )
         layout.addWidget(self.label)
 

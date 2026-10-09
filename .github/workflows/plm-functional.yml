@@ -87,6 +87,9 @@ jobs:
             tests.test_qt_artifacts.ArtifactPreviewTests.test_search_supports_line_jump \
             tests.test_qt_artifacts.ArtifactPreviewTests.test_diff_switches_between_unified_diff_and_current_file \
             tests.test_qt_artifacts.ArtifactPreviewTests.test_toolbar_routes_to_selected_output_and_signals
+      - name: Core topology and generator golden outputs
+        timeout-minutes: 3
+        run: uv run python -u -m unittest -v tests.test_topology_indexes tests.test_generation_regressions
       - name: Generation business linkage
         timeout-minutes: 1
         run: |

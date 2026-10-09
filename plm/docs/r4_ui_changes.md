@@ -36,3 +36,9 @@
 
 - Formatter 参数表行高保持 40px，ComboBox/LineEdit 在创建时就固定为 36px，供上下各 2px 内边距使用。
 - 不再依赖 `ButtonSizingController` 在后续事件中把默认 40px 高度调整成 36px；这使 Linux/Windows 的最小高度断言一致。
+
+## 不可达时钟分支清理
+
+- `validate()` 已禁止任何 Controller 的 PCLK 源随 mode 变化，删除 `gen_decoder`、`gen_sel_gen`、`gen_clk_mux_phy_output` 和顶层连接中只服务于多候选 Controller PCLK 的生成分支。
+- 保留 Controller 固定 PHY PCLK 直连；DPR 仍使用独立的 glitch-free 时钟选择器；两种 PCLK 架构均保留。
+- 为保证 R4 已审核的 RTL golden hash 稳定，暂保留生成文件的静态注释与未使用接口参数，避免引入纯文本输出差异。

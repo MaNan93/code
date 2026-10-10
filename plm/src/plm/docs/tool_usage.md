@@ -312,7 +312,12 @@ phy_mac_messagebus,perlane,phy2mac,8,0x50,0x50
 （也不应该假设）两者取值一致：前者用于 Group 的无 owner 空窗，后者用于
 某条 controller lane 在当前 mode 没分到 PHY lane 时的固定读值。
 
-复位信号（`phy_rst_n`/`ctrl_rst_n`）是独立端口，不放在这张表里。
+两种复位信号（`phy_rst_n`/`ctrl_rst_n` 和 `phy_perst_n`/`ctrl_perst_n`）
+都是独立端口，不放在这张表里。每个 controller 提供自己的 `<controller>_rst_n`
+和 `<controller>_perst_n`；PHY 侧两种复位均为每 lane 一个输出。
+两路分别按照当前 owner 的原始 `dec_tgt` 路由，不等待数据路径的同步选择或
+non-overlap 窗口；多路选择为全零时，两路输出均为低电平。
+启用 DPR 时，分别使用独立的 `dpr_rst_n` 和 `dpr_perst_n` 作为 DPR 候选输入。
 
 `pipe_lane_mapper_connection.sv` 是随 `pipe_lane_mapper.sv` 一起自动生成
 的一个纯包装模块：把 mapper 本体的两个 struct 数组端口（PHY 侧一个，每个

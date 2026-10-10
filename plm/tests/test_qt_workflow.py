@@ -646,7 +646,6 @@ class QtWorkflowTests(unittest.TestCase):
         self.assertEqual(controller.generation_state, "out_of_date")
 
     def test_output_state_edit_undo_save_and_project_switch(self):
-        from PyQt5 import QtTest
         controller, window = self._editing_window()
         page = window.config_page
         controller.generate_current()
@@ -686,7 +685,6 @@ class QtWorkflowTests(unittest.TestCase):
         self.assertIn("renamed_current", str(page.artifacts_panel.current_path))
 
     def test_output_state_failed_invalid_and_external_changes(self):
-        from PyQt5 import QtTest
         controller, window = self._editing_window()
         page = window.config_page
         def fail(*args, **kwargs):
@@ -881,7 +879,6 @@ class QtWorkflowTests(unittest.TestCase):
         self.assertFalse(page.dirty)
 
     def test_live_validation_timer_and_duplicate_ids_mark_both_rows(self):
-        from PyQt5 import QtTest
         controller, window = self._editing_window()
         page = window.config_page
         page.controllers_editor.table.item(1, 0).setText("0")

@@ -46,6 +46,9 @@ class WorkspaceService:
             sel_mode=flags.get("sel-mode") or "sync",
             dpr=bool(flags.get("dpr")),
             bus_type=flags.get("bus-type") or "bus",
+            module_prefix=flags.get("module_prefix", ""),
+            file_prefix=flags.get("file_prefix", ""),
+            macro_prefix=flags.get("macro_prefix", ""),
             verible_path=str(Path(formatter["verible_path"]).expanduser()) if formatter.get("verible_path") else None,
             verible_flags=formatter.get("verible_flags"),
         )

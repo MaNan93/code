@@ -251,6 +251,21 @@ class GenerationEditor(QtWidgets.QWidget):
         layout.addRow("选择方式", self.sel_mode)
         layout.addRow("Connection 总线类型", self.bus_type)
         layout.addRow("DPR", self.dpr)
+        self._prefix_edits = {}
+        for name, description, example in (
+            ("module_prefix", "模块和 package 名称前缀", "soc_"),
+            ("file_prefix", "所有 .sv 文件名称前缀", "rtl_"),
+            ("macro_prefix", "宏名称前缀", "SOC_"),
+        ):
+            edit = QtWidgets.QLineEdit()
+            edit.setObjectName(name)
+            edit.setAccessibleName(name)
+            edit.setPlaceholderText(description)
+            edit.setToolTip(f"直接添加到原名称前，例如 {example}；留空保持原名称。")
+            edit.textChanged.connect(self.changed.emit)
+            self._prefix_edits[name] = edit
+            setattr(self, name, edit)
+            layout.addRow(name, edit)
         self.generate_btn = QtWidgets.QPushButton("Generate")
         self.generate_btn.setObjectName("ConfigGenerateButton")
         self.generate_btn.clicked.connect(self.generateRequested.emit)
@@ -313,7 +328,9 @@ class GenerationEditor(QtWidgets.QWidget):
         self.pclk_mode.blockSignals(False)
 
     def set_flags(self, flags):
-        for widget in (self.arch, self.pclk_mode, self.sel_mode, self.bus_type, self.dpr):
+        controls = (self.arch, self.pclk_mode, self.sel_mode, self.bus_type, self.dpr,
+                    *self._prefix_edits.values())
+        for widget in controls:
             widget.blockSignals(True)
         arch = flags.get("arch") or (
             "serdes" if flags.get("pclk-mode") == "pclk_as_phy_input" else "original_pipe"
@@ -327,14 +344,18 @@ class GenerationEditor(QtWidgets.QWidget):
         self.dpr.setChecked(bool(flags.get("dpr")))
         self.sel_mode.setEnabled(not self.dpr.isChecked())
         self.sel_mode.setToolTip("DPR 需要 sync 选择方式。" if self.dpr.isChecked() else "")
-        for widget in (self.arch, self.pclk_mode, self.sel_mode, self.bus_type, self.dpr):
+        for name, edit in self._prefix_edits.items():
+            edit.setText(flags.get(name) or "")
+        for widget in controls:
             widget.blockSignals(False)
 
     def flags(self):
-        return {
+        flags = {
             "arch": self.arch.currentText(),
             "pclk-mode": self.pclk_mode.currentText(),
             "sel-mode": self.sel_mode.currentText(),
             "dpr": self.dpr.isChecked(),
             "bus-type": self.bus_type.currentText(),
         }
+        flags.update({name: edit.text() for name, edit in self._prefix_edits.items() if edit.text()})
+        return flags

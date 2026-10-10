@@ -4,7 +4,7 @@ import unittest
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from qt_test_support import dispose_new_widgets
-from PyQt5 import QtWidgets
+from PyQt5 import QtTest, QtWidgets
 
 from plm.frontend.qt.widgets.config_editor import GenerationEditor
 
@@ -50,6 +50,38 @@ class GenerationEditorRestoreTests(unittest.TestCase):
     def test_generation_action_uses_the_single_generate_label(self):
         editor = GenerationEditor()
         self.assertEqual(editor.generate_btn.text(), "Generate")
+
+    def test_prefix_inputs_have_requested_labels_and_start_empty(self):
+        editor = GenerationEditor()
+        for name in ("module_prefix", "file_prefix", "macro_prefix"):
+            with self.subTest(name=name):
+                control = getattr(editor, name)
+                self.assertIsInstance(control, QtWidgets.QLineEdit)
+                self.assertEqual(control.text(), "")
+                self.assertEqual(editor.layout().labelForField(control).text(), name)
+                self.assertNotIn(name, editor.flags())
+
+    def test_loading_prefixes_is_silent_and_old_projects_clear_previous_values(self):
+        editor = GenerationEditor()
+        changed = QtTest.QSignalSpy(editor.changed)
+        prefixes = {"module_prefix": "soc_", "file_prefix": "rtl_", "macro_prefix": "SOC_"}
+        editor.set_flags(prefixes)
+        self.assertEqual(len(changed), 0)
+        for name, value in prefixes.items():
+            self.assertEqual(getattr(editor, name).text(), value)
+            self.assertEqual(editor.flags()[name], value)
+        editor.set_flags({})
+        self.assertEqual(len(changed), 0)
+        for name in prefixes:
+            self.assertEqual(getattr(editor, name).text(), "")
+            self.assertNotIn(name, editor.flags())
+
+    def test_each_prefix_edit_emits_one_change(self):
+        editor = GenerationEditor()
+        changed = QtTest.QSignalSpy(editor.changed)
+        for name in ("module_prefix", "file_prefix", "macro_prefix"):
+            getattr(editor, name).setText("example_")
+        self.assertEqual(len(changed), 3)
 
 
 if __name__ == "__main__":

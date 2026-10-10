@@ -405,8 +405,7 @@ QTableWidget#laneGrid {
 
 QFrame#ArtifactsPanel {
     background-color: $bg_artifacts;
-    border: none;
-    border-left: 1px solid $border_artifacts;
+    border: $artifacts_border_width solid $border_artifacts;
     border-radius: $radius_card;
 }
 QWidget#ArtifactSearchBar { background: transparent; }

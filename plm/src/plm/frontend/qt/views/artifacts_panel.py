@@ -14,7 +14,7 @@ from plm.frontend.qt.widgets.common import (
 from plm.frontend.qt.styles.tokens import (
     BORDER_ARTIFACTS, CONTROL_HEIGHT, ICON_BUTTON_SIZE, TEXT_ARTIFACTS_MUTED,
 )
-from .artifact_chrome import ArtifactFilePopup, ArtifactPathButton
+from .artifact_chrome import ArtifactContent, ArtifactFilePopup, ArtifactPathButton
 from .artifact_preview import ArtifactPreview
 from .artifact_files import ArtifactFiles
 from .artifact_interactions import ArtifactInteractions
@@ -124,8 +124,7 @@ class ArtifactsPanel(
         outer.setSizeConstraint(QtWidgets.QLayout.SetNoConstraint)
         outer.setContentsMargins(0, 0, 0, 0)
         outer.setSpacing(0)
-        content = QtWidgets.QWidget()
-        content.setObjectName("ArtifactContent")
+        content = ArtifactContent()
         root = QtWidgets.QVBoxLayout(content)
         self.content_layout = root
         root.setContentsMargins(0, 0, 0, 0)

@@ -165,6 +165,64 @@ class GenerationIntegrationTests(unittest.TestCase):
         with self.assertRaisesRegex(ValidationError, "bus_type"):
             self.service.validate(window.config_page.content())
 
+    def test_prefix_inputs_are_undoable_and_persist_across_reload(self):
+        controller, window = self.window()
+        page = window.config_page
+        editor = page.generation_editor
+        controller.generate_current()
+        wait_for_idle(self.app)
+        self.assertEqual(controller.generation_state, "up_to_date")
+        prefixes = {"module_prefix": "soc_", "file_prefix": "rtl_", "macro_prefix": "SOC_"}
+        for name, value in prefixes.items():
+            getattr(editor, name).setText(value)
+        self.assertTrue(page.dirty)
+        wait_for_idle(self.app)
+        self.assertEqual(controller.generation_state, "out_of_date")
+        page.undo()
+        self.assertEqual(editor.macro_prefix.text(), "")
+        self.assertEqual(editor.module_prefix.text(), "soc_")
+        page.redo()
+        self.assertEqual(editor.macro_prefix.text(), "SOC_")
+        controller.save_current()
+        wait_for_idle(self.app)
+        self.assertFalse(page.dirty)
+        loaded = self.service.load(controller.current_project)["gen_flags"]
+        for name, value in prefixes.items():
+            self.assertEqual(loaded[name], value)
+        controller.reload_project(controller.current_project.name)
+        wait_for_idle(self.app)
+        for name, value in prefixes.items():
+            self.assertEqual(getattr(editor, name).text(), value)
+        self.assertFalse(page.dirty)
+        controller.generate_current()
+        wait_for_idle(self.app)
+        self.assertEqual(controller.generation_state, "up_to_date")
+        root = controller.current_project.config_dir.parent
+        top = root / "rtl/src/rtl_pipe_lane_mapper.sv"
+        self.assertIn("module soc_pipe_lane_mapper #(", top.read_text())
+        self.assertIn("`ifdef SOC_DUMP_FSDB", (root / "tb/rtl_tb_pipe_lane_mapper.sv").read_text())
+        self.assertFalse((root / "rtl/src/pipe_lane_mapper.sv").exists())
+        self.assertIn(top.resolve(), self.service.output_files(controller.current_project))
+        controller.reload_project(controller.current_project.name)
+        wait_for_idle(self.app)
+        # Explicit reload retains its existing policy of requesting regeneration.
+        for name, value in prefixes.items():
+            self.assertEqual(getattr(editor, name).text(), value)
+        self.assertEqual(self.service.output_state(
+            controller.current_project, page.content(), use_disk=True,
+        ), "up_to_date")
+        controller.generate_current()
+        wait_for_idle(self.app)
+        self.assertEqual(controller.generation_state, "up_to_date")
+
+    def test_invalid_prefix_cannot_save_over_a_valid_workspace(self):
+        controller, window = self.window()
+        signature = self.service.signature(controller.current_project)
+        window.config_page.generation_editor.file_prefix.setText("../escape/")
+        with self.assertRaisesRegex(ValidationError, "file_prefix"):
+            self.service.save(controller.current_project, window.config_page.content())
+        self.assertEqual(self.service.signature(controller.current_project), signature)
+
     def test_formatter_parameter_validation_and_detection(self):
         page = SettingsPage(preferences=self.store.preferences())
         self.addCleanup(page.close)

@@ -74,6 +74,9 @@ def _add_generation_args(parser):
     )
     parser.add_argument("--dpr", action="store_true", help=DPR_HELP)
     parser.add_argument("--quiet", action="store_true")
+    parser.add_argument("--module-prefix", default="", help="Prefix PLM module and package names.")
+    parser.add_argument("--file-prefix", default="", help="Prefix all emitted SystemVerilog filenames.")
+    parser.add_argument("--macro-prefix", default="", help="Prefix PLM preprocessor macro names.")
     parser.add_argument("--events-json", action="store_true", help=argparse.SUPPRESS)
 
 
@@ -114,6 +117,9 @@ def cmd_generate(argv):
         verible_flags=_parse_verible_flags(args.verible_flags),
         quiet=args.quiet,
         bus_type=args.bus_type,
+        module_prefix=args.module_prefix,
+        file_prefix=args.file_prefix,
+        macro_prefix=args.macro_prefix,
     )
     print(f"Config: {csv_dir}")
     try:

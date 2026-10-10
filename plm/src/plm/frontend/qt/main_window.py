@@ -13,6 +13,7 @@ from plm.frontend.qt.styles.tokens import (
     FONT_UI_PRIMARY,
     ICON_SIZE,
     ICON_BUTTON_SIZE,
+    SPACING_XS,
     SPACING_SM,
     TITLEBAR_HEIGHT,
     TITLEBAR_BUTTON_WIDTH,
@@ -412,7 +413,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.main_container = QtWidgets.QWidget()
         self.main_container.setObjectName("MainContainer")
         main_layout = QtWidgets.QVBoxLayout(self.main_container)
-        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.setContentsMargins(*([SPACING_XS] * 4))
         main_layout.setSpacing(0)
         main_layout.addWidget(self.content_splitter)
 

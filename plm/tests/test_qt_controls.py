@@ -11,6 +11,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from qt_test_support import (
     dispose_new_widgets, isolate_host_formatter, preserve_application_state, wait_for_idle,
+    wait_for_signal,
 )
 from sample_data import sample_config
 from PyQt5 import QtCore, QtTest, QtWidgets
@@ -67,11 +68,11 @@ class QtControlLogicTests(unittest.TestCase):
         self.window.artifacts_toggle_button.click()
         wait_for_idle(self.app)
         self.assertTrue(page.artifacts_panel.isVisible())
-        self.assertTrue(shown.wait(1000))
+        wait_for_signal(shown)
         hidden = QtTest.QSignalSpy(page._artifacts_animation.finished)
         self.window.artifacts_toggle_button.click()
         wait_for_idle(self.app)
-        self.assertTrue(hidden.wait(1000))
+        wait_for_signal(hidden)
         self.assertFalse(page.artifacts_panel.isVisible())
 
         self.assertGreater(self.window.content_splitter.sizes()[1], 0)

@@ -17,6 +17,7 @@ value-level rules relating them -- with no file I/O of its own.
 """
 
 from dataclasses import dataclass
+import re
 
 # --arch names the PHY macro family a config set targets; each one only ever
 # works with one --pclk-mode, since that's a property of the macro, not an
@@ -58,6 +59,9 @@ class GenerationOptions:
     verible_flags: dict = None
     quiet: bool = False
     bus_type: str = "bus"
+    module_prefix: str = ""
+    file_prefix: str = ""
+    macro_prefix: str = ""
 
     def errors(self):
         errors = []
@@ -89,6 +93,16 @@ class GenerationOptions:
             errors.append(f"dpr requires sel_mode sync (got {self.sel_mode})")
         if self.verible_flags is not None and not isinstance(self.verible_flags, dict):
             errors.append("verible_flags must be a JSON object")
+        for name in ("module_prefix", "macro_prefix", "file_prefix"):
+            value = getattr(self, name)
+            if name == "file_prefix":
+                pattern = r"[A-Za-z0-9_.-]*"
+                allowed = "letters, digits, underscore, dot or hyphen"
+            else:
+                pattern = r"(?:[A-Za-z_][A-Za-z0-9_]*)?"
+                allowed = "an ASCII identifier prefix starting with a letter or underscore"
+            if not isinstance(value, str) or not re.fullmatch(pattern, value):
+                errors.append(f"{name} must be empty or {allowed} (got {value!r})")
         return errors
 
     def validated(self):
@@ -98,13 +112,17 @@ class GenerationOptions:
         return self
 
     def manifest_dict(self):
-        return {
+        result = {
             "arch": self.arch,
             "pclk_mode": self.pclk_mode,
             "sel_mode": self.sel_mode,
             "dpr": bool(self.dpr),
             "bus_type": self.bus_type,
         }
+        for name in ("module_prefix", "file_prefix", "macro_prefix"):
+            if getattr(self, name):
+                result[name] = getattr(self, name)
+        return result
 
 
 

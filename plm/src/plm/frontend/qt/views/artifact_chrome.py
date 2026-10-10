@@ -5,10 +5,29 @@ from html import escape
 from PyQt5 import QtCore, QtGui, QtWidgets
 
 from plm.frontend.qt.styles.tokens import (
-    ACCENT_ARTIFACTS, ICON_TEXT_GAP, MENU_PADDING, MENU_SHADOW_MARGIN,
+    ACCENT_ARTIFACTS, ARTIFACTS_BORDER_WIDTH, ICON_TEXT_GAP, MENU_PADDING, MENU_SHADOW_MARGIN,
     RADIUS_CARD, TEXT_ARTIFACTS, TEXT_ARTIFACTS_MUTED,
 )
 from plm.frontend.qt.widgets.common import ICON_SIZE, load_lucide_icon, paint_popup_surface
+
+
+class ArtifactContent(QtWidgets.QWidget):
+    """Clip child surfaces inside the drawer's rounded border."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setObjectName("ArtifactContent")
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        # QSS rounds the frame itself, but does not clip its child widgets.
+        path = QtGui.QPainterPath()
+        # Leave room for the frame's antialiased stroke at the curved edges.
+        radius = max(0, RADIUS_CARD - ARTIFACTS_BORDER_WIDTH - 1)
+        path.addRoundedRect(
+            QtCore.QRectF(self.rect()).adjusted(1, 1, -1, -1), radius, radius,
+        )
+        self.setMask(QtGui.QRegion(path.toFillPolygon().toPolygon()))
 
 
 class ArtifactPathLabel(QtWidgets.QLabel):

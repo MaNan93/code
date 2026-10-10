@@ -16,8 +16,8 @@ from PyQt5 import QtCore, QtGui, QtTest, QtWidgets
 from plm.frontend.qt.controllers import AppController
 from plm.frontend.qt.services import ProjectService, SettingsStore
 from plm.frontend.qt.styles.tokens import (
-    BG_ARTIFACTS, BG_ARTIFACTS_HEADER, BG_FOCUS, BG_SUBTLE, BG_SURFACE, BORDER, BORDER_HOVER, CONTROL_HEIGHT, FONT_CODE_PRIMARY, FONT_MONO, FONT_SCALE, FONT_SIZE_BODY,
-    ICON_GLYPH_SIZE, NAV_COLLAPSED_WIDTH, NAV_ICON_INSET, NAV_ITEM_GAP, SPACING_MD, TITLEBAR_CONTROLS_WIDTH, PRIMARY_SOFT, PRIMARY_PRESSED, TEXT_MAIN, TOOLTIP_BG, scale_content_size,
+    BG_ARTIFACTS, BG_ARTIFACTS_HEADER, BG_FOCUS, BG_SUBTLE, BORDER, BORDER_HOVER, CONTROL_HEIGHT, FONT_CODE_PRIMARY, FONT_MONO, FONT_SCALE, FONT_SIZE_BODY,
+    ICON_GLYPH_SIZE, NAV_COLLAPSED_WIDTH, NAV_ICON_INSET, NAV_ITEM_GAP, SPACING_MD, PRIMARY_SOFT, PRIMARY_PRESSED, TEXT_MAIN, TOOLTIP_BG,
 )
 from plm.frontend.qt.models import ProjectInfo
 from plm.frontend.qt.main_window import MainWindow
@@ -319,7 +319,7 @@ class QtFrontendLayoutTests(unittest.TestCase):
         self.assertEqual(
             self.window.content_splitter.mapTo(self.window.body_container, QtCore.QPoint()).x()
             - (nav.geometry().right() + 1),
-            0,
+            4,
         )
         aligned_widgets = [
             nav.new_chat_btn,

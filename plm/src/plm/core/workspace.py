@@ -34,6 +34,7 @@ from plm.core.gen_flags import (
     BUS_TYPE_VALUES,
     PCLK_MODE_VALUES,
     SEL_MODE_VALUES,
+    GenerationOptions,
     complete_arch_pclk,
 )
 from plm.core.model import _stripped
@@ -168,13 +169,16 @@ def read_gen_flags(path):
     pclk_mode_val = _PCLK_MODE_MIGRATION.get(raw_pclk_mode, raw_pclk_mode)
     arch_val, pclk_mode_val = complete_arch_pclk(flags.get("arch"), pclk_mode_val)
     sel_val = flags.get("sel-mode")
-    return {
+    result = {
         "arch": arch_val,
         "pclk-mode": pclk_mode_val,
         "sel-mode": sel_val if sel_val in SEL_MODE_VALUES else None,
         "dpr": flags.get("dpr", "").strip().lower() in ("1", "true", "yes", "on"),
         "bus-type": flags.get("bus-type") or "bus",
     }
+    result.update({name: flags[name] for name in ("module_prefix", "file_prefix", "macro_prefix")
+                   if flags.get(name)})
+    return result
 
 
 def write_gen_flags(path, flags):
@@ -185,6 +189,9 @@ def write_gen_flags(path, flags):
     straight through. A set of choices that pins nothing at all removes the
     file instead of leaving an empty one behind.
     """
+    GenerationOptions(**{name: flags.get(name, "") for name in (
+        "module_prefix", "file_prefix", "macro_prefix",
+    )}).validated()
     path = Path(path)
     lines = [
         "# Written by the PLM Qt front end; the CLI does not read this file.",
@@ -209,6 +216,10 @@ def write_gen_flags(path, flags):
         lines.append(f"bus-type = {bus_type}")
     if flags.get("dpr"):
         lines.append("dpr = true")
+    for name in ("module_prefix", "file_prefix", "macro_prefix"):
+        value = flags.get(name)
+        if value:
+            lines.append(f"{name} = {value}")
     if len(lines) == header_lines:
         # nothing but the header comments -- no point keeping a file that
         # pins no keys at all.

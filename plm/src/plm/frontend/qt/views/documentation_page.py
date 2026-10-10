@@ -4,7 +4,7 @@ import unicodedata
 from PyQt5 import QtCore, QtGui, QtWidgets, sip
 from plm.frontend.qt.services.tasks import TaskRunner
 from plm.frontend.qt.styles.tokens import (
-    BG_SUBTLE, BORDER, FONT_CODE_PRIMARY, FONT_WEIGHT_MEDIUM, TEXT_MAIN, TEXT_MUTED,
+    BG_SUBTLE, FONT_CODE_PRIMARY, FONT_WEIGHT_MEDIUM, TEXT_MAIN, TEXT_MUTED,
     FONT_SIZE_BODY,
 )
 from .secondary_page import SecondaryPage
@@ -36,7 +36,7 @@ class DocumentationPage(SecondaryPage):
         th {{ background-color: {bg_subtle}; color: {text_main}; font-size: {body_size}px; font-weight: {header_weight}; padding: 8px 16px; }}
         td {{ color: {text_main}; font-size: {body_size}px; font-weight: 400; padding: 8px 16px; }}
         """.format(
-            text_main=TEXT_MAIN, border=BORDER, bg_subtle=BG_SUBTLE,
+            text_main=TEXT_MAIN, bg_subtle=BG_SUBTLE,
             heading_size=FONT_SIZE_BODY,
             subheading_size=FONT_SIZE_BODY,
             body_size=FONT_SIZE_BODY,

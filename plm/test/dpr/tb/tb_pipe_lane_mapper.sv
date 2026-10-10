@@ -8,6 +8,7 @@
 //   3. Group sel vectors are always one-hot0 (non-overlap)
 //   4. During the NOV handoff window (sel all-zero), phy lanes present the safe state (txelecidle=1)
 //   5. phy_rst_n follows the current owner's ctrl_rst_n
+//   6. Independent phy_perst_n follows the current owner's ctrl_perst_n
 //=============================================================================
 import pipe_lane_signal_pkg::*;
 
@@ -110,10 +111,12 @@ module tb_pipe_lane_mapper;
     //------------------------------------------------------------ DUT IO
     logic [NL-1:0]      phy_phystatus_stim = '0;
     logic [NC-1:0]        ctrl_rst_n = '0;
+    logic [NC-1:0]        ctrl_perst_n = '0;
     logic [1:0] mode = '0;
 
     logic [NL-1:0]      phy_pclk_in;
     logic [NL-1:0]      phy_rst_n;
+    logic [NL-1:0]      phy_perst_n;
 
     mac2phy_lane_t [NL-1:0] phy_mac2phy;
     phy2mac_lane_t [NL-1:0] phy_phy2mac;
@@ -135,6 +138,7 @@ module tb_pipe_lane_mapper;
     // it never actually overrides any lane, regardless of dpr_rst_n/dpr_mac2phy.
     logic [NL-1:0] v_lane_mask = '0;
     logic dpr_rst_n = 1'b1;
+    logic dpr_perst_n = 1'b1;
     mac2phy_lane_t [NL-1:0] dpr_mac2phy = '0;
     phy2mac_lane_t [NL-1:0] dpr_phy2mac;
     logic dpr_pclk;   // derived working clock, DUT output
@@ -147,26 +151,32 @@ module tb_pipe_lane_mapper;
         .mode           (mode),
         .phy_pclk_in    (phy_pclk_in),
         .phy_rst_n      (phy_rst_n),
+        .phy_perst_n    (phy_perst_n),
         .phy_mac2phy    (phy_mac2phy),
         .phy_phy2mac    (phy_phy2mac),
         .v_lane_mask    (v_lane_mask),
         .dpr_rst_n      (dpr_rst_n),
+        .dpr_perst_n    (dpr_perst_n),
         .dpr_mac2phy    (dpr_mac2phy),
         .dpr_phy2mac    (dpr_phy2mac),
         .dpr_pclk       (dpr_pclk),
         .ctrla_rst_n   (ctrl_rst_n[0]),
+        .ctrla_perst_n (ctrl_perst_n[0]),
         .ctrla_mac2phy (ctrla_mac2phy),
         .ctrla_phy2mac (ctrla_phy2mac),
         .ctrla_pclk    (ctrla_pclk),
         .ctrlb_rst_n   (ctrl_rst_n[1]),
+        .ctrlb_perst_n (ctrl_perst_n[1]),
         .ctrlb_mac2phy (ctrlb_mac2phy),
         .ctrlb_phy2mac (ctrlb_phy2mac),
         .ctrlb_pclk    (ctrlb_pclk),
         .ctrlc_rst_n   (ctrl_rst_n[2]),
+        .ctrlc_perst_n (ctrl_perst_n[2]),
         .ctrlc_mac2phy (ctrlc_mac2phy),
         .ctrlc_phy2mac (ctrlc_phy2mac),
         .ctrlc_pclk    (ctrlc_pclk),
         .ctrld_rst_n   (ctrl_rst_n[3]),
+        .ctrld_perst_n (ctrl_perst_n[3]),
         .ctrld_mac2phy (ctrld_mac2phy),
         .ctrld_phy2mac (ctrld_phy2mac),
         .ctrld_pclk    (ctrld_pclk)
@@ -347,7 +357,7 @@ module tb_pipe_lane_mapper;
 
     //------------------------------------------------------------ NOV one-hot / safe-state monitor
     int unsigned err_count = 0;
-    int unsigned err_clock = 0, err_reset = 0, err_m2p = 0, err_p2m = 0, err_tie_off = 0, err_safe_state = 0, err_dpr = 0;
+    int unsigned err_clock = 0, err_reset = 0, err_perst = 0, err_m2p = 0, err_p2m = 0, err_tie_off = 0, err_safe_state = 0, err_dpr = 0;
 
     task automatic chk(input bit ok, input string msg);
         if (!ok) begin
@@ -551,6 +561,10 @@ module tb_pipe_lane_mapper;
                 $sformatf("mode%0d lane%0d: phy_rst_n=%0b does not follow owner ctrl%0d",
                           m, lane_idx, phy_rst_n[lane_idx], cid));
             err_reset += (err_count - err_before);
+            err_before = err_count;
+            chk(phy_perst_n[lane_idx] == ctrl_perst_n[cid],
+                $sformatf("mode%0d lane%0d: perst_n does not follow owner ctrl%0d", m, lane_idx, cid));
+            err_perst += (err_count - err_before);
 
             begin
                 int src_lane;
@@ -722,6 +736,22 @@ module tb_pipe_lane_mapper;
         $display("%0t: mode%0d checked (%0d cumulative errors)", $time, m, err_count);
     endtask
 
+    task automatic check_perst(input int m);
+        int unsigned err_before;
+        err_before = err_count;
+        for (int c = 0; c < NC; c++) begin
+            ctrl_perst_n[c] = 1'b0; #1;
+            for (int lane_idx = 0; lane_idx < NL; lane_idx++) begin
+                chk(phy_perst_n[lane_idx] == (owner_of(m, lane_idx) == c ? 1'b0 : 1'b1),
+                    $sformatf("mode%0d lane%0d: ctrl%0d perst_n pulse routing", m, lane_idx, c));
+                chk(phy_rst_n[lane_idx] == ctrl_rst_n[owner_of(m, lane_idx)], "perst_n must not change rst_n");
+            end
+            ctrl_perst_n[c] = 1'b1; #1;
+            chk(phy_perst_n == '1, "perst_n release must reach all owner lanes");
+        end
+        err_perst += (err_count - err_before);
+    endtask
+
     //------------------------------------------------------------ dpr test: DPR claims/releases a lane per group
     task automatic check_dpr();
         int test_lanes[4] = '{0, 3, 6, 9};
@@ -739,6 +769,13 @@ module tb_pipe_lane_mapper;
             endcase
             #SETTLE;
             err_before = err_count;
+            dpr_perst_n = 1'b0; #1;
+            for (int lane = 0; lane < NL; lane++) begin
+                chk(phy_perst_n[lane] == (v_lane_mask[lane] ? 1'b0 : ctrl_perst_n[owner_of(mode, lane)]), "DPR perst_n override routing");
+                chk(phy_rst_n[lane] == (v_lane_mask[lane] ? dpr_rst_n : ctrl_rst_n[owner_of(mode, lane)]), "DPR perst_n must not change rst_n");
+            end
+            dpr_perst_n = 1'b1; #1;
+            chk(phy_perst_n == '1, "DPR perst_n release");
             case (oid)
                 0: chk_p2m(ctrla_phy2mac[op], exp_safe_p2m,
                     $sformatf("dpr claimed lane%0d: real owner CtrlA[%0d] should read SAFE_P2M", lane_idx, op));
@@ -775,14 +812,17 @@ module tb_pipe_lane_mapper;
 `endif
 
         ctrl_rst_n = '0;
+        ctrl_perst_n = '0;
         dpr_rst_n = 0;
         mode = '0;
         #100;
         ctrl_rst_n = '1;
+        ctrl_perst_n = '1;
         dpr_rst_n = 1;
         #SETTLE;
 
         check_mode(0);
+        check_perst(0);
         // toggle physical lane 0's phystatus and dynamically verify it's followed correctly
         phy_phystatus_stim[0] = 1'b1; #20;
         check_mode(0);
@@ -790,6 +830,7 @@ module tb_pipe_lane_mapper;
         check_mode(0);
         mode = 1; #SETTLE;
         check_mode(1);
+        check_perst(1);
         // toggle physical lane 0's phystatus and dynamically verify it's followed correctly
         phy_phystatus_stim[0] = 1'b1; #20;
         check_mode(1);
@@ -797,6 +838,7 @@ module tb_pipe_lane_mapper;
         check_mode(1);
         mode = 2; #SETTLE;
         check_mode(2);
+        check_perst(2);
         // toggle physical lane 0's phystatus and dynamically verify it's followed correctly
         phy_phystatus_stim[0] = 1'b1; #20;
         check_mode(2);
@@ -804,6 +846,7 @@ module tb_pipe_lane_mapper;
         check_mode(2);
         mode = 3; #SETTLE;
         check_mode(3);
+        check_perst(3);
         // toggle physical lane 0's phystatus and dynamically verify it's followed correctly
         phy_phystatus_stim[0] = 1'b1; #20;
         check_mode(3);
@@ -825,6 +868,7 @@ module tb_pipe_lane_mapper;
                 expect_low = (owner_of(3, lane_idx) == 0);
                 chk(phy_rst_n[lane_idx] == (expect_low ? 1'b0 : 1'b1),
                     $sformatf("mode3 lane%0d: ctrl_rst_n[0]=0 pulse, expected phy_rst_n=%0b", lane_idx, expect_low ? 1'b0 : 1'b1));
+                chk(phy_perst_n[lane_idx] == ctrl_perst_n[owner_of(mode, lane_idx)], "rst_n must not change perst_n");
             end
             err_reset += (err_count - err_before);
         end
@@ -840,6 +884,7 @@ module tb_pipe_lane_mapper;
                 expect_low = (owner_of(3, lane_idx) == 1);
                 chk(phy_rst_n[lane_idx] == (expect_low ? 1'b0 : 1'b1),
                     $sformatf("mode3 lane%0d: ctrl_rst_n[1]=0 pulse, expected phy_rst_n=%0b", lane_idx, expect_low ? 1'b0 : 1'b1));
+                chk(phy_perst_n[lane_idx] == ctrl_perst_n[owner_of(mode, lane_idx)], "rst_n must not change perst_n");
             end
             err_reset += (err_count - err_before);
         end
@@ -855,6 +900,7 @@ module tb_pipe_lane_mapper;
                 expect_low = (owner_of(3, lane_idx) == 2);
                 chk(phy_rst_n[lane_idx] == (expect_low ? 1'b0 : 1'b1),
                     $sformatf("mode3 lane%0d: ctrl_rst_n[2]=0 pulse, expected phy_rst_n=%0b", lane_idx, expect_low ? 1'b0 : 1'b1));
+                chk(phy_perst_n[lane_idx] == ctrl_perst_n[owner_of(mode, lane_idx)], "rst_n must not change perst_n");
             end
             err_reset += (err_count - err_before);
         end
@@ -870,6 +916,7 @@ module tb_pipe_lane_mapper;
                 expect_low = (owner_of(3, lane_idx) == 3);
                 chk(phy_rst_n[lane_idx] == (expect_low ? 1'b0 : 1'b1),
                     $sformatf("mode3 lane%0d: ctrl_rst_n[3]=0 pulse, expected phy_rst_n=%0b", lane_idx, expect_low ? 1'b0 : 1'b1));
+                chk(phy_perst_n[lane_idx] == ctrl_perst_n[owner_of(mode, lane_idx)], "rst_n must not change perst_n");
             end
             err_reset += (err_count - err_before);
         end
@@ -883,6 +930,7 @@ module tb_pipe_lane_mapper;
         $display("=== test case summary ===");
         $display("  clock     : %s (%0d errors)", err_clock == 0 ? "PASS" : "FAIL", err_clock);
         $display("  reset     : %s (%0d errors)", err_reset == 0 ? "PASS" : "FAIL", err_reset);
+        $display("  perst     : %s (%0d errors)", err_perst == 0 ? "PASS" : "FAIL", err_perst);
         $display("  m2p       : %s (%0d errors)", err_m2p == 0 ? "PASS" : "FAIL", err_m2p);
         $display("  p2m       : %s (%0d errors)", err_p2m == 0 ? "PASS" : "FAIL", err_p2m);
         $display("  tie_off   : %s (%0d errors)", err_tie_off == 0 ? "PASS" : "FAIL", err_tie_off);

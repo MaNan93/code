@@ -1,5 +1,6 @@
 // PIPE lane mapper reset-mux submodule.
 // Each lane's phy_rst_n connects to its current owner's ctrl_rst_n.
+// Independent phy_perst_n follows the same owner using ctrl_perst_n.
 // The input port is named sel_tgt, but at the top level it's actually wired to
 // pipe_lane_sel_gen's dec_tgt (the decoder's raw output, not synchronized by pipe_lane_sel_sync),
 // not sel_gen's final external sel_tgt -- reset follows mode directly, without waiting for pipe_lane_sel_sync.
@@ -12,11 +13,14 @@ module pipe_lane_rst_mux #(
     parameter int NC = 6
 ) (
     input logic [NC-1:0] ctrl_rst_n,
+    input logic [NC-1:0] ctrl_perst_n,
     input lane_sel_t sel_tgt,
-    output logic [NL-1:0] phy_rst_n
+    output logic [NL-1:0] phy_rst_n,
+    output logic [NL-1:0] phy_perst_n
 );
 
     assign phy_rst_n[0] = ctrl_rst_n[0];  // G0 direct to CtrlAlpha
+    assign phy_perst_n[0] = ctrl_perst_n[0];  // G0 direct to CtrlAlpha
     // G1 lane1~1: CtrlAlpha, CtrlDelta
     logic rst_n_g1;
     pipe_lane_data_mux #(.WIDTH(1), .N(2)) u_rst_g1 (
@@ -26,6 +30,14 @@ module pipe_lane_rst_mux #(
         .dout (rst_n_g1)
     );
     assign phy_rst_n[1] = rst_n_g1;
+    logic perst_n_g1;
+    pipe_lane_data_mux #(.WIDTH(1), .N(2)) u_perst_g1 (
+        .sel  (sel_tgt.g1),
+        .din  ({ctrl_perst_n[3], ctrl_perst_n[0]}),
+        .safe (1'b0),
+        .dout (perst_n_g1)
+    );
+    assign phy_perst_n[1] = perst_n_g1;
     // G2 lane2~2: CtrlAlpha, CtrlEpsilon
     logic rst_n_g2;
     pipe_lane_data_mux #(.WIDTH(1), .N(2)) u_rst_g2 (
@@ -35,7 +47,16 @@ module pipe_lane_rst_mux #(
         .dout (rst_n_g2)
     );
     assign phy_rst_n[2] = rst_n_g2;
+    logic perst_n_g2;
+    pipe_lane_data_mux #(.WIDTH(1), .N(2)) u_perst_g2 (
+        .sel  (sel_tgt.g2),
+        .din  ({ctrl_perst_n[4], ctrl_perst_n[0]}),
+        .safe (1'b0),
+        .dout (perst_n_g2)
+    );
+    assign phy_perst_n[2] = perst_n_g2;
     assign phy_rst_n[3] = ctrl_rst_n[1];  // G3 direct to CtrlBeta
+    assign phy_perst_n[3] = ctrl_perst_n[1];  // G3 direct to CtrlBeta
     // G4 lane4~4: CtrlBeta, CtrlZeta
     logic rst_n_g4;
     pipe_lane_data_mux #(.WIDTH(1), .N(2)) u_rst_g4 (
@@ -45,6 +66,15 @@ module pipe_lane_rst_mux #(
         .dout (rst_n_g4)
     );
     assign phy_rst_n[4] = rst_n_g4;
+    logic perst_n_g4;
+    pipe_lane_data_mux #(.WIDTH(1), .N(2)) u_perst_g4 (
+        .sel  (sel_tgt.g4),
+        .din  ({ctrl_perst_n[5], ctrl_perst_n[1]}),
+        .safe (1'b0),
+        .dout (perst_n_g4)
+    );
+    assign phy_perst_n[4] = perst_n_g4;
     assign phy_rst_n[5] = ctrl_rst_n[2];  // G5 direct to CtrlGamma
+    assign phy_perst_n[5] = ctrl_perst_n[2];  // G5 direct to CtrlGamma
 
 endmodule

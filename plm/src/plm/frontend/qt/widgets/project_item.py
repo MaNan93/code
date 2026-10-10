@@ -4,9 +4,8 @@ from pathlib import Path
 
 from PyQt5 import QtCore, QtWidgets
 
-from plm.frontend.qt.styles.tokens import CONTROL_HEIGHT, CONTROL_PADDING_X, DANGER, ICON_SIZE_SM, ICON_TEXT_GAP, NAV_ITEM_GAP, TEXT_SUB
+from plm.frontend.qt.styles.tokens import CONTROL_HEIGHT, CONTROL_PADDING_X, DANGER, ICON_SIZE, ICON_TEXT_GAP, NAV_ICON_INSET, NAV_ITEM_GAP, TEXT_SUB
 from plm.frontend.qt.widgets.common import (
-    ICON_SIZE,
     PROJECT_ROOT,
     StyledMenu,
     load_lucide_icon,
@@ -52,16 +51,16 @@ class ProjectItemWidget(QtWidgets.QWidget):
         self.header.setContextMenuPolicy(QtCore.Qt.CustomContextMenu)
         self.header.customContextMenuRequested.connect(self.show_context_menu)
         header_layout = QtWidgets.QHBoxLayout(self.header)
-        header_layout.setContentsMargins(CONTROL_PADDING_X, 0, CONTROL_PADDING_X, 0)
+        header_layout.setContentsMargins(NAV_ICON_INSET, 0, CONTROL_PADDING_X, 0)
         header_layout.setSpacing(0)
         self.folder_icon = QtWidgets.QLabel()
         self.folder_icon.setObjectName("ProjectFolderIcon")
-        self.folder_icon.setFixedSize(ICON_SIZE_SM, ICON_SIZE_SM)
+        self.folder_icon.setFixedSize(ICON_SIZE, ICON_SIZE)
         self.folder_icon.setAlignment(QtCore.Qt.AlignCenter)
         self.folder_icon.setPixmap(
             load_lucide_icon(
-                "folder", TEXT_SUB, ICON_SIZE_SM, align_visible_left=True
-            ).pixmap(ICON_SIZE_SM, ICON_SIZE_SM)
+                "folder", TEXT_SUB, ICON_SIZE, align_visible_left=True
+            ).pixmap(ICON_SIZE, ICON_SIZE)
         )
         self.folder_icon.setAttribute(QtCore.Qt.WA_TransparentForMouseEvents)
         self.project_name_label = QtWidgets.QLabel(self.project_name)
@@ -84,7 +83,7 @@ class ProjectItemWidget(QtWidgets.QWidget):
         header_layout.addWidget(self.project_name_label, 1)
         header_layout.addWidget(self.project_name_edit, 1, QtCore.Qt.AlignVCenter)
         self.more_btn = make_icon_button(
-            "more-horizontal", "更多操作", "ProjectMoreBtn", 28, ICON_SIZE_SM
+            "more-horizontal", "更多操作", "ProjectMoreBtn", 28, ICON_SIZE
         )
         self.more_btn.setFixedSize(28, 28)
         self.more_btn.clicked.connect(self.show_more_menu)

@@ -163,13 +163,13 @@ class AsyncBoundaryTests(unittest.TestCase):
         wait_for_idle(self.app)
         self.assertIn("ExternalCtrl", project.controllers_csv.read_text(encoding="utf-8"))
 
-    def test_shadow_free_canvases_have_no_clearance_and_panels_stay_aligned(self):
+    def test_shadow_free_canvases_keep_four_pixel_insets_and_panels_stay_aligned(self):
         window = self.window
         window.hide_log()
         wait_for_idle(self.app)
         page = window.config_page
         bottom = page.mapTo(window, page.rect().bottomRight()).y() + 1
-        self.assertEqual(window.height() - bottom, window.SHADOW_MARGIN)
+        self.assertEqual(window.height() - bottom, window.SHADOW_MARGIN + 4)
         margins = window.content_splitter.contentsMargins()
         self.assertEqual((margins.left(), margins.top(), margins.right(), margins.bottom()),
                          (0, 0, 0, 0))
@@ -181,7 +181,7 @@ class AsyncBoundaryTests(unittest.TestCase):
         self.assertEqual(window.content_splitter.handleWidth(), 4)
         for panel in (page, window.log_panel):
             right = panel.mapTo(window, panel.rect().bottomRight()).x() + 1
-            self.assertEqual(window.width() - right, window.SHADOW_MARGIN)
+            self.assertEqual(window.width() - right, window.SHADOW_MARGIN + 4)
             self.assertTrue(panel.mask().isEmpty())
             self.assertIsNone(panel.graphicsEffect())
         self.assertIsNone(page.artifacts_panel.graphicsEffect())

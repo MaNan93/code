@@ -9,11 +9,12 @@ from unittest.mock import patch
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from PyQt5 import QtGui, QtWidgets, sip
+from PyQt5 import QtCore, QtGui, QtTest, QtWidgets, sip
 from plm.core import verible
 from plm.frontend.qt.services.tasks import TaskRunner
 from qt_test_support import (
     dispose_new_widgets, isolate_host_formatter, preserve_application_state,
+    wait_for_signal,
 )
 
 
@@ -43,6 +44,7 @@ class QtTestIsolationTests(unittest.TestCase):
         before = (
             self.app.font().toString(), QtGui.QPalette(self.app.palette()),
             self.app.styleSheet(), sys.excepthook, self.app.clipboard().text(),
+            QtGui.QFontDatabase().families(),
         )
 
         self.run_case(
@@ -56,6 +58,7 @@ class QtTestIsolationTests(unittest.TestCase):
         self.assertEqual(self.app.styleSheet(), before[2])
         self.assertIs(sys.excepthook, before[3])
         self.assertEqual(self.app.clipboard().text(), before[4])
+        self.assertEqual(QtGui.QFontDatabase().families(), before[5])
 
     def test_restored_behavior_suite_uses_explicit_project_and_settings_stores(self):
         # Default stores discover user workspaces and write native user settings.
@@ -126,6 +129,27 @@ class QtTestIsolationTests(unittest.TestCase):
                 self.assertEqual(run.call_args.args[0], ["dedicated-mock", "--inplace", "-"])
 
         self.assertIsNone(verible.find_verible())
+
+
+    def test_signal_wait_accepts_a_signal_delivered_before_the_wait(self):
+        timer = QtCore.QTimer()
+        spy = QtTest.QSignalSpy(timer.timeout)
+        timer.timeout.emit()
+        wait_for_signal(spy)
+        self.assertEqual(len(spy), 1)
+
+    def test_signal_wait_processes_a_queued_signal(self):
+        timer = QtCore.QTimer()
+        spy = QtTest.QSignalSpy(timer.timeout)
+        QtCore.QTimer.singleShot(0, timer.timeout.emit)
+        wait_for_signal(spy)
+        self.assertEqual(len(spy), 1)
+
+    def test_signal_wait_reports_a_missing_signal(self):
+        timer = QtCore.QTimer()
+        spy = QtTest.QSignalSpy(timer.timeout)
+        with self.assertRaisesRegex(AssertionError, "did not arrive within 10 ms"):
+            wait_for_signal(spy, timeout=10)
 
 
 if __name__ == "__main__":

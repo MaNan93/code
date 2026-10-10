@@ -6,33 +6,71 @@ Controls use a 40 px grid; every 18 px Lucide glyph occupies a centered 20 px sl
 from pathlib import Path
 import sys
 
-PRIMARY = "#3B82F6"
-PRIMARY_HOVER = "#2563EB"
-PRIMARY_LIGHT = "#F2F4F7"
-BG_MAIN = "#FFFFFF"
-BG_SURFACE = "#FFFFFF"
-BG_SIDEBAR = "#F7F8FA"
-BG_SIDEBAR_INACTIVE = "#F7F8FA"
-BG_SUBTLE = "#F2F4F7"
-BG_ALTERNATE = "#FAFBFC"
-BG_HOVER = "#E9EDF2"
-BG_FOCUS = "#DDE3EB"
-BG_ARTIFACTS = "#F5F4F1"
-BORDER_ARTIFACTS = "#DDD9D1"
-NAV_ITEM_GAP = 2
-INFO_BG, INFO_TEXT = "#DBEAFE", "#1D4ED8"
-SUCCESS_BG, SUCCESS_TEXT = "#DCFCE7", "#15803D"
-WARNING_BG, WARNING_TEXT = "#FEF3C7", "#B45309"
-DANGER_BG, DANGER_TEXT = "#FEE2E2", "#B91C1C"
-BORDER = "#EEF0F3"
-BORDER_HOVER = "#CBD5E1"
-BORDER_FOCUS = "#3B82F6"
-TEXT_MAIN = "#1F2328"
-TEXT_SUB = "#64748B"
+# neutral ramp
+N0 = "#FFFFFF"
+N25 = "#FAFBFC"
+N50 = "#F6F7F9"
+N100 = "#EEF0F4"
+N200 = "#E1E5EB"
+N300 = "#CBD2DC"
+N400 = "#8B94A3"
+# N400 is too light for 16 px text; N450 meets 4.5:1 on all resting surfaces.
+N450 = "#656E7D"
+N500 = "#626C7B"
+N600 = "#4A5462"
+N800 = "#23272F"
+
+# primary ramp
+P50 = "#E8F0FE"
+P100 = "#D6E4FD"
+P500 = "#3B82F6"
+P600 = "#2563EB"
+P700 = "#1D4ED8"
+
+# semantic pairs (background, icon, text)
+SEMANTIC_COLORS = {
+    "info": ("#DBEAFE", P700, P700),
+    "success": ("#DCFCE7", "#16A34A", "#15803D"),
+    "warning": ("#FEF3C7", "#B45309", "#B45309"),
+    "danger": ("#FEE2E2", "#EF4444", "#B91C1C"),
+}
+INFO_BG, INFO, INFO_TEXT = SEMANTIC_COLORS["info"]
+SUCCESS_BG, SUCCESS, SUCCESS_TEXT = SEMANTIC_COLORS["success"]
+WARNING_BG, WARNING, WARNING_TEXT = SEMANTIC_COLORS["warning"]
+DANGER_BG, DANGER, DANGER_TEXT = SEMANTIC_COLORS["danger"]
+
+# derived roles
+PRIMARY = P500
+PRIMARY_HOVER = P600
+PRIMARY_SOFT = P50
+PRIMARY_PRESSED = P100
+BG_MAIN = N0
+BG_SURFACE = N0
+BG_SIDEBAR = N50
+BG_CARD = N50
+BG_SUBTLE = N100
+BG_ALTERNATE = N25
+BG_HOVER = N200
+BG_SWITCH_HOVER = "#F3F4F6"
+BG_FOCUS = N200
+# GitHub Primer light surfaces and foregrounds for the source viewer.
+BG_ARTIFACTS = "#FFFFFF"
+BG_ARTIFACTS_HEADER = "#F6F8FA"
+BORDER_ARTIFACTS = "#D1D9E0"
+TEXT_ARTIFACTS = "#1F2328"
+TEXT_ARTIFACTS_MUTED = "#59636E"
+ACCENT_ARTIFACTS = "#0969DA"
+BORDER = "#E5E8ED"
+BORDER_HOVER = N300
+BORDER_FOCUS = P500
+TEXT_MAIN = N800
+TEXT_SUB = N500
 TEXT_HEADER = "#475569"
-TEXT_MUTED = "#94A3B8"
-DANGER = "#EF4444"
-SUCCESS = "#10B981"
+TEXT_MUTED = N450
+TOOLTIP_BG = N800
+TOOLTIP_TEXT = N0
+
+NAV_ITEM_GAP = 2
 
 FONT_UI_PRIMARY = {"win32": "Segoe UI", "darwin": ".AppleSystemUIFont"}.get(sys.platform, "Roboto")
 FONT_FAMILY = '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang SC", "Microsoft YaHei", sans-serif'
@@ -42,6 +80,19 @@ ICON_DIR = Path(__file__).resolve().parents[1] / "assets" / "icons"
 UI_CONTENT_SCALE = 1.2
 FONT_SCALE = 1.0
 CONTROL_HEIGHT = 40
+TITLEBAR_HEIGHT = 44
+HEADER_HEIGHT = 48
+TITLEBAR_BUTTON_WIDTH = 46
+TITLEBAR_CONTROLS_WIDTH = 3 * TITLEBAR_BUTTON_WIDTH
+LOG_HEADER_HEIGHT = 32
+LOG_STATUS_HEIGHT = 24
+ARTIFACTS_TOOLBAR_HEIGHT = HEADER_HEIGHT
+ARTIFACTS_BORDER_WIDTH = 1
+NAV_EXPANDED_WIDTH = 260
+NAV_COLLAPSED_WIDTH = 56
+ARTIFACTS_DEFAULT_WIDTH = 380
+ARTIFACTS_MIN_WIDTH = 300
+PANEL_ANIMATION_DURATION = 200
 LINE_HEIGHT = 24
 CONTROL_PADDING_Y = 8
 CONTROL_PADDING_X = 16
@@ -66,21 +117,8 @@ def scale_content_size(size):
     return round(size * UI_CONTENT_SCALE)
 
 
-def scale_font_size(size):
-    """Compatibility helper for the shared UI font size."""
-    return FONT_SIZE_BODY
-
-
-def shrink_font_size(size):
-    """Compatibility helper for the shared UI font size."""
-    return FONT_SIZE_BODY
-
-
 FONT_SIZE_BODY = 16
-FONT_SIZE_SM = FONT_SIZE_BODY
-FONT_SIZE_LG = FONT_SIZE_BODY
 ICON_SIZE = 20
-ICON_SIZE_SM = ICON_SIZE
 ICON_GLYPH_SIZE = 18
 ICON_STROKE_WIDTH = 2
 ICON_BUTTON_SIZE = 32
@@ -97,12 +135,17 @@ SPACING_MD = 12
 SPACING_LG = 16
 SPACING_XL = 24
 
+# Keep nav icons centered on the collapsed rail in both states.
+NAV_ICON_INSET = (NAV_COLLAPSED_WIDTH - ICON_SIZE) // 2 - SPACING_MD
+
 SHADOW_SM = {"blur_radius": 4, "offset": (0, 1), "rgba": (0, 0, 0, 20)}
 
 QSS_TOKENS = {
     "control_height": f"{CONTROL_HEIGHT}px",
+    "titlebar_button_width": f"{TITLEBAR_BUTTON_WIDTH}px",
     "control_padding_y": f"{CONTROL_PADDING_Y}px",
     "control_padding_x": f"{CONTROL_PADDING_X}px",
+    "nav_icon_inset": f"{NAV_ICON_INSET}px",
     "menu_radius": f"{MENU_RADIUS}px",
     "menu_padding": f"{MENU_PADDING}px",
     "menu_gap": f"{MENU_GAP}px",
@@ -112,20 +155,25 @@ QSS_TOKENS = {
     "menu_bottom_padding": f"{MENU_SHADOW_MARGIN + MENU_PADDING - MENU_GAP}px",
     "icon_size": f"{ICON_SIZE}px",
     "icon_glyph_size": f"{ICON_GLYPH_SIZE}px",
-    "icon_button_radius": f"{ICON_BUTTON_SIZE // 2}px",
     "primary": PRIMARY,
     "primary_hover": PRIMARY_HOVER,
-    "primary_light": PRIMARY_LIGHT,
+    "primary_soft": PRIMARY_SOFT,
+    "primary_pressed": PRIMARY_PRESSED,
     "bg_main": BG_MAIN,
     "bg_surface": BG_SURFACE,
     "bg_sidebar": BG_SIDEBAR,
-    "bg_sidebar_inactive": BG_SIDEBAR_INACTIVE,
+    "bg_card": BG_CARD,
     "bg_subtle": BG_SUBTLE,
     "bg_alternate": BG_ALTERNATE,
     "bg_hover": BG_HOVER,
     "bg_focus": BG_FOCUS,
     "bg_artifacts": BG_ARTIFACTS,
+    "bg_artifacts_header": BG_ARTIFACTS_HEADER,
     "border_artifacts": BORDER_ARTIFACTS,
+    "artifacts_border_width": f"{ARTIFACTS_BORDER_WIDTH}px",
+    "text_artifacts": TEXT_ARTIFACTS,
+    "text_artifacts_muted": TEXT_ARTIFACTS_MUTED,
+    "accent_artifacts": ACCENT_ARTIFACTS,
     "info_bg": INFO_BG,
     "info_text": INFO_TEXT,
     "success_bg": SUCCESS_BG,
@@ -141,15 +189,13 @@ QSS_TOKENS = {
     "text_sub": TEXT_SUB,
     "text_header": TEXT_HEADER,
     "text_muted": TEXT_MUTED,
+    "tooltip_bg": TOOLTIP_BG,
+    "tooltip_text": TOOLTIP_TEXT,
     "danger": DANGER,
     "success": SUCCESS,
     "font_family": FONT_FAMILY,
     "font_mono": FONT_MONO,
     "font_size_body": f"{FONT_SIZE_BODY}px",
-    "font_size_sm": f"{FONT_SIZE_SM}px",
-    "font_size_lg": f"{FONT_SIZE_LG}px",
-    "font_size_12": f"{shrink_font_size(12)}px",
-    "font_size_13": f"{shrink_font_size(13)}px",
     "chevron_right_icon": (ICON_DIR / "chevron-right.svg").as_posix(),
     "chevron_down_icon": (ICON_DIR / "tree-chevron-down.svg").as_posix(),
     "radius_chip": f"{RADIUS_CHIP}px",

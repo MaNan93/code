@@ -2,9 +2,11 @@
 
 import time
 import sys
+import os
+from pathlib import Path
 from unittest.mock import patch
 
-from PyQt5 import QtCore, QtGui, QtTest, QtWidgets
+from PyQt5 import QtCore, QtGui, QtTest
 from plm.frontend.qt.services.tasks import TaskRunner
 from plm.frontend.qt.widgets.common import ContentIconStyle
 
@@ -33,6 +35,18 @@ def isolate_host_formatter(owner, app):
 
 def preserve_application_state(owner, app):
     """Restore application preferences and the callback hook after a test scope."""
+    register = owner.addClassCleanup if isinstance(owner, type) else owner.addCleanup
+    # The Windows offscreen plugin starts without a font database. Without
+    # real fonts, text-painting tests can pass while every label renders blank.
+    # Borrow installed fonts for this scope and remove only those we added.
+    if not QtGui.QFontDatabase().families():
+        font_directory = Path(os.environ.get("WINDIR", "C:/Windows")) / "Fonts"
+        for filename in ("segoeui.ttf", "consola.ttf"):
+            path = font_directory / filename
+            if path.is_file():
+                font_id = QtGui.QFontDatabase.addApplicationFont(str(path))
+                if font_id >= 0:
+                    register(QtGui.QFontDatabase.removeApplicationFont, font_id)
     font = QtGui.QFont(app.font())
     palette = QtGui.QPalette(app.palette())
     stylesheet = app.styleSheet()
@@ -71,7 +85,6 @@ def preserve_application_state(owner, app):
             clipboard.clear()
         sys.excepthook = exception_hook
 
-    register = owner.addClassCleanup if isinstance(owner, type) else owner.addCleanup
     register(restore)
 
 
@@ -92,6 +105,12 @@ def wait_for_idle(app, timeout=10000):
             return
         QtTest.QTest.qWait(5)
     raise AssertionError("Qt workers or debounced callbacks did not finish within 10 seconds")
+
+
+def wait_for_signal(spy, timeout=2000):
+    """Accept an already delivered signal before waiting for a future one."""
+    if not spy and not spy.wait(timeout):
+        raise AssertionError(f"Expected Qt signal did not arrive within {timeout} ms")
 
 
 def dispose_new_widgets(app, existing):

@@ -8,7 +8,7 @@
   },
   "files": {
     "makefile": "c25dc98bf8ee551eb196496f948599549b937f102c702b97fe7efc4579512e16",
-    "tb_pipe_lane_mapper.sv": "4fe4b9cc42573e6ae2597e7269a05570066ba978859392a8eb16be0924574a6c"
+    "tb_pipe_lane_mapper.sv": "dc75c5d73d3faed8e0339bdb09411acc80971f7bc7f2914dcf8b0d8ce7b0d816"
   },
   "formatter": {
     "engine": "none",
@@ -45,10 +45,11 @@
       "wrap_end_else_clauses": "true"
     }
   },
-  "generation_key": "30754a6b05f76ff0483a1248baff2f47536b666f2154b4792ce7697a7016352c",
-  "generator_fingerprint": "6f8ebf26e195c4c0c010eb2694b614082d89f3d33b5636bc2e3803871392f34a",
+  "generation_key": "083909c3d2451fb8b56835bb7f4fefd5b40a840fadc03be6d86da799c7cb65d7",
+  "generator_fingerprint": "33ab0916db1cbee01e3d3f26f96f81af155cc77de741fdab64f8851a36faa8af",
   "options": {
     "arch": "original_pipe",
+    "bus_type": "bus",
     "dpr": false,
     "pclk_mode": "pclk_as_phy_output",
     "sel_mode": "sync"

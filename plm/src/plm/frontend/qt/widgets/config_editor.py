@@ -11,6 +11,7 @@ from PyQt5 import QtCore, QtWidgets
 from plm.core.gen_flags import (
     ARCH_PCLK_MODE,
     ARCH_VALUES,
+    BUS_TYPE_VALUES,
     PCLK_MODE_VALUES,
     SEL_MODE_VALUES,
 )
@@ -20,9 +21,7 @@ from plm.frontend.qt.widgets.tables import EditableTable
 
 
 LANE_COUNTS = (2, 4, 8, 16, 32)
-CONTROLLER_COLUMN_WIDTHS = {"ctrl_id": 96, "max_width": 128}
 TABLE_VISIBLE_ROWS = 10
-TABLE_CARD_PADDING = 8
 
 
 class LaneCountCombo(StyledComboBox):
@@ -75,24 +74,22 @@ class CsvTableEditor(QtWidgets.QWidget):
             self.table = self.editor.table
             self.editor.set_columns(self.lane_count.value())
             self.editor.changed.connect(self.changed.emit)
-            self._setup_table_card(layout)
+            self._setup_table_layout(layout)
             return
 
         specs = []
         for key in self._keys:
             spec = {"key": key, "heading": key}
-            if key in CONTROLLER_COLUMN_WIDTHS:
-                spec.update(
-                    width=CONTROLLER_COLUMN_WIDTHS[key],
-                    fixed_width=True,
-                    alignment=QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter,
-                )
+            if key in ("ctrl_id", "max_width"):
+                spec["alignment"] = QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter
             elif key == "ctrl_name":
                 spec["alignment"] = QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter
+            elif key == "signal_name":
+                spec.update(min_width=256, alignment=QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter)
             elif key == "signal_type":
-                spec.update(options=["perlane", "shared"], width=104)
+                spec.update(options=["perlane", "shared"], switch=True, width=112)
             elif key == "direction":
-                spec.update(options=["mac2phy", "phy2mac"], width=112)
+                spec.update(options=["mac2phy", "phy2mac"], switch=True, width=120)
             elif key == "width":
                 spec["width"] = 64
                 spec["alignment"] = QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter
@@ -107,21 +104,18 @@ class CsvTableEditor(QtWidgets.QWidget):
         self.editor = EditableTable(
             specs,
             id_column="ctrl_id" if "ctrl_id" in self._keys else None,
+            equal_columns="ctrl_id" in self._keys,
         )
         self.table = self.editor.table
         self.editor.changed.connect(self.changed.emit)
-        self._setup_table_card(layout)
+        self._setup_table_layout(layout)
 
-    def _setup_table_card(self, layout):
-        """Use one card and height policy for both CSV tables and the lane grid."""
+    def _setup_table_layout(self, layout):
+        """Let tables fill the editor width and share a content-based height."""
         self.table.setMouseTracking(True)
-        self.table_card = QtWidgets.QFrame()
-        self.table_card.setObjectName("ConfigTableCard")
-        card_layout = QtWidgets.QVBoxLayout(self.table_card)
-        card_layout.setContentsMargins(*([TABLE_CARD_PADDING] * 4))
-        card_layout.setSpacing(0)
-        card_layout.addWidget(self.editor)
-        layout.addWidget(self.table_card)
+        self.table.setShowGrid(True)
+        self.table.setGridStyle(QtCore.Qt.SolidLine)
+        layout.addWidget(self.editor)
         layout.addStretch(1)
         self.table.model().rowsInserted.connect(self._update_table_height)
         self.table.model().rowsRemoved.connect(self._update_table_height)
@@ -247,11 +241,31 @@ class GenerationEditor(QtWidgets.QWidget):
         self.pclk_mode.setToolTip("PCLK 模式由 PHY 架构自动决定。")
         self.sel_mode = StyledComboBox()
         self.sel_mode.addItems(SEL_MODE_VALUES)
+        self.bus_type = StyledComboBox()
+        self.bus_type.addItems(BUS_TYPE_VALUES)
+        self.bus_type.setCurrentText("bus")
+        self.bus_type.setToolTip("flat：一维向量；bus：二维 lane 数组。")
         self.dpr = QtWidgets.QCheckBox("启用 DPR")
         layout.addRow("PHY 架构", self.arch)
         layout.addRow("PCLK 模式", self.pclk_mode)
         layout.addRow("选择方式", self.sel_mode)
+        layout.addRow("Connection 总线类型", self.bus_type)
         layout.addRow("DPR", self.dpr)
+        self._prefix_edits = {}
+        for name, description, example in (
+            ("module_prefix", "模块和 package 名称前缀", "soc_"),
+            ("file_prefix", "所有 .sv 文件名称前缀", "rtl_"),
+            ("macro_prefix", "宏名称前缀", "SOC_"),
+        ):
+            edit = QtWidgets.QLineEdit()
+            edit.setObjectName(name)
+            edit.setAccessibleName(name)
+            edit.setPlaceholderText(description)
+            edit.setToolTip(f"直接添加到原名称前，例如 {example}；留空保持原名称。")
+            edit.textChanged.connect(self.changed.emit)
+            self._prefix_edits[name] = edit
+            setattr(self, name, edit)
+            layout.addRow(name, edit)
         self.generate_btn = QtWidgets.QPushButton("Generate")
         self.generate_btn.setObjectName("ConfigGenerateButton")
         self.generate_btn.clicked.connect(self.generateRequested.emit)
@@ -265,7 +279,7 @@ class GenerationEditor(QtWidgets.QWidget):
         actions.addWidget(self.generate_btn)
         layout.addRow("", actions)
         self.arch.currentIndexChanged.connect(self._sync_pclk)
-        for control in (self.arch, self.pclk_mode, self.sel_mode):
+        for control in (self.arch, self.pclk_mode, self.sel_mode, self.bus_type):
             control.currentIndexChanged.connect(self.changed.emit)
         self.dpr.toggled.connect(self._sync_dpr)
 
@@ -314,7 +328,9 @@ class GenerationEditor(QtWidgets.QWidget):
         self.pclk_mode.blockSignals(False)
 
     def set_flags(self, flags):
-        for widget in (self.arch, self.pclk_mode, self.sel_mode, self.dpr):
+        controls = (self.arch, self.pclk_mode, self.sel_mode, self.bus_type, self.dpr,
+                    *self._prefix_edits.values())
+        for widget in controls:
             widget.blockSignals(True)
         arch = flags.get("arch") or (
             "serdes" if flags.get("pclk-mode") == "pclk_as_phy_input" else "original_pipe"
@@ -324,16 +340,22 @@ class GenerationEditor(QtWidgets.QWidget):
         if pclk_mode:
             self._set_combo_value(self.pclk_mode, pclk_mode)
         self._set_combo_value(self.sel_mode, flags.get("sel-mode") or "sync")
+        self._set_combo_value(self.bus_type, flags.get("bus-type") or "bus")
         self.dpr.setChecked(bool(flags.get("dpr")))
         self.sel_mode.setEnabled(not self.dpr.isChecked())
         self.sel_mode.setToolTip("DPR 需要 sync 选择方式。" if self.dpr.isChecked() else "")
-        for widget in (self.arch, self.pclk_mode, self.sel_mode, self.dpr):
+        for name, edit in self._prefix_edits.items():
+            edit.setText(flags.get(name) or "")
+        for widget in controls:
             widget.blockSignals(False)
 
     def flags(self):
-        return {
+        flags = {
             "arch": self.arch.currentText(),
             "pclk-mode": self.pclk_mode.currentText(),
             "sel-mode": self.sel_mode.currentText(),
             "dpr": self.dpr.isChecked(),
+            "bus-type": self.bus_type.currentText(),
         }
+        flags.update({name: edit.text() for name, edit in self._prefix_edits.items() if edit.text()})
+        return flags

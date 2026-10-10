@@ -44,8 +44,8 @@ QLabel#WindowBrandName {
     background: transparent;
 }
 QPushButton#WindowControlButton {
-    min-width: 46px;
-    max-width: 46px;
+    min-width: $titlebar_button_width;
+    max-width: $titlebar_button_width;
     padding: 0;
     border: none;
     border-radius: 0;
@@ -53,7 +53,7 @@ QPushButton#WindowControlButton {
 }
 QPushButton#WindowControlButton[role="minimize"]:hover,
 QPushButton#WindowControlButton[role="maximize"]:hover {
-    background-color: rgba(148, 163, 184, 28);
+    background-color: $bg_hover;
 }
 QPushButton#WindowControlButton[role="close"]:hover {
     background-color: $danger;
@@ -107,7 +107,7 @@ QLineEdit, QComboBox, QSpinBox {
     padding: 7px $control_padding_x;
     color: $text_main;
     font-size: $font_size_body;
-    selection-background-color: $primary_light;
+    selection-background-color: $primary_soft;
     selection-color: $text_main;
 }
 QLineEdit:hover, QComboBox:hover, QSpinBox:hover { border-color: $border_hover; }
@@ -122,7 +122,7 @@ QComboBox QAbstractItemView {
     background-color: $bg_surface;
     border: none;
     border-radius: $radius_card;
-    selection-background-color: $primary_light;
+    selection-background-color: $primary_soft;
     selection-color: $text_main;
     outline: none;
     padding: $menu_padding;
@@ -139,7 +139,7 @@ QTableWidget {
     background-color: $bg_surface;
     alternate-background-color: $bg_alternate;
     border: none;
-    gridline-color: $bg_subtle;
+    gridline-color: $border;
     color: $text_main;
     font-size: $font_size_body;
     outline: none;
@@ -149,7 +149,7 @@ QTableWidget::item {
     border: none;
 }
 QTableWidget::item:selected {
-    background-color: $primary_light;
+    background-color: $primary_soft;
     color: $text_main;
 }
 QHeaderView::section {
@@ -215,7 +215,7 @@ QTabWidget#ConfigTabs QTabBar::tab {
     font-weight: $font_weight_medium;
 }
 QTabWidget#ConfigTabs QTabBar::tab:selected {
-    background-color: $bg_subtle;
+    background-color: $primary_soft;
     color: $primary;
     font-weight: $font_weight_medium;
 }
@@ -283,7 +283,9 @@ QPushButton#ProjectButton {
     color: $text_main;
     text-align: left;
 }
-QPushButton#NavActionButton, QPushButton#NavFooterButton { padding: $control_padding_y $control_padding_x; }
+QPushButton#NavActionButton, QPushButton#NavFooterButton {
+    padding: $control_padding_y $control_padding_x $control_padding_y $nav_icon_inset;
+}
 QPushButton#ProjectButton { padding: 0; }
 QPushButton#NavActionButton:hover, QPushButton#NavFooterButton:hover,
 QPushButton#ProjectButton:hover,
@@ -304,7 +306,7 @@ QPushButton#ProjectButton:pressed, QPushButton#ProjectMoreBtn:pressed {
 }
 QPushButton#ProjectButton[menuOpen="true"] { background-color: $bg_subtle; }
 QPushButton#ProjectButton[selected="true"], QPushButton#NavFooterButton[selected="true"] {
-    background-color: $primary_light;
+    background-color: $primary_soft;
     color: $text_main;
     font-weight: $font_weight_medium;
 }
@@ -331,7 +333,7 @@ QFrame#ConfigHeader {
 }
 QLabel#ConfigSessionTitle {
     color: $text_main;
-    font-size: $font_size_lg;
+    font-size: $font_size_body;
     font-weight: $font_weight_semibold;
 }
 QLineEdit#ConfigSessionEditor {
@@ -350,39 +352,41 @@ QPushButton#LogClearButton:hover, QPushButton#LogCloseBtn:hover,
 QPushButton#SecondaryBackButton:hover { background-color: $bg_subtle; }
 QPushButton#HeaderButton:focus { background-color: $bg_subtle; }
 QPushButton#HeaderButton:pressed { background-color: $border; }
-QPushButton#ArtifactsToolButton:checked { background-color: $primary_light; }
+QPushButton#ArtifactsToolButton:checked { background-color: $primary_soft; }
 QPushButton#ArtifactsToolButton::menu-indicator { image: none; width: 0; height: 0; }
 QWidget#ConfigArea, QScrollArea#ConfigScroll, QWidget#ConfigScrollContent { background: $bg_main; border: none; }
 QWidget#ConfigTabPage { background: transparent; border: none; }
 QTableWidget#ConfigDataTable {
-    background-color: #FFFFFF;
+    background-color: $bg_surface;
     alternate-background-color: $bg_alternate;
-    selection-background-color: $primary_light;
+    selection-background-color: $primary_soft;
     selection-color: $text_main;
 }
+QTableWidget#ConfigDataTable::item { background-color: $bg_surface; }
 QTableWidget#ConfigDataTable::item:alternate { background-color: $bg_alternate; }
 QTableWidget#ConfigDataTable::item:selected {
-    background-color: $primary_light;
+    background-color: $primary_soft;
     color: $text_main;
 }
 QTableWidget#ConfigDataTable::item:hover:!selected { background-color: $bg_subtle; }
 QTableWidget#ConfigDataTable[formatterTable="true"]::item {
     padding: 0px 10px;
 }
-QFrame#ConfigTableCard {
-    background-color: $bg_sidebar_inactive;
-    border: none;
-    border-radius: $radius_card;
-}
 QWidget#ConfigCsvEditor { background-color: transparent; }
-QWidget#ConfigPanelActions { background-color: transparent; border: none; }
-QFrame#ConfigTableCard QTableWidget#ConfigDataTable {
-    background-color: $bg_surface;
+QWidget#ConfigCsvEditor QTableWidget {
+    /* Header corners reveal the page directly, without an inset card. */
+    background-color: transparent;
     alternate-background-color: $bg_alternate;
     border: none;
+    gridline-color: $border;
 }
-QFrame#ConfigTableCard QHeaderView::section:first { border-top-left-radius: $radius_control; }
-QFrame#ConfigTableCard QHeaderView::section:last { border-top-right-radius: $radius_control; }
+QWidget#ConfigCsvEditor QHeaderView { background: transparent; }
+QWidget#ConfigCsvEditor QHeaderView::section:first { border-top-left-radius: $radius_card; }
+QWidget#ConfigCsvEditor QHeaderView::section:last { border-top-right-radius: $radius_card; }
+QWidget#ConfigCsvEditor QHeaderView::section {
+    border: none;
+    border-bottom: 1px solid $border;
+}
 QLabel#ConfigProjectStatus {
     background: transparent;
     border: none;
@@ -394,31 +398,33 @@ QLabel#ConfigProjectStatus[dirty="true"] {
 }
 QTableWidget#laneGrid {
     background-color: $bg_surface;
-    selection-background-color: $primary_light;
+    selection-background-color: $primary_soft;
     selection-color: $text_main;
     border: none;
 }
 
 QFrame#ArtifactsPanel {
     background-color: $bg_artifacts;
-    border: none;
-    border-left: 1px solid $border_artifacts;
+    border: $artifacts_border_width solid $border_artifacts;
     border-radius: $radius_card;
 }
 QWidget#ArtifactSearchBar { background: transparent; }
 QWidget#ArtifactsToolbar {
-    background: transparent;
+    background-color: $bg_artifacts_header;
     border: none;
+    border-bottom: 1px solid $border_artifacts;
+    border-top-left-radius: $radius_card;
+    border-top-right-radius: $radius_card;
 }
 QLabel#ArtifactPath {
-    color: $text_header;
+    color: $text_artifacts;
     background: transparent;
     border: none;
-    font-size: $font_size_13;
+    font-size: $font_size_body;
     padding: 0 6px;
 }
-QPushButton#ArtifactsToolButton { border-radius: $icon_button_radius; padding: 0; }
-QPushButton#ArtifactsToolButton:hover { background-color: $bg_hover; }
+QPushButton#ArtifactsToolButton { border-radius: 6px; padding: 0; }
+QPushButton#ArtifactsToolButton:hover { background-color: $border_artifacts; }
 QWidget#ArtifactContent { background: transparent; border: none; }
 QWidget#ArtifactEmptyState { background: transparent; }
 QPushButton#ArtifactPathButton {
@@ -427,35 +433,23 @@ QPushButton#ArtifactPathButton {
     border-radius: $radius_hover;
     padding: 0;
 }
-QPushButton#ArtifactPathButton:hover, QPushButton#ArtifactPathButton:checked {
-    background-color: $bg_subtle;
-}
-QPushButton#ArtifactPathButton:focus { border: 1px solid $border_focus; }
+QPushButton#ArtifactPathButton:hover { background-color: $border_artifacts; }
+QPushButton#ArtifactPathButton:checked { background-color: $primary_soft; }
+QPushButton#ArtifactPathButton:focus { border: 1px solid $accent_artifacts; }
 QFrame#ArtifactFilePopup {
     background: transparent;
     border: none;
     border-radius: $radius_card;
 }
-QFrame#ArtifactToolSeparator { background: transparent; border: none; }
-QFrame#ArtifactFooter {
-    background: transparent;
-    border: none;
-    border-bottom-left-radius: $radius_card;
-    border-bottom-right-radius: $radius_card;
-}
-QFrame#ArtifactFooter QLabel { font-size: $font_size_12; }
-QLabel#ArtifactFileProgress, QLabel#ArtifactEditorMetadata {
-    color: $text_sub; background: transparent; border: none;
-}
 QPlainTextEdit#ArtifactCodePreview {
     background-color: $bg_artifacts;
-    color: $text_main;
+    color: $text_artifacts;
     border: none;
-    border-radius: $radius_control;
-    selection-background-color: $primary_light;
+    border-radius: 0;
+    selection-background-color: $primary_soft;
     selection-color: $text_main;
     font-family: $font_mono;
-    font-size: $font_size_sm;
+    font-size: $font_size_body;
 }
 QPlainTextEdit#ArtifactCodePreview QScrollBar:horizontal { height: 4px; }
 QPlainTextEdit#ArtifactCodePreview QScrollBar::handle:horizontal {
@@ -463,7 +457,7 @@ QPlainTextEdit#ArtifactCodePreview QScrollBar::handle:horizontal {
     border-radius: 2px;
 }
 QTreeWidget#ArtifactFileTree {
-    background-color: #FFFFFF;
+    background-color: $bg_surface;
     color: $text_main;
     border: none;
     border-radius: $radius_card;
@@ -471,7 +465,7 @@ QTreeWidget#ArtifactFileTree {
     padding: 8px;
     font-family: $font_family;
     font-size: $font_size_body;
-    selection-background-color: $primary_light;
+    selection-background-color: $primary_soft;
     selection-color: $text_main;
 }
 QTreeWidget#ArtifactFileTree::item {
@@ -481,9 +475,9 @@ QTreeWidget#ArtifactFileTree::item {
     color: $text_main;
     font-size: $font_size_body;
 }
-QTreeWidget#ArtifactFileTree::item:hover:!selected { background-color: $bg_subtle; }
+QTreeWidget#ArtifactFileTree::item:hover:!selected { background-color: $bg_hover; }
 QTreeWidget#ArtifactFileTree::item:selected {
-    background-color: $bg_subtle;
+    background-color: $primary_soft;
     color: $text_main;
 }
 QTreeWidget#ArtifactFileTree::branch:selected { background: $bg_surface; }
@@ -517,7 +511,7 @@ QTreeWidget#ArtifactFileTree QScrollBar::sub-line:vertical { height: 0; }
 QTreeWidget#ArtifactFileTree QScrollBar::add-page:vertical,
 QTreeWidget#ArtifactFileTree QScrollBar::sub-page:vertical { background: transparent; }
 QLabel#ArtifactEmptyText {
-    color: $text_muted;
+    color: $text_artifacts_muted;
     font-size: $font_size_body;
 }
 
@@ -534,41 +528,37 @@ QPlainTextEdit#LogOutput {
     border: none;
     padding: $spacing_sm $spacing_lg;
     font-family: $font_mono;
-    font-size: $font_size_sm;
+    font-size: $font_size_body;
 }
 QFrame#LogStatusBar {
-    background: $bg_sidebar_inactive;
+    background: $bg_sidebar;
     border: none;
 }
-QLabel#LogStatusText { color: $text_sub; font-size: $font_size_sm; }
+QLabel#LogStatusText { color: $text_sub; font-size: $font_size_body; }
 
-QLabel#GenerationStatus, QLabel#ArtifactStatus {
+QLabel#GenerationStatus {
     background-color: $bg_subtle;
     color: $text_sub;
     border: none;
     border-radius: $radius_hover;
     padding: 3px 8px;
-    font-size: $font_size_sm;
+    font-size: $font_size_body;
 }
-QLabel#GenerationStatus[state="up_to_date"],
-QLabel#ArtifactStatus[state="up_to_date"] {
+QLabel#GenerationStatus[state="up_to_date"] {
     background-color: $success_bg;
     color: $success_text;
 }
-QLabel#GenerationStatus[state="out_of_date"], QLabel#ArtifactStatus[state="out_of_date"],
-QLabel#GenerationStatus[state="external_changed"],
-QLabel#ArtifactStatus[state="external_changed"] {
+QLabel#GenerationStatus[state="out_of_date"],
+QLabel#GenerationStatus[state="external_changed"] {
     background-color: $warning_bg;
     color: $warning_text;
 }
-QLabel#GenerationStatus[state="generating"],
-QLabel#ArtifactStatus[state="generating"] {
+QLabel#GenerationStatus[state="generating"] {
     background-color: $info_bg;
     color: $info_text;
 }
-QLabel#GenerationStatus[state="failed"], QLabel#ArtifactStatus[state="failed"],
-QLabel#GenerationStatus[state="invalid"],
-QLabel#ArtifactStatus[state="invalid"] {
+QLabel#GenerationStatus[state="failed"],
+QLabel#GenerationStatus[state="invalid"] {
     background-color: $danger_bg;
     color: $danger_text;
 }
@@ -580,7 +570,7 @@ QFrame#SecondaryPageHeader {
 }
 QLabel#SecondaryPageTitle {
     color: $text_main;
-    font-size: $font_size_lg;
+    font-size: $font_size_body;
     font-weight: $font_weight_semibold;
 }
 QWidget#SecondaryPagePanel, QWidget#SecondaryContent, QWidget#SecondaryTabs { background: transparent; }
@@ -595,7 +585,7 @@ QPushButton#SecondaryMenuButton {
 }
 QPushButton#SecondaryMenuButton:hover { background-color: $bg_subtle; color: $text_main; }
 QPushButton#SecondaryMenuButton[selected="true"] {
-    background-color: $bg_subtle;
+    background-color: $primary_soft;
     color: $primary;
     font-weight: $font_weight_medium;
 }
@@ -613,7 +603,7 @@ QFrame#SettingsRow {
 }
 QWidget#SettingsEditorControl { background: transparent; border: none; }
 QLabel#SettingsRowLabel { color: $text_main; font-size: $font_size_body; }
-QLabel#SettingsStatus { color: $text_sub; font-size: $font_size_sm; }
+QLabel#SettingsStatus { color: $text_sub; font-size: $font_size_body; }
 QLineEdit#SettingsEditorPath { padding: 0 $spacing_md; }
 
 QDialog { background-color: $bg_main; color: $text_main; border: none; border-radius: 0; }
@@ -621,7 +611,7 @@ QMessageBox { background-color: $bg_surface; color: $text_main; border-radius: 0
 QMessageBox QLabel { background: transparent; color: $text_main; }
 QLabel#NewProjectDialogTitle {
     color: $text_main;
-    font-size: $font_size_lg;
+    font-size: $font_size_body;
     font-weight: $font_weight_semibold;
 }
 QLabel#NewProjectDialogSubtitle {
@@ -659,7 +649,7 @@ QPushButton#ProjectButton:hover {
 }
 QPushButton#ProjectButton[menuOpen="true"] { background-color: $bg_hover; }
 QPushButton#ProjectButton[selected="true"], QPushButton#NavFooterButton[selected="true"] {
-    background-color: $bg_hover;
+    background-color: $primary_soft;
     color: $text_main;
 }
 QPushButton#NavActionButton:focus, QPushButton#NavFooterButton:focus,
@@ -679,18 +669,17 @@ QPushButton#ProjectMoreBtn[menuOpen="true"] {
     background-color: $border_hover;
 }
 QFrame#ButtonGroup > QPushButton[selected="true"] {
-    background-color: $primary_light;
+    background-color: $primary_soft;
     color: $primary;
     border-bottom: none;
 }
-QWidget#ArtifactsToolbar > QPushButton#ArtifactsToolButton { border-radius: $icon_button_radius; }
 QToolTip {
-    background-color: #202123;
-    color: #FFFFFF;
+    background-color: $tooltip_bg;
+    color: $tooltip_text;
     border: none;
     border-radius: $radius_card;
     padding: 6px 10px;
-    font-size: $font_size_12;
+    font-size: $font_size_body;
 }
 
 /* Embedded formatter values share the table row's continuous background. */
@@ -715,7 +704,7 @@ QPushButton#SecondaryBackButton {
     font-weight: $font_weight_medium;
 }
 
-/* One focus color for every button, including named and grouped variants. */
+/* Neutral button focus; selected controls keep their primary fill below. */
 QPushButton:focus:!pressed,
 QPushButton#PrimaryBtn:focus:!pressed,
 QPushButton#SettingsPrimaryButton:focus:!pressed,
@@ -739,4 +728,34 @@ QFrame#ButtonGroup > QPushButton:focus:!pressed {
     background-color: $bg_focus;
     color: $text_main;
     border: none;
+}
+
+/* Selection remains blue while a navigation control has focus or hover. */
+QPushButton#ProjectButton[selected="true"],
+QPushButton#ProjectButton[selected="true"]:hover,
+QPushButton#ProjectButton[selected="true"]:focus:!pressed,
+QPushButton#NavFooterButton[selected="true"],
+QPushButton#NavFooterButton[selected="true"]:hover,
+QPushButton#NavFooterButton[selected="true"]:focus:!pressed,
+QPushButton#SecondaryMenuButton[selected="true"],
+QPushButton#SecondaryMenuButton[selected="true"]:hover,
+QPushButton#SecondaryMenuButton[selected="true"]:focus:!pressed,
+QPushButton#ArtifactsToolButton:checked,
+QPushButton#ArtifactsToolButton:checked:hover,
+QPushButton#ArtifactsToolButton:checked:focus:!pressed,
+QPushButton#ArtifactPathButton:checked,
+QPushButton#ArtifactPathButton:checked:hover,
+QPushButton#ArtifactPathButton:checked:focus:!pressed,
+QFrame#ButtonGroup > QPushButton[selected="true"]:hover,
+QFrame#ButtonGroup > QPushButton[selected="true"]:focus:!pressed,
+QFrame#ButtonGroup > QPushButton[selected="true"] {
+    background-color: $primary_soft;
+}
+QPushButton#ProjectButton[selected="true"]:pressed,
+QPushButton#NavFooterButton[selected="true"]:pressed,
+QPushButton#SecondaryMenuButton[selected="true"]:pressed,
+QPushButton#ArtifactsToolButton:checked:pressed,
+QPushButton#ArtifactPathButton:checked:pressed,
+QFrame#ButtonGroup > QPushButton[selected="true"]:pressed {
+    background-color: $primary_pressed;
 }

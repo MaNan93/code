@@ -18,6 +18,7 @@ import sys
 from plm import __version__
 from plm.core.gen_flags import (
     ARCH_VALUES,
+    BUS_TYPE_VALUES,
     PCLK_MODE_VALUES,
     SEL_MODE_VALUES,
     GenerationOptions,
@@ -47,6 +48,11 @@ def _add_config_arg(parser):
 
 def _add_generation_args(parser):
     parser.add_argument(
+        "--bus-type", choices=list(BUS_TYPE_VALUES), default="bus",
+        help="Connection wrapper ports: flat=one-dimensional vectors; "
+        "bus=two-dimensional lane arrays (default).",
+    )
+    parser.add_argument(
         "--sel-mode", choices=list(SEL_MODE_VALUES), default="sync",
         help="sync=break-before-make plus synchronization; "
         "comb=passthrough for a shared clock domain only",
@@ -68,6 +74,9 @@ def _add_generation_args(parser):
     )
     parser.add_argument("--dpr", action="store_true", help=DPR_HELP)
     parser.add_argument("--quiet", action="store_true")
+    parser.add_argument("--module-prefix", default="", help="Prefix PLM module and package names.")
+    parser.add_argument("--file-prefix", default="", help="Prefix all emitted SystemVerilog filenames.")
+    parser.add_argument("--macro-prefix", default="", help="Prefix PLM preprocessor macro names.")
     parser.add_argument("--events-json", action="store_true", help=argparse.SUPPRESS)
 
 
@@ -107,6 +116,10 @@ def cmd_generate(argv):
         verible_path=args.verible_path,
         verible_flags=_parse_verible_flags(args.verible_flags),
         quiet=args.quiet,
+        bus_type=args.bus_type,
+        module_prefix=args.module_prefix,
+        file_prefix=args.file_prefix,
+        macro_prefix=args.macro_prefix,
     )
     print(f"Config: {csv_dir}")
     try:

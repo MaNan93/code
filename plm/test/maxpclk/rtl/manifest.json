@@ -1,5 +1,5 @@
 {
-  "config_hash": "e40c56d0678bd964e12e7409dc41c79143595f123b769c32a926cd584c6147aa",
+  "config_hash": "8e8574346473ab28d1511dc5a3b1ac0e8a24bf4e6780bda19e0d27a6cc58037c",
   "design": {
     "controller_count": 4,
     "group_count": 4,
@@ -16,10 +16,10 @@
     "src/pipe_lane_clk_mux.sv": "3b127a4c34e53d8eb09129d5505b73672142d96231cb51de9f709aaa69128c2c",
     "src/pipe_lane_data_m2p.sv": "9daeccc2aa6d855dccac9d8d8359c361de3be9e196a8341ec1961f15e3510d6a",
     "src/pipe_lane_data_p2m.sv": "bfdff13123d462231e5c350bd61f978039f6cd67d79a5feb527fcc1690e25491",
-    "src/pipe_lane_mapper.sv": "ddc2b0f33e27dff26ab33b05e517d51db6bfd6408540946fac5c5384bc54409f",
-    "src/pipe_lane_mapper_connection.sv": "6827bfdb46313a8ad8318d6e0b521d6f2c5ac9f276d2751864fdb690cabc2475",
+    "src/pipe_lane_mapper.sv": "1bcfbf3a4a38aa93f46270b400b32e6bd13a5f6db4366c39c3684d6f2eaf7be4",
+    "src/pipe_lane_mapper_connection.sv": "4d0e53d782de0b3fe892f359f946b52eaa46f02663c659ba5c14329bf1cd6f16",
     "src/pipe_lane_mode_dec.sv": "cc9de0732baf6b2313a8e36bde843449a93495d2d4b1068aa6439dfcd5c205ba",
-    "src/pipe_lane_rst_mux.sv": "161e26e9ffbfff2b7403a32e57ec5af8e26e94b3b1330ffb473e8cf6eca67026",
+    "src/pipe_lane_rst_mux.sv": "80269f6acc0ea54082ab5ceec22a315513abbf9a16bfa2498e16637bd5d3713d",
     "src/pipe_lane_sel_gen.sv": "06f8bd5b9fe5a08ebe649532d258546f110766355f3723f2ff411b36deb22506",
     "src/pipe_lane_signal_pkg.sv": "c52e96da3d1a12474ec2b6a204c0e85f0488cd89c71342a624cd984f3eaed666"
   },
@@ -58,10 +58,11 @@
       "wrap_end_else_clauses": "true"
     }
   },
-  "generation_key": "e90da7722580ff7284612082bab509374fe2324dd6454cee1b19ab18a7adad04",
-  "generator_fingerprint": "6f8ebf26e195c4c0c010eb2694b614082d89f3d33b5636bc2e3803871392f34a",
+  "generation_key": "cc24e5e5326737dd45cf52645a2f7afae650a8aeb3198fd3bf8ceb3bca3880b5",
+  "generator_fingerprint": "33ab0916db1cbee01e3d3f26f96f81af155cc77de741fdab64f8851a36faa8af",
   "options": {
     "arch": "serdes",
+    "bus_type": "bus",
     "dpr": false,
     "pclk_mode": "pclk_as_phy_input",
     "sel_mode": "sync"

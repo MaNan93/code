@@ -1,11 +1,11 @@
 from pathlib import Path
 import re
 import unicodedata
-from PyQt5 import QtCore, QtGui, QtWidgets
+from PyQt5 import QtCore, QtGui, QtWidgets, sip
 from plm.frontend.qt.services.tasks import TaskRunner
 from plm.frontend.qt.styles.tokens import (
-    BG_SUBTLE, BORDER, FONT_CODE_PRIMARY, FONT_WEIGHT_MEDIUM, TEXT_MAIN, TEXT_MUTED,
-    scale_font_size, shrink_font_size,
+    BG_SUBTLE, FONT_CODE_PRIMARY, FONT_WEIGHT_MEDIUM, TEXT_MAIN, TEXT_MUTED,
+    FONT_SIZE_BODY,
 )
 from .secondary_page import SecondaryPage
 DOCS_DIR = Path(__file__).resolve().parents[3] / "docs"
@@ -36,10 +36,10 @@ class DocumentationPage(SecondaryPage):
         th {{ background-color: {bg_subtle}; color: {text_main}; font-size: {body_size}px; font-weight: {header_weight}; padding: 8px 16px; }}
         td {{ color: {text_main}; font-size: {body_size}px; font-weight: 400; padding: 8px 16px; }}
         """.format(
-            text_main=TEXT_MAIN, border=BORDER, bg_subtle=BG_SUBTLE,
-            heading_size=scale_font_size(16),
-            subheading_size=scale_font_size(14),
-            body_size=scale_font_size(13),
+            text_main=TEXT_MAIN, bg_subtle=BG_SUBTLE,
+            heading_size=FONT_SIZE_BODY,
+            subheading_size=FONT_SIZE_BODY,
+            body_size=FONT_SIZE_BODY,
             header_weight=FONT_WEIGHT_MEDIUM,
         )
         self.doc_browser.document().setDefaultStyleSheet(doc_css)
@@ -115,8 +115,18 @@ class DocumentationPage(SecondaryPage):
 
         def finished(markdown):
             if revision == self._document_revision:
-                self.doc_browser.setMarkdown(markdown)
-                self._format_document()
+                # Format before attaching: each edit otherwise lays out the
+                # visible browser again, including Markdown table insertion.
+                previous = self.doc_browser.document()
+                document = QtGui.QTextDocument(self.doc_browser)
+                document.setDefaultFont(previous.defaultFont())
+                document.setDefaultStyleSheet(previous.defaultStyleSheet())
+                document.setUndoRedoEnabled(previous.isUndoRedoEnabled())
+                document.setMarkdown(markdown)
+                self._format_document(document)
+                self.doc_browser.setDocument(document)
+                if not sip.isdeleted(previous):
+                    previous.deleteLater()
                 self.doc_browser.verticalScrollBar().setValue(0)
 
         def failed(error):
@@ -125,8 +135,16 @@ class DocumentationPage(SecondaryPage):
 
         self.tasks.submit(read, finished, failed)
 
-    def _format_document(self):
-        document = self.doc_browser.document()
+    def _format_document(self, document=None):
+        document = document if document is not None else self.doc_browser.document()
+        cursor = QtGui.QTextCursor(document)
+        cursor.beginEditBlock()
+        try:
+            self._format_document_blocks(document)
+        finally:
+            cursor.endEditBlock()
+
+    def _format_document_blocks(self, document):
         formatted_tables = set()
         block = document.begin()
         while block.isValid():
@@ -141,7 +159,7 @@ class DocumentationPage(SecondaryPage):
                 heading_format.clearProperty(QtGui.QTextFormat.FontSizeAdjustment)
                 heading_format.setProperty(
                     QtGui.QTextFormat.FontPixelSize,
-                    shrink_font_size(16 if heading_level == 1 else 14),
+                    FONT_SIZE_BODY,
                 )
                 heading_format.setFontWeight(QtGui.QFont.Bold)
                 cursor.setCharFormat(heading_format)
@@ -159,7 +177,7 @@ class DocumentationPage(SecondaryPage):
                 note_format = QtGui.QTextCharFormat()
                 note_format.setForeground(QtGui.QColor(TEXT_MUTED))
                 note_format.setProperty(
-                    QtGui.QTextFormat.FontPixelSize, shrink_font_size(12)
+                    QtGui.QTextFormat.FontPixelSize, FONT_SIZE_BODY
                 )
                 cursor.mergeCharFormat(note_format)
 
@@ -188,7 +206,7 @@ class DocumentationPage(SecondaryPage):
                     header_format = QtGui.QTextCharFormat()
                     header_format.setForeground(QtGui.QColor(TEXT_MAIN))
                     header_format.setProperty(
-                        QtGui.QTextFormat.FontPixelSize, shrink_font_size(13)
+                        QtGui.QTextFormat.FontPixelSize, FONT_SIZE_BODY
                     )
                     header_format.setFontWeight(QtGui.QFont.Medium)
                     cell_cursor.mergeCharFormat(header_format)
@@ -197,7 +215,7 @@ class DocumentationPage(SecondaryPage):
                 code_format = QtGui.QTextCharFormat()
                 code_format.setFontFamilies([FONT_CODE_PRIMARY, "Courier New", "monospace"])
                 code_format.setProperty(
-                    QtGui.QTextFormat.FontPixelSize, shrink_font_size(13)
+                    QtGui.QTextFormat.FontPixelSize, FONT_SIZE_BODY
                 )
                 cursor.setCharFormat(code_format)
                 cursor.setBlockCharFormat(code_format)

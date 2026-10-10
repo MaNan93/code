@@ -17,6 +17,7 @@ import tempfile
 import uuid
 
 from plm.core.generator import rtl, tb
+from plm.core.naming import GenerationNames
 from plm.core.plan import GenerationPlan, MANIFEST_SCHEMA_VERSION
 from plm.core.paths import COMMON_DIR, TB_MAKEFILE
 from plm.core.validation import ValidationError, ValidationIssue
@@ -116,6 +117,7 @@ def _self_check_output_set(plan, workspace):
     """Validate staged files before the transactional output swap."""
     workspace = Path(workspace)
     issues = []
+    names = GenerationNames.from_options(plan.options)
     required = {
         "rtl": {
             "flist.f",
@@ -130,6 +132,11 @@ def _self_check_output_set(plan, workspace):
             "src/pipe_lane_mapper_connection.sv",
         },
         "tb": {"tb_pipe_lane_mapper.sv"},
+    }
+    required = {
+        kind: {str(PurePosixPath(path).with_name(names.file(PurePosixPath(path).name)))
+               if path.endswith(".sv") else path for path in paths}
+        for kind, paths in required.items()
     }
     manifests = {}
     for kind in OUTPUT_DIRS:
@@ -174,12 +181,13 @@ def _self_check_output_set(plan, workspace):
             if rtl_manifest.get(field) != tb_manifest.get(field):
                 issues.append(ValidationIssue("output", f"RTL/TB manifest {field} mismatch"))
 
-    top = workspace / "rtl" / "src" / "pipe_lane_mapper.sv"
-    testbench = workspace / "tb" / "tb_pipe_lane_mapper.sv"
+    top = workspace / "rtl" / "src" / names.file("pipe_lane_mapper.sv")
+    testbench = workspace / "tb" / names.file("tb_pipe_lane_mapper.sv")
     if top.is_file():
         text = top.read_text(encoding="utf-8")
         for expected, pattern in (
-            ("module pipe_lane_mapper #(", r"\bmodule\s+pipe_lane_mapper\s*#\s*\("),
+            (f"module {names.identifier('pipe_lane_mapper')} #(",
+             rf"\bmodule\s+{re.escape(names.identifier('pipe_lane_mapper'))}\s*#\s*\("),
             (f"parameter int NL = {plan.lane_count}",
              rf"\bparameter\s+int\s+NL\s*=\s*{plan.lane_count}\s*(?=[,)])"),
             (f"parameter int NC = {plan.num_ctrl}",
@@ -187,7 +195,7 @@ def _self_check_output_set(plan, workspace):
         ):
             if not re.search(pattern, text):
                 issues.append(ValidationIssue("output", f"top-level port/width check failed: {expected}"))
-    if testbench.is_file() and "module tb_pipe_lane_mapper;" not in testbench.read_text(encoding="utf-8"):
+    if testbench.is_file() and f"module {names.identifier('tb_pipe_lane_mapper')};" not in testbench.read_text(encoding="utf-8"):
         issues.append(ValidationIssue("output", "testbench module declaration is missing"))
 
     flist = workspace / "rtl" / "flist.f"
@@ -318,6 +326,7 @@ def _export_rtl_into(plan, out_dir, *, display_out=None):
     """Write the full RTL output for plan into out_dir (a <set>/rtl/
     directory): a common/ snapshot, src/*.sv, flist.f."""
     options = plan.options
+    names = GenerationNames.from_options(options)
     src = out_dir / "src"
     common_dst = out_dir / "common"
     # Wipe and recreate both -- otherwise a file that gets renamed or
@@ -343,9 +352,9 @@ def _export_rtl_into(plan, out_dir, *, display_out=None):
         if f.is_file():
             if f.suffix == ".sv":
                 _write_text(
-                    common_dst / f.name,
+                    common_dst / names.file(f.name),
                     format_sv(
-                        f.read_text(encoding="utf-8"),
+                        names.sv_source(f.read_text(encoding="utf-8")),
                         options.verible_path,
                         options.verible_flags,
                         cache=True,
@@ -376,13 +385,17 @@ def _export_rtl_into(plan, out_dir, *, display_out=None):
             plan, options.pclk_mode, options.sel_mode, options.dpr
         ),
         src / "pipe_lane_mapper_connection.sv": rtl.gen_connection(
-            plan, options.pclk_mode, options.dpr, sel_mode=options.sel_mode
+            plan, options.pclk_mode, options.dpr, sel_mode=options.sel_mode,
+            bus_type=options.bus_type,
         ),
         out_dir / "flist.f": rtl.gen_filelist(plan),
     }
     for p, c in files.items():
         if p.suffix == ".sv":
-            c = format_sv(c, options.verible_path, options.verible_flags)
+            p = p.with_name(names.file(p.name))
+            c = format_sv(names.sv_source(c), options.verible_path, options.verible_flags)
+        else:
+            c = names.filelist(c)
         _write_text(p, c)
         print(f"  generated {shown_out / p.relative_to(out_dir)}")
 
@@ -393,23 +406,21 @@ def _export_tb_into(plan, out_rtl, *, display_tb=None):
     the RTL output dir a set's resolve_set() gives back -- the testbench
     always lives alongside it, not inside it)."""
     options = plan.options
+    names = GenerationNames.from_options(options)
     tb_dir = out_rtl.parent / "tb"
     tb_dir.mkdir(parents=True, exist_ok=True)
 
-    # Config-independent (no config-specific content, just relative
-    # paths), so every config set gets an identical copy instead of it
-    # being hand-maintained per set and silently missing wherever nobody
-    # remembered to add it.
+    # Keep the shared simulator template aligned with the selected names.
     if TB_MAKEFILE.is_file():
-        _write_text(tb_dir / "makefile", TB_MAKEFILE.read_text(encoding="utf-8"))
+        _write_text(tb_dir / "makefile", names.makefile(TB_MAKEFILE.read_text(encoding="utf-8")))
 
     shown_tb = Path(display_tb) if display_tb is not None else tb_dir
     print(f"TB    : {shown_tb}")
-    tb_file = tb_dir / "tb_pipe_lane_mapper.sv"
+    tb_file = tb_dir / names.file("tb_pipe_lane_mapper.sv")
     _write_text(
         tb_file,
         format_sv(
-            tb.gen_tb(plan, options.pclk_mode, options.dpr),
+            names.sv_source(tb.gen_tb(plan, options.pclk_mode, options.dpr)),
             options.verible_path,
             options.verible_flags,
         ),

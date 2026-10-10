@@ -12,7 +12,7 @@ from plm.frontend.qt.services import SettingsStore
 from plm.frontend.qt.views.new_project_dialog import NewProjectDialog
 from plm.frontend.qt.widgets.common import StyledMenu
 from plm.frontend.qt.widgets.lanegrid import LaneGrid
-from plm.frontend.qt.styles.tokens import CONTROL_HEIGHT, FONT_FAMILY, ICON_BUTTON_SIZE, ICON_SIZE
+from plm.frontend.qt.styles.tokens import FONT_FAMILY, ICON_BUTTON_SIZE, ICON_SIZE
 from qt_smoke_support import wait_for_idle
 
 OUT=Path(os.environ.get("PLM_SCREENSHOT_DIR","ui-screenshots")).resolve()
@@ -58,7 +58,7 @@ with tempfile.TemporaryDirectory(prefix="plm-ui-") as td:
     with patch("plm.frontend.qt.main_window.AppController",return_value=controller):
         w=MainWindow()
     prepare_capture(w)
-    w.resize(1400,900); w.show(); wait_for_idle(app)
+    w.show(); wait_for_idle(app)
 
     # Visual review uses the fixed font baseline and CJK fallback stack.
     stylesheet=app.styleSheet()

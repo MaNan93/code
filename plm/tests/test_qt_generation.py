@@ -63,10 +63,25 @@ class GenerationIntegrationTests(unittest.TestCase):
             if flags:
                 expected.update(flags)
             self.assertEqual(page._preferences()["verible_flags"], expected)
+            self.assertIsNone(page.flag_table)
+            page._select_section(1)
+            self.assertEqual(page._preferences()["verible_flags"], expected)
+            self.assertEqual(page.flag_table.rowCount(), len(DEFAULT_VERIBLE_FLAGS))
             page._fill_flags({})
             self.assertEqual(page._preferences()["verible_flags"], DEFAULT_VERIBLE_FLAGS)
             page._fill_flags(None)
             self.assertEqual(page._preferences()["verible_flags"], DEFAULT_VERIBLE_FLAGS)
+
+    def test_saving_invalid_loaded_flags_reveals_tools_without_prior_visit(self):
+        page = SettingsPage(preferences={"verible_flags": {"column_limit": "-1"}})
+        self.addCleanup(page.close)
+        self.assertIsNone(page.flag_table)
+        saved = QtTest.QSignalSpy(page.preferencesSaved)
+        page._save_settings()
+        self.assertEqual(len(saved), 0)
+        self.assertTrue(page.menu_buttons[1].property("selected"))
+        self.assertEqual(page._flag_controls["column_limit"].text(), "-1")
+        self.assertIn("column_limit", page.settings_status.text())
 
     def test_startup_auto_detects_formatter_without_overwriting_an_explicit_path(self):
         detected = str(self.root / "tools" / "verible-verilog-format.exe")
@@ -110,6 +125,103 @@ class GenerationIntegrationTests(unittest.TestCase):
             (controller.current_project.config_dir.parent / "rtl/manifest.json").read_text()
         )
         self.assertEqual(manifest["formatter"]["engine"], "none")
+
+    def test_bus_type_is_undoable_persisted_and_invalidates_generated_outputs(self):
+        controller, window = self.window()
+        page = window.config_page
+        editor = page.generation_editor
+        self.assertEqual(editor.bus_type.currentText(), "bus")
+        controller.generate_current()
+        wait_for_idle(self.app)
+        self.assertEqual(controller.generation_state, "up_to_date")
+        editor.bus_type.setCurrentText("flat")
+        wait_for_idle(self.app)
+        self.assertTrue(page.dirty)
+        self.assertEqual(controller.generation_state, "out_of_date")
+        page.undo()
+        self.assertEqual(editor.bus_type.currentText(), "bus")
+        page.redo()
+        self.assertEqual(editor.bus_type.currentText(), "flat")
+        wait_for_idle(self.app)
+        controller.generate_current()
+        wait_for_idle(self.app)
+        self.assertEqual(controller.generation_state, "up_to_date")
+        root = controller.current_project.config_dir.parent
+        source = (root / "rtl/src/pipe_lane_mapper_connection.sv").read_text()
+        self.assertIn("[NL * ", source)
+        self.assertNotIn(" [0:NL-1]", source.split(");", 1)[0])
+        self.assertEqual(self.service.load(controller.current_project)["gen_flags"]["bus-type"], "flat")
+        controller.reload_project(controller.current_project.name)
+        wait_for_idle(self.app)
+        self.assertEqual(editor.bus_type.currentText(), "flat")
+        self.assertFalse(page.dirty)
+
+    def test_unknown_bus_type_reports_generation_validation_error(self):
+        controller, window = self.window()
+        payload = window.config_page.content()
+        payload["gen_flags"]["bus-type"] = "unknown"
+        window.config_page.set_content(payload)
+        self.assertEqual(window.config_page.generation_editor.bus_type.currentText(), "unknown")
+        with self.assertRaisesRegex(ValidationError, "bus_type"):
+            self.service.validate(window.config_page.content())
+
+    def test_prefix_inputs_are_undoable_and_persist_across_reload(self):
+        controller, window = self.window()
+        page = window.config_page
+        editor = page.generation_editor
+        controller.generate_current()
+        wait_for_idle(self.app)
+        self.assertEqual(controller.generation_state, "up_to_date")
+        prefixes = {"module_prefix": "soc_", "file_prefix": "rtl_", "macro_prefix": "SOC_"}
+        for name, value in prefixes.items():
+            getattr(editor, name).setText(value)
+        self.assertTrue(page.dirty)
+        wait_for_idle(self.app)
+        self.assertEqual(controller.generation_state, "out_of_date")
+        page.undo()
+        self.assertEqual(editor.macro_prefix.text(), "")
+        self.assertEqual(editor.module_prefix.text(), "soc_")
+        page.redo()
+        self.assertEqual(editor.macro_prefix.text(), "SOC_")
+        controller.save_current()
+        wait_for_idle(self.app)
+        self.assertFalse(page.dirty)
+        loaded = self.service.load(controller.current_project)["gen_flags"]
+        for name, value in prefixes.items():
+            self.assertEqual(loaded[name], value)
+        controller.reload_project(controller.current_project.name)
+        wait_for_idle(self.app)
+        for name, value in prefixes.items():
+            self.assertEqual(getattr(editor, name).text(), value)
+        self.assertFalse(page.dirty)
+        controller.generate_current()
+        wait_for_idle(self.app)
+        self.assertEqual(controller.generation_state, "up_to_date")
+        root = controller.current_project.config_dir.parent
+        top = root / "rtl/src/rtl_pipe_lane_mapper.sv"
+        self.assertIn("module soc_pipe_lane_mapper #(", top.read_text())
+        self.assertIn("`ifdef SOC_DUMP_FSDB", (root / "tb/rtl_tb_pipe_lane_mapper.sv").read_text())
+        self.assertFalse((root / "rtl/src/pipe_lane_mapper.sv").exists())
+        self.assertIn(top.resolve(), self.service.output_files(controller.current_project))
+        controller.reload_project(controller.current_project.name)
+        wait_for_idle(self.app)
+        # Explicit reload retains its existing policy of requesting regeneration.
+        for name, value in prefixes.items():
+            self.assertEqual(getattr(editor, name).text(), value)
+        self.assertEqual(self.service.output_state(
+            controller.current_project, page.content(), use_disk=True,
+        ), "up_to_date")
+        controller.generate_current()
+        wait_for_idle(self.app)
+        self.assertEqual(controller.generation_state, "up_to_date")
+
+    def test_invalid_prefix_cannot_save_over_a_valid_workspace(self):
+        controller, window = self.window()
+        signature = self.service.signature(controller.current_project)
+        window.config_page.generation_editor.file_prefix.setText("../escape/")
+        with self.assertRaisesRegex(ValidationError, "file_prefix"):
+            self.service.save(controller.current_project, window.config_page.content())
+        self.assertEqual(self.service.signature(controller.current_project), signature)
 
     def test_formatter_parameter_validation_and_detection(self):
         page = SettingsPage(preferences=self.store.preferences())

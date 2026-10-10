@@ -1,5 +1,5 @@
 {
-  "config_hash": "e40c56d0678bd964e12e7409dc41c79143595f123b769c32a926cd584c6147aa",
+  "config_hash": "8e8574346473ab28d1511dc5a3b1ac0e8a24bf4e6780bda19e0d27a6cc58037c",
   "design": {
     "controller_count": 4,
     "group_count": 4,
@@ -8,7 +8,7 @@
   },
   "files": {
     "makefile": "c25dc98bf8ee551eb196496f948599549b937f102c702b97fe7efc4579512e16",
-    "tb_pipe_lane_mapper.sv": "0ba21f59a5b08eab4c9715d4e7f0aa1f9a63f637a4061eb0b8ef720d0754055d"
+    "tb_pipe_lane_mapper.sv": "72fc9960bb24a1fa061e334e29feb3ccfb948fdeafbcae3c719552040fe2c4b1"
   },
   "formatter": {
     "engine": "none",
@@ -45,10 +45,11 @@
       "wrap_end_else_clauses": "true"
     }
   },
-  "generation_key": "e90da7722580ff7284612082bab509374fe2324dd6454cee1b19ab18a7adad04",
-  "generator_fingerprint": "6f8ebf26e195c4c0c010eb2694b614082d89f3d33b5636bc2e3803871392f34a",
+  "generation_key": "cc24e5e5326737dd45cf52645a2f7afae650a8aeb3198fd3bf8ceb3bca3880b5",
+  "generator_fingerprint": "33ab0916db1cbee01e3d3f26f96f81af155cc77de741fdab64f8851a36faa8af",
   "options": {
     "arch": "serdes",
+    "bus_type": "bus",
     "dpr": false,
     "pclk_mode": "pclk_as_phy_input",
     "sel_mode": "sync"

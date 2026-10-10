@@ -15,6 +15,7 @@ GENERATOR_FILES = (
     "plan.py",
     "exporter.py",
     "gen_flags.py",
+    "naming.py",
     "model.py",
     "verible.py",
     "generator/rtl.py",

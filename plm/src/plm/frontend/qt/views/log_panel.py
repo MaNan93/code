@@ -1,4 +1,5 @@
 from PyQt5 import QtCore, QtWidgets
+from plm.frontend.qt.styles.tokens import LOG_HEADER_HEIGHT, LOG_STATUS_HEIGHT
 from plm.frontend.qt.widgets.common import (
     ICON_SIZE, RoundedCanvasFrame, make_icon_button,
 )
@@ -19,7 +20,7 @@ class LogPanel(RoundedCanvasFrame):
         root.setSpacing(0)
         header = QtWidgets.QFrame()
         header.setObjectName("LogHeader")
-        header.setMinimumHeight(32)
+        header.setMinimumHeight(LOG_HEADER_HEIGHT)
         header_layout = QtWidgets.QHBoxLayout(header)
         header_layout.setContentsMargins(16, 0, 12, 0)
         header_layout.setSpacing(8)
@@ -45,7 +46,7 @@ class LogPanel(RoundedCanvasFrame):
 
         self.status_bar = QtWidgets.QFrame()
         self.status_bar.setObjectName("LogStatusBar")
-        self.status_bar.setFixedHeight(24)
+        self.status_bar.setFixedHeight(LOG_STATUS_HEIGHT)
         status_layout = QtWidgets.QHBoxLayout(self.status_bar)
         status_layout.setContentsMargins(16, 0, 12, 0)
         status_layout.setSpacing(0)

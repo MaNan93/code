@@ -11,7 +11,7 @@ from PyQt5 import QtCore, QtGui, QtSvg, QtWidgets
 from plm.core.paths import PLM_ROOT
 from plm.frontend.qt.styles.tokens import (
     BG_MAIN, BG_SUBTLE, BORDER, CONTROL_HEIGHT, CONTROL_PADDING_X, DANGER,
-    ICON_BUTTON_SIZE, ICON_GLYPH_SIZE, ICON_SIZE, ICON_SIZE_SM, ICON_TEXT_GAP,
+    ICON_BUTTON_SIZE, ICON_GLYPH_SIZE, ICON_SIZE, ICON_TEXT_GAP,
     LINE_HEIGHT, MENU_GAP, MENU_ICON_TEXT_GAP, MENU_ITEM_PADDING_X, MENU_PADDING, MENU_RADIUS,
     MENU_SHADOW_LAYER_ALPHA, MENU_SHADOW_MARGIN, MENU_SHADOW_OFFSET, MENU_SHADOW_SPREAD,
     MENU_MIN_WIDTH,
@@ -40,29 +40,34 @@ class FixedHeightItemDelegate(QtWidgets.QStyledItemDelegate):
 class ButtonSizingController(QtCore.QObject):
     """Apply the Medium control height throughout the application."""
 
+    SIZING_EVENTS = frozenset((
+        QtCore.QEvent.Polish, QtCore.QEvent.FontChange,
+        QtCore.QEvent.StyleChange, QtCore.QEvent.Show,
+    ))
+
     def __init__(self, app):
         super().__init__(app)
         self._applying = False
         app.installEventFilter(self)
 
     def eventFilter(self, watched, event):
-        if event.type() == QtCore.QEvent.Paint and isinstance(watched, QtWidgets.QDialog):
+        kind = event.type()
+        if kind != QtCore.QEvent.Paint and kind not in self.SIZING_EVENTS:
+            return False
+        if kind == QtCore.QEvent.Paint and isinstance(watched, QtWidgets.QDialog):
             # Native framed dialogs must have an opaque client surface even
             # when their owner is the translucent, frameless main window.
             painter = QtGui.QPainter(watched)
             painter.fillRect(event.rect(), QtGui.QColor(BG_MAIN))
             painter.end()
-        if (event.type() == QtCore.QEvent.Paint
+        if (kind == QtCore.QEvent.Paint
                 and isinstance(watched, QtWidgets.QPushButton)
                 and not watched.icon().isNull()
                 and (watched.text() or watched.objectName() in ("NavActionButton", "NavFooterButton")
                      or (watched.hasFocus() and watched.layout() is None))):
             paint_icon_text_button(watched)
             return True
-        if self._applying or event.type() not in (
-            QtCore.QEvent.Polish, QtCore.QEvent.FontChange,
-            QtCore.QEvent.StyleChange, QtCore.QEvent.Show,
-        ):
+        if self._applying or kind not in self.SIZING_EVENTS:
             return False
         self._applying = True
         try:
@@ -75,9 +80,19 @@ class ButtonSizingController(QtCore.QObject):
                     label_width = watched.fontMetrics().horizontalAdvance(watched.text())
                     watched.setMinimumWidth(label_width + ICON_SIZE + ICON_TEXT_GAP + 2 * CONTROL_PADDING_X)
             elif isinstance(watched, (QtWidgets.QLineEdit, QtWidgets.QComboBox, QtWidgets.QSpinBox)):
-                watched.setFixedHeight(CONTROL_HEIGHT - 4 if watched.property("formatterRow") is not None else CONTROL_HEIGHT)
-                if isinstance(watched, QtWidgets.QComboBox) and not isinstance(watched.itemDelegate(), FixedHeightItemDelegate):
-                    watched.setItemDelegate(FixedHeightItemDelegate(watched))
+                height = CONTROL_HEIGHT - 4 if watched.property("formatterRow") is not None else CONTROL_HEIGHT
+                if watched.minimumHeight() != height or watched.maximumHeight() != height:
+                    watched.setFixedHeight(height)
+                # StyledComboBox paints its own menu, so its native popup never
+                # needs a delegate. Install other popup delegates only once.
+                if (isinstance(watched, QtWidgets.QComboBox)
+                        and not isinstance(watched, StyledComboBox)
+                        and not hasattr(watched, "_plm_popup_delegate")):
+                    delegate = watched.itemDelegate()
+                    if not isinstance(delegate, FixedHeightItemDelegate):
+                        delegate = FixedHeightItemDelegate(watched)
+                        watched.setItemDelegate(delegate)
+                    watched._plm_popup_delegate = delegate
         finally:
             self._applying = False
         return False
@@ -118,7 +133,7 @@ class ContentIconStyle(QtWidgets.QProxyStyle):
 
     def pixelMetric(self, metric, option=None, widget=None):
         if metric == QtWidgets.QStyle.PM_SmallIconSize:
-            return ICON_SIZE_SM
+            return ICON_SIZE
         return ICON_SIZE if metric in self.ICON_METRICS else super().pixelMetric(metric, option, widget)
 
     def drawControl(self, element, option, painter, widget=None):
@@ -138,11 +153,11 @@ class ContentIconStyle(QtWidgets.QProxyStyle):
 
 
 def draw_icon_text_label(style, option, painter, widget):
-    """Draw a centered icon slot and the shared text line with a uniform gap."""
+    """Keep navigation icons left aligned; center other icon/text labels."""
     rect = QtCore.QRect(option.rect)
     text_width = option.fontMetrics.horizontalAdvance(option.text)
     total = ICON_SIZE + (ICON_TEXT_GAP + text_width if option.text else 0)
-    left_aligned = option.text and widget and widget.objectName() in ("NavActionButton", "NavFooterButton")
+    left_aligned = widget is not None and widget.objectName() in ("NavActionButton", "NavFooterButton")
     x = rect.left() if left_aligned else rect.left() + max(0, (rect.width() - total) // 2)
     enabled = bool(option.state & QtWidgets.QStyle.State_Enabled)
     if option.state & QtWidgets.QStyle.State_HasFocus and not option.state & QtWidgets.QStyle.State_Sunken:
@@ -193,8 +208,7 @@ def paint_icon_text_button(button):
     painter = QtWidgets.QStylePainter(button)
     painter.setFont(button.font())
     painter.drawControl(QtWidgets.QStyle.CE_PushButton, face)
-    option.rect = (button.style().subElementRect(QtWidgets.QStyle.SE_PushButtonContents, option, button)
-                   if option.text else button.rect())
+    option.rect = button.style().subElementRect(QtWidgets.QStyle.SE_PushButtonContents, option, button)
     draw_icon_text_label(button.style(), option, painter, button)
     painter.end()
 
@@ -406,7 +420,7 @@ class StyledMenu(QtWidgets.QMenu):
         action = event.action()
         if (event.type() == QtCore.QEvent.ActionAdded and action.icon().isNull()
                 and ("删除" in action.text() or action.text().lower().startswith("delete"))):
-            action.setIcon(load_lucide_icon("trash-2", DANGER, ICON_SIZE_SM))
+            action.setIcon(load_lucide_icon("trash-2", DANGER, ICON_SIZE))
 
     def sizeHint(self):
         result = super().sizeHint()
@@ -478,7 +492,13 @@ class StyledComboBox(QtWidgets.QComboBox):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.popup_menu = StyledMenu(self)
+        self._popup_menu = None
+
+    @property
+    def popup_menu(self):
+        if self._popup_menu is None:
+            self._popup_menu = StyledMenu(self)
+        return self._popup_menu
 
     def showPopup(self):
         if not self.count():
@@ -501,5 +521,6 @@ class StyledComboBox(QtWidgets.QComboBox):
         self.activated[str].emit(self.itemText(index))
 
     def hidePopup(self):
-        self.popup_menu.hide()
+        if self._popup_menu is not None:
+            self._popup_menu.hide()
         super().hidePopup()

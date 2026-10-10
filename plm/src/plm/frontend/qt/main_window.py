@@ -7,11 +7,16 @@ from plm.frontend.qt.exceptions import install_exception_handler
 from plm.frontend.qt.styles import APP_QSS
 from plm.frontend.qt.styles.tokens import (
     BG_SIDEBAR,
-    BG_SIDEBAR_INACTIVE,
+    BG_SUBTLE,
     BG_SURFACE,
     FONT_SIZE_BODY,
     FONT_UI_PRIMARY,
     ICON_SIZE,
+    ICON_BUTTON_SIZE,
+    SPACING_XS,
+    SPACING_SM,
+    TITLEBAR_HEIGHT,
+    TITLEBAR_BUTTON_WIDTH,
     RADIUS_WINDOW,
     PRIMARY,
     TEXT_SUB,
@@ -19,7 +24,7 @@ from plm.frontend.qt.styles.tokens import (
 from plm.frontend.qt.views.config_page import ConfigPage
 from plm.frontend.qt.views.log_panel import LogPanel
 from plm.frontend.qt.widgets.common import (
-    ContentIconStyle, install_button_sizing, load_lucide_icon,
+    ContentIconStyle, install_button_sizing, load_lucide_icon, make_icon_button,
 )
 from plm.frontend.qt.widgets.tooltip import install_tooltips
 
@@ -36,15 +41,23 @@ class WindowBackdrop(QtWidgets.QWidget):
         super().__init__(parent)
         self.setObjectName("WindowBackdrop")
         self.shadow_enabled = True
+        self._shadow_pixmap = QtGui.QPixmap()
+        self._shadow_cache_key = None
 
-    def paintEvent(self, event):
-        painter = QtGui.QPainter(self)
-        painter.setCompositionMode(QtGui.QPainter.CompositionMode_Source)
-        painter.fillRect(self.rect(), QtCore.Qt.transparent)
-        painter.setCompositionMode(QtGui.QPainter.CompositionMode_SourceOver)
-        if not self.shadow_enabled:
-            painter.end()
+    def _update_shadow_cache(self):
+        ratio = self.devicePixelRatioF()
+        key = (self.width(), self.height(), self.SHADOW_MARGIN, ratio)
+        if key == self._shadow_cache_key:
             return
+        self._shadow_cache_key = key
+        self._shadow_pixmap = QtGui.QPixmap(
+            round(self.width() * ratio), round(self.height() * ratio)
+        )
+        self._shadow_pixmap.setDevicePixelRatio(ratio)
+        self._shadow_pixmap.fill(QtCore.Qt.transparent)
+        if self._shadow_pixmap.isNull():
+            return
+        painter = QtGui.QPainter(self._shadow_pixmap)
         painter.setRenderHint(QtGui.QPainter.Antialiasing)
         margin = self.SHADOW_MARGIN
         rect = QtCore.QRectF(self.rect()).adjusted(margin, margin, -margin, -margin)
@@ -61,6 +74,16 @@ class WindowBackdrop(QtWidgets.QWidget):
             painter.fillPath(path, color)
         painter.end()
 
+    def paintEvent(self, event):
+        painter = QtGui.QPainter(self)
+        painter.setCompositionMode(QtGui.QPainter.CompositionMode_Source)
+        if self.shadow_enabled:
+            self._update_shadow_cache()
+            painter.drawPixmap(0, 0, self._shadow_pixmap)
+        else:
+            painter.fillRect(self.rect(), QtCore.Qt.transparent)
+        painter.end()
+
 
 class WindowShell(QtWidgets.QWidget):
     """Paint the window perimeter with translucent, antialiased edges."""
@@ -75,7 +98,7 @@ class WindowShell(QtWidgets.QWidget):
     def paintEvent(self, event):
         maximized = self.property("maximized") in (True, "true")
         inactive = self.property("windowActive") in (False, "false")
-        color = BG_SIDEBAR_INACTIVE if inactive else BG_SIDEBAR
+        color = BG_SUBTLE if inactive else BG_SIDEBAR
         painter = QtGui.QPainter(self)
         painter.setRenderHint(QtGui.QPainter.Antialiasing)
         rect = QtCore.QRectF(self.rect())
@@ -92,9 +115,9 @@ class WindowShell(QtWidgets.QWidget):
 class WindowTitleBar(QtWidgets.QFrame):
     """Full-width brand, drag surface, and frameless window controls."""
 
-    HEIGHT = 44
+    HEIGHT = TITLEBAR_HEIGHT
 
-    def __init__(self, window, sidebar_button=None):
+    def __init__(self, window):
         super().__init__(window)
         self._window = window
         self._drag_offset = None
@@ -120,10 +143,15 @@ class WindowTitleBar(QtWidgets.QFrame):
         self.title_label.setAlignment(QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter)
         self.title_label.setAttribute(QtCore.Qt.WA_TransparentForMouseEvents)
         layout.addWidget(self.title_label, 0, QtCore.Qt.AlignVCenter)
-        if sidebar_button is not None:
-            layout.addSpacing(8)
-            layout.addWidget(sidebar_button, 0, QtCore.Qt.AlignVCenter)
-            sidebar_button.show()
+        self.collapse_btn = make_icon_button(
+            "panel-left", "收起侧边栏", "NavCollapseButton", ICON_BUTTON_SIZE, ICON_SIZE
+        )
+        layout.addSpacing(SPACING_SM)
+        layout.addWidget(self.collapse_btn, 0, QtCore.Qt.AlignVCenter)
+        self.actions_layout = QtWidgets.QHBoxLayout()
+        self.actions_layout.setContentsMargins(0, 0, 0, 0)
+        self.actions_layout.setSpacing(SPACING_SM)
+        layout.addLayout(self.actions_layout)
         layout.addStretch(1)
 
         self.minimize_btn = WindowControlButton("minimize", "最小化", self)
@@ -135,6 +163,17 @@ class WindowTitleBar(QtWidgets.QFrame):
         for button in (self.minimize_btn, self.maximize_btn, self.close_btn):
             layout.addWidget(button, 0, QtCore.Qt.AlignVCenter)
         window.windowTitleChanged.connect(self.title_label.setText)
+
+    def add_panel_action(self, button):
+        if self.actions_layout.count() == 0:
+            self.actions_layout.addSpacing(SPACING_SM)
+        self.actions_layout.addWidget(button, 0, QtCore.Qt.AlignVCenter)
+
+    def update_sidebar_state(self, collapsed):
+        self.collapse_btn.setIcon(load_lucide_icon(
+            "panel-right" if collapsed else "panel-left", TEXT_SUB,
+        ))
+        self.collapse_btn.setToolTip("展开侧边栏" if collapsed else "收起侧边栏")
 
     def toggle_maximized(self):
         if self._window.isMaximized():
@@ -204,7 +243,7 @@ class WindowControlButton(QtWidgets.QPushButton):
         self._icon_size = ICON_SIZE
         self.setObjectName("WindowControlButton")
         self.setProperty("role", role)
-        self.setFixedWidth(46)
+        self.setFixedWidth(TITLEBAR_BUTTON_WIDTH)
         self.setIconSize(QtCore.QSize(self._icon_size, self._icon_size))
         self.setToolTip(tooltip)
         self.setCursor(QtCore.Qt.ArrowCursor)
@@ -318,7 +357,7 @@ class MainWindow(QtWidgets.QMainWindow):
         install_button_sizing(app)
         install_tooltips(app)
         self.setWindowTitle("plmConsultant")
-        self.resize(1400, 900)
+        self.resize(1280, 800)
         self.setMinimumSize(960, 640)
         self.setWindowIcon(load_lucide_icon("layout-dashboard", PRIMARY))
         self._log_sizes = [700, 200]
@@ -335,7 +374,9 @@ class MainWindow(QtWidgets.QMainWindow):
         shell_layout.setSpacing(0)
 
         self.nav_panel = self.controller.create_navigation()
-        self.title_bar = WindowTitleBar(self, self.nav_panel.collapse_btn)
+        self.title_bar = WindowTitleBar(self)
+        self.title_bar.collapse_btn.clicked.connect(self.nav_panel.toggle_collapse)
+        self.nav_panel.collapsedChanged.connect(self.title_bar.update_sidebar_state)
         shell_layout.addWidget(self.title_bar)
 
         self.body_container = QtWidgets.QWidget()
@@ -353,22 +394,17 @@ class MainWindow(QtWidgets.QMainWindow):
         self.config_page = ConfigPage(
             editor_path_provider=self.controller.settings.editor_path
         )
-        self.log_toggle_button = self.config_page.take_log_button()
-        self.log_toggle_button.setFixedWidth(32)
-        title_layout = self.title_bar.layout()
-        button_index = title_layout.indexOf(self.nav_panel.collapse_btn) + 1
-        title_layout.insertSpacing(button_index, 8)
-        title_layout.insertWidget(
-            button_index + 1, self.log_toggle_button, 0, QtCore.Qt.AlignVCenter,
+        self.log_toggle_button = make_icon_button(
+            "panel-bottom", "显示/隐藏输出面板", "HeaderButton", ICON_BUTTON_SIZE, ICON_SIZE
         )
-        self.artifacts_toggle_button = self.config_page.take_artifacts_button()
-        self.artifacts_toggle_button.setFixedWidth(32)
-        title_layout.insertSpacing(button_index + 2, 8)
-        title_layout.insertWidget(
-            button_index + 3, self.artifacts_toggle_button, 0, QtCore.Qt.AlignVCenter,
+        self.artifacts_toggle_button = make_icon_button(
+            "file-text", "显示/隐藏 Artifacts", "HeaderButton", ICON_BUTTON_SIZE, ICON_SIZE
         )
+        self.title_bar.add_panel_action(self.log_toggle_button)
+        self.title_bar.add_panel_action(self.artifacts_toggle_button)
+        self.log_toggle_button.clicked.connect(self.toggle_log)
+        self.artifacts_toggle_button.clicked.connect(self.config_page.toggle_artifacts)
         self.log_panel = LogPanel()
-        self.config_page.logToggleRequested.connect(self.toggle_log)
         self.log_panel.closeRequested.connect(self.hide_log)
         self.content_splitter.addWidget(self.config_page)
         self.content_splitter.addWidget(self.log_panel)
@@ -377,7 +413,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.main_container = QtWidgets.QWidget()
         self.main_container.setObjectName("MainContainer")
         main_layout = QtWidgets.QVBoxLayout(self.main_container)
-        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.setContentsMargins(*([SPACING_XS] * 4))
         main_layout.setSpacing(0)
         main_layout.addWidget(self.content_splitter)
 
@@ -407,7 +443,11 @@ class MainWindow(QtWidgets.QMainWindow):
         self.addActions([self.undo_action, self.redo_action])
         self.config_page.historyChanged.connect(self._update_history_actions)
         self._update_history_actions()
-        self._enable_background_focus(self.main_container)
+        for index in range(self.config_page.tabs.count()):
+            scroll = self.config_page.tabs.widget(index).scroll
+            if scroll is not None:
+                self._enable_background_focus(scroll)
+                self._enable_background_focus(scroll.widget())
 
     def _create_resize_handles(self):
         horizontal = QtCore.Qt.SizeHorCursor
@@ -475,12 +515,8 @@ class MainWindow(QtWidgets.QMainWindow):
 
     @staticmethod
     def _enable_background_focus(container):
-        # Blank areas take focus through Qt's normal mouse dispatch. Editors
-        # and item views keep their native focus-out commit behavior.
-        for widget in [container, *container.findChildren(QtWidgets.QWidget)]:
-            if type(widget) in (QtWidgets.QWidget, QtWidgets.QFrame) or widget is container:
-                if widget.focusPolicy() == QtCore.Qt.NoFocus:
-                    widget.setFocusPolicy(QtCore.Qt.ClickFocus)
+        if container.objectName() in {"ConfigScroll", "ConfigScrollContent", "SecondaryPage"}:
+            container.setFocusPolicy(QtCore.Qt.ClickFocus)
 
     def _application_state_changed(self, state):
         self._sync_window_chrome(state == QtCore.Qt.ApplicationActive)

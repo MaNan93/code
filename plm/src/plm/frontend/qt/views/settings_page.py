@@ -37,6 +37,16 @@ class _FormatterTable(QtWidgets.QTableWidget):
 
     ROW_HEIGHT = CONTROL_HEIGHT
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._row_height_timer = QtCore.QTimer(self)
+        self._row_height_timer.setSingleShot(True)
+        self._row_height_timer.timeout.connect(self.applyRowHeight)
+
+    def scheduleRowHeight(self):
+        if not self._row_height_timer.isActive():
+            self._row_height_timer.start(0)
+
     def eventFilter(self, watched, event):
         if event.type() == QtCore.QEvent.FocusIn:
             row = watched.property("formatterRow")
@@ -62,7 +72,7 @@ class _FormatterTable(QtWidgets.QTableWidget):
 
     def showEvent(self, event):
         super().showEvent(event)
-        QtCore.QTimer.singleShot(0, self.applyRowHeight)
+        self.scheduleRowHeight()
 
 
 class SettingsPage(SecondaryPage):
@@ -73,6 +83,9 @@ class SettingsPage(SecondaryPage):
             "verible_flags": None,
             **(preferences or {}),
         }
+        self.flag_table = None
+        self._flag_controls = {}
+        self._fill_flags(self.initial_preferences["verible_flags"])
         super().__init__("settings", parent)
         self._detection_started = False
 
@@ -162,6 +175,8 @@ class SettingsPage(SecondaryPage):
         for name, row in self.setting_rows.items():
             row.setVisible(name in visible_rows)
         is_formatter = index == 1
+        if is_formatter:
+            self._ensure_formatter_controls()
         self.formatter_panel.setVisible(is_formatter)
         self.general_rows_spacing.changeSize(
             0, 0 if is_formatter else 24,
@@ -200,7 +215,18 @@ class SettingsPage(SecondaryPage):
         browse_button.clicked.connect(self._browse_verible)
         path_row.addWidget(browse_button)
         layout.addLayout(path_row)
-        self.flag_table = _FormatterTable(0, 2)
+        return panel
+
+    def _ensure_formatter_controls(self):
+        if self.flag_table is not None:
+            return
+        groups = ((VERIBLE_ALIGN_PARAMS, ("align", "flush-left", "preserve", "infer")),
+                  (VERIBLE_INDENT_PARAMS, ("indent", "wrap")),
+                  (VERIBLE_BOOL_PARAMS, ("true", "false")),
+                  (VERIBLE_INT_PARAMS, None),
+                  (VERIBLE_STR_PARAMS, ("auto", "LF", "CR", "CRLF")))
+        self.flag_table = _FormatterTable(sum(len(params) for params, _ in groups), 2)
+        self.flag_table.setUpdatesEnabled(False)
         self.flag_table.setObjectName("ConfigDataTable")
         self.flag_table.setProperty("formatterTable", True)
         self.flag_table.setShowGrid(False)
@@ -218,22 +244,15 @@ class SettingsPage(SecondaryPage):
         formatter_header.hide()
         formatter_header.setFixedHeight(CONTROL_HEIGHT)
         formatter_header.setSectionResizeMode(0, QtWidgets.QHeaderView.Stretch)
-        formatter_header.setSectionResizeMode(1, QtWidgets.QHeaderView.ResizeToContents)
+        formatter_header.setSectionResizeMode(1, QtWidgets.QHeaderView.Fixed)
         self.flag_table.setAlternatingRowColors(True)
         self.flag_table.setVerticalScrollMode(QtWidgets.QAbstractItemView.ScrollPerPixel)
         self.flag_table.setHorizontalScrollMode(QtWidgets.QAbstractItemView.ScrollPerPixel)
         self.flag_table.setSizeAdjustPolicy(QtWidgets.QAbstractScrollArea.AdjustIgnored)
         self.flag_table.setMinimumHeight(240)
-        self._flag_controls = {}
-        groups = ((VERIBLE_ALIGN_PARAMS, ("align", "flush-left", "preserve", "infer")),
-                  (VERIBLE_INDENT_PARAMS, ("indent", "wrap")),
-                  (VERIBLE_BOOL_PARAMS, ("true", "false")),
-                  (VERIBLE_INT_PARAMS, None),
-                  (VERIBLE_STR_PARAMS, ("auto", "LF", "CR", "CRLF")))
+        row = 0
         for params, choices in groups:
             for name in params:
-                row = self.flag_table.rowCount()
-                self.flag_table.insertRow(row)
                 item = QtWidgets.QTableWidgetItem(name)
                 item.setFlags(item.flags() & ~QtCore.Qt.ItemIsEditable)
                 self.flag_table.setItem(row, 0, item)
@@ -267,15 +286,17 @@ class SettingsPage(SecondaryPage):
                 value_layout.addWidget(control)
                 self.flag_table.setCellWidget(row, 1, value_cell)
                 self._flag_controls[name] = control
-        layout.addWidget(self.flag_table, 1)
-        self._fill_flags(preferences["verible_flags"])
+                row += 1
+        self.formatter_panel.layout().addWidget(self.flag_table, 1)
+        self._fill_flags(self._original_flags)
         self.flag_table.applyRowHeight()
-        return panel
+        formatter_header.setSectionResizeMode(1, QtWidgets.QHeaderView.ResizeToContents)
+        self.flag_table.setUpdatesEnabled(True)
 
     def changeEvent(self, event):
         super().changeEvent(event)
-        if event.type() in (QtCore.QEvent.FontChange, QtCore.QEvent.StyleChange) and hasattr(self, "flag_table"):
-            QtCore.QTimer.singleShot(0, self.flag_table.applyRowHeight)
+        if event.type() in (QtCore.QEvent.FontChange, QtCore.QEvent.StyleChange) and self.flag_table is not None:
+            self.flag_table.scheduleRowHeight()
 
     def _flags_changed(self, *_):
         self._flags_dirty = True
@@ -357,8 +378,17 @@ class SettingsPage(SecondaryPage):
         }
 
     def _save_settings(self):
+        if self.flag_table is None:
+            validator = QtGui.QIntValidator(0, 2147483647)
+            for name in VERIBLE_INT_PARAMS:
+                value = self._original_flags[name]
+                if value.strip() and validator.validate(value, 0)[0] != QtGui.QValidator.Acceptable:
+                    self._select_section(1)
+                    break
         for name in VERIBLE_INT_PARAMS:
-            control = self._flag_controls[name]
+            control = self._flag_controls.get(name)
+            if control is None:
+                continue
             if control.text().strip() and not control.hasAcceptableInput():
                 self.settings_status.setText(f"{name} 必须是非负整数。")
                 formatter_index = next((i for i, button in enumerate(self.menu_buttons)

@@ -9,6 +9,7 @@ verible-verilog-format).
 """
 
 from plm.core.paths import mode_width
+from plm.core.gen_flags import BUS_TYPE_VALUES
 
 
 def gen_pkg(cfg, dpr=False):
@@ -826,7 +827,7 @@ def gen_clk_mux_phy_input(cfg, dpr=False):
 
 
 def gen_rst_mux(cfg, dpr=False):
-    """Each lane's phy_rst_n connects to its current owner's ctrl_rst_n.
+    """Route independent rst_n and perst_n inputs from each lane's owner.
 
     The input port is still called sel_tgt, but at the top level it's
     actually wired to pipe_lane_sel_gen's dec_tgt (the decoder's raw,
@@ -835,13 +836,14 @@ def gen_rst_mux(cfg, dpr=False):
     without waiting for pipe_lane_sel_sync to finish cross-clock-domain
     synchronization and the non-overlap window. Same for DPR: dec_tgt
     already has DPR combined in as one more candidate (see
-    pipe_lane_sel_gen), so dpr_rst_n takes over immediately too.
+    pipe_lane_sel_gen), so DPR's reset inputs take over immediately too.
     """
     LC, NC = cfg.lane_count, cfg.num_ctrl
 
     L = [
         "// PIPE lane mapper reset-mux submodule.",
         "// Each lane's phy_rst_n connects to its current owner's ctrl_rst_n.",
+        "// Independent phy_perst_n follows the same owner using ctrl_perst_n.",
         "// The input port is named sel_tgt, but at the top level it's actually wired to",
         "// pipe_lane_sel_gen's dec_tgt (the decoder's raw output, not synchronized by pipe_lane_sel_sync),",
         "// not sel_gen's final external sel_tgt -- reset follows mode directly, without waiting for pipe_lane_sel_sync.",
@@ -854,38 +856,43 @@ def gen_rst_mux(cfg, dpr=False):
         f"    parameter int NC = {NC}",
         ") (",
         "    input logic [NC-1:0] ctrl_rst_n,",
+        "    input logic [NC-1:0] ctrl_perst_n,",
     ]
     if dpr:
         L.append("    input logic dpr_rst_n,")
+        L.append("    input logic dpr_perst_n,")
     L.append("    input lane_sel_t sel_tgt,")
-    L.append("    output logic [NL-1:0] phy_rst_n")
+    L.append("    output logic [NL-1:0] phy_rst_n,")
+    L.append("    output logic [NL-1:0] phy_perst_n")
     L.append(");")
     L.append("")
 
     for g in cfg.groups:
         if g.is_direct and not dpr:
             c = g.cands[0]
-            for lane_idx in g.lanes:
-                L.append(
-                    f"    assign phy_rst_n[{lane_idx}] = ctrl_rst_n[{c}];"
-                    f"  // G{g.gid} direct to {cfg.controllers[c].name}"
-                )
+            for reset in ("rst_n", "perst_n"):
+                for lane_idx in g.lanes:
+                    L.append(
+                        f"    assign phy_{reset}[{lane_idx}] = ctrl_{reset}[{c}];"
+                        f"  // G{g.gid} direct to {cfg.controllers[c].name}"
+                    )
         else:
             names = ", ".join(cfg.controllers[c].name for c in g.cands) + (", DPR" if dpr else "")
             n = g.n + 1 if dpr else g.n
             L.append(f"    // G{g.gid} lane{g.lanes[0]}~{g.lanes[-1]}: {names}")
-            L.append(f"    logic rst_n_g{g.gid};")
-            L.append(f"    pipe_lane_data_mux #(.WIDTH(1), .N({n})) u_rst_g{g.gid} (")
-            L.append(f"        .sel  (sel_tgt.g{g.gid}),")
-            din_terms = ", ".join(f"ctrl_rst_n[{c}]" for c in reversed(g.cands))
-            if dpr:
-                din_terms = "dpr_rst_n, " + din_terms
-            L.append(f"        .din  ({{{din_terms}}}),")
-            L.append("        .safe (1'b0),")
-            L.append(f"        .dout (rst_n_g{g.gid})")
-            L.append("    );")
-            for lane_idx in g.lanes:
-                L.append(f"    assign phy_rst_n[{lane_idx}] = rst_n_g{g.gid};")
+            for reset, instance in (("rst_n", "rst"), ("perst_n", "perst")):
+                L.append(f"    logic {reset}_g{g.gid};")
+                L.append(f"    pipe_lane_data_mux #(.WIDTH(1), .N({n})) u_{instance}_g{g.gid} (")
+                L.append(f"        .sel  (sel_tgt.g{g.gid}),")
+                din_terms = ", ".join(f"ctrl_{reset}[{c}]" for c in reversed(g.cands))
+                if dpr:
+                    din_terms = f"dpr_{reset}, " + din_terms
+                L.append(f"        .din  ({{{din_terms}}}),")
+                L.append("        .safe (1'b0),")
+                L.append(f"        .dout ({reset}_g{g.gid})")
+                L.append("    );")
+                for lane_idx in g.lanes:
+                    L.append(f"    assign phy_{reset}[{lane_idx}] = {reset}_g{g.gid};")
     L.append("")
     L.append("endmodule")
     return "\n".join(L) + "\n"
@@ -1234,6 +1241,7 @@ def gen_top(cfg, pclk_mode="pclk_as_phy_output", sel_mode="sync", dpr=False):
         L.append(f"    input logic [{mode_width(nm)-1}:0] mode,")
         L.append("    output logic [NL-1:0] phy_pclk_in,")
         L.append("    output logic [NL-1:0] phy_rst_n,")
+    L.append("    output logic [NL-1:0] phy_perst_n,")
     L.append("    // PHY-side PIPE data")
     L.append("    output mac2phy_lane_t [NL-1:0] phy_mac2phy,")
     L.append("    input phy2mac_lane_t [NL-1:0] phy_phy2mac,")
@@ -1242,6 +1250,7 @@ def gen_top(cfg, pclk_mode="pclk_as_phy_output", sel_mode="sync", dpr=False):
         L.append("    // connected 1:1 to every PHY lane -- v_lane_mask[lane_idx]=1 overrides lane lane_idx.")
         L.append("    input logic [NL-1:0] v_lane_mask,")
         L.append("    input logic dpr_rst_n,")
+        L.append("    input logic dpr_perst_n,")
         L.append("    input mac2phy_lane_t [NL-1:0] dpr_mac2phy,")
         L.append("    output phy2mac_lane_t [NL-1:0] dpr_phy2mac,")
         if phy_input_mode:
@@ -1254,6 +1263,7 @@ def gen_top(cfg, pclk_mode="pclk_as_phy_output", sel_mode="sync", dpr=False):
         c = cfg.controllers[cid]
         L.append(f"    // {c.name} x{c.max_width}")
         L.append(f"    input logic {c.lname}_rst_n,   // already synchronized externally")
+        L.append(f"    input logic {c.lname}_perst_n, // independent reset, routed like rst_n")
         L.append(f"    input mac2phy_lane_t [{c.max_width-1}:0] {c.lname}_mac2phy,")
         L.append(f"    output phy2mac_lane_t [{c.max_width-1}:0] {c.lname}_phy2mac,")
         if phy_input_mode:
@@ -1272,6 +1282,12 @@ def gen_top(cfg, pclk_mode="pclk_as_phy_output", sel_mode="sync", dpr=False):
     L.append(
         "    assign ctrl_rst_n = {"
         + ", ".join(f"{cfg.controllers[cid].lname}_rst_n" for cid in sorted(cfg.controllers, reverse=True))
+        + "};"
+    )
+    L.append("    logic [NC-1:0] ctrl_perst_n;")
+    L.append(
+        "    assign ctrl_perst_n = {"
+        + ", ".join(f"{cfg.controllers[cid].lname}_perst_n" for cid in sorted(cfg.controllers, reverse=True))
         + "};"
     )
     if not phy_input_mode:
@@ -1398,7 +1414,7 @@ def gen_top(cfg, pclk_mode="pclk_as_phy_output", sel_mode="sync", dpr=False):
 
     # ---- reset-mux submodule
     L.append("    //------------------------------------------------------------")
-    L.append("    // Reset-mux submodule: phy_rst_n selects ctrl_rst_n by current owner")
+    L.append("    // Reset-mux submodule: independent rst_n/perst_n select the current owner's inputs")
     L.append(
         "    // Uses dec_tgt (the decoder's raw output, not synchronized by pipe_lane_sel_sync), not sel_tgt"
     )
@@ -1408,10 +1424,13 @@ def gen_top(cfg, pclk_mode="pclk_as_phy_output", sel_mode="sync", dpr=False):
     L.append("        .NC   (NC)")
     L.append("    ) u_rst_mux (")
     L.append("        .ctrl_rst_n (ctrl_rst_n),")
+    L.append("        .ctrl_perst_n (ctrl_perst_n),")
     if dpr:
         L.append("        .dpr_rst_n  (dpr_rst_n),")
+        L.append("        .dpr_perst_n (dpr_perst_n),")
     L.append("        .sel_tgt    (dec_tgt),")
-    L.append("        .phy_rst_n  (phy_rst_n)")
+    L.append("        .phy_rst_n  (phy_rst_n),")
+    L.append("        .phy_perst_n (phy_perst_n)")
     L.append("    );")
     L.append("")
 
@@ -1471,15 +1490,17 @@ def gen_top(cfg, pclk_mode="pclk_as_phy_output", sel_mode="sync", dpr=False):
     return "\n".join(L) + "\n"
 
 
-def gen_connection(cfg, pclk_mode="pclk_as_phy_output", dpr=False, sel_mode="sync"):
+def gen_connection(cfg, pclk_mode="pclk_as_phy_output", dpr=False, sel_mode="sync", bus_type="bus"):
     """pipe_lane_mapper_connection.sv: a pure struct<->flat bridge around
     pipe_lane_mapper. The mapper's two packed-struct-array ports per side
     (PHY, and one per controller) become individual flat ports here, one
     per pipe_signals.csv row -- for integration with flows/IP that don't
     want SV struct ports.
 
-    "perlane" signals (the default) stay an unpacked array of the
-    controller's own max_width. A MAC-to-PHY "shared" signal collapses to a
+    With bus_type="bus", "perlane" signals stay an unpacked array of the
+    controller's own max_width. With "flat", each port becomes one packed
+    vector; lane i occupies [i * signal_width +: signal_width], lane 0 low.
+    A MAC-to-PHY "shared" signal collapses to a
     single scalar input per controller: the wrapper copies the one value to
     all of that controller's lanes. PHY-to-MAC signals are always per-lane.
 
@@ -1491,6 +1512,20 @@ def gen_connection(cfg, pclk_mode="pclk_as_phy_output", dpr=False, sel_mode="syn
     per-lane struct field; "shared" is purely a wrapper-level convenience
     for whatever instantiates this file.
     """
+    if bus_type not in BUS_TYPE_VALUES:
+        raise ValueError(f"bus_type must be flat or bus (got {bus_type!r})")
+
+    def lane_port(direction, signal, name, lanes):
+        if bus_type == "flat":
+            return f"    {direction} logic [{lanes} * {signal.width} - 1:0] {name},"
+        last_lane = "NL-1" if lanes == "NL" else lanes - 1
+        return f"    {direction} logic [{signal.width-1}:0] {name} [0:{last_lane}],"
+
+    def lane_value(name, signal, lane):
+        if bus_type == "flat":
+            return f"{name}[{lane} * {signal.width} +: {signal.width}]"
+        return f"{name}[{lane}]"
+
     LC, NC = cfg.lane_count, cfg.num_ctrl
     nm = len(cfg.modes)
     phy_input_mode = pclk_mode == "pclk_as_phy_input"
@@ -1503,7 +1538,11 @@ def gen_connection(cfg, pclk_mode="pclk_as_phy_output", dpr=False, sel_mode="syn
     L.append("// row becomes its own flat port here instead of a packed-struct field, for")
     L.append("// integration with flows/IP that don't want SV struct ports. A MAC-to-PHY")
     L.append("// signal_type=shared collapses a controller's own lanes to one scalar input; perlane")
-    L.append("// (the default) stays an unpacked array of max_width. The PHY side is always")
+    if bus_type == "bus":
+        L.append("// (the default) stays an unpacked array of max_width. The PHY side is always")
+    else:
+        L.append("// ports are one-dimensional vectors: lane i occupies [i * width +: width].")
+        L.append("// Lane 0 occupies the least significant slice. The PHY side is always")
     L.append("// per-lane -- which controller owns a PHY lane still varies by mode, so even a")
     L.append("// \"shared\" signal still needs its own value per PHY lane there.")
     L.append("import pipe_lane_signal_pkg::*;")
@@ -1524,24 +1563,26 @@ def gen_connection(cfg, pclk_mode="pclk_as_phy_output", dpr=False, sel_mode="syn
         L.append(f"    input logic [{mode_width(nm)-1}:0] mode,")
         L.append("    output logic [NL-1:0] phy_pclk_in,")
         L.append("    output logic [NL-1:0] phy_rst_n,")
+    L.append("    output logic [NL-1:0] phy_perst_n,")
     L.append("    // PHY-side PIPE data, flattened -- always per-lane regardless of signal_type")
     for s in m2p_sigs:
-        L.append(f"    output logic [{s.width-1}:0] phy_{s.name} [0:NL-1],")
+        L.append(lane_port("output", s, f"phy_{s.name}", "NL"))
     for s in p2m_sigs:
-        L.append(f"    input logic [{s.width-1}:0] phy_{s.name} [0:NL-1],")
+        L.append(lane_port("input", s, f"phy_{s.name}", "NL"))
     if dpr:
         L.append("    // DPR (diagnostic probe): a virtual controller with link width NL,")
         L.append("    // connected 1:1 to every PHY lane -- v_lane_mask[lane_idx]=1 overrides lane lane_idx.")
         L.append("    input logic [NL-1:0] v_lane_mask,")
         L.append("    input logic dpr_rst_n,")
+        L.append("    input logic dpr_perst_n,")
         for s in m2p_sigs:
             if s.is_shared:
                 L.append(f"    // {s.name}: shared across DPR's own lanes")
                 L.append(f"    input logic [{s.width-1}:0] dpr_{s.name},")
             else:
-                L.append(f"    input logic [{s.width-1}:0] dpr_{s.name} [0:NL-1],")
+                L.append(lane_port("input", s, f"dpr_{s.name}", "NL"))
         for s in p2m_sigs:
-            L.append(f"    output logic [{s.width-1}:0] dpr_{s.name} [0:NL-1],")
+            L.append(lane_port("output", s, f"dpr_{s.name}", "NL"))
         if phy_input_mode:
             L.append("    input logic dpr_pclk,")
             L.append("    output logic [NL-1:0] dpr_rx_clk,")
@@ -1552,14 +1593,15 @@ def gen_connection(cfg, pclk_mode="pclk_as_phy_output", dpr=False, sel_mode="syn
         c = cfg.controllers[cid]
         L.append(f"    // {c.name} x{c.max_width}")
         L.append(f"    input logic {c.lname}_rst_n,")
+        L.append(f"    input logic {c.lname}_perst_n,")
         for s in m2p_sigs:
             if s.is_shared:
                 L.append(f"    // {s.name}: shared across {c.name}'s own lanes")
                 L.append(f"    input logic [{s.width-1}:0] {c.lname}_{s.name},")
             else:
-                L.append(f"    input logic [{s.width-1}:0] {c.lname}_{s.name} [0:{c.max_width-1}],")
+                L.append(lane_port("input", s, f"{c.lname}_{s.name}", c.max_width))
         for s in p2m_sigs:
-            L.append(f"    output logic [{s.width-1}:0] {c.lname}_{s.name} [0:{c.max_width-1}],")
+            L.append(lane_port("output", s, f"{c.lname}_{s.name}", c.max_width))
         if phy_input_mode:
             L.append(f"    input logic [{c.max_width-1}:0] {c.lname}_pclk,")
             L.append(f"    output logic [{c.max_width-1}:0] {c.lname}_rx_clk,")
@@ -1587,9 +1629,10 @@ def gen_connection(cfg, pclk_mode="pclk_as_phy_output", dpr=False, sel_mode="syn
     L.append("    //------------------------------------------------------------")
     for lane_idx in range(LC):
         for s in m2p_sigs:
-            L.append(f"    assign phy_{s.name}[{lane_idx}] = w_phy_mac2phy[{lane_idx}].{s.name};")
+            target = lane_value(f"phy_{s.name}", s, lane_idx)
+            L.append(f"    assign {target} = w_phy_mac2phy[{lane_idx}].{s.name};")
     for lane_idx in range(LC):
-        fields = ", ".join(f"{s.name}: phy_{s.name}[{lane_idx}]" for s in p2m_sigs)
+        fields = ", ".join(f"{s.name}: {lane_value(f'phy_{s.name}', s, lane_idx)}" for s in p2m_sigs)
         L.append(f"    assign w_phy_phy2mac[{lane_idx}] = '{{{fields}}};")
     L.append("")
 
@@ -1602,12 +1645,13 @@ def gen_connection(cfg, pclk_mode="pclk_as_phy_output", dpr=False, sel_mode="syn
         for lane_idx in range(c.max_width):
             fields = []
             for s in m2p_sigs:
-                val = f"{c.lname}_{s.name}" if s.is_shared else f"{c.lname}_{s.name}[{lane_idx}]"
+                val = f"{c.lname}_{s.name}" if s.is_shared else lane_value(f"{c.lname}_{s.name}", s, lane_idx)
                 fields.append(f"{s.name}: {val}")
             L.append(f"    assign w_{c.lname}_mac2phy[{lane_idx}] = '{{{', '.join(fields)}}};")
         for s in p2m_sigs:
             for lane_idx in range(c.max_width):
-                L.append(f"    assign {c.lname}_{s.name}[{lane_idx}] = w_{c.lname}_phy2mac[{lane_idx}].{s.name};")
+                target = lane_value(f"{c.lname}_{s.name}", s, lane_idx)
+                L.append(f"    assign {target} = w_{c.lname}_phy2mac[{lane_idx}].{s.name};")
         L.append("")
 
     if dpr:
@@ -1617,12 +1661,13 @@ def gen_connection(cfg, pclk_mode="pclk_as_phy_output", dpr=False, sel_mode="syn
         for lane_idx in range(LC):
             fields = []
             for s in m2p_sigs:
-                val = f"dpr_{s.name}" if s.is_shared else f"dpr_{s.name}[{lane_idx}]"
+                val = f"dpr_{s.name}" if s.is_shared else lane_value(f"dpr_{s.name}", s, lane_idx)
                 fields.append(f"{s.name}: {val}")
             L.append(f"    assign w_dpr_mac2phy[{lane_idx}] = '{{{', '.join(fields)}}};")
         for s in p2m_sigs:
             for lane_idx in range(LC):
-                L.append(f"    assign dpr_{s.name}[{lane_idx}] = w_dpr_phy2mac[{lane_idx}].{s.name};")
+                target = lane_value(f"dpr_{s.name}", s, lane_idx)
+                L.append(f"    assign {target} = w_dpr_phy2mac[{lane_idx}].{s.name};")
         L.append("")
 
     # ---- the real DUT
@@ -1644,11 +1689,13 @@ def gen_connection(cfg, pclk_mode="pclk_as_phy_output", dpr=False, sel_mode="syn
         L.append("        .mode         (mode),")
         L.append("        .phy_pclk_in  (phy_pclk_in),")
         L.append("        .phy_rst_n    (phy_rst_n),")
+    L.append("        .phy_perst_n  (phy_perst_n),")
     L.append("        .phy_mac2phy  (w_phy_mac2phy),")
     L.append("        .phy_phy2mac  (w_phy_phy2mac),")
     if dpr:
         L.append("        .v_lane_mask  (v_lane_mask),")
         L.append("        .dpr_rst_n    (dpr_rst_n),")
+        L.append("        .dpr_perst_n  (dpr_perst_n),")
         L.append("        .dpr_mac2phy  (w_dpr_mac2phy),")
         L.append("        .dpr_phy2mac  (w_dpr_phy2mac),")
         L.append("        .dpr_pclk     (dpr_pclk),")
@@ -1657,6 +1704,7 @@ def gen_connection(cfg, pclk_mode="pclk_as_phy_output", dpr=False, sel_mode="syn
     for cid in sorted(cfg.controllers):
         c = cfg.controllers[cid]
         L.append(f"        .{c.lname}_rst_n   ({c.lname}_rst_n),")
+        L.append(f"        .{c.lname}_perst_n ({c.lname}_perst_n),")
         L.append(f"        .{c.lname}_mac2phy (w_{c.lname}_mac2phy),")
         L.append(f"        .{c.lname}_phy2mac (w_{c.lname}_phy2mac),")
         if phy_input_mode:

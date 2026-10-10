@@ -8,10 +8,6 @@ from PyQt5 import QtGui
 MAX_PREVIEW_BYTES = 200 * 1024
 
 MAX_PREVIEW_CACHE_BYTES = 8 * 1024 * 1024
-ARTIFACT_LANGUAGES = {
-    ".sv": "SystemVerilog", ".svh": "SystemVerilog",
-    ".v": "Verilog", ".vh": "Verilog", ".json": "JSON",
-}
 
 
 class ArtifactPreview:
@@ -146,7 +142,6 @@ class ArtifactPreview:
                     def show_diff(diff):
                         if preview_revision == self._preview_revision:
                             self.preview.setPlainText(diff)
-                            self._update_editor_status()
                             if self.search_input.text():
                                 self._search_changed()
 
@@ -185,43 +180,19 @@ class ArtifactPreview:
         self._output_state = state
         self._output_text = text
         self._output_detail = detail
-        self.status.setProperty("state", state)
-        self.status.style().unpolish(self.status)
-        self.status.style().polish(self.status)
         self._update_status()
 
     def _update_status(self):
         text = self._output_text
+        if not text and self._readable:
+            text = self._file_status
         if not self._readable and (self.current_path is not None or not text):
             text = self._file_status
-        self.status.setText(text)
-        self.status.setVisible(bool(text))
-        self.file_progress.setText(
-            f"{self.selection.current_index + 1}/{len(self.selection.files)}"
-            + (f" · {len(self._current_contents.get(str(self.current_path), '').splitlines())} 行"
-               if self._readable else "")
-            if self.current_path is not None else ""
-        )
-        self.status.setToolTip("\n".join(part for part in (self._file_error, self._output_detail) if part))
-        self._update_editor_status()
-
-    def _update_editor_status(self):
-        if not self._readable or self.current_path is None:
-            self.editor_metadata.set_metadata("")
-            return
-        cursor = self.preview.textCursor()
-        text = self._current_contents.get(str(self.current_path), "")
-        newlines = "CRLF" if "\r\n" in text else "LF"
-        if newlines == "CRLF" and "\n" in text.replace("\r\n", ""):
-            newlines = "Mixed"
-        language = ARTIFACT_LANGUAGES.get(self.current_path.suffix.lower(), "Plain Text")
-        if self.diff_button.isChecked() and self._diff_available():
-            language = "Diff"
-        metadata = (
-            f"行 {cursor.blockNumber() + 1}，"
-            f"列 {cursor.positionInBlock() + 1} · {language} · UTF-8 · {newlines} · RO"
-        )
-        self.editor_metadata.set_metadata(metadata)
+        self.status_text = text
+        self.toolbar.setAccessibleDescription(text)
+        self.toolbar.setToolTip("\n".join(
+            part for part in (text, self._file_error, self._output_detail) if part
+        ))
 
     def _update_highlighting(self, *_):
         is_verilog = (

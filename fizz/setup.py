@@ -5,11 +5,14 @@ from setuptools import setup, find_packages
 
 setup(
     name="fizz",
-    version="0.3.0",
+    version="0.3.1",
     packages=find_packages(where="src"),
     package_dir={"": "src"},
     package_data={
-        "fizz.frontend.qt": ["assets/fonts/*.ttf", "assets/fonts/*.txt", "assets/fonts/*.md"],
+        "fizz.frontend.qt": [
+            "assets/fonts/*.ttf", "assets/fonts/*.txt", "assets/fonts/*.md",
+            "assets/icons/*.svg", "assets/icons/*.txt", "styles/*.qss",
+        ],
     },
     python_requires=">=3.12",
     install_requires=["PyQt5>=5.15"],

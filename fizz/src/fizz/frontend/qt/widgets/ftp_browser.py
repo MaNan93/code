@@ -5,6 +5,7 @@ from PyQt5 import QtCore, QtWidgets
 
 from fizz import core
 from fizz.frontend.qt.workers import FtpConnectWorker, FtpListWorker
+from fizz.frontend.qt.widgets.common import load_lucide_icon, polish_controls
 
 
 class FtpBrowserDialog(QtWidgets.QDialog):
@@ -50,6 +51,7 @@ class FtpBrowserDialog(QtWidgets.QDialog):
         layout.addWidget(self.listbox, 1)
         layout.addWidget(self.status_label)
         layout.addLayout(btn_row)
+        polish_controls(self)
 
         QtCore.QTimer.singleShot(0, self._connect)
 
@@ -75,13 +77,15 @@ class FtpBrowserDialog(QtWidgets.QDialog):
         self.path_edit.setText(pwd)
         self.listbox.clear()
         for name in entries:
-            self.listbox.addItem(f"[DIR]  {name}")
+            item = QtWidgets.QListWidgetItem(load_lucide_icon("folder"), name)
+            item.setData(QtCore.Qt.UserRole, name)
+            self.listbox.addItem(item)
         self.up_btn.setEnabled(pwd != "/")
         self.ok_btn.setEnabled(True)
         self.status_label.setText(f"{pwd}  ({len(entries)} 个子目录)")
 
     def _go_into(self, item):
-        name = item.text().replace("[DIR]  ", "", 1)
+        name = item.data(QtCore.Qt.UserRole) or item.text()
         new_path = self.current_path.rstrip("/") + "/" + name
         self._list(new_path)
 

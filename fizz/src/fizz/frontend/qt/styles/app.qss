@@ -1,0 +1,89 @@
+QWidget {
+    background: $bg_main; color: $text_main;
+    font-family: $font_family; font-size: $font_size_body;
+}
+QLabel { background: transparent; }
+QFrame#WindowTitleBar, QFrame#NavPanel { background: $bg_sidebar; border: none; }
+QLabel#WindowBrandName, QLabel#PageTitle { font-weight: 600; }
+QFrame#NavPanel QLabel#SectionTitle, QLabel#PageDescription, QLabel#Hint {
+    color: $text_sub; background: transparent;
+}
+QFrame#PageHeader { background: $bg_main; border-bottom: 1px solid $border; }
+QWidget#WorkflowPage, QScrollArea#FormScroll, QScrollArea#FormScroll > QWidget > QWidget {
+    background: $bg_main; border: none;
+}
+QFrame#Section, QFrame#LogPanel { background: $bg_sidebar; border: none; border-radius: 16px; }
+QFrame#Section QLabel { background: transparent; }
+QLabel#SectionTitle { font-weight: 600; }
+QLabel#VersionLabel { color: $text_muted; font-size: 12px; }
+QPushButton {
+    background: $bg_subtle; color: $text_main; border: none;
+    border-radius: 20px; padding: 8px 16px;
+}
+QPushButton:hover { background: $bg_hover; }
+QPushButton:pressed { background: $border; }
+QPushButton:disabled { background: $bg_subtle; color: $text_muted; }
+QPushButton#PrimaryBtn, QPushButton#primaryBtn { background: $primary; color: white; }
+QPushButton#PrimaryBtn:hover, QPushButton#primaryBtn:hover { background: $primary_hover; }
+QPushButton#PrimaryBtn:disabled, QPushButton#primaryBtn:disabled { background: $bg_subtle; color: $text_muted; }
+QPushButton#NavButton, QPushButton#NavIconBtn {
+    background: transparent; text-align: left; border-radius: 20px;
+    padding: 0px 12px;
+}
+QPushButton#NavIconBtn { padding: 0px; text-align: center; }
+QPushButton#NavButton:hover, QPushButton#NavIconBtn:hover { background: $bg_hover; }
+QPushButton#NavButton:checked, QPushButton#NavIconBtn:checked { background: $bg_hover; }
+QPushButton#WindowControlButton { background: transparent; border-radius: 0; padding: 0; }
+QPushButton#WindowControlButton:hover { background: $bg_hover; }
+QPushButton#WindowControlButton[role="close"]:hover { background: $danger; }
+QToolButton { background: transparent; border: none; border-radius: 12px; padding: 4px; }
+QToolButton:hover { background: $bg_hover; }
+QLineEdit, QComboBox, QSpinBox {
+    background: $bg_subtle; border: 1px solid transparent; border-radius: 12px;
+    padding: 7px 12px; color: $text_main;
+    selection-background-color: $primary_soft; selection-color: $text_main;
+}
+QLineEdit:hover, QComboBox:hover, QSpinBox:hover { border-color: $border; }
+QLineEdit:focus, QComboBox:focus, QSpinBox:focus { border-color: $primary; }
+QLineEdit:disabled, QComboBox:disabled, QSpinBox:disabled { color: $text_muted; }
+QComboBox::drop-down { border: none; width: 28px; }
+QComboBox QAbstractItemView { background: $bg_main; selection-background-color: $primary_soft; selection-color: $text_main; border: 1px solid $border; }
+QCheckBox { background: transparent; spacing: 8px; }
+QCheckBox::indicator { width: 16px; height: 16px; border: 1px solid $text_muted; border-radius: 4px; background: $bg_main; }
+QCheckBox::indicator:checked { background: $primary; border-color: $primary; }
+QListWidget, QTreeWidget, QTableWidget {
+    background: $bg_main; border: none; border-radius: 12px;
+    outline: none; selection-background-color: $primary_soft; selection-color: $text_main;
+}
+QListWidget::item, QTreeWidget::item { padding: 8px 12px; border-radius: 10px; }
+QListWidget::item:hover, QTreeWidget::item:hover { background: $bg_subtle; }
+QListWidget::item:selected, QTreeWidget::item:selected { background: $primary_soft; color: $text_main; }
+QHeaderView::section { background: $bg_subtle; border: none; padding: 8px 12px; color: $text_sub; }
+QTableWidget { gridline-color: $border; alternate-background-color: $bg_sidebar; }
+QTableWidget::item { padding: 8px; }
+QTextEdit, QPlainTextEdit {
+    background: $bg_sidebar; border: none; border-radius: 12px;
+    padding: 8px; font-family: $font_mono; font-size: 13px;
+}
+QFrame#Section QTextEdit { background: $bg_main; }
+QTextEdit#LogOutput { background: $bg_sidebar; padding: 8px 12px; }
+QProgressBar { background: $bg_subtle; border: none; border-radius: 6px; min-height: 12px; max-height: 12px; }
+QProgressBar::chunk { background: $primary; border-radius: 6px; }
+QTabWidget::pane { background: $bg_sidebar; border: none; border-radius: 12px; }
+QTabBar { background: transparent; }
+QTabBar::tab { background: transparent; color: $text_sub; padding: 8px 16px; border-bottom: 2px solid transparent; }
+QTabBar::tab:selected { color: $text_main; border-bottom-color: $primary; }
+QTabBar::tab:hover { background: $bg_subtle; }
+QStatusBar { background: $bg_main; color: $text_sub; border-top: 1px solid $border; font-size: 12px; }
+QStatusBar::item { border: none; }
+QSplitter::handle { background: $bg_main; height: 8px; width: 8px; }
+QSplitter::handle:hover { background: $bg_subtle; }
+QMenu { background: $bg_main; border: 1px solid $border; border-radius: 12px; padding: 8px; }
+QMenu::item { padding: 8px 24px 8px 12px; border-radius: 12px; }
+QMenu::item:selected { background: $bg_hover; }
+QScrollBar:vertical { background: transparent; width: 10px; margin: 2px; }
+QScrollBar:horizontal { background: transparent; height: 10px; margin: 2px; }
+QScrollBar::handle { background: #CBD2DC; border-radius: 4px; min-height: 28px; min-width: 28px; }
+QScrollBar::add-line, QScrollBar::sub-line { width: 0; height: 0; }
+QScrollBar::add-page, QScrollBar::sub-page { background: transparent; }
+QToolTip { background: $text_main; color: white; border: none; border-radius: 6px; padding: 6px 10px; }

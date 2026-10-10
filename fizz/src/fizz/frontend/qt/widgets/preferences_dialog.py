@@ -2,15 +2,15 @@
 
 from PyQt5 import QtWidgets
 
-from fizz.frontend.qt.widgets import sap_icons
+from fizz.frontend.qt.widgets.common import load_lucide_icon, polish_controls
 
 
 class PreferencesDialog(QtWidgets.QDialog):
     def __init__(self, values, dialog_initial_dir, parent=None):
         super().__init__(parent)
-        self.setWindowTitle("preference")
-        self.resize(700, 480)
-        self.setMinimumSize(600, 480)
+        self.setWindowTitle("fizz 设置")
+        self.resize(820, 580)
+        self.setMinimumSize(720, 560)
         self._dialog_initial_dir = dialog_initial_dir
         self.action = None  # "save" | "open"
 
@@ -42,7 +42,7 @@ class PreferencesDialog(QtWidgets.QDialog):
             form.addWidget(field, row, 1)
             if browse_cb is not None:
                 btn = QtWidgets.QPushButton("浏览...")
-                btn.setIcon(sap_icons.icon("open-folder"))
+                btn.setIcon(load_lucide_icon("folder-open"))
                 btn.clicked.connect(browse_cb)
                 form.addWidget(btn, row, 2)
 
@@ -57,9 +57,12 @@ class PreferencesDialog(QtWidgets.QDialog):
         btn_row.addWidget(save_btn)
 
         layout = QtWidgets.QVBoxLayout(self)
+        layout.setContentsMargins(24, 24, 24, 24)
+        layout.setSpacing(16)
         layout.addLayout(form)
         layout.addStretch(1)
         layout.addLayout(btn_row)
+        polish_controls(self)
 
     def _browse_vcs_key(self):
         path, _ = QtWidgets.QFileDialog.getOpenFileName(

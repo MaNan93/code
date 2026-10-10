@@ -17,7 +17,7 @@ import os
 import re
 import shutil
 import subprocess
-from urllib.parse import urlparse
+from urllib.parse import unquote, urlparse
 
 DEFAULT_OBF_TOOL = "verible-verilog-obfuscate"
 DEFAULT_VCS_OPTIONS = "-ipopt=partialprotect -ipopt=overwrite"
@@ -560,10 +560,110 @@ class RLskitResult:
         self.tar_file = ""
         self.cksum = ""
         self.upload_ok = False
+        self.upload_attempted = False
+        self.upload_skipped = False
         self.target_url = ""
 
 
-def run_rlskit_package(src_dir, suffix, ftp_url, ftp_user, ftp_pass, on_line):
+class UploadCancelled(Exception):
+    """Raised cooperatively when the user cancels an active upload."""
+
+
+def run_rlskit_ftp_upload(tar_file, target_url, ftp_user, ftp_pass, overwrite,
+                          on_line, on_progress=lambda current, total: None,
+                          should_cancel=lambda: False):
+    """Upload one existing archive to FTP, optionally replacing its target."""
+    result = RLskitResult()
+    result.tar_file = tar_file
+    result.target_url = target_url
+    file_size = os.path.getsize(tar_file)
+    parsed = urlparse(target_url)
+    if parsed.scheme.lower() != "ftp":
+        raise ValueError("覆盖上传目前只支持 FTP URL")
+
+    on_progress(0, file_size)
+    ftp = ftplib.FTP()
+    ftp.connect(parsed.hostname or "", parsed.port or 21, timeout=30)
+    ftp.login(ftp_user, ftp_pass)
+    try:
+        remote_path = unquote(parsed.path or "/")
+        remote_dir, remote_name = remote_path.rsplit("/", 1)
+        ftp.cwd(remote_dir or "/")
+        exists = remote_name in ftp.nlst()
+        if exists and not overwrite:
+            result.upload_skipped = True
+            on_line(
+                f"=== 未上传: 远端文件已存在 ===\n"
+                f"   {target_url}\n本地文件: {tar_file}\n\n"
+            )
+            return result
+
+        result.upload_attempted = True
+        action = "覆盖上传" if exists else "FTP 上传"
+        on_line(f"> {action}: {os.path.basename(tar_file)}\n   -> {target_url}\n")
+        uploaded = 0
+        temp_name = f".{remote_name}.fizz-uploading"
+        backup_name = f".{remote_name}.fizz-backup"
+
+        def _sent(block):
+            nonlocal uploaded
+            if should_cancel():
+                raise UploadCancelled()
+            uploaded += len(block)
+            on_progress(min(uploaded, file_size), file_size)
+
+        try:
+            with open(tar_file, "rb") as upload_file:
+                ftp.storbinary(
+                    f"STOR {temp_name}", upload_file,
+                    blocksize=256 * 1024, callback=_sent,
+                )
+            if should_cancel():
+                raise UploadCancelled()
+            if exists:
+                try:
+                    ftp.delete(backup_name)
+                except ftplib.all_errors:
+                    pass
+                ftp.rename(remote_name, backup_name)
+                try:
+                    ftp.rename(temp_name, remote_name)
+                except Exception:
+                    ftp.rename(backup_name, remote_name)
+                    raise
+                try:
+                    ftp.delete(backup_name)
+                except ftplib.all_errors:
+                    pass
+            else:
+                ftp.rename(temp_name, remote_name)
+        except UploadCancelled:
+            try:
+                ftp.delete(temp_name)
+            except ftplib.all_errors:
+                pass
+            on_line("\n--- 上传已取消，远端临时文件已清理 ---\n")
+            raise
+        except Exception:
+            try:
+                ftp.delete(temp_name)
+            except ftplib.all_errors:
+                pass
+            raise
+        result.upload_ok = True
+        on_progress(file_size, file_size)
+        on_line("\n--- FTP 上传完成 ---\n")
+        return result
+    finally:
+        try:
+            ftp.quit()
+        except Exception:
+            ftp.close()
+
+
+def run_rlskit_package(src_dir, suffix, ftp_url, ftp_user, ftp_pass, on_line,
+                       on_progress=lambda current, total: None,
+                       should_cancel=lambda: False):
     """Copy src_dir -> src_dir+suffix, tar.gz it, cksum it, and optionally
     curl-upload it over FTP/HTTP if ftp_url+ftp_user are set and the remote
     file doesn't already exist. Returns an RLskitResult."""
@@ -609,30 +709,39 @@ def run_rlskit_package(src_dir, suffix, ftp_url, ftp_user, ftp_pass, on_line):
         target_url = ftp_url.rstrip("/") + "/" + os.path.basename(tar_file)
         result.target_url = target_url
         on_line(f"> 检查远端文件: {os.path.basename(tar_file)}\n")
-
-        chk = subprocess.run(
-            ["curl", "-sI", "--fail", target_url, "-u", f"{ftp_user}:{ftp_pass}"],
-            stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-        )
-        if chk.returncode == 0:
-            on_line(f"=== 未上传: 远端文件已存在 ===\n   {target_url}\n本地文件: {tar_file}\n\n")
+        parsed = urlparse(target_url)
+        if parsed.scheme.lower() == "ftp":
+            upload_result = run_rlskit_ftp_upload(
+                tar_file, target_url, ftp_user, ftp_pass, False,
+                on_line, on_progress, should_cancel,
+            )
+            result.upload_ok = upload_result.upload_ok
+            result.upload_attempted = upload_result.upload_attempted
+            result.upload_skipped = upload_result.upload_skipped
         else:
-            on_line("  远端文件不存在，开始上传。\n")
-            on_line(f"> FTP 上传: {os.path.basename(tar_file)}\n   -> {target_url}\n")
-
-            proc = subprocess.Popen(
-                ["curl", "-sS", "-T", tar_file, "-u", f"{ftp_user}:{ftp_pass}", target_url],
+            chk = subprocess.run(
+                ["curl", "-sI", "--fail", target_url, "-u", f"{ftp_user}:{ftp_pass}"],
                 stdout=subprocess.PIPE, stderr=subprocess.PIPE,
             )
-            if proc.stderr is not None:
-                for line in proc.stderr:
-                    decoded = line.decode(errors="replace").rstrip("\r\n")
-                    if decoded:
-                        on_line(f"  {decoded}\n")
-            proc.wait()
-            on_line(f"\n--- curl 退出码: {proc.returncode} ---\n")
-            if proc.returncode == 0:
-                result.upload_ok = True
+            if chk.returncode == 0:
+                result.upload_skipped = True
+                on_line(f"=== 未上传: 远端文件已存在 ===\n   {target_url}\n本地文件: {tar_file}\n\n")
+            else:
+                result.upload_attempted = True
+                on_line("  远端文件不存在，开始上传。\n")
+                on_line(f"> 上传: {os.path.basename(tar_file)}\n   -> {target_url}\n")
+                on_progress(0, 0)
+                proc = subprocess.Popen(
+                    ["curl", "-sS", "-T", tar_file, "-u", f"{ftp_user}:{ftp_pass}", target_url],
+                    stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                )
+                _, stderr = proc.communicate()
+                if stderr:
+                    on_line(stderr.decode(errors="replace"))
+                on_line(f"\n--- curl 退出码: {proc.returncode} ---\n")
+                if proc.returncode == 0:
+                    result.upload_ok = True
+                    on_progress(file_size, file_size)
     else:
         on_line("=== 未上传: 未填写 FTP URL/用户 ===\n\n")
 

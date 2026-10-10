@@ -9,4 +9,4 @@ package, so it's left as a submodule import (`from fizz.frontend.qt.main
 import main`) rather than re-exported at the top level.
 """
 
-__version__ = "0.3.0"
+__version__ = "0.3.1"

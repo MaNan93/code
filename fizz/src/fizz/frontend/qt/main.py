@@ -18,7 +18,9 @@ except ImportError:
     )
 
 from fizz.frontend.qt.main_window import MainWindow
-from fizz.frontend.qt.widgets.theme import apply_titlebar_theme, build_stylesheet
+from fizz.frontend.qt.styles import APP_QSS
+from fizz.frontend.qt.styles.tokens import FONT_SIZE_BODY
+from fizz.frontend.qt.widgets.common import load_lucide_icon
 
 
 def main(argv=None):
@@ -34,10 +36,12 @@ def main(argv=None):
     # and the platform default font can silently be a legacy CJK bitmap
     # face on a Chinese-locale Windows install.
     app.setStyle("Fusion")
-    app.setFont(QtGui.QFont("Segoe UI", 13))
-    app.setStyleSheet(build_stylesheet())
+    font = QtGui.QFont("Segoe UI")
+    font.setPixelSize(FONT_SIZE_BODY)
+    app.setFont(font)
+    app.setStyleSheet(APP_QSS)
+    app.setWindowIcon(load_lucide_icon("file-code-corner"))
     win = MainWindow()
-    apply_titlebar_theme(win)
     win.show()
     return app.exec_()
 

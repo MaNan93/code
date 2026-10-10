@@ -8,7 +8,7 @@
 //   3. Group sel vectors are always one-hot0 (non-overlap)
 //   4. During the NOV handoff window (sel all-zero), phy lanes present the safe state (txelecidle=1)
 //   5. phy_rst_n follows the current owner's ctrl_rst_n
-//   6. Independent phy_perst_n follows the current owner's ctrl_perst_n
+//   6. SerDes MAC->PHY phy_perst_n follows the owner's ctrl_perst_n
 //=============================================================================
 import pipe_lane_signal_pkg::*;
 

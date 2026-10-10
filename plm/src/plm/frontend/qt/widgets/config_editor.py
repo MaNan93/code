@@ -261,7 +261,7 @@ class GenerationEditor(QtWidgets.QWidget):
             edit.setObjectName(name)
             edit.setAccessibleName(name)
             edit.setPlaceholderText(description)
-            edit.setToolTip(f"直接添加到原名称前，例如 {example}；留空保持原名称。")
+            edit.setToolTip(f"自动补齐末尾下划线，例如 {example.rstrip('_')} → {example}；已有 _ 不重复添加，留空保持原名称。")
             edit.textChanged.connect(self.changed.emit)
             self._prefix_edits[name] = edit
             setattr(self, name, edit)

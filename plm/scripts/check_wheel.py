@@ -157,11 +157,16 @@ with tempfile.TemporaryDirectory(prefix='plm CLI wheel ') as temporary:
             run_cli(command)
             assert (root/'rtl/src/pipe_lane_mapper.sv').is_file()
             assert (root/'tb/tb_pipe_lane_mapper.sv').is_file()
+            top = (root/'rtl/src/pipe_lane_mapper.sv').read_text(encoding='utf-8')
+            wrapper = (root/'rtl/src/pipe_lane_mapper_connection.sv').read_text(encoding='utf-8')
+            assert ('phy_perst_n' in top) == (arch == 'serdes')
+            assert ('phy_perst_n' in wrapper) == (arch == 'serdes')
     run_cli([sys.argv[2], 'generate', '--config', str(root), '--bus-type', 'flat', '--quiet'])
     connection = (root/'rtl/src/pipe_lane_mapper_connection.sv').read_text(encoding='utf-8')
     assert '[NL * ' in connection and ' +: ' in connection
     run_cli([sys.argv[2], 'generate', '--config', str(root), '--quiet',
-             '--module-prefix', 'soc_', '--file-prefix', 'rtl_', '--macro-prefix', 'SOC_'])
+             '--arch', 'serdes', '--pclk-mode', 'pclk_as_phy_input',
+             '--module-prefix', 'soc', '--file-prefix', 'rtl', '--macro-prefix', 'SOC'])
     top = (root/'rtl/src/rtl_pipe_lane_mapper.sv').read_text(encoding='utf-8')
     assert 'module soc_pipe_lane_mapper #(' in top
     assert 'output logic [NL-1:0] phy_perst_n,' in top
@@ -243,6 +248,7 @@ with tempfile.TemporaryDirectory(prefix='plm wheel smoke ') as temporary:
             top = (config/'rtl/src/pipe_lane_mapper.sv').read_text(encoding='utf-8')
             assert 'endmodule' in top
             assert 'dft_mode' not in top
+            assert ('phy_perst_n' in top) == (arch == 'serdes')
             assert (config/'tb/tb_pipe_lane_mapper.sv').is_file()
     print('Qt smoke: 4 generation combinations passed.', flush=True)
     page.generation_editor.bus_type.setCurrentText('flat')
@@ -252,7 +258,7 @@ with tempfile.TemporaryDirectory(prefix='plm wheel smoke ') as temporary:
     connection = (config/'rtl/src/pipe_lane_mapper_connection.sv').read_text(encoding='utf-8')
     assert '[NL * ' in connection and ' +: ' in connection
     print('Qt smoke: flat Connection ports passed.', flush=True)
-    for name, value in (('module_prefix', 'soc_'), ('file_prefix', 'rtl_'), ('macro_prefix', 'SOC_')):
+    for name, value in (('module_prefix', 'soc'), ('file_prefix', 'rtl'), ('macro_prefix', 'SOC')):
         getattr(page.generation_editor, name).setText(value)
     controller.generate_current()
     wait_for_idle(app)
@@ -261,7 +267,7 @@ with tempfile.TemporaryDirectory(prefix='plm wheel smoke ') as temporary:
     assert 'output logic [NL-1:0] phy_perst_n,' in (config/'rtl/src/rtl_pipe_lane_mapper.sv').read_text(encoding='utf-8')
     assert '`ifdef SOC_DUMP_FSDB' in (config/'tb/rtl_tb_pipe_lane_mapper.sv').read_text(encoding='utf-8')
     saved = controller.workspaces.load(controller.current_project)['gen_flags']
-    assert saved['module_prefix'] == 'soc_' and saved['file_prefix'] == 'rtl_' and saved['macro_prefix'] == 'SOC_'
+    assert saved['module_prefix'] == 'soc' and saved['file_prefix'] == 'rtl' and saved['macro_prefix'] == 'SOC'
     print('Qt smoke: naming prefixes generated and persisted.', flush=True)
     window.on_open_settings()
     window.view_stack.currentWidget().menu_buttons[1].click()

@@ -1,6 +1,6 @@
 // PIPE lane mapper reset-mux submodule.
 // Each lane's phy_rst_n connects to its current owner's ctrl_rst_n.
-// Independent phy_perst_n follows the same owner using ctrl_perst_n.
+// SerDes MAC->PHY phy_perst_n independently follows ctrl_perst_n.
 // The input port is named sel_tgt, but at the top level it's actually wired to
 // pipe_lane_sel_gen's dec_tgt (the decoder's raw output, not synchronized by pipe_lane_sel_sync),
 // not sel_gen's final external sel_tgt -- reset follows mode directly, without waiting for pipe_lane_sel_sync.

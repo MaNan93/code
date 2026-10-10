@@ -18,7 +18,6 @@ module pipe_lane_mapper_connection #(
     input logic [1:0] mode,
     output logic [NL-1:0] phy_pclk_in,
     output logic [NL-1:0] phy_rst_n,
-    output logic [NL-1:0] phy_perst_n,
     // PHY-side PIPE data, flattened -- always per-lane regardless of signal_type
     output logic [31:0] phy_mac_phy_txdata [0:NL-1],
     output logic [3:0] phy_mac_phy_txdatak [0:NL-1],
@@ -61,7 +60,6 @@ module pipe_lane_mapper_connection #(
     // Controller side. Each controller's ports are declared at its own real max_width.
     // CtrlX16 x16
     input logic ctrlx16_rst_n,
-    input logic ctrlx16_perst_n,
     input logic [31:0] ctrlx16_mac_phy_txdata [0:15],
     input logic [3:0] ctrlx16_mac_phy_txdatak [0:15],
     input logic [0:0] ctrlx16_mac_phy_txdatavalid [0:15],
@@ -103,7 +101,6 @@ module pipe_lane_mapper_connection #(
     output logic ctrlx16_pclk,
     // CtrlX8asdfadssssss x8
     input logic ctrlx8asdfadssssss_rst_n,
-    input logic ctrlx8asdfadssssss_perst_n,
     input logic [31:0] ctrlx8asdfadssssss_mac_phy_txdata [0:7],
     input logic [3:0] ctrlx8asdfadssssss_mac_phy_txdatak [0:7],
     input logic [0:0] ctrlx8asdfadssssss_mac_phy_txdatavalid [0:7],
@@ -145,7 +142,6 @@ module pipe_lane_mapper_connection #(
     output logic ctrlx8asdfadssssss_pclk,
     // CtrlX4a x4
     input logic ctrlx4a_rst_n,
-    input logic ctrlx4a_perst_n,
     input logic [31:0] ctrlx4a_mac_phy_txdata [0:3],
     input logic [3:0] ctrlx4a_mac_phy_txdatak [0:3],
     input logic [0:0] ctrlx4a_mac_phy_txdatavalid [0:3],
@@ -187,7 +183,6 @@ module pipe_lane_mapper_connection #(
     output logic ctrlx4a_pclk,
     // CtrlX4b x4
     input logic ctrlx4b_rst_n,
-    input logic ctrlx4b_perst_n,
     input logic [31:0] ctrlx4b_mac_phy_txdata [0:3],
     input logic [3:0] ctrlx4b_mac_phy_txdatak [0:3],
     input logic [0:0] ctrlx4b_mac_phy_txdatavalid [0:3],
@@ -1200,26 +1195,21 @@ module pipe_lane_mapper_connection #(
         .mode         (mode),
         .phy_pclk_in  (phy_pclk_in),
         .phy_rst_n    (phy_rst_n),
-        .phy_perst_n  (phy_perst_n),
         .phy_mac2phy  (w_phy_mac2phy),
         .phy_phy2mac  (w_phy_phy2mac),
         .ctrlx16_rst_n   (ctrlx16_rst_n),
-        .ctrlx16_perst_n (ctrlx16_perst_n),
         .ctrlx16_mac2phy (w_ctrlx16_mac2phy),
         .ctrlx16_phy2mac (w_ctrlx16_phy2mac),
         .ctrlx16_pclk (ctrlx16_pclk),
         .ctrlx8asdfadssssss_rst_n   (ctrlx8asdfadssssss_rst_n),
-        .ctrlx8asdfadssssss_perst_n (ctrlx8asdfadssssss_perst_n),
         .ctrlx8asdfadssssss_mac2phy (w_ctrlx8asdfadssssss_mac2phy),
         .ctrlx8asdfadssssss_phy2mac (w_ctrlx8asdfadssssss_phy2mac),
         .ctrlx8asdfadssssss_pclk (ctrlx8asdfadssssss_pclk),
         .ctrlx4a_rst_n   (ctrlx4a_rst_n),
-        .ctrlx4a_perst_n (ctrlx4a_perst_n),
         .ctrlx4a_mac2phy (w_ctrlx4a_mac2phy),
         .ctrlx4a_phy2mac (w_ctrlx4a_phy2mac),
         .ctrlx4a_pclk (ctrlx4a_pclk),
         .ctrlx4b_rst_n   (ctrlx4b_rst_n),
-        .ctrlx4b_perst_n (ctrlx4b_perst_n),
         .ctrlx4b_mac2phy (w_ctrlx4b_mac2phy),
         .ctrlx4b_phy2mac (w_ctrlx4b_phy2mac),
         .ctrlx4b_pclk (ctrlx4b_pclk)

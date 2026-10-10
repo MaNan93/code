@@ -32,28 +32,28 @@ module pipe_lane_mapper #(
     // Controller side. Each controller's ports are declared at its own real max_width.
     // CtrlA x12
     input logic ctrla_rst_n,   // already synchronized externally
-    input logic ctrla_perst_n, // independent reset, routed like rst_n
+    input logic ctrla_perst_n, // SerDes MAC->PHY reset, routed like rst_n
     input mac2phy_lane_t [11:0] ctrla_mac2phy,
     output phy2mac_lane_t [11:0] ctrla_phy2mac,
     input logic [11:0] ctrla_pclk,
     output logic [11:0] ctrla_rx_clk,
     // CtrlB x6
     input logic ctrlb_rst_n,   // already synchronized externally
-    input logic ctrlb_perst_n, // independent reset, routed like rst_n
+    input logic ctrlb_perst_n, // SerDes MAC->PHY reset, routed like rst_n
     input mac2phy_lane_t [5:0] ctrlb_mac2phy,
     output phy2mac_lane_t [5:0] ctrlb_phy2mac,
     input logic [5:0] ctrlb_pclk,
     output logic [5:0] ctrlb_rx_clk,
     // CtrlC x8
     input logic ctrlc_rst_n,   // already synchronized externally
-    input logic ctrlc_perst_n, // independent reset, routed like rst_n
+    input logic ctrlc_perst_n, // SerDes MAC->PHY reset, routed like rst_n
     input mac2phy_lane_t [7:0] ctrlc_mac2phy,
     output phy2mac_lane_t [7:0] ctrlc_phy2mac,
     input logic [7:0] ctrlc_pclk,
     output logic [7:0] ctrlc_rx_clk,
     // CtrlD x3
     input logic ctrld_rst_n,   // already synchronized externally
-    input logic ctrld_perst_n, // independent reset, routed like rst_n
+    input logic ctrld_perst_n, // SerDes MAC->PHY reset, routed like rst_n
     input mac2phy_lane_t [2:0] ctrld_mac2phy,
     output phy2mac_lane_t [2:0] ctrld_phy2mac,
     input logic [2:0] ctrld_pclk,

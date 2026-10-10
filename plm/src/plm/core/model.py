@@ -112,8 +112,8 @@ class Signal:
     command during the handoff window (e.g. txelecidle should be 1).
 
     Every signal in the table goes through NOV (the synchronized sel).
-    Resets (phy_rst_n / ctrl_rst_n and phy_perst_n / ctrl_perst_n) are
-    separate ports and aren't in this table.
+    Reset (phy_rst_n / ctrl_rst_n) and SerDes-only MAC->PHY reset
+    (phy_perst_n / ctrl_perst_n) are separate ports, outside this table.
 
     signal_type: "perlane" (default sense of everything in this table --
     each of a controller's own lanes carries its own independent value) or
@@ -533,24 +533,27 @@ class Config:
         phy_input = pclk_mode == "pclk_as_phy_input"
         clocks = ("rx_clk", "phy_pclk") if phy_input else ("phy_pclk_out", "phy_pclk_in")
         top = dict.fromkeys((
-            "mode", "phy_rst_n", "phy_perst_n", "phy_mac2phy", "phy_phy2mac",
-            "ctrl_rst_n", "ctrl_perst_n",
+            "mode", "phy_rst_n", "phy_mac2phy", "phy_phy2mac", "ctrl_rst_n",
             "sel_tgt", "dec_tgt", "u_sel_gen", "u_clk_mux", "u_rst_mux",
             "u_data_m2p", "u_data_p2m", *clocks,
         ), "a reserved port or net")
         if not phy_input:
             top["ctrl_pclk"] = "a reserved net"
         wrapper = dict.fromkeys((
-            "mode", "phy_rst_n", "phy_perst_n", "w_phy_mac2phy", "w_phy_phy2mac",
+            "mode", "phy_rst_n", "w_phy_mac2phy", "w_phy_phy2mac",
             "u_pipe_lane_mapper", *clocks,
         ), "a reserved port or net")
+        if phy_input:
+            top.update(dict.fromkeys(("phy_perst_n", "ctrl_perst_n"), "a reserved port or net"))
+            wrapper["phy_perst_n"] = "a reserved port"
         if dpr:
-            for name in ("v_lane_mask", "dpr_rst_n", "dpr_perst_n", "dpr_pclk", "dpr_mac2phy", "dpr_phy2mac"):
+            for name in ("v_lane_mask", "dpr_rst_n", "dpr_pclk", "dpr_mac2phy", "dpr_phy2mac"):
                 top[name] = "a DPR port"
-            for name in ("v_lane_mask", "dpr_rst_n", "dpr_perst_n", "dpr_pclk", "w_dpr_mac2phy", "w_dpr_phy2mac"):
+            for name in ("v_lane_mask", "dpr_rst_n", "dpr_pclk", "w_dpr_mac2phy", "w_dpr_phy2mac"):
                 wrapper[name] = "a DPR port or net"
             if phy_input:
                 top["dpr_rx_clk"] = wrapper["dpr_rx_clk"] = "a DPR port"
+                top["dpr_perst_n"] = wrapper["dpr_perst_n"] = "a DPR port"
         errors = {}
 
         def add(scope, module, name, table, row, column):
@@ -569,13 +572,13 @@ class Config:
                 add(wrapper, "pipe_lane_mapper_connection", f"dpr_{signal.name}",
                     "signals", row, "signal_name")
         for row, controller in enumerate(self.controllers.values()):
-            suffixes = ("rst_n", "perst_n", "mac2phy", "phy2mac", "pclk")
+            suffixes = ("rst_n", "mac2phy", "phy2mac", "pclk")
             if phy_input:
-                suffixes += ("rx_clk",)
+                suffixes += ("rx_clk", "perst_n")
             for suffix in suffixes:
                 add(top, "pipe_lane_mapper", f"{controller.lname}_{suffix}",
                     "controllers", row, "ctrl_name")
-            for suffix in (("rst_n", "perst_n", "pclk", "rx_clk") if phy_input else ("rst_n", "perst_n", "pclk")):
+            for suffix in (("rst_n", "perst_n", "pclk", "rx_clk") if phy_input else ("rst_n", "pclk")):
                 add(wrapper, "pipe_lane_mapper_connection", f"{controller.lname}_{suffix}",
                     "controllers", row, "ctrl_name")
             for suffix in ("mac2phy", "phy2mac"):

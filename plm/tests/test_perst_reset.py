@@ -32,6 +32,10 @@ class PerstResetTests(unittest.TestCase):
                     with self.subTest(pclk=pclk_mode, dpr=dpr, bus_type=bus_type):
                         top = rtl.gen_top(self.cfg, pclk_mode, dpr=dpr)
                         wrapper = rtl.gen_connection(self.cfg, pclk_mode, dpr=dpr, bus_type=bus_type)
+                        if pclk_mode == "pclk_as_phy_output":
+                            for source in (top, wrapper, rtl.gen_rst_mux(self.cfg, dpr, pclk_mode)):
+                                self.assertNotIn("perst_n", source)
+                            continue
                         for source in (top, wrapper):
                             self.assertIn("output logic [NL-1:0] phy_perst_n,", source)
                             self.assertIn("input logic ctrla_perst_n,", source)
@@ -50,7 +54,7 @@ class PerstResetTests(unittest.TestCase):
                             self.assertNotIn("perst_n", ports)
 
     def test_direct_groups_and_mux_groups_use_independent_inputs_and_low_safe_state(self):
-        source = rtl.gen_rst_mux(self.cfg)
+        source = rtl.gen_rst_mux(self.cfg, pclk_mode="pclk_as_phy_input")
         self.assertIn("assign phy_perst_n[0] = ctrl_perst_n[0];", source)
         self.assertIn(".din  ({ctrl_perst_n[1], ctrl_perst_n[0]})", source)
         perst = source.split("u_perst_g1 (", 1)[1].split(");", 1)[0]
@@ -60,7 +64,7 @@ class PerstResetTests(unittest.TestCase):
         self.assertIn("assign phy_perst_n[1] = perst_n_g1;", source)
 
     def test_dpr_is_an_independent_reset_candidate_even_for_direct_groups(self):
-        source = rtl.gen_rst_mux(self.cfg, dpr=True)
+        source = rtl.gen_rst_mux(self.cfg, dpr=True, pclk_mode="pclk_as_phy_input")
         self.assertIn(".din  ({dpr_perst_n, ctrl_perst_n[0]})", source)
         self.assertIn(".din  ({dpr_perst_n, ctrl_perst_n[1], ctrl_perst_n[0]})", source)
         for group in self.cfg.groups:
@@ -78,6 +82,9 @@ class PerstResetTests(unittest.TestCase):
                         arch="serdes" if pclk_mode == "pclk_as_phy_input" else "original_pipe",
                         pclk_mode=pclk_mode, dpr=dpr,
                     )
+                    if pclk_mode == "pclk_as_phy_output":
+                        load_generation_plan_from_payload(payload, options)
+                        continue
                     with self.assertRaisesRegex(ValidationError, "phy_perst_n"):
                         load_generation_plan_from_payload(payload, options)
 
@@ -86,6 +93,10 @@ class PerstResetTests(unittest.TestCase):
             for dpr in (False, True):
                 with self.subTest(pclk=pclk_mode, dpr=dpr):
                     source = tb.gen_tb(self.cfg, pclk_mode, dpr)
+                    if pclk_mode == "pclk_as_phy_output":
+                        self.assertNotIn("perst_n", source)
+                        self.assertNotIn("err_perst", source)
+                        continue
                     self.assertIn(".phy_perst_n    (phy_perst_n)", source)
                     self.assertIn(".ctrlb_perst_n (ctrl_perst_n[1])", source)
                     self.assertIn("ctrl_perst_n[c] = 1'b0; #1;", source)
@@ -107,7 +118,8 @@ class PerstResetTests(unittest.TestCase):
                 root = Path(temporary)
                 (root / "pipe_lane_signal_pkg.sv").write_text(rtl.gen_pkg(self.cfg, dpr), encoding="utf-8")
                 shutil.copy2(COMMON_DIR / "pipe_lane_data_mux.sv", root)
-                (root / "pipe_lane_rst_mux.sv").write_text(rtl.gen_rst_mux(self.cfg, dpr), encoding="utf-8")
+                (root / "pipe_lane_rst_mux.sv").write_text(
+                    rtl.gen_rst_mux(self.cfg, dpr, "pclk_as_phy_input"), encoding="utf-8")
                 dpr_ports = ".dpr_rst_n(dpr_rst_n), .dpr_perst_n(dpr_perst_n)," if dpr else ""
                 # Expose one-hot selectors without depending on the package's bit layout.
                 # This combinational reset mux needs no clock or timed SV process.

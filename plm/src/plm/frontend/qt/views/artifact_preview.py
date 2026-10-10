@@ -91,6 +91,7 @@ class ArtifactPreview:
         preview_revision = self._preview_revision
         self.empty_state.setVisible(self.current_path is None)
         self.preview.setVisible(self.current_path is not None)
+        self.preview.set_diff_mode(False)
         self.preview.clear()
         self._readable = False
         self.search_status.clear()
@@ -142,6 +143,7 @@ class ArtifactPreview:
                     def show_diff(diff):
                         if preview_revision == self._preview_revision:
                             self.preview.setPlainText(diff)
+                            self.preview.set_diff_mode(True)
                             if self.search_input.text():
                                 self._search_changed()
 

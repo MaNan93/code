@@ -6,6 +6,8 @@ from PyQt5 import QtCore, QtGui, QtWidgets
 from plm.frontend.qt.widgets.common import StyledMenu
 from plm.frontend.qt.styles.tokens import (
     BG_ARTIFACTS, FONT_CODE_PRIMARY, FONT_SIZE_BODY, TEXT_ARTIFACTS_MUTED,
+    BG_ARTIFACTS_HEADER, DIFF_ADDED_BG, DIFF_REMOVED_BG,
+    DIFF_ADDED_GUTTER, DIFF_REMOVED_GUTTER, DIFF_HUNK_BG,
 )
 
 
@@ -149,10 +151,70 @@ class CodePreview(QtWidgets.QPlainTextEdit):
         self.setFont(font)
         self.line_numbers = LineNumberArea(self)
         self._line_number_width = 0
+        self._diff_mode = False
+        self._diff_rows = []
+        self._diff_line_digits = 1
         self.highlighter = VerilogHighlighter(self.document())
         self.blockCountChanged.connect(self.update_line_number_width)
         self.updateRequest.connect(self.update_line_number_area)
+        self.textChanged.connect(self._update_diff_rows)
         self.update_line_number_width()
+
+    def set_diff_mode(self, enabled):
+        self._diff_mode = bool(enabled)
+        self._update_diff_rows()
+
+    @staticmethod
+    def diff_rows(text):
+        """Track original/new source coordinates, not unified-diff row numbers."""
+        rows = []
+        old = new = 0
+        in_hunk = False
+        for line in text.splitlines():
+            hunk = re.match(r"@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@", line)
+            if hunk:
+                old, new = map(int, hunk.groups())
+                in_hunk = True
+                rows.append((None, None, "hunk"))
+            elif not in_hunk:
+                rows.append((None, None, "header"))
+            elif line.startswith("+"):
+                rows.append((None, new, "added"))
+                new += 1
+            elif line.startswith("-"):
+                rows.append((old, None, "removed"))
+                old += 1
+            elif line.startswith(" "):
+                rows.append((old, new, "context"))
+                old += 1
+                new += 1
+            else:
+                rows.append((None, None, "marker"))
+        return rows
+
+    def _update_diff_rows(self):
+        self._diff_rows = self.diff_rows(self.toPlainText()) if self._diff_mode else []
+        self._diff_line_digits = len(str(max(
+            (number for old, new, _kind in self._diff_rows
+             for number in (old, new) if number is not None), default=1,
+        )))
+        colors = {"added": DIFF_ADDED_BG, "removed": DIFF_REMOVED_BG,
+                  "hunk": DIFF_HUNK_BG, "header": BG_ARTIFACTS_HEADER}
+        selections = []
+        block = self.document().begin()
+        for _old, _new, kind in self._diff_rows:
+            if kind in colors:
+                selection = QtWidgets.QTextEdit.ExtraSelection()
+                selection.cursor = QtGui.QTextCursor(block)
+                selection.format.setBackground(QtGui.QColor(colors[kind]))
+                selection.format.setProperty(QtGui.QTextFormat.FullWidthSelection, True)
+                if kind == "hunk":
+                    selection.format.setForeground(QtGui.QColor("#0969DA"))
+                selections.append(selection)
+            block = block.next()
+        self.setExtraSelections(selections)
+        self.update_line_number_width()
+        self.line_numbers.update()
 
     def createStandardContextMenu(self, position=None):
         native_menu = (super().createStandardContextMenu() if position is None
@@ -173,6 +235,9 @@ class CodePreview(QtWidgets.QPlainTextEdit):
         event.accept()
 
     def line_number_width(self):
+        if self._diff_mode:
+            cell = LINE_NUMBER_PADDING + self.fontMetrics().horizontalAdvance("9") * self._diff_line_digits
+            return 8 + 2 * cell
         digits = len(str(self.blockCount()))
         return 8 + LINE_NUMBER_PADDING + self.fontMetrics().horizontalAdvance("9") * digits
 
@@ -219,6 +284,24 @@ class CodePreview(QtWidgets.QPlainTextEdit):
         while block.isValid() and top <= event.rect().bottom():
             height = int(self.blockBoundingRect(block).height())
             if block.isVisible() and top + height >= event.rect().top():
+                if self._diff_mode:
+                    old, new, kind = (self._diff_rows[number] if number < len(self._diff_rows)
+                                      else (None, None, "context"))
+                    colors = {"added": DIFF_ADDED_GUTTER, "removed": DIFF_REMOVED_GUTTER,
+                              "hunk": DIFF_HUNK_BG, "header": BG_ARTIFACTS_HEADER}
+                    if kind in colors:
+                        painter.fillRect(0, top, self.line_numbers.width(), height,
+                                         QtGui.QColor(colors[kind]))
+                    cell = (self.line_numbers.width() - 8) // 2
+                    for column, value in enumerate((old, new)):
+                        if value is not None:
+                            painter.drawText(column * cell, top, cell - 4,
+                                             self.fontMetrics().height(), QtCore.Qt.AlignRight,
+                                             str(value))
+                    top += height
+                    block = block.next()
+                    number += 1
+                    continue
                 painter.drawText(
                     0,
                     top,

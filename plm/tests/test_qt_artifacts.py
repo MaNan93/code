@@ -338,9 +338,40 @@ class ArtifactPreviewTests(unittest.TestCase):
         self.assertIn("+++ current/rtl/one.sv", diff)
         self.assertIn("-assign value = 1'b0;", diff)
         self.assertIn("+assign value = 1'b1;", diff)
+        # Check the rendered row and gutter, not just QColor configuration.
+        self.app.processEvents()
+        preview = self.panel.preview
+        viewport_image = preview.viewport().grab().toImage()
+        gutter_image = preview.line_numbers.grab().toImage()
+        for prefix, background, gutter in (
+            ("-assign", "#ffebe9", "#ffd7d5"),
+            ("+assign", "#e6ffec", "#ccffd8"),
+            ("@@", "#ddf4ff", "#ddf4ff"),
+        ):
+            index = next(i for i, line in enumerate(diff.splitlines()) if line.startswith(prefix))
+            block = preview.document().findBlockByNumber(index)
+            y = int(preview.blockBoundingGeometry(block).translated(preview.contentOffset()).center().y())
+            viewport_scale = viewport_image.devicePixelRatio()
+            gutter_scale = gutter_image.devicePixelRatio()
+            self.assertEqual(viewport_image.pixelColor(
+                round(viewport_image.width() - 16 * viewport_scale), round(y * viewport_scale)).name(), background)
+            self.assertEqual(gutter_image.pixelColor(
+                round(gutter_image.width() - 2 * gutter_scale), round(y * gutter_scale)).name(), gutter)
         self.panel.diff_button.click()
         wait_for_idle(self.app)
         self.assertEqual(self.panel.preview.toPlainText(), current)
+        self.assertEqual(self.panel.preview.extraSelections(), [])
+
+    def test_diff_coordinates_follow_hunks_and_do_not_treat_source_as_file_headers(self):
+        diff = ("--- previous/file\n+++ current/file\n@@ -115,3 +116,3 @@\n"
+                " unchanged\n--- old source\n+++ new source\n tail\n"
+                "\\ No newline at end of file\n@@ -200 +201 @@\n-old\n+new\n")
+        self.assertEqual(CodePreview.diff_rows(diff), [
+            (None, None, "header"), (None, None, "header"), (None, None, "hunk"),
+            (115, 116, "context"), (116, None, "removed"), (None, 117, "added"),
+            (117, 118, "context"), (None, None, "marker"), (None, None, "hunk"),
+            (200, None, "removed"), (None, 201, "added"),
+        ])
 
     def test_diff_separates_lines_without_trailing_newlines(self):
         for previous, current, markers in (

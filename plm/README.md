@@ -44,5 +44,5 @@ The wheel includes the application and its runtime resources. The source
 distribution also includes tests, immutable fixtures and validation scripts.
 
 Version 3.0.0 changes the generated reset port interface. See the
-[release notes and migration guide](src/plm/docs/release_notes_3_0_0.md)
+[release history and migration guide](src/plm/docs/release_note.md)
 before updating existing RTL integrations.

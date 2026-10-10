@@ -47,7 +47,7 @@ def gen_tb(cfg, pclk_mode="pclk_as_phy_output", dpr=False):
       3. Group sel vectors are always one-hot0 (non-overlap)
       4. During the NOV handoff window (sel all-zero), phy lanes present the safe state
       5. phy_rst_n follows the current owner's ctrl_rst_n
-      6. Independent phy_perst_n follows the current owner's ctrl_perst_n
+      6. For SerDes, MAC->PHY phy_perst_n follows the owner's ctrl_perst_n
     """
     nm = len(cfg.modes)
     LC, NC = cfg.lane_count, cfg.num_ctrl
@@ -83,7 +83,8 @@ def gen_tb(cfg, pclk_mode="pclk_as_phy_output", dpr=False):
         "//   3. Group sel vectors are always one-hot0 (non-overlap)",
         "//   4. During the NOV handoff window (sel all-zero), phy lanes present the safe state (txelecidle=1)",
         "//   5. phy_rst_n follows the current owner's ctrl_rst_n",
-        "//   6. Independent phy_perst_n follows the current owner's ctrl_perst_n",
+        *(["//   6. SerDes MAC->PHY phy_perst_n follows the owner's ctrl_perst_n"]
+          if phy_input_mode else []),
         "//=============================================================================",
         "import pipe_lane_signal_pkg::*;",
         "",
@@ -175,12 +176,14 @@ def gen_tb(cfg, pclk_mode="pclk_as_phy_output", dpr=False):
     # are per-controller named signals (ctrla_rst_n, ...) now -- see the
     # DUT instance below, which wires ctrl_rst_n[cid] to each one.
     L.append("    logic [NC-1:0]        ctrl_rst_n = '0;")
-    L.append("    logic [NC-1:0]        ctrl_perst_n = '0;")
+    if phy_input_mode:
+        L.append("    logic [NC-1:0]        ctrl_perst_n = '0;")
     L.append(f"    logic [{mode_width(nm)-1}:0] mode = '0;")
     L.append("")
     L.append(f"    logic [NL-1:0]      {'phy_pclk' if phy_input_mode else 'phy_pclk_in'};")
     L.append("    logic [NL-1:0]      phy_rst_n;")
-    L.append("    logic [NL-1:0]      phy_perst_n;")
+    if phy_input_mode:
+        L.append("    logic [NL-1:0]      phy_perst_n;")
     L.append("")
     L.append("    mac2phy_lane_t [NL-1:0] phy_mac2phy;")
     L.append("    phy2mac_lane_t [NL-1:0] phy_phy2mac;")
@@ -197,7 +200,8 @@ def gen_tb(cfg, pclk_mode="pclk_as_phy_output", dpr=False):
         L.append("    // it never actually overrides any lane, regardless of dpr_rst_n/dpr_mac2phy.")
         L.append("    logic [NL-1:0] v_lane_mask = '0;")
         L.append("    logic dpr_rst_n = 1'b1;")
-        L.append("    logic dpr_perst_n = 1'b1;")
+        if phy_input_mode:
+            L.append("    logic dpr_perst_n = 1'b1;")
         L.append("    mac2phy_lane_t [NL-1:0] dpr_mac2phy = '0;")
         L.append("    phy2mac_lane_t [NL-1:0] dpr_phy2mac;")
         if phy_input_mode:
@@ -219,20 +223,23 @@ def gen_tb(cfg, pclk_mode="pclk_as_phy_output", dpr=False):
         L.append("        .rx_clk         (rx_clk),")
         L.append("        .phy_pclk       (phy_pclk),")
         L.append("        .phy_rst_n      (phy_rst_n),")
-        L.append("        .phy_perst_n    (phy_perst_n),")
+        if phy_input_mode:
+            L.append("        .phy_perst_n    (phy_perst_n),")
         L.append("        .phy_mac2phy    (phy_mac2phy),")
         L.append("        .phy_phy2mac    (phy_phy2mac),")
         if dpr:
             L.append("        .v_lane_mask    (v_lane_mask),")
             L.append("        .dpr_rst_n      (dpr_rst_n),")
-            L.append("        .dpr_perst_n    (dpr_perst_n),")
+            if phy_input_mode:
+                L.append("        .dpr_perst_n    (dpr_perst_n),")
             L.append("        .dpr_mac2phy    (dpr_mac2phy),")
             L.append("        .dpr_phy2mac    (dpr_phy2mac),")
             L.append("        .dpr_pclk       (dpr_pclk),")
             L.append("        .dpr_rx_clk     (dpr_rx_clk),")
         for c in ctrls:
             L.append(f"        .{c.lname}_rst_n   (ctrl_rst_n[{c.id}]),")
-            L.append(f"        .{c.lname}_perst_n (ctrl_perst_n[{c.id}]),")
+            if phy_input_mode:
+                L.append(f"        .{c.lname}_perst_n (ctrl_perst_n[{c.id}]),")
             L.append(f"        .{c.lname}_mac2phy ({c.lname}_mac2phy),")
             L.append(f"        .{c.lname}_phy2mac ({c.lname}_phy2mac),")
             L.append(f"        .{c.lname}_pclk    ({c.lname}_pclk),")
@@ -242,19 +249,22 @@ def gen_tb(cfg, pclk_mode="pclk_as_phy_output", dpr=False):
         L.append("        .mode           (mode),")
         L.append("        .phy_pclk_in    (phy_pclk_in),")
         L.append("        .phy_rst_n      (phy_rst_n),")
-        L.append("        .phy_perst_n    (phy_perst_n),")
+        if phy_input_mode:
+            L.append("        .phy_perst_n    (phy_perst_n),")
         L.append("        .phy_mac2phy    (phy_mac2phy),")
         L.append("        .phy_phy2mac    (phy_phy2mac),")
         if dpr:
             L.append("        .v_lane_mask    (v_lane_mask),")
             L.append("        .dpr_rst_n      (dpr_rst_n),")
-            L.append("        .dpr_perst_n    (dpr_perst_n),")
+            if phy_input_mode:
+                L.append("        .dpr_perst_n    (dpr_perst_n),")
             L.append("        .dpr_mac2phy    (dpr_mac2phy),")
             L.append("        .dpr_phy2mac    (dpr_phy2mac),")
             L.append("        .dpr_pclk       (dpr_pclk),")
         for c in ctrls:
             L.append(f"        .{c.lname}_rst_n   (ctrl_rst_n[{c.id}]),")
-            L.append(f"        .{c.lname}_perst_n (ctrl_perst_n[{c.id}]),")
+            if phy_input_mode:
+                L.append(f"        .{c.lname}_perst_n (ctrl_perst_n[{c.id}]),")
             L.append(f"        .{c.lname}_mac2phy ({c.lname}_mac2phy),")
             L.append(f"        .{c.lname}_phy2mac ({c.lname}_phy2mac),")
             L.append(f"        .{c.lname}_pclk    ({c.lname}_pclk),")
@@ -382,7 +392,9 @@ def gen_tb(cfg, pclk_mode="pclk_as_phy_output", dpr=False):
     # (snapshot before, diff after) and bumps its own category's counter
     # by the delta -- chk() never knows or cares which category called it.
     L.append("    int unsigned err_count = 0;")
-    case_names = ["clock", "reset", "perst", "m2p", "p2m", "tie_off", "safe_state"]
+    case_names = ["clock", "reset", "m2p", "p2m", "tie_off", "safe_state"]
+    if phy_input_mode:
+        case_names.insert(2, "perst")
     if dpr:
         case_names.append("dpr")
     L.append("    int unsigned " + ", ".join(f"err_{n} = 0" for n in case_names) + ";")
@@ -647,10 +659,11 @@ def gen_tb(cfg, pclk_mode="pclk_as_phy_output", dpr=False):
     )
     L.append("                          m, lane_idx, phy_rst_n[lane_idx], cid));")
     L.append("            err_reset += (err_count - err_before);")
-    L.append("            err_before = err_count;")
-    L.append("            chk(phy_perst_n[lane_idx] == ctrl_perst_n[cid],")
-    L.append('                $sformatf("mode%0d lane%0d: perst_n does not follow owner ctrl%0d", m, lane_idx, cid));')
-    L.append("            err_perst += (err_count - err_before);")
+    if phy_input_mode:
+        L.append("            err_before = err_count;")
+        L.append("            chk(phy_perst_n[lane_idx] == ctrl_perst_n[cid],")
+        L.append('                $sformatf("mode%0d lane%0d: perst_n does not follow owner ctrl%0d", m, lane_idx, cid));')
+        L.append("            err_perst += (err_count - err_before);")
     L.append("")
     if phy_input_mode:
         _emit_clk_period_chk(
@@ -804,24 +817,25 @@ def gen_tb(cfg, pclk_mode="pclk_as_phy_output", dpr=False):
     L.append("    endtask")
     L.append("")
 
-    # Exercise perst_n independently in every mode, without resetting the
-    # clock/select machinery driven by ctrl_rst_n.
-    L.append("    task automatic check_perst(input int m);")
-    L.append("        int unsigned err_before;")
-    L.append("        err_before = err_count;")
-    L.append("        for (int c = 0; c < NC; c++) begin")
-    L.append("            ctrl_perst_n[c] = 1'b0; #1;")
-    L.append("            for (int lane_idx = 0; lane_idx < NL; lane_idx++) begin")
-    L.append('                chk(phy_perst_n[lane_idx] == (owner_of(m, lane_idx) == c ? 1\'b0 : 1\'b1),')
-    L.append('                    $sformatf("mode%0d lane%0d: ctrl%0d perst_n pulse routing", m, lane_idx, c));')
-    L.append('                chk(phy_rst_n[lane_idx] == ctrl_rst_n[owner_of(m, lane_idx)], "perst_n must not change rst_n");')
-    L.append("            end")
-    L.append("            ctrl_perst_n[c] = 1'b1; #1;")
-    L.append('            chk(phy_perst_n == \'1, "perst_n release must reach all owner lanes");')
-    L.append("        end")
-    L.append("        err_perst += (err_count - err_before);")
-    L.append("    endtask")
-    L.append("")
+    if phy_input_mode:
+        # Exercise perst_n independently in every mode, without resetting the
+        # clock/select machinery driven by ctrl_rst_n.
+        L.append("    task automatic check_perst(input int m);")
+        L.append("        int unsigned err_before;")
+        L.append("        err_before = err_count;")
+        L.append("        for (int c = 0; c < NC; c++) begin")
+        L.append("            ctrl_perst_n[c] = 1'b0; #1;")
+        L.append("            for (int lane_idx = 0; lane_idx < NL; lane_idx++) begin")
+        L.append('                chk(phy_perst_n[lane_idx] == (owner_of(m, lane_idx) == c ? 1\'b0 : 1\'b1),')
+        L.append('                    $sformatf("mode%0d lane%0d: ctrl%0d perst_n pulse routing", m, lane_idx, c));')
+        L.append('                chk(phy_rst_n[lane_idx] == ctrl_rst_n[owner_of(m, lane_idx)], "perst_n must not change rst_n");')
+        L.append("            end")
+        L.append("            ctrl_perst_n[c] = 1'b1; #1;")
+        L.append('            chk(phy_perst_n == \'1, "perst_n release must reach all owner lanes");')
+        L.append("        end")
+        L.append("        err_perst += (err_count - err_before);")
+        L.append("    endtask")
+        L.append("")
 
     if dpr:
         # DPR is idle by construction until this task actively drives
@@ -849,13 +863,14 @@ def gen_tb(cfg, pclk_mode="pclk_as_phy_output", dpr=False):
         L.append("            endcase")
         L.append("            #SETTLE;")
         L.append("            err_before = err_count;")
-        L.append("            dpr_perst_n = 1'b0; #1;")
-        L.append("            for (int lane = 0; lane < NL; lane++) begin")
-        L.append('                chk(phy_perst_n[lane] == (v_lane_mask[lane] ? 1\'b0 : ctrl_perst_n[owner_of(mode, lane)]), "DPR perst_n override routing");')
-        L.append('                chk(phy_rst_n[lane] == (v_lane_mask[lane] ? dpr_rst_n : ctrl_rst_n[owner_of(mode, lane)]), "DPR perst_n must not change rst_n");')
-        L.append("            end")
-        L.append("            dpr_perst_n = 1'b1; #1;")
-        L.append('            chk(phy_perst_n == \'1, "DPR perst_n release");')
+        if phy_input_mode:
+            L.append("            dpr_perst_n = 1'b0; #1;")
+            L.append("            for (int lane = 0; lane < NL; lane++) begin")
+            L.append('                chk(phy_perst_n[lane] == (v_lane_mask[lane] ? 1\'b0 : ctrl_perst_n[owner_of(mode, lane)]), "DPR perst_n override routing");')
+            L.append('                chk(phy_rst_n[lane] == (v_lane_mask[lane] ? dpr_rst_n : ctrl_rst_n[owner_of(mode, lane)]), "DPR perst_n must not change rst_n");')
+            L.append("            end")
+            L.append("            dpr_perst_n = 1'b1; #1;")
+            L.append('            chk(phy_perst_n == \'1, "DPR perst_n release");')
         L.append("            case (oid)")
         for c in ctrls:
             L.append(f"                {c.id}: chk_p2m({c.lname}_phy2mac[op], exp_safe_p2m,")
@@ -925,20 +940,23 @@ def gen_tb(cfg, pclk_mode="pclk_as_phy_output", dpr=False):
     L.append("`endif")
     L.append("")
     L.append("        ctrl_rst_n = '0;")
-    L.append("        ctrl_perst_n = '0;")
+    if phy_input_mode:
+        L.append("        ctrl_perst_n = '0;")
     if dpr:
         L.append("        dpr_rst_n = 0;")
     L.append("        mode = '0;")
     L.append("        #100;")
     L.append("        ctrl_rst_n = '1;")
-    L.append("        ctrl_perst_n = '1;")
+    if phy_input_mode:
+        L.append("        ctrl_perst_n = '1;")
     if dpr:
         L.append("        dpr_rst_n = 1;")
     L.append("        #SETTLE;")
     L.append("")
     for i, m in enumerate(cfg.modes):
         L.append(f"        check_mode({m});")
-        L.append(f"        check_perst({m});")
+        if phy_input_mode:
+            L.append(f"        check_perst({m});")
         L.append(
             "        // toggle physical lane 0's phystatus and dynamically verify it's followed correctly"
         )
@@ -976,7 +994,8 @@ def gen_tb(cfg, pclk_mode="pclk_as_phy_output", dpr=False):
             f'                    $sformatf("mode{last_m} lane%0d: ctrl_rst_n[{c.id}]=0 pulse, '
             f"expected phy_rst_n=%0b\", lane_idx, expect_low ? 1'b0 : 1'b1));"
         )
-        L.append('                chk(phy_perst_n[lane_idx] == ctrl_perst_n[owner_of(mode, lane_idx)], "rst_n must not change perst_n");')
+        if phy_input_mode:
+            L.append('                chk(phy_perst_n[lane_idx] == ctrl_perst_n[owner_of(mode, lane_idx)], "rst_n must not change perst_n");')
         L.append("            end")
         L.append("            err_reset += (err_count - err_before);")
         L.append("        end")

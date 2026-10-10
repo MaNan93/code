@@ -24,7 +24,6 @@ module pipe_lane_mapper #(
     input logic [1:0] mode,
     output logic [NL-1:0] phy_pclk_in,
     output logic [NL-1:0] phy_rst_n,
-    output logic [NL-1:0] phy_perst_n,
     // PHY-side PIPE data
     output mac2phy_lane_t [NL-1:0] phy_mac2phy,
     input phy2mac_lane_t [NL-1:0] phy_phy2mac,
@@ -32,32 +31,27 @@ module pipe_lane_mapper #(
     // connected 1:1 to every PHY lane -- v_lane_mask[lane_idx]=1 overrides lane lane_idx.
     input logic [NL-1:0] v_lane_mask,
     input logic dpr_rst_n,
-    input logic dpr_perst_n,
     input mac2phy_lane_t [NL-1:0] dpr_mac2phy,
     output phy2mac_lane_t [NL-1:0] dpr_phy2mac,
     output logic dpr_pclk,   // derived from PHY output clocks
     // Controller side. Each controller's ports are declared at its own real max_width.
     // CtrlA x12
     input logic ctrla_rst_n,   // already synchronized externally
-    input logic ctrla_perst_n, // independent reset, routed like rst_n
     input mac2phy_lane_t [11:0] ctrla_mac2phy,
     output phy2mac_lane_t [11:0] ctrla_phy2mac,
     output logic ctrla_pclk,
     // CtrlB x6
     input logic ctrlb_rst_n,   // already synchronized externally
-    input logic ctrlb_perst_n, // independent reset, routed like rst_n
     input mac2phy_lane_t [5:0] ctrlb_mac2phy,
     output phy2mac_lane_t [5:0] ctrlb_phy2mac,
     output logic ctrlb_pclk,
     // CtrlC x8
     input logic ctrlc_rst_n,   // already synchronized externally
-    input logic ctrlc_perst_n, // independent reset, routed like rst_n
     input mac2phy_lane_t [7:0] ctrlc_mac2phy,
     output phy2mac_lane_t [7:0] ctrlc_phy2mac,
     output logic ctrlc_pclk,
     // CtrlD x3
     input logic ctrld_rst_n,   // already synchronized externally
-    input logic ctrld_perst_n, // independent reset, routed like rst_n
     input mac2phy_lane_t [2:0] ctrld_mac2phy,
     output phy2mac_lane_t [2:0] ctrld_phy2mac,
     output logic ctrld_pclk
@@ -65,8 +59,6 @@ module pipe_lane_mapper #(
 
     logic [NC-1:0] ctrl_rst_n;   // reconstructed from each controller's own named port above
     assign ctrl_rst_n = {ctrld_rst_n, ctrlc_rst_n, ctrlb_rst_n, ctrla_rst_n};
-    logic [NC-1:0] ctrl_perst_n;
-    assign ctrl_perst_n = {ctrld_perst_n, ctrlc_perst_n, ctrlb_perst_n, ctrla_perst_n};
     logic [NC-1:0] ctrl_pclk;   // driven by u_clk_mux below, flattened out to each controller's own named port
     lane_sel_t sel_tgt;   // each group's currently effective owner selection (after pipe_lane_sel_sync)
     lane_sel_t dec_tgt;   // each group's raw decoder selection (unsynchronized, DPR-combined), used by rst_mux
@@ -112,7 +104,7 @@ module pipe_lane_mapper #(
     assign ctrld_pclk = ctrl_pclk[3];
 
     //------------------------------------------------------------
-    // Reset-mux submodule: independent rst_n/perst_n select the current owner's inputs
+    // Reset-mux submodule: phy_rst_n selects ctrl_rst_n by current owner
     // Uses dec_tgt (the decoder's raw output, not synchronized by pipe_lane_sel_sync), not sel_tgt
     //------------------------------------------------------------
     pipe_lane_rst_mux #(
@@ -120,12 +112,9 @@ module pipe_lane_mapper #(
         .NC   (NC)
     ) u_rst_mux (
         .ctrl_rst_n (ctrl_rst_n),
-        .ctrl_perst_n (ctrl_perst_n),
         .dpr_rst_n  (dpr_rst_n),
-        .dpr_perst_n (dpr_perst_n),
         .sel_tgt    (dec_tgt),
-        .phy_rst_n  (phy_rst_n),
-        .phy_perst_n (phy_perst_n)
+        .phy_rst_n  (phy_rst_n)
     );
 
     //------------------------------------------------------------

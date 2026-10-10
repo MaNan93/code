@@ -38,7 +38,7 @@ class GenerationPrefixTests(unittest.TestCase):
                 if path.is_file()}
 
     def test_all_prefixes_keep_declarations_references_and_simulator_inputs_aligned(self):
-        result = self.generate(module_prefix="soc_", file_prefix="rtl_", macro_prefix="SOC_")
+        result = self.generate(module_prefix="soc", file_prefix="rtl", macro_prefix="SOC")
         self.assertTrue(result.generated)
         sources = list((self.root / "rtl").rglob("*.sv"))
         self.assertEqual(len(sources), 14)
@@ -73,7 +73,7 @@ class GenerationPrefixTests(unittest.TestCase):
         self.assertIn("TB_FILES  = ../tb/rtl_tb_pipe_lane_mapper.sv", makefile)
         self.assertIn("+define+SOC_DUMP_FSDB", makefile)
         for manifest in result.manifests.values():
-            for name, value in {"module_prefix": "soc_", "file_prefix": "rtl_", "macro_prefix": "SOC_"}.items():
+            for name, value in {"module_prefix": "soc", "file_prefix": "rtl", "macro_prefix": "SOC"}.items():
                 self.assertEqual(manifest["options"][name], value)
 
     def test_each_prefix_is_independent_and_changes_generation_identity(self):
@@ -88,7 +88,7 @@ class GenerationPrefixTests(unittest.TestCase):
                     for relative, contents in baseline.items():
                         path = Path(relative)
                         if path.suffix == ".sv":
-                            renamed = path.with_name("out-" + path.name).as_posix()
+                            renamed = path.with_name("out-_" + path.name).as_posix()
                             self.assertEqual(self.outputs()[renamed], contents)
                 else:
                     self.assertEqual(set(self.outputs()), set(baseline))
@@ -106,6 +106,13 @@ class GenerationPrefixTests(unittest.TestCase):
         self.generate()
         self.assertEqual({name: data for name, data in self.outputs().items()
                           if not name.endswith("manifest.json")}, baseline)
+
+    def test_existing_trailing_underscore_is_not_added_twice(self):
+        self.generate(module_prefix="soc", file_prefix="rtl", macro_prefix="SOC")
+        first = {name: data for name, data in self.outputs().items() if not name.endswith("manifest.json")}
+        self.generate(module_prefix="soc_", file_prefix="rtl_", macro_prefix="SOC_")
+        self.assertEqual({name: data for name, data in self.outputs().items()
+                          if not name.endswith("manifest.json")}, first)
 
     def test_invalid_prefixes_preserve_installed_outputs_and_flags(self):
         self.generate()

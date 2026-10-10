@@ -42,7 +42,7 @@ controller state: gen_running=True ... gen_state=generating
 对照实验：同一批 4 个测试，`PLM_NO_VERIBLE=1` 时 `OK`（41.857s，0 次格式化调用）；启用本机 verible 时 `FAILED`（123.343s，165 次格式化调用、累计 77.2s、单次最大 0.62s）。
 
 为什么是问题：
-1) 项目文档（`QT_CODE_REVIEW.md`、`docs/r3_integrity_check.md`）记录的全绿结论是在**没有 verible** 的环境取得的，在真实开发机上不成立 —— 这个基线不能用来判断重构是否有回归。
+1) 项目文档（`QT_CODE_REVIEW.md`、现已合并到 `src/plm/docs/release_note.md` 的 1.0.5/r3 记录）记录的全绿结论是在**没有 verible** 的环境取得的，在真实开发机上不成立 —— 这个基线不能用来判断重构是否有回归。
 2) `wait_for_idle` 把 10 秒写成硬编码，而"生成"的真实耗时取决于外部工具是否安装，测试稳定性被外部环境绑架。
 3) 用户实际体验同样受影响：一次生成 ~19 秒，其中绝大部分是 41 次子进程启动。
 

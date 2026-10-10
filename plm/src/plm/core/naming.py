@@ -31,6 +31,12 @@ class GenerationNames:
     file_prefix: str = ""
     macro_prefix: str = ""
 
+    def __post_init__(self):
+        for name in ("module_prefix", "file_prefix", "macro_prefix"):
+            value = getattr(self, name)
+            if value and not value.endswith("_"):
+                object.__setattr__(self, name, value + "_")
+
     @classmethod
     def from_options(cls, options):
         return cls(options.module_prefix, options.file_prefix, options.macro_prefix)

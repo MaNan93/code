@@ -374,7 +374,7 @@ def _export_rtl_into(plan, out_dir, *, display_out=None):
         src / "pipe_lane_clk_mux.sv": rtl.gen_clk_mux(
             plan, options.pclk_mode, options.dpr
         ),
-        src / "pipe_lane_rst_mux.sv": rtl.gen_rst_mux(plan, options.dpr),
+        src / "pipe_lane_rst_mux.sv": rtl.gen_rst_mux(plan, options.dpr, options.pclk_mode),
         src / "pipe_lane_data_m2p.sv": rtl.gen_data_m2p(
             plan, options.pclk_mode, options.dpr
         ),

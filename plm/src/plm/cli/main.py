@@ -74,9 +74,9 @@ def _add_generation_args(parser):
     )
     parser.add_argument("--dpr", action="store_true", help=DPR_HELP)
     parser.add_argument("--quiet", action="store_true")
-    parser.add_argument("--module-prefix", default="", help="Prefix PLM module and package names.")
-    parser.add_argument("--file-prefix", default="", help="Prefix all emitted SystemVerilog filenames.")
-    parser.add_argument("--macro-prefix", default="", help="Prefix PLM preprocessor macro names.")
+    parser.add_argument("--module-prefix", default="", help="Prefix PLM module/package names; append _ when missing.")
+    parser.add_argument("--file-prefix", default="", help="Prefix all SystemVerilog filenames; append _ when missing.")
+    parser.add_argument("--macro-prefix", default="", help="Prefix PLM macros; append _ when missing.")
     parser.add_argument("--events-json", action="store_true", help=argparse.SUPPRESS)
 
 

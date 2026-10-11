@@ -13,11 +13,15 @@ import argparse
 from pathlib import Path
 from typing import Callable, Dict, List, Optional, Set, Tuple
 
+# Support this monorepo's source checkout as well as installed packages.
+for _package in ("ramgen", "vutils"):
+    _source = Path(__file__).resolve().parent.parent / _package / "src"
+    if _source.is_dir():
+        sys.path.insert(0, str(_source))
 from ramgen import ramgen
-import sys as _sys, pathlib as _pathlib
-_sys.path.insert(0, str(_pathlib.Path(__file__).parent.parent / "vutils" / "src"))
-from vutils.vedit import vedit
-del _sys, _pathlib
+from ramgen.sv_scan import IDENTIFIER, instance_declarations, matching_delimiters, module_headers, tokenize
+from vutils.vedit import read_interface_from_file, vedit
+del _package, _source
 ENCODING = "utf-8"
 
 
@@ -114,8 +118,7 @@ def _pick_target_module(modules: List[Dict[str, object]], path: Path,
 
 def _load_editor(path: Path, inst_name: Optional[str] = None) -> vedit:
     """Create a vedit editor for the module that owns *inst_name*."""
-    module_name = _resolve_target_module_name(path, inst_name=inst_name)
-    return vedit.from_file(path, module_name=module_name)
+    return vedit.from_file(path, auto_select=True, inst_name=inst_name)
 
 
 def _append_to_file(
@@ -135,15 +138,11 @@ def _append_to_file(
     Returns:
         如果文件被修改则返回 True，否则返回 False
     """
-    try:
-        editor = _load_editor(path, inst_name=inst_name)
-    except Exception as exc:
-        _warn(f"skip editing {path}: {exc}")
-        return False
+    editor = _load_editor(path, inst_name=inst_name)
 
     original_text = path.read_text(encoding=ENCODING)
 
-    # Add ports
+    port_dict = {}
     if signals:
         port_dict = {
             s["name"]: {
@@ -154,12 +153,10 @@ def _append_to_file(
             }
             for s in signals
         }
-        editor.add_port(port_dict)
-
-    # Add instance-port connections
+    inst_port_dict = {}
     if pins and inst_name:
         inst_port_dict = {inst_name: {port: {"wire": wire} for port, wire in pins}}
-        editor.add_inst_port(inst_port_dict)
+    editor.add_ports_and_inst_ports(port_dict, inst_port_dict)
 
     updated_text = editor.module_text
     if updated_text != original_text:
@@ -265,17 +262,35 @@ def rewrite_cdm_pl_reg_file(rtl_dir: Path) -> Optional[Path]:
     if not cdm_pl_reg_file.is_file():
         return None
 
-    # Pre-apply regex replacements to the file text
-    text = cdm_pl_reg_file.read_text(encoding=ENCODING)
-    text = re.sub(r"\(write_pulse.*?pl_reg_16\[7\];", "sys_fast_link_mode;", text)
-    text = re.sub(r"\(phy_type.*?pl_reg_18\[5:0\];", "sys_link_capable;", text)
-    cdm_pl_reg_file.write_text(text, encoding=ENCODING)
+    editor = _load_editor(cdm_pl_reg_file)
+    text = editor.module_text
 
-    # Add CDM ports via vedit
-    try:
-        editor = _load_editor(cdm_pl_reg_file)
-    except Exception:
-        return cdm_pl_reg_file
+    def replacement_rhs(match: re.Match) -> Optional[str]:
+        rhs = match.group("rhs")
+        for start, register, signal in (
+            ("write_pulse", r"pl_reg_16\s*\[\s*7\s*\]", "sys_fast_link_mode"),
+            ("phy_type", r"pl_reg_18\s*\[\s*5\s*:\s*0\s*\]", "sys_link_capable"),
+        ):
+            if re.match(rf"\s*\(\s*{start}\b", rhs) and re.search(register, rhs):
+                return signal
+        return None
+
+    # Replace the complete assignment RHS, including closing parentheses and
+    # multiline expressions. Do not write the file until editing has succeeded.
+    masked_text = re.sub(r'//[^\n]*|/\*[\s\S]*?\*/|"(?:\\.|[^"\\])*"',
+                         lambda m: re.sub(r"[^\n]", " ", m.group(0)), text)
+    replacements = []
+    for match in re.finditer(
+        r"(?P<head>\b[A-Za-z_][A-Za-z0-9_$]*(?:\s*\[[^\]]+\])?\s*=(?!=)\s*)"
+        r"(?P<rhs>[^;]+);", masked_text,
+    ):
+        signal = replacement_rhs(match)
+        if signal is not None:
+            replacements.append((match.start("rhs"), match.end("rhs"), signal))
+    for start, end, signal in reversed(replacements):
+        text = text[:start] + signal + text[end:]
+    if text != editor.module_text:
+        editor = vedit(text, editor.module_name)
 
     editor.add_port({
         "sys_fast_link_mode": {"direction": "input"},
@@ -283,7 +298,7 @@ def rewrite_cdm_pl_reg_file(rtl_dir: Path) -> Optional[Path]:
     })
 
     updated_text = editor.module_text
-    if updated_text != text:
+    if updated_text != cdm_pl_reg_file.read_text(encoding=ENCODING):
         cdm_pl_reg_file.write_text(updated_text, encoding=ENCODING)
 
     return cdm_pl_reg_file
@@ -450,12 +465,14 @@ def _resolve_target_module_name(path: Path, inst_name: Optional[str] = None) -> 
 
 
 def analyze_pcie_iip_subsystem_interface(rtl_dir: Path) -> Optional[dict]:
-    """Return module name and ANSI port metadata for rtl/examples/pcie_iip_subsystem.sv."""
+    """Read subsystem ports and header parameters with complete syntax validation."""
     subsystem_file = rtl_dir / EXAMPLES_DIR / PCIE_IIP_SUBSYSTEM_SV
     try:
-        target_module_name = _resolve_target_module_name(subsystem_file)
-        editor = vedit.from_file(subsystem_file, module_name=target_module_name)
-        return {"module_name": editor.module_name, "ports": editor.ports, "style": "ansi"}
+        interface = read_interface_from_file(subsystem_file, auto_select=True)
+        return {"module_name": interface["module_name"], "ports": interface["ports"],
+                "style": "ansi" if interface["is_ansi"] else "non-ansi",
+                "parameter_declaration": interface["parameter_declaration"],
+                "param_names": interface["param_names"]}
     except Exception as exc:
         _warn(f"failed to analyze subsystem interface ({subsystem_file}): {exc}")
         return None
@@ -507,8 +524,28 @@ def extract_port_widths_from_report_html(report_path: Path) -> Dict[str, str]:
 
 
 def _normalize_signal_name(value: object) -> str:
-    """Normalize signal name for dictionary lookup (strip whitespace and lowercase)."""
-    return str(value).strip().lower()
+    """Keep Verilog's case-sensitive identity while trimming CSV whitespace."""
+    return str(value).strip()
+
+
+def _casefold_index(names) -> dict:
+    """Index only names with an unambiguous spelling under case folding."""
+    index = {}
+    for name in names:
+        folded = name.casefold()
+        if folded not in index:
+            index[folded] = name
+        elif index[folded] != name:
+            index[folded] = None
+    return index
+
+
+def _matching_signal_key(name: str, values: dict, folded_values: dict, source_names: dict):
+    if name in values:
+        return name
+    # Preserve tolerant matching only when both sides have one possible name.
+    folded = name.casefold()
+    return folded_values.get(folded) if source_names.get(folded) == name else None
 
 
 def load_wrapper_rules(rule_path: Path) -> Dict[str, Dict[str, str]]:
@@ -552,6 +589,8 @@ def generate_pcie_ctrl_wrapper_file(rtl_dir: Path, module_prefix: str, rule_csv_
         return None
 
     subsystem_module_name = subsystem_info["module_name"]
+    parameter_declaration = subsystem_info.get("parameter_declaration", "")
+    param_names = subsystem_info.get("param_names", [])
     ports = subsystem_info.get("ports", [])
     wrapper_file = rtl_dir / TOP_DIR / PCIE_CTRL_WRAPPER_SV
     wrapper_file.parent.mkdir(parents=True, exist_ok=True)
@@ -561,11 +600,13 @@ def generate_pcie_ctrl_wrapper_file(rtl_dir: Path, module_prefix: str, rule_csv_
     # Load HTML width overrides
     report_path = rtl_dir.parent / REPORT_HTML
     html_widths = extract_port_widths_from_report_html(report_path)
-    # 统一用归一化后的 key（小写+strip）构建查找表，避免大小写/空白不一致导致匹配失败
+    # Prefer exact SV identifiers; tolerate case differences only if unique.
     normalized_html_widths = {
         _normalize_signal_name(key): value
         for key, value in html_widths.items()
     }
+    source_case_index = _casefold_index(_normalize_signal_name(p.get("name", "")) for p in ports)
+    html_case_index = _casefold_index(normalized_html_widths)
     if not report_path.is_file():
         print(f"warning: {report_path} not found, using widths from ANSI port list", flush=True)
 
@@ -578,13 +619,26 @@ def generate_pcie_ctrl_wrapper_file(rtl_dir: Path, module_prefix: str, rule_csv_
         name_key = _normalize_signal_name(raw_name)
         direction = port.get("direction", "")
         ansi_width = port.get("width", "")
-        if name_key in normalized_html_widths:
-            width = normalized_html_widths[name_key]
+        html_key = _matching_signal_key(name_key, normalized_html_widths, html_case_index, source_case_index)
+        if html_key is not None:
+            width = normalized_html_widths[html_key]
         else:
             if report_path.is_file():
                 print(f"warning: port '{raw_name}' not found in {REPORT_HTML}, keeping ANSI width '{ansi_width}'", flush=True)
             width = ansi_width
-        analyzed_ports.append({"name": raw_name, "name_key": name_key, "direction": direction, "width": width})
+        dimension = port.get("dimension", "")
+        # Header parameters are copied below; unknown identifiers and macros
+        # cannot silently become undeclared names in the generated wrapper.
+        for bounds in (width, dimension):
+            if "`" in bounds:
+                raise ValueError(f"port '{raw_name}' needs a resolved width from {report_path}: {bounds}")
+            bounds = re.sub(r"(?:\d+)?'[sS]?[bBoOdDhH][0-9a-fA-F_xXzZ?]+", "", bounds)
+            identifiers = re.findall(r"(?<![\w$])[A-Za-z_][A-Za-z0-9_$]*", bounds)
+            unknown = set(identifiers) - set(param_names)
+            if unknown:
+                raise ValueError(f"port '{raw_name}' has undefined width parameters {sorted(unknown)}; update {report_path}")
+        analyzed_ports.append({"name": raw_name, "name_key": name_key, "direction": direction,
+                               "width": width, "type": port.get("type", ""), "dimension": dimension})
 
     # Step 3: apply rule.csv to determine wrapper ports and u_pcie_ctrl connections
     rule_path = rule_csv_path if rule_csv_path else _find_config_file(RULE_CSV)
@@ -592,18 +646,29 @@ def generate_pcie_ctrl_wrapper_file(rtl_dir: Path, module_prefix: str, rule_csv_
     if not rule_path.is_file():
         print(f"warning: {rule_path} not found, using default one-to-one wrapper mapping", flush=True)
 
-    analyzed_names = {port.get("name_key", "") for port in analyzed_ports}
+    rule_case_index = _casefold_index(rules)
+    matched_rules = {_matching_signal_key(port["name_key"], rules, rule_case_index, source_case_index)
+                     for port in analyzed_ports}
     for rule_name in rules:
-        if rule_name not in analyzed_names:
+        if rule_name not in matched_rules:
             print(f"warning: rule name '{rule_name}' not found in analyzed subsystem ports", flush=True)
 
     wrapper_ports: List[Dict[str, str]] = []
     wrapper_port_seen: Set[str] = set()
+    wrapper_ports_by_name: Dict[str, Dict[str, str]] = {}
     internal_logic_decls: List[Dict[str, str]] = []
     internal_logic_seen: Set[str] = set()
     instance_conns: List[Dict[str, str]] = []
     internal_signal_refs: Dict[str, List[str]] = {}  # Track which ports map to same internal signal
     internal_signal_widths: Dict[str, str] = {}
+    aliases: List[str] = []
+    signal_shapes: Dict[str, Tuple[str, str]] = {}
+
+    def check_shape(signal: str, width: str, dimension: str) -> None:
+        shape = (width, dimension)
+        if signal in signal_shapes and signal_shapes[signal] != shape:
+            raise ValueError(f"signal '{signal}' has conflicting widths/dimensions: {signal_shapes[signal]} vs {shape}")
+        signal_shapes[signal] = shape
 
     def is_valid_identifier(s: str) -> bool:
         """Check if string is a valid Verilog identifier."""
@@ -614,7 +679,10 @@ def generate_pcie_ctrl_wrapper_file(rtl_dir: Path, module_prefix: str, rule_csv_
         name_key = port.get("name_key", "")
         direction = port.get("direction", "")
         width = port.get("width", "")
-        rule = rules.get(name_key)
+        ptype = port.get("type", "")
+        dimension = port.get("dimension", "")
+        rule_key = _matching_signal_key(name_key, rules, rule_case_index, source_case_index)
+        rule = rules.get(rule_key)
         if rule is None:
             pin_value = "-"
             port_value = "-"
@@ -624,8 +692,7 @@ def generate_pcie_ctrl_wrapper_file(rtl_dir: Path, module_prefix: str, rule_csv_
 
         # Validation 1: pin must not be empty
         if not pin_value:
-            print(f"error: rule for '{name}' has empty pin (pin column is required)", flush=True)
-            continue
+            raise ValueError(f"rule for '{name}' has empty pin (pin column is required)")
 
         pin_lower = pin_value.lower()
         port_lower = port_value.lower()
@@ -656,15 +723,13 @@ def generate_pcie_ctrl_wrapper_file(rtl_dir: Path, module_prefix: str, rule_csv_
                 if port_value == "-":
                     # port="-" means use pin value as wrapper port name
                     if not is_valid_identifier(conn_expr):
-                        print(f"error: rule for '{name}' has port='-' but pin='{pin_value}' is not a valid Verilog identifier", flush=True)
-                        wrapper_port_name = ""
+                        raise ValueError(f"rule for '{name}' has port='-' but pin='{pin_value}' is not a valid Verilog identifier")
                     else:
                         wrapper_port_name = conn_expr
                 else:
                     # port is a specific name
                     if not is_valid_identifier(port_value):
-                        print(f"error: rule for '{name}' has port='{port_value}' which is not a valid Verilog identifier", flush=True)
-                        wrapper_port_name = ""
+                        raise ValueError(f"rule for '{name}' has port='{port_value}' which is not a valid Verilog identifier")
                     else:
                         wrapper_port_name = port_value
             else:
@@ -672,12 +737,34 @@ def generate_pcie_ctrl_wrapper_file(rtl_dir: Path, module_prefix: str, rule_csv_
                 wrapper_port_name = name if not is_port_nc else ""
 
         # Add wrapper port (with deduplication)
+        if wrapper_port_name:
+            check_shape(wrapper_port_name, width, dimension)
+            previous = wrapper_ports_by_name.get(wrapper_port_name)
+            if previous and previous["direction"] != direction:
+                raise ValueError(f"wrapper port '{wrapper_port_name}' has conflicting directions")
         if wrapper_port_name and wrapper_port_name not in wrapper_port_seen:
-            wrapper_ports.append({"name": wrapper_port_name, "direction": direction, "width": width})
+            wrapper_ports.append({"name": wrapper_port_name, "direction": direction, "width": width,
+                                  "type": ptype, "dimension": dimension})
             wrapper_port_seen.add(wrapper_port_name)
+            wrapper_ports_by_name[wrapper_port_name] = wrapper_ports[-1]
+
+        if wrapper_port_name and conn_expr != wrapper_port_name:
+            if not is_valid_identifier(conn_expr):
+                raise ValueError(f"rule for '{name}' exposes an expression without a declared source signal: {conn_expr}")
+            if direction == "input":
+                aliases.append(f"    assign {conn_expr} = {wrapper_port_name};")
+            elif direction == "output":
+                aliases.append(f"    assign {wrapper_port_name} = {conn_expr};")
+            elif direction == "inout":
+                # Connect the bidirectional net directly, preserving its drivers
+                # and high-impedance behavior without a directional assignment.
+                conn_expr = wrapper_port_name
+            else:
+                raise ValueError(f"unsupported renamed port direction for '{name}': {direction}")
 
         # Track internal signal references for duplicate detection
-        if not wrapper_port_name and conn_expr and is_valid_identifier(conn_expr):
+        if conn_expr and is_valid_identifier(conn_expr):
+            check_shape(conn_expr, width, dimension)
             if conn_expr not in internal_signal_refs:
                 internal_signal_refs[conn_expr] = []
             internal_signal_refs[conn_expr].append(name)
@@ -693,12 +780,12 @@ def generate_pcie_ctrl_wrapper_file(rtl_dir: Path, module_prefix: str, rule_csv_
         # Declare internal logic for non-port connections with valid identifiers
         if (
             conn_expr
-            and not wrapper_port_name
             and is_valid_identifier(conn_expr)
-            and conn_expr not in wrapper_port_seen
+            and conn_expr != wrapper_port_name
             and conn_expr not in internal_logic_seen
         ):
-            internal_logic_decls.append({"name": conn_expr, "width": width})
+            internal_logic_decls.append({"name": conn_expr, "width": width,
+                                         "type": ptype, "dimension": dimension})
             internal_logic_seen.add(conn_expr)
 
         instance_conns.append({
@@ -718,12 +805,13 @@ def generate_pcie_ctrl_wrapper_file(rtl_dir: Path, module_prefix: str, rule_csv_
             direction = port.get("direction", "")
             width = port.get("width", "")
             port_name = port.get("name", "")
-            decl = f"{direction} {width} {port_name}".rstrip() if width else f"{direction} {port_name}"
+            decl = " ".join(filter(None, (direction, port.get("type", ""), width,
+                                          port_name, port.get("dimension", ""))))
             trailing = "," if index < len(wrapper_ports) - 1 else ""
             port_lines.append(f"    {decl}{trailing}")
-        module_decl = f"module {wrapper_module_name}(\n" + "\n".join(port_lines) + "\n);"
+        module_decl = f"module {wrapper_module_name}{parameter_declaration}(\n" + "\n".join(port_lines) + "\n);"
     else:
-        module_decl = f"module {wrapper_module_name}();"
+        module_decl = f"module {wrapper_module_name}{parameter_declaration}();"
 
     logic_decl_block = ""
     if internal_logic_decls:
@@ -732,15 +820,17 @@ def generate_pcie_ctrl_wrapper_file(rtl_dir: Path, module_prefix: str, rule_csv_
         for decl in internal_logic_decls:
             width = decl.get("width", "")
             signal_name = decl.get("name", "")
-            if not signal_name or signal_name in emitted_logic_names:
+            if not signal_name or signal_name in emitted_logic_names or signal_name in wrapper_port_seen:
                 continue
             emitted_logic_names.add(signal_name)
-            if width:
-                logic_lines.append(f"    logic {width} {signal_name};")
-            else:
-                logic_lines.append(f"    logic {signal_name};")
+            ptype = re.sub(r"\b(?:wire|reg|logic|tri)\b", "", decl.get("type", "")).strip()
+            logic_lines.append("    " + " ".join(filter(None, ("wire", ptype, width,
+                                signal_name, decl.get("dimension", "")))) + ";")
         logic_decl_block = "\n".join(logic_lines)
 
+    param_connections = ""
+    if param_names:
+        param_connections = " #(\n" + ",\n".join(f"        .{name}({name})" for name in param_names) + "\n    )"
     if instance_conns:
         max_pin_len = max((len(conn["pin"]) for conn in instance_conns), default=0)
         max_expr_len = max((len(conn["expr"]) for conn in instance_conns), default=0)
@@ -753,16 +843,18 @@ def generate_pcie_ctrl_wrapper_file(rtl_dir: Path, module_prefix: str, rule_csv_
             # Empty expr means floating pin: .pin()
             instance_lines.append(f"        .{pin_name} ({expr}){trailing} // {direction}")
         instance_block = (
-            f"    {subsystem_module_name} u_pcie_ctrl (\n"
+            f"    {subsystem_module_name}{param_connections} u_pcie_ctrl (\n"
             + "\n".join(instance_lines)
             + "\n    );  // .pin() = floating/unconnected, .pin(expr) = connected"
         )
     else:
-        instance_block = f"    {subsystem_module_name} u_pcie_ctrl ();"
+        instance_block = f"    {subsystem_module_name}{param_connections} u_pcie_ctrl ();"
 
     content_sections = [module_decl]
     if logic_decl_block:
         content_sections.append(logic_decl_block)
+    if aliases:
+        content_sections.append("\n".join(dict.fromkeys(aliases)))
     content_sections.append(instance_block)
     content = "\n\n".join(content_sections) + "\n\nendmodule"
     wrapper_file.write_text(content + "\n", encoding=ENCODING)
@@ -777,6 +869,36 @@ def read_subsystem_append_block() -> Optional[str]:
     return text or None
 
 
+def _source_module_bounds(text: str, path: Path) -> Tuple[int, int]:
+    """Locate the selected module's header end and endmodule in source text."""
+    tokens = tokenize(text)
+    closing = matching_delimiters(tokens)
+    headers = list(module_headers(tokens))
+    if not headers:
+        raise ValueError(f"No module found in {path}")
+    _, name_idx = next((h for h in headers if tokens[h[1]].group() == path.stem), headers[0])
+    cursor = name_idx + 1
+    while cursor < len(tokens):
+        if cursor in closing:
+            cursor = closing[cursor] + 1
+        elif tokens[cursor].group() == ";":
+            break
+        else:
+            cursor += 1
+    if cursor >= len(tokens):
+        raise ValueError(f"Cannot locate module header end in {path}")
+    body_start = tokens[cursor].end()
+    depth = 1
+    for token in tokens[cursor + 1:]:
+        if token.group() == "module":
+            depth += 1
+        elif token.group() == "endmodule":
+            depth -= 1
+            if depth == 0:
+                return body_start, token.start()
+    raise ValueError(f"Cannot locate endmodule in {path}")
+
+
 def append_text_after_first_port_close(rtl_dir: Path, text_to_append: Optional[str]) -> Optional[Path]:
     if not text_to_append:
         return None
@@ -784,17 +906,19 @@ def append_text_after_first_port_close(rtl_dir: Path, text_to_append: Optional[s
     if not subsystem_file.is_file():
         return None
     text = subsystem_file.read_text(encoding=ENCODING)
-    if text_to_append in text:
+    pos, module_end = _source_module_bounds(text, subsystem_file)
+    if text_to_append in text[pos:module_end]:
         return subsystem_file
-    m = re.search(r"^\s*\);\s*$", text, re.MULTILINE)
-    if not m:
-        return None
-    pos = m.end()
+    line_end = text.find("\n", pos)
+    tail = text[pos:line_end if line_end >= 0 else len(text)]
+    if not tail.strip() or tail.lstrip().startswith("//"):
+        pos = line_end + 1 if line_end >= 0 else len(text)
     if text[pos:pos + 2] == "\r\n":
         pos += 2
     elif text[pos:pos + 1] == "\n":
         pos += 1
-    new_text = text[:pos] + text_to_append.rstrip("\n") + "\n" + text[pos:]
+    separator = "" if text[:pos].endswith("\n") else "\n"
+    new_text = text[:pos] + separator + text_to_append.rstrip("\n") + "\n" + text[pos:]
     subsystem_file.write_text(new_text.rstrip("\n") + "\n", encoding=ENCODING)
     return subsystem_file
 
@@ -803,15 +927,17 @@ def extract_pcie_ram_port_from_rams_file(rtl_dir: Path) -> Optional[str]:
     rams_file = rtl_dir / EXAMPLES_DIR / PCIE_IIP_RAMS_SV
     if not rams_file.is_file():
         return None
-    lines = rams_file.read_text(encoding=ENCODING).splitlines()
     result = []
-    for line in lines:
-        if re.match(r"^\s*(input|output)\b", line) and not re.match(r"^\s*input\b.*clk", line):
-            line = re.sub(r"^(\s*)(input|output)\b", r"\1wire", line)
-            line = re.sub(r",\s*$", "", line.rstrip())
-            if not line.endswith(";"):
-                line += ";"
-            result.append(line)
+    for port in read_interface_from_file(rams_file, auto_select=True)["ports"]:
+        name = port["name"]
+        if port["direction"] == "input" and "clk" in name:
+            continue
+        # Preserve signedness and both packed/unpacked dimensions, while
+        # replacing the port direction/net type with exactly one wire keyword.
+        signed = "signed" if re.search(r"\bsigned\b", port.get("type", "")) else ""
+        decl = " ".join(filter(None, ("wire", signed, port.get("width", ""),
+                                      name, port.get("dimension", ""))))
+        result.append(decl + ";")
     return "\n".join(result) if result else None
 
 
@@ -827,7 +953,8 @@ def extract_signal_names_from_pcie_ram_port(pcie_ram_port: Optional[str]) -> Lis
 
     signal_names: List[str] = []
     for line in pcie_ram_port.splitlines():
-        match = re.match(r"^\s*(?:wire|input|output)\b(?:\s+\[[^\]]+\])?\s+([A-Za-z_][A-Za-z0-9_$]*)\s*;", line)
+        match = re.match(r"^\s*wire\b(?:\s+(?:signed|unsigned))?(?:\s*\[[^\]]+\])*\s+"
+                         r"([A-Za-z_][A-Za-z0-9_$]*)(?:\s*\[[^\]]+\])*\s*;", line)
         if match:
             signal_names.append(match.group(1))
     return signal_names
@@ -856,11 +983,23 @@ def extract_pcie_ram_inst_from_device_file(rtl_dir: Path, module_prefix: str) ->
     if not device_file.is_file():
         return None
     text = device_file.read_text(encoding=ENCODING)
-    m = re.search(
-        r"(^\s*[`A-Za-z_][A-Za-z0-9_$`]*\s*(?:#\s*\([\s\S]*?\)\s*)?)(external_rams)(\s*\([\s\S]*?\)\s*;)",
-        text, re.MULTILINE,
-    )
-    return f"{build_module_prefix(module_prefix)}pcie_ram u_pcie_ram{m.group(3)}".rstrip() if m else None
+    tokens = tokenize(text)
+    closing = matching_delimiters(tokens)
+    for declaration in instance_declarations(text, tokens, closing, IDENTIFIER.fullmatch):
+        for instance in declaration["instances"]:
+            if instance["name"] != "external_rams":
+                continue
+            name_start = instance["name_start"]
+            prefix = text[declaration["type_end"]:declaration["instances"][0]["name_start"]]
+            # Find this instance's connection end using the same token offsets.
+            name_idx = next(i for i, token in enumerate(tokens) if token.start() == name_start)
+            port_idx = name_idx + 1
+            while port_idx in closing and tokens[port_idx].group() == "[":
+                port_idx = closing[port_idx] + 1
+            end = tokens[closing[port_idx]].end()
+            suffix = text[name_start + len(instance["name"]):end]
+            return f"{build_module_prefix(module_prefix)}pcie_ram{prefix}u_pcie_ram{suffix};"
+    return None
 
 
 def append_pcie_ram_inst_to_subsystem_file(rtl_dir: Path, pcie_ram_inst: Optional[str]) -> Optional[Path]:
@@ -870,12 +1009,9 @@ def append_pcie_ram_inst_to_subsystem_file(rtl_dir: Path, pcie_ram_inst: Optiona
     if not subsystem_file.is_file():
         return None
     text = subsystem_file.read_text(encoding=ENCODING)
-    if pcie_ram_inst in text:
+    body_start, pos = _source_module_bounds(text, subsystem_file)
+    if pcie_ram_inst in text[body_start:pos]:
         return subsystem_file
-    m = re.search(r"^\s*endmodule\b", text, re.MULTILINE)
-    if not m:
-        return None
-    pos = m.start()
     new_text = text[:pos].rstrip("\n") + f"\n{pcie_ram_inst}\n" + text[pos:]
     subsystem_file.write_text(new_text.rstrip("\n") + "\n", encoding=ENCODING)
     return subsystem_file
@@ -898,9 +1034,14 @@ def write_rtl_flist(rtl_dir: Path, include_scratch: bool) -> Path:
     ]
     if include_scratch:
         scratch_dir = rtl_dir / SCRATCH_DIR
-        use_vh = scratch_dir.is_dir() and any(scratch_dir.rglob("*.vh"))
-        lines.insert(3, _resolve_scratch_header_name(DWC_PCIE_CTL_UNPREFIX_SVH, use_vh))
-        lines.append(_resolve_scratch_header_name(DWC_PCIE_CTL_UNDEF_SVH, use_vh))
+        def resolve_header(name: str) -> str:
+            for use_vh in (False, True):
+                relative = _resolve_scratch_header_name(name, use_vh)
+                if (rtl_dir / relative).is_file():
+                    return relative
+            raise FileNotFoundError(f"missing scratch header: {scratch_dir / name} (or .vh)")
+        lines.insert(3, resolve_header(DWC_PCIE_CTL_UNPREFIX_SVH))
+        lines.append(resolve_header(DWC_PCIE_CTL_UNDEF_SVH))
     lines.append(f"{TOP_DIR}/{PCIE_CTRL_WRAPPER_SV}")
     flist_file.write_text("\n".join(lines) + "\n", encoding=ENCODING)
     return flist_file
@@ -1176,6 +1317,8 @@ def run(rule_csv_path: Optional[Path] = None) -> dict:
 
     log_step(5, "generate wrapper from rule.csv")
     generated_wrapper_file = step_generate_wrapper(rtl_dir, module_prefix, rule_path)
+    if generated_wrapper_file is None:
+        raise RuntimeError("failed to generate PCIe wrapper; subsystem interface could not be analyzed")
     log_ok()
 
     return build_run_result(

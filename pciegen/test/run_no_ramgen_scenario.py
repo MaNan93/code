@@ -12,16 +12,10 @@ import json
 import shutil
 import sys
 import tempfile
-import types
 from pathlib import Path
 
 
-def _load_pciegen_module(repo_root: Path):
-    if "ramgen" not in sys.modules:
-        ramgen_stub = types.ModuleType("ramgen")
-        ramgen_stub.ramgen = lambda **_: {}
-        sys.modules["ramgen"] = ramgen_stub
-
+def _load_pciegen_module(repo_root: Path, stub_ramgen: bool = True):
     pciegen_path = repo_root / "pciegen" / "pciegen.py"
     spec = importlib.util.spec_from_file_location("pciegen_module", pciegen_path)
     if spec is None or spec.loader is None:
@@ -29,6 +23,8 @@ def _load_pciegen_module(repo_root: Path):
 
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
+    if stub_ramgen:
+        module.ramgen = lambda **_: {}
     return module
 
 
@@ -219,6 +215,8 @@ def run_scenario() -> int:
         cdm_pl_reg_text = (rtl_dir / "src" / "Cdm" / "cdm_pl_reg.sv").read_text(encoding="utf-8")
         _assert_contains(cdm_pl_reg_text, "sys_fast_link_mode", "cdm_pl_reg replacement", failures)
         _assert_contains(cdm_pl_reg_text, "sys_link_capable", "cdm_pl_reg replacement", failures)
+        _assert_contains(cdm_pl_reg_text, "wire x = sys_fast_link_mode;", "cdm actual RHS replacement", failures)
+        _assert_contains(cdm_pl_reg_text, "wire y = sys_link_capable;", "cdm actual RHS replacement", failures)
 
         cdm_text = (rtl_dir / "src" / "Cdm" / "cdm.sv").read_text(encoding="utf-8")
         _assert_contains(cdm_text, ".sys_fast_link_mode(sys_fast_link_mode)", "cdm add_inst_port", failures)
@@ -239,13 +237,25 @@ def run_scenario() -> int:
         else:
             wrapper_text = wrapper_path.read_text(encoding="utf-8")
             # Width override from IO.html should replace parameter/macro widths.
-            _assert_contains(wrapper_text, "input [1:0] a_wrap", "wrapper width override for a", failures)
-            _assert_contains(wrapper_text, "output [3:0] c", "wrapper width override for c", failures)
+            wrapper_editor = pciegen.vedit.from_file(wrapper_path)
+            wrapper_ports = {port["name"]: port for port in wrapper_editor.ports}
+            for name, direction, width in (("a_wrap", "input", "[1:0]"), ("c", "output", "[3:0]")):
+                port = wrapper_ports.get(name, {})
+                if port.get("direction") != direction or port.get("width") != width:
+                    failures.append(f"wrapper port '{name}' has incorrect direction/width: {port}")
+            _assert_contains(wrapper_text, "assign a_bus = a_wrap;", "wrapper rename connectivity", failures)
+            _assert_contains(wrapper_text, "wire [1:0] a_bus;", "wrapper alias declaration", failures)
             # Rule mapping: pin value replacement in instance connection.
             _assert_contains(wrapper_text, ".a", "rule pin remap for a", failures)
             _assert_contains(wrapper_text, "(a_bus", "rule pin remap for a", failures)
             _assert_contains(wrapper_text, ".b", "rule constant mapping for b", failures)
             _assert_contains(wrapper_text, "(1'b0", "rule constant mapping for b", failures)
+
+        from vutils.vparser import VeribleParser
+        parsed = VeribleParser().parse_files([str(path) for path in rtl_dir.rglob("*.sv")], {"gen_tree": False})
+        for path, data in parsed.items():
+            if data.errors:
+                failures.append(f"generated RTL syntax error in {path}: {data.errors}")
 
         result["checks"]["passed"] = len(failures) == 0
         result["checks"]["failures"] = failures

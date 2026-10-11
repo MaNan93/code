@@ -8,8 +8,6 @@ from plm.frontend.qt.widgets.common import (
 class LogPanel(RoundedCanvasFrame):
     """Region 4: output tab, clear action, and auto-scrolling log."""
 
-    BORDER_WIDTH = 0.0
-
     closeRequested = QtCore.pyqtSignal()
 
     def __init__(self, parent=None):

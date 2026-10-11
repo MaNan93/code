@@ -7,7 +7,7 @@ from plm.frontend.qt.views.artifacts_panel import ArtifactsPanel
 from plm.frontend.qt.styles.tokens import (
     CONTROL_HEIGHT, HEADER_HEIGHT, SPACING_LG, SPACING_MD,
     ARTIFACTS_DEFAULT_WIDTH, ARTIFACTS_MIN_WIDTH,
-    PANEL_ANIMATION_DURATION,
+    PANEL_ANIMATION_DURATION, TEXT_MAIN,
 )
 
 
@@ -177,6 +177,31 @@ class ErrorSummary(QtWidgets.QLabel):
         super().mouseReleaseEvent(event)
 
 
+class DrawerShadow(QtWidgets.QWidget):
+    """Soft edge cast by the artifacts drawer onto the config panel it covers.
+
+    Both are white; without it only a hairline separates the two.
+    """
+
+    WIDTH = 18
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setAttribute(QtCore.Qt.WA_TransparentForMouseEvents, True)
+        self.setAttribute(QtCore.Qt.WA_NoSystemBackground, True)
+        self.hide()
+
+    def paintEvent(self, _event):
+        painter = QtGui.QPainter(self)
+        gradient = QtGui.QLinearGradient(0, 0, self.width(), 0)
+        edge = QtGui.QColor(TEXT_MAIN)
+        edge.setAlpha(0)
+        gradient.setColorAt(0.0, edge)
+        edge.setAlpha(38)
+        gradient.setColorAt(1.0, edge)
+        painter.fillRect(self.rect(), gradient)
+
+
 class ConfigTabPage(QtWidgets.QWidget):
     def __init__(self, editor, fill_editor=False, parent=None):
         super().__init__(parent)
@@ -215,7 +240,6 @@ class ConfigPage(RoundedCanvasFrame):
     """Region 2 with an absolute-positioned Region 5 overlay."""
 
     MAX_HISTORY = 50
-    BORDER_WIDTH = 0.0  # Let the white canvas meet the gray underlay directly.
 
     dirtyChanged = QtCore.pyqtSignal(bool)
     generateRequested = QtCore.pyqtSignal()
@@ -296,12 +320,27 @@ class ConfigPage(RoundedCanvasFrame):
             self._finish_artifacts_animation
         )
         self.tabs.currentChanged.connect(self._raise_artifacts)
+        self.artifacts_shadow = DrawerShadow(self)
+        self.artifacts_panel.installEventFilter(self)
         self.artifacts_panel.hide()
         self.installEventFilter(self)
 
     def _raise_artifacts(self, *_args):
         if self.artifacts_panel.isVisible():
+            self.artifacts_shadow.raise_()
             self.artifacts_panel.raise_()
+
+    def _sync_artifacts_shadow(self):
+        panel = self.artifacts_panel.geometry()
+        # Nothing to cast onto once the drawer covers the whole panel.
+        visible = self.artifacts_panel.isVisible() and panel.width() > 0 and panel.left() > 0
+        if visible:
+            inset = self.CORNER_RADII[0]
+            self.artifacts_shadow.setGeometry(
+                panel.left() - DrawerShadow.WIDTH, inset,
+                DrawerShadow.WIDTH, max(0, panel.height() - 2 * inset),
+            )
+        self.artifacts_shadow.setVisible(visible)
 
     def set_editable(self, editable):
         """Lock the four editors while no project is open.
@@ -459,6 +498,10 @@ class ConfigPage(RoundedCanvasFrame):
     def eventFilter(self, watched, event):
         if event.type() == QtCore.QEvent.Resize and watched is self:
             self.reposition_artifacts()
+        elif watched is self.artifacts_panel and event.type() in (
+            QtCore.QEvent.Move, QtCore.QEvent.Resize, QtCore.QEvent.Show, QtCore.QEvent.Hide,
+        ):
+            self._sync_artifacts_shadow()
         return super().eventFilter(watched, event)
 
     def toggle_artifacts(self):

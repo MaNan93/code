@@ -16,7 +16,7 @@ N200 = "#D5DBF0"
 N300 = "#BCC5E3"
 N400 = "#8A91B4"
 # N400 is too light for 16 px text; N450 meets 4.5:1 on all resting surfaces.
-N450 = "#5C638B"
+N450 = "#596088"
 N500 = "#575E87"
 N600 = "#444B72"
 N800 = "#1B1F3B"
@@ -47,7 +47,10 @@ PRIMARY_SOFT = P50
 PRIMARY_PRESSED = P100
 BG_MAIN = N0
 BG_SURFACE = N0
-BG_SIDEBAR = N50
+# The chrome behind the panels. Deliberately a step darker than N50: white
+# panels on N50 are only 1.13:1 apart and read as one surface.
+BG_SIDEBAR = "#DDE2F3"
+BG_SIDEBAR_HOVER = "#CCD3EB"
 BG_CARD = N50
 BG_SUBTLE = N100
 BG_ALTERNATE = N25
@@ -61,12 +64,14 @@ DIFF_REMOVED_BG = "#FFEBE9"
 DIFF_ADDED_GUTTER = "#CCFFD8"
 DIFF_REMOVED_GUTTER = "#FFD7D5"
 DIFF_HUNK_BG = "#DDF4FF"
-BG_ARTIFACTS_HEADER = "#F6F8FA"
-BORDER_ARTIFACTS = "#D1D9E0"
+BG_ARTIFACTS_HEADER = N100
+BORDER_ARTIFACTS = N300
 TEXT_ARTIFACTS = "#1F2328"
 TEXT_ARTIFACTS_MUTED = "#59636E"
 ACCENT_ARTIFACTS = "#0969DA"
 BORDER = "#DCE1F2"
+# Outline of the top-level panels (config, output, settings, docs).
+BORDER_PANEL = N300
 BORDER_HOVER = N300
 BORDER_FOCUS = P500
 TEXT_MAIN = N800
@@ -168,6 +173,7 @@ QSS_TOKENS = {
     "bg_main": BG_MAIN,
     "bg_surface": BG_SURFACE,
     "bg_sidebar": BG_SIDEBAR,
+    "bg_sidebar_hover": BG_SIDEBAR_HOVER,
     "bg_card": BG_CARD,
     "bg_subtle": BG_SUBTLE,
     "bg_alternate": BG_ALTERNATE,
@@ -189,6 +195,7 @@ QSS_TOKENS = {
     "danger_bg": DANGER_BG,
     "danger_text": DANGER_TEXT,
     "border": BORDER,
+    "border_panel": BORDER_PANEL,
     "border_hover": BORDER_HOVER,
     "border_focus": BORDER_FOCUS,
     "text_main": TEXT_MAIN,

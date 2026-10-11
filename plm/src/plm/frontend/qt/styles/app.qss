@@ -353,10 +353,11 @@ QPushButton#SecondaryBackButton {
     border-radius: $radius_control;
     padding: 0;
 }
-QPushButton#HeaderButton:hover, QPushButton#ArtifactsToolButton:hover,
-QPushButton#LogClearButton:hover, QPushButton#LogCloseBtn:hover,
-QPushButton#SecondaryBackButton:hover { background-color: $bg_subtle; }
-QPushButton#HeaderButton:focus { background-color: $bg_subtle; }
+QPushButton#ArtifactsToolButton:hover,
+QPushButton#LogClearButton:hover, QPushButton#LogCloseBtn:hover { background-color: $bg_subtle; }
+/* These sit on the chrome, not on a panel. */
+QPushButton#HeaderButton:hover, QPushButton#SecondaryBackButton:hover,
+QPushButton#HeaderButton:focus { background-color: $bg_sidebar_hover; }
 QPushButton#HeaderButton:pressed { background-color: $border; }
 QPushButton#ArtifactsToolButton:checked { background-color: $primary_soft; }
 QPushButton#ArtifactsToolButton::menu-indicator { image: none; width: 0; height: 0; }
@@ -537,7 +538,7 @@ QPlainTextEdit#LogOutput {
     font-size: $font_size_body;
 }
 QFrame#LogStatusBar {
-    background: $bg_sidebar;
+    background: $bg_card;
     border: none;
 }
 QLabel#LogStatusText { color: $text_sub; font-size: $font_size_body; }
@@ -580,14 +581,15 @@ QLabel#GenerationStatus[state="invalid"] {
     color: $danger_text;
 }
 
-/* The page reaches the window's bottom-right corner; follow its rounding
-   instead of painting a square over it. */
-QFrame#SecondaryPage {
+/* Settings and documentation sit in an outlined panel on the chrome, the
+   same way the config and output panels do. */
+QFrame#SecondaryPage { background-color: transparent; }
+QWidget#SecondaryPageArea {
     background-color: $bg_main;
-    border-bottom-right-radius: 16px;
+    border: 1px solid $border_panel;
+    border-radius: $radius_card;
+    margin: 0 $spacing_xs $spacing_xs $spacing_xs;
 }
-QWidget#WindowShell[maximized="true"] QFrame#SecondaryPage { border-bottom-right-radius: 0; }
-QWidget#SecondaryPageArea { background-color: transparent; }
 QFrame#SecondaryPageHeader {
     background: transparent;
     border: none;
@@ -669,15 +671,17 @@ QFrame#ButtonGroup > QPushButton:hover {
 QFrame#ButtonGroup > QPushButton:pressed { background-color: $border; }
 QPushButton#NavActionButton:hover, QPushButton#NavFooterButton:hover,
 QPushButton#ProjectButton:hover {
-    background-color: $bg_hover;
+    background-color: $bg_sidebar_hover;
 }
-QPushButton#ProjectButton[menuOpen="true"] { background-color: $bg_hover; }
+QPushButton#ProjectButton[menuOpen="true"] { background-color: $bg_sidebar_hover; }
+/* White on the tinted chrome: the selected row reads as raised, and stays
+   clearly apart from hover. */
 QPushButton#ProjectButton[selected="true"], QPushButton#NavFooterButton[selected="true"] {
-    background-color: $primary_soft;
+    background-color: $bg_surface;
     color: $text_main;
 }
 QPushButton#NavActionButton:focus, QPushButton#NavFooterButton:focus,
-QPushButton#ProjectButton:focus { background-color: $bg_hover; }
+QPushButton#ProjectButton:focus { background-color: $bg_sidebar_hover; }
 QPushButton#NavActionButton:pressed, QPushButton#NavFooterButton:pressed,
 QPushButton#ProjectButton:pressed { background-color: $border_hover; }
 QPushButton#ProjectMoreBtn {

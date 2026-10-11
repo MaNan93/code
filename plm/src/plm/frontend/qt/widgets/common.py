@@ -10,7 +10,7 @@ from PyQt5 import QtCore, QtGui, QtSvg, QtWidgets
 
 from plm.core.paths import PLM_ROOT
 from plm.frontend.qt.styles.tokens import (
-    BG_MAIN, BG_SUBTLE, BORDER, CONTROL_HEIGHT, CONTROL_PADDING_X, DANGER,
+    BG_MAIN, BG_SUBTLE, BORDER, BORDER_PANEL, CONTROL_HEIGHT, CONTROL_PADDING_X, DANGER,
     ICON_BUTTON_SIZE, ICON_GLYPH_SIZE, ICON_SIZE, ICON_TEXT_GAP,
     LINE_HEIGHT, MENU_GAP, MENU_ICON_TEXT_GAP, MENU_ITEM_PADDING_X, MENU_PADDING, MENU_RADIUS,
     MENU_SHADOW_LAYER_ALPHA, MENU_SHADOW_MARGIN, MENU_SHADOW_OFFSET, MENU_SHADOW_SPREAD,
@@ -256,10 +256,10 @@ def paint_popup_surface(painter, rect, radius=MENU_RADIUS):
 
 
 class RoundedCanvasFrame(QtWidgets.QFrame):
-    """Antialiased white canvas with an optional light border."""
+    """Antialiased white canvas outlined against the chrome behind it."""
 
     CORNER_RADII = (RADIUS_CARD,) * 4
-    BORDER_WIDTH = 0.0
+    BORDER_WIDTH = 1.0
 
     def paintEvent(self, event):
         painter = QtGui.QPainter(self)
@@ -271,7 +271,7 @@ class RoundedCanvasFrame(QtWidgets.QFrame):
         )
         painter.fillPath(path, QtGui.QColor(BG_MAIN))
         if self.BORDER_WIDTH:
-            painter.setPen(QtGui.QPen(QtGui.QColor(BORDER), self.BORDER_WIDTH))
+            painter.setPen(QtGui.QPen(QtGui.QColor(BORDER_PANEL), self.BORDER_WIDTH))
             painter.drawPath(path)
         painter.end()
 

@@ -62,6 +62,8 @@ class SecondaryPage(QtWidgets.QFrame):
 
         page_area = QtWidgets.QWidget()
         page_area.setObjectName("SecondaryPageArea")
+        # A panel on the chrome, like the config and output panels.
+        page_area.setAttribute(QtCore.Qt.WA_StyledBackground, True)
         page_area_layout = QtWidgets.QHBoxLayout(page_area)
         page_area_layout.setContentsMargins(SPACING_XL, SPACING_XL, SPACING_XL, SPACING_XL)
         page_area_layout.setSpacing(0)

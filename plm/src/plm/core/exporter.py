@@ -326,9 +326,10 @@ def _commit_output_set(staged, workspace):
             _remove_path(backup)
 
 
-def _export_rtl_into(plan, out_dir, *, display_out=None):
+def _export_rtl_into(plan, out_dir, *, display_out=None, log=None):
     """Write the full RTL output for plan into out_dir (a <set>/rtl/
     directory): a common/ snapshot, src/*.sv, flist.f."""
+    log = log or print
     options = plan.options
     names = GenerationNames.from_options(options)
     src = out_dir / "src"
@@ -368,7 +369,7 @@ def _export_rtl_into(plan, out_dir, *, display_out=None):
                 shutil.copy2(f, common_dst / f.name)
 
     shown_out = Path(display_out) if display_out is not None else out_dir
-    print(f"RTL   : {shown_out}")
+    log(f"RTL   : {shown_out}")
     files = {
         src / "pipe_lane_signal_pkg.sv": rtl.gen_pkg(plan, options.dpr),
         src / "pipe_lane_mode_dec.sv": rtl.gen_decoder(plan, options.dpr),
@@ -401,14 +402,15 @@ def _export_rtl_into(plan, out_dir, *, display_out=None):
         else:
             c = names.filelist(c)
         _write_text(p, c)
-        print(f"  generated {shown_out / p.relative_to(out_dir)}")
+        log(f"  generated {shown_out / p.relative_to(out_dir)}")
 
 
 
-def _export_tb_into(plan, out_rtl, *, display_tb=None):
+def _export_tb_into(plan, out_rtl, *, display_tb=None, log=None):
     """Write the testbench for plan into out_rtl.parent / "tb" (out_rtl is
     the RTL output dir a set's resolve_set() gives back -- the testbench
     always lives alongside it, not inside it)."""
+    log = log or print
     options = plan.options
     names = GenerationNames.from_options(options)
     tb_dir = out_rtl.parent / "tb"
@@ -419,7 +421,7 @@ def _export_tb_into(plan, out_rtl, *, display_tb=None):
         _write_text(tb_dir / "makefile", names.makefile(TB_MAKEFILE.read_text(encoding="utf-8")))
 
     shown_tb = Path(display_tb) if display_tb is not None else tb_dir
-    print(f"TB    : {shown_tb}")
+    log(f"TB    : {shown_tb}")
     tb_file = tb_dir / names.file("tb_pipe_lane_mapper.sv")
     _write_text(
         tb_file,
@@ -429,10 +431,16 @@ def _export_tb_into(plan, out_rtl, *, display_tb=None):
             options.verible_flags,
         ),
     )
-    print(f"  generated {shown_tb / tb_file.name}")
+    log(f"  generated {shown_tb / tb_file.name}")
 
-def export_all(plan, out_rtl):
-    """Generate, self-check and atomically install one matched RTL/TB set."""
+def export_all(plan, out_rtl, *, log=None):
+    """Generate, self-check and atomically install one matched RTL/TB set.
+
+    ``log`` receives each progress line (default: print). Callers running in
+    a worker thread pass their own sink instead of redirecting sys.stdout,
+    which is process-wide.
+    """
+    log = log or print
     if not isinstance(plan, GenerationPlan):
         raise TypeError("plan must be a GenerationPlan")
     options = plan.options
@@ -442,18 +450,18 @@ def export_all(plan, out_rtl):
     try:
         _export_rtl_into(
             plan, staged / "rtl",
-            display_out=workspace / "rtl",
+            display_out=workspace / "rtl", log=log,
         )
         _export_tb_into(
             plan, staged / "rtl",
-            display_tb=workspace / "tb",
+            display_tb=workspace / "tb", log=log,
         )
         rtl_manifest = _write_manifest(plan, staged / "rtl", "rtl")
         tb_manifest = _write_manifest(plan, staged / "tb", "tb")
         _self_check_output_set(plan, staged)
         if not options.quiet:
-            print()
-            print(plan.report())
+            log("")
+            log(plan.report())
         _commit_output_set(staged, workspace)
         return {"rtl": rtl_manifest, "tb": tb_manifest}
     finally:

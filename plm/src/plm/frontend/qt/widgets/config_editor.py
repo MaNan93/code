@@ -266,7 +266,12 @@ class GenerationEditor(QtWidgets.QWidget):
         self.generate_btn = QtWidgets.QPushButton("Generate")
         self.generate_btn.setObjectName("ConfigGenerateButton")
         self.generate_btn.clicked.connect(self.generateRequested.emit)
-        actions = QtWidgets.QHBoxLayout()
+        # Not a form row: the page pins this bar below the scrolled form, so
+        # the primary action stays visible at any window height.
+        self.footer = QtWidgets.QWidget()
+        self.footer.setObjectName("GenerationFooter")
+        actions = QtWidgets.QHBoxLayout(self.footer)
+        actions.setContentsMargins(0, 12, 0, 0)
         self.status_label = StatusBadge("请选择项目")
         self.status_label.setObjectName("GenerationStatus")
         actions.addWidget(
@@ -274,7 +279,6 @@ class GenerationEditor(QtWidgets.QWidget):
         )
         actions.addStretch(1)
         actions.addWidget(self.generate_btn)
-        layout.addRow("", actions)
         self.arch.currentIndexChanged.connect(self._sync_pclk)
         for control in (self.arch, self.pclk_mode, self.bus_type):
             control.currentIndexChanged.connect(self.changed.emit)

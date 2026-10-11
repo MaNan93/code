@@ -71,6 +71,10 @@ class ProjectService:
             config_dir = candidate.resolve()
             if config_dir in seen:
                 continue
+            # WorkspaceService only opens <project>/config; loose CSVs in
+            # some other directory would be listed and then fail to load.
+            if config_dir.name != "config":
+                continue
             try:
                 file_names = {
                     path.name for path in config_dir.iterdir() if path.is_file()

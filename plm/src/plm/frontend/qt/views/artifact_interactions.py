@@ -1,9 +1,34 @@
 """Artifact drawer behavior extracted from its widget construction."""
 
+import os
+import shlex
 import shutil
 import subprocess
 from pathlib import Path
 from PyQt5 import QtCore, QtGui, QtWidgets
+
+
+def editor_command(editor):
+    """Split the configured editor into an executable and its arguments.
+
+    A value that names an existing file is taken whole, so a path with
+    spaces needs no quoting; otherwise it is a command line such as
+    ``code -g`` or ``gvim --remote-tab``.
+    """
+    editor = (editor or "").strip()
+    whole = Path(editor).expanduser()
+    if editor and whole.is_file():
+        return [str(whole)]
+    try:
+        parts = [part.strip('"') for part in shlex.split(editor, posix=os.name != "nt")]
+    except ValueError:
+        parts = []
+    if parts:
+        candidate = Path(parts[0]).expanduser()
+        executable = str(candidate) if candidate.is_file() else shutil.which(parts[0])
+        if executable is not None:
+            return [executable, *parts[1:]]
+    raise OSError(f"未找到 {editor}，请在设置中配置编辑器。")
 
 
 class ArtifactInteractions:
@@ -174,11 +199,7 @@ class ArtifactInteractions:
         def launch(_progress):
             if not path.is_file():
                 raise OSError("文件已不存在，请刷新文件列表。")
-            configured_path = Path(editor).expanduser()
-            executable = str(configured_path) if configured_path.is_file() else shutil.which(editor)
-            if executable is None:
-                raise OSError(f"未找到 {editor}，请在设置中配置编辑器。")
-            subprocess.Popen([executable, str(path)])
+            subprocess.Popen([*editor_command(editor), str(path)])
 
         self.tasks.submit(launch, lambda _result: None,
                           lambda error: QtWidgets.QMessageBox.warning(self, "无法打开编辑器", str(error)))

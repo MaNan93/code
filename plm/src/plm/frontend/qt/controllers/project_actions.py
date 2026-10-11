@@ -91,14 +91,20 @@ class ProjectActions:
         self.rename_project(self.current_name, new_name)
 
     def rename_project(self, old_name, new_name):
+        def keep_title():
+            # The header shows the typed name as soon as editing ends.
+            self.config_page.update_title(self.current_name or "无项目")
+
         if (self._generation_running or self._save_running
                 or self._load_running or self._project_operation_running):
+            keep_title()
             return
         state = self.settings.get_project_state(old_name)
         self._project_io(
             lambda: self.projects.rename(old_name, new_name),
             lambda config_dir, discovered: self._finish_rename(old_name, state, config_dir, discovered),
             "重命名失败",
+            on_failed=keep_title,
         )
 
     def _finish_rename(self, old_name, state, config_dir, discovered):

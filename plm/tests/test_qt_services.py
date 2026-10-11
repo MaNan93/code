@@ -34,6 +34,38 @@ class ProjectServiceTests(unittest.TestCase):
             self.assertEqual(project.pipe_signals_csv, config_dir / "pipe_signals.csv")
 
 
+class EditorCommandTests(unittest.TestCase):
+    def test_editor_setting_may_carry_arguments_or_be_a_path_with_spaces(self):
+        import sys
+        from plm.frontend.qt.views.artifact_interactions import editor_command
+
+        self.assertEqual(
+            editor_command(f'"{sys.executable}" -g --flag'), [sys.executable, "-g", "--flag"]
+        )
+        with tempfile.TemporaryDirectory(prefix="editor with spaces ") as directory:
+            tool = Path(directory) / "my editor"
+            tool.write_text("", encoding="utf-8")
+            self.assertEqual(editor_command(str(tool)), [str(tool)])
+        with self.assertRaisesRegex(OSError, "未找到"):
+            editor_command("definitely-not-an-editor-xyz --flag")
+        with self.assertRaises(OSError):
+            editor_command("")
+
+
+class ProjectDiscoveryTests(unittest.TestCase):
+    def test_only_openable_config_directories_are_listed(self):
+        from plm.core.workspace import scaffold_default_content
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            scaffold_default_content(root / "test/good")
+            loose = root / "test/loose"
+            loose.mkdir()
+            for path in (root / "test/good/config").glob("*.csv"):
+                (loose / path.name).write_bytes(path.read_bytes())
+            self.assertEqual([p.name for p in ProjectService(root).discover()], ["good"])
+
+
 class SettingsStoreProjectStateTests(unittest.TestCase):
     def test_project_states_round_trip_independently_from_static_info(self):
         with tempfile.TemporaryDirectory() as temporary_directory:

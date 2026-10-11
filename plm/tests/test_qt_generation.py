@@ -219,7 +219,9 @@ class GenerationIntegrationTests(unittest.TestCase):
         controller, window = self.window()
         signature = self.service.signature(controller.current_project)
         window.config_page.generation_editor.file_prefix.setText("../escape/")
-        with self.assertRaisesRegex(ValidationError, "file_prefix"):
+        # Unlike an invalid table cell, this can never be written: the value
+        # becomes part of output file paths.
+        with self.assertRaisesRegex(ValueError, "file_prefix"):
             self.service.save(controller.current_project, window.config_page.content())
         self.assertEqual(self.service.signature(controller.current_project), signature)
 
@@ -312,6 +314,119 @@ class GenerationIntegrationTests(unittest.TestCase):
         page.set_content(legacy)
         self.assertNotIn("sel-mode", page.content()["gen_flags"])
         self.assertEqual(self.service.validate(page.content()).options.sel_mode, "sync")
+
+    def test_topology_error_marks_the_controller_row_not_the_ctrl_id(self):
+        controller, window = self.window()
+        page = window.config_page
+        payload = page.content()
+        payload["controllers"] = [
+            {"ctrl_id": "1", "ctrl_name": "Ctrl1", "max_width": "1"},
+            {"ctrl_id": "0", "ctrl_name": "Ctrl10", "max_width": "9"},
+        ]
+        payload["mapping"] = {"lane_count": 2, "rows": [{"mode": "0", "lane0": "0-0", "lane1": "1-0"}]}
+        page.set_content(payload)
+        page._mark_dirty()
+        controller.validate_current()
+        wait_for_idle(self.app)
+        table = page.controllers_editor.table
+        marked = {row for row in range(table.rowCount()) if table.item(row, 2).toolTip()}
+        self.assertEqual(marked, {1})
+        self.assertIn("Ctrl10", table.item(1, 2).toolTip())
+
+    def test_sidebar_follows_a_switch_that_saved_first(self):
+        scaffold_default_content(self.root / "test/other")
+        controller, window = self.window()
+        page, nav = window.config_page, window.nav_panel
+        first = controller.current_name
+        other = "other" if first == "demo" else "demo"
+        page.controllers_editor.table.item(0, 1).setText("Edited")
+        wait_for_idle(self.app)
+        self.assertTrue(page.dirty)
+        with patch.object(QtWidgets.QMessageBox, "question", return_value=QtWidgets.QMessageBox.Save):
+            nav.project_list.select_project(other)
+            wait_for_idle(self.app)
+        self.assertEqual(controller.current_name, other)
+        self.assertEqual(nav.project_list.selected_project_name, other)
+        self.assertEqual(nav.current_project_name, other)
+
+    def test_failed_header_rename_restores_the_title(self):
+        scaffold_default_content(self.root / "test/other")
+        controller, window = self.window()
+        header = window.config_page.header
+        first = controller.current_name
+        taken = "other" if first == "demo" else "demo"
+        header.enter_edit_mode()
+        header.title_edit.setText(taken)
+        header.save_title()
+        wait_for_idle(self.app)
+        self.assertEqual(controller.current_name, first)
+        self.assertEqual(header.title_label.text(), first)
+        self.assertTrue((self.root / "test" / first).is_dir())
+
+    def test_generate_bar_stays_visible_below_the_scrolled_form(self):
+        controller, window = self.window()
+        page = window.config_page
+        page.tabs.setCurrentIndex(3)
+        wait_for_idle(self.app)
+        tab = page.tabs.widget(3)
+        button = page.generation_editor.generate_btn
+        self.assertFalse(tab.scroll.isAncestorOf(button))
+        bottom = button.mapTo(tab, QtCore.QPoint(0, button.height())).y()
+        self.assertLessEqual(bottom, tab.height())
+        self.assertTrue(button.isVisible())
+
+    def test_typing_a_prefix_is_one_undo_step(self):
+        controller, window = self.window()
+        page = window.config_page
+        start = page._history_index
+        for character in "soc_top":
+            page.generation_editor.module_prefix.insert(character)
+        self.assertEqual(page._history_index, start + 1)
+        page.generation_editor.file_prefix.insert("r")
+        self.assertEqual(page._history_index, start + 2)
+        page.undo()
+        page.undo()
+        self.assertEqual(page.generation_editor.module_prefix.text(), "")
+        page.redo()
+        self.assertEqual(page.generation_editor.module_prefix.text(), "soc_top")
+        # Typing again after an undo/redo starts a new step.
+        page.generation_editor.module_prefix.insert("x")
+        self.assertEqual(page._history_index, start + 2)
+
+    def test_new_mode_row_starts_valid(self):
+        controller, window = self.window()
+        page = window.config_page
+        before = page.mapping_editor.rows()
+        page.mapping_editor.add_row()
+        rows = page.mapping_editor.rows()
+        self.assertEqual(len(rows), len(before) + 1)
+        self.assertEqual(rows[-1]["mode"], str(len(before)))
+        self.assertEqual(
+            {key: value for key, value in rows[-1].items() if key != "mode"},
+            {key: value for key, value in before[-1].items() if key != "mode"},
+        )
+        self.service.validate(page.content())
+
+    def test_generation_log_does_not_swap_process_stdout(self):
+        import sys
+        controller, window = self.window()
+        seen = []
+        real_generate = self.service.generate
+
+        def spy(*args, **kwargs):
+            before = sys.stdout
+            result = real_generate(*args, **kwargs)
+            seen.append(sys.stdout is before)
+            return result
+
+        with patch.object(self.service, "generate", side_effect=spy), \
+                patch("plm.core.exporter.print", create=True) as printed:
+            _result, _files, report = self.service.generate(
+                controller.current_project, window.config_page.content()
+            )
+        self.assertEqual(seen, [True])
+        printed.assert_not_called()
+        self.assertIn("generated", report)
 
     def test_both_pclk_modes_generate_with_and_without_dpr(self):
         controller, window = self.window()

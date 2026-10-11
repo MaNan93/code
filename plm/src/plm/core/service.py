@@ -14,7 +14,7 @@ class GenerationResult:
     generated: bool
 
 
-def generate(config_dir, out_rtl, options, progress=None, *, force=False):
+def generate(config_dir, out_rtl, options, progress=None, *, force=False, log=None):
     """Validate and produce one current output set, skipping a true no-op."""
     notify = progress or (lambda _phase: None)
     notify("VALIDATING")
@@ -25,5 +25,5 @@ def generate(config_dir, out_rtl, options, progress=None, *, force=False):
         return GenerationResult(plan, read_manifests(workspace), False)
 
     notify("GENERATING")
-    manifests = export_all(plan, out_rtl)
+    manifests = export_all(plan, out_rtl, log=log)
     return GenerationResult(plan, manifests, True)

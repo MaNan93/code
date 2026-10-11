@@ -1,6 +1,5 @@
 """Adapter from project metadata to the shared PLM workspace and generator APIs."""
 
-from contextlib import redirect_stdout
 from io import StringIO
 import os
 from pathlib import Path
@@ -70,7 +69,12 @@ class WorkspaceService:
         return load_generation_plan_from_payload(payload, self._options(payload))
 
     def save(self, project, payload):
-        self.validate(payload)
+        """Write the tables as they are.
+
+        Validation reports problems but does not gate saving: a half-finished
+        edit is still work worth keeping. Generation validates what it reads
+        back from disk.
+        """
         save_workspace_content(self._root(project), payload)
 
     def generate(self, project, payload, progress=None, on_saved=None, *, force=False):
@@ -79,11 +83,11 @@ class WorkspaceService:
             on_saved()
         root = self._root(project)
         report = StringIO()
-        with redirect_stdout(report):
-            result = generate(
-                project.config_dir, root / "rtl", self._options(payload), progress,
-                **({"force": True} if force else {}),
-            )
+        result = generate(
+            project.config_dir, root / "rtl", self._options(payload), progress,
+            log=lambda line="": report.write(f"{line}\n"),
+            **({"force": True} if force else {}),
+        )
         if result.plan.formatter.get("engine") == "unavailable":
             report.write("配置的 Verible 不可用，已保留生成器原始排版。\n")
         return result, self.output_files(project), report.getvalue()

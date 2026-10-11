@@ -46,7 +46,7 @@ class ProjectNavigation:
             return False
         return answer != QtWidgets.QMessageBox.Cancel
 
-    def _project_io(self, operation, completed, title):
+    def _project_io(self, operation, completed, title, on_failed=None):
         if self._project_operation_running:
             return
         self._project_operation_running = True
@@ -65,6 +65,8 @@ class ProjectNavigation:
             self._project_operation_running = False
             self.nav.setEnabled(True)
             self.log_panel.append_log(f"{title}：{error}")
+            if on_failed:
+                on_failed()
 
         self.tasks.submit(run, finished, failed)
 
@@ -162,8 +164,10 @@ class ProjectNavigation:
             self._generation_failure = None
             if invalidate_outputs:
                 self._reload_stale_projects.add(project.config_dir)
-                self.nav.current_project_name = name
-                self.nav.project_list.select_project(name, emit_signal=False)
+            # A load that follows "save first" was started by the controller,
+            # after the sidebar had already been put back on the old project.
+            self.nav.current_project_name = name
+            self.nav.project_list.select_project(name, emit_signal=False)
             self.config_page.set_content(payload)
             self.config_page.update_title(name)
             self.settings.set_recent_project(name)

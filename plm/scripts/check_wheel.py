@@ -131,7 +131,7 @@ from plm.core.workspace import scaffold_default_content
 from plm.core.verible import find_verible
 
 assert Path(plm.__file__).resolve().is_relative_to(Path(sys.argv[1]).resolve())
-assert plm.__version__ == '3.0.1'
+assert plm.__version__ == '3.0.2'
 assert find_spec('PyQt5') is None, 'The base CLI check must run without Qt'
 assert len(list(COMMON_DIR.glob('*.sv'))) == 5
 assert TB_MAKEFILE.is_file()
@@ -146,7 +146,7 @@ with tempfile.TemporaryDirectory(prefix='plm CLI wheel ') as temporary:
     scaffold_default_content(root)
     version = subprocess.run([sys.argv[2], '--version'], stdout=subprocess.PIPE,
                              stderr=subprocess.STDOUT, text=True, check=True)
-    assert version.stdout.strip() == 'plm 3.0.1'
+    assert version.stdout.strip() == 'plm 3.0.2'
     run_cli([sys.argv[2], 'validate', '--config', str(root)])
     for arch, pclk in (('original_pipe', 'pclk_as_phy_output'), ('serdes', 'pclk_as_phy_input')):
         for dpr in (False, True):

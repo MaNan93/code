@@ -25,15 +25,17 @@ uv run python run.py -gui
 没有可用项目时进入空状态。删除只允许带 `.plm-workspace` 标记的工作区，
 并需要确认。
 
-有未保存修改时，切换、重新加载、归档当前项目、删除当前项目或关闭窗口会提示
-保存、放弃或取消。保存校验失败时保留当前项目和编辑内容。外部程序改动 CSV 或
+有未保存修改时，切换、重新加载或关闭窗口会提示保存、放弃或取消；归档当前
+项目会先保存；删除项目只做一次删除确认，未保存的修改随项目一起丢弃。
+保存不以校验通过为前提：表格里有不合法的格子也能存盘，校验结果照常显示，
+生成时才要求配置合法。外部程序改动 CSV 或
 `gen_flags.txt` 后，保存和生成会要求先重新加载，避免覆盖磁盘上的改动。
 
 ## 配置编辑
 
 三个表格对应当前项目的三个 CSV。通过表格右键菜单添加行、
 删除选中行，直接编辑单元格。编辑会实时校验；错误会标出具体单元格，
-保存和生成时会再次执行完整的核心校验。
+生成时会再次执行完整的核心校验；保存不要求校验通过。
 
 Controller、LaneMapping 和 Signals 表格直接填满内容区宽度，共用浅色网格线。
 标题行保留底部分隔线，不显示上方和左右外框；数据区保留左右边线。
@@ -89,7 +91,7 @@ Generation 页提供以下参数：
 不会在加载时悄悄改写。PHY input 模式的 DPR 使用外部 `dpr_pclk` 输入和逐 lane
 `dpr_rx_clk` 输出。
 
-**保存**只校验并写入 `controllers.csv`、`lane_mapping.csv`、`pipe_signals.csv`
+**保存**写入 `controllers.csv`、`lane_mapping.csv`、`pipe_signals.csv`
 和 `gen_flags.txt`。**生成**先保存并使用同一组 `GenerationOptions` 调用核心，
 在 staging 中生成并检查整套 RTL/TB，成功后更新输出。失败时保留旧输出；
 具体错误与真实生成记录显示在底部日志面板。
@@ -130,7 +132,8 @@ Verible 设置保存在本机，不写入这个项目文件。
 
 ## Settings 与 Documentation
 
-Settings 有 General、Formatter 两个分页。默认编辑器在 General 中设置。
+Settings 有 General、Formatter 两个分页。默认编辑器在 General 中设置，
+可以带参数（如 `code -g`）；含空格的可执行文件路径直接填写即可。
 外部编辑器和 Verible 设置保存在本机，重启后恢复。
 Documentation 内置当前工具说明和本指南，安装包中也可使用。
 完整版本历史与迁移方法统一记录在随包附带的 [release_note.md](release_note.md)。

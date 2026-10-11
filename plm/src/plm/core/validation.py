@@ -1,8 +1,9 @@
 """Four-layer validation used by the CLI, generators and front ends."""
 
 import csv
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 import io
+import os
 from pathlib import Path
 import re
 
@@ -202,7 +203,14 @@ def load_generation_plan_from_payload(payload, options):
         files = config_snapshot_from_payload(payload)
     except ValueError as error:
         raise ValidationError([ValidationIssue("format", str(error))]) from error
-    config = _load_validated_config(virtual_config_dir, files)
+    try:
+        config = _load_validated_config(virtual_config_dir, files)
+    except ValidationError as error:
+        # Unsaved rows have no directory; name the table file alone.
+        prefix = str(virtual_config_dir) + os.sep
+        raise ValidationError(
+            replace(issue, message=issue.message.replace(prefix, "")) for issue in error.issues
+        ) from error
     return _build_generation_plan(config, options, files)
 
 

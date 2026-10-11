@@ -404,9 +404,15 @@ class LaneGrid(QtWidgets.QWidget):
         self._insert_row_at(idx if 0 <= idx < len(self.data) else len(self.data))
 
     def _insert_row_at(self, pos):
-        row = {"mode": ""}
+        # Start from the neighbouring mode's assignment under the next free
+        # mode number: a usable row to repaint, not one that is invalid on
+        # arrival (empty mode, every lane on 0-0).
+        used = {int(text) for text in (str(r.get("mode", "")).strip() for r in self.data) if text.isdigit()}
+        mode = next(number for number in range(len(used) + 1) if number not in used)
+        template = self.data[pos - 1] if 0 < pos <= len(self.data) else (self.data[0] if self.data else {})
+        row = {"mode": str(mode)}
         for lane_idx in range(self.lane_count):
-            row[f"lane{lane_idx}"] = "0-0"
+            row[f"lane{lane_idx}"] = template.get(f"lane{lane_idx}") or "0-0"
         self.data.insert(pos, row)
         self._render_body()
         self.changed.emit()

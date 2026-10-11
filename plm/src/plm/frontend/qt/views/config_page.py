@@ -174,6 +174,9 @@ class ConfigTabPage(QtWidgets.QWidget):
             content_layout.addStretch(1)
         scroll.setWidget(content)
         root.addWidget(scroll, 1)
+        footer = getattr(editor, "footer", None)
+        if footer is not None:
+            root.addWidget(footer)
 
 
 class ConfigPage(RoundedCanvasFrame):
@@ -194,6 +197,7 @@ class ConfigPage(RoundedCanvasFrame):
         self._first_error = None
         self._history = []
         self._history_index = -1
+        self._typing_key = None
         self._saved_content = None
         self.artifacts_width = ARTIFACTS_DEFAULT_WIDTH
         self.restore_artifacts_width = ARTIFACTS_DEFAULT_WIDTH
@@ -269,6 +273,15 @@ class ConfigPage(RoundedCanvasFrame):
         payload = self.content()
         if self._history and payload == self._history[self._history_index]:
             return
+        typing_key = self._typed_field(self._history[self._history_index], payload) if self._history else None
+        at_tip = self._history_index == len(self._history) - 1
+        if typing_key is not None and typing_key == self._typing_key and at_tip and self._history_index > 0:
+            # Consecutive keystrokes in one text field are a single edit.
+            self._history[self._history_index] = payload
+            self._update_dirty()
+            self.historyChanged.emit()
+            return
+        self._typing_key = typing_key
         self._history = self._history[:self._history_index + 1]
         self._history.append(payload)
         if len(self._history) > self.MAX_HISTORY:
@@ -276,6 +289,19 @@ class ConfigPage(RoundedCanvasFrame):
         self._history_index = len(self._history) - 1
         self._update_dirty()
         self.historyChanged.emit()
+
+    @staticmethod
+    def _typed_field(before, after):
+        """Name the one free-text generation field that differs, if that is all."""
+        if {key: value for key, value in before.items() if key != "gen_flags"} != {
+            key: value for key, value in after.items() if key != "gen_flags"
+        }:
+            return None
+        old, new = before.get("gen_flags") or {}, after.get("gen_flags") or {}
+        changed = [key for key in set(old) | set(new) if old.get(key) != new.get(key)]
+        if len(changed) == 1 and changed[0] in ("module_prefix", "file_prefix", "macro_prefix"):
+            return changed[0]
+        return None
 
     def _update_dirty(self):
         self.dirty = self.content() != self._saved_content
@@ -301,6 +327,7 @@ class ConfigPage(RoundedCanvasFrame):
 
     def undo(self):
         self.finish_editing()
+        self._typing_key = None
         if self.can_undo():
             self._history_index -= 1
             self._load_content(self._history[self._history_index])
@@ -309,6 +336,7 @@ class ConfigPage(RoundedCanvasFrame):
 
     def redo(self):
         self.finish_editing()
+        self._typing_key = None
         if self.can_redo():
             self._history_index += 1
             self._load_content(self._history[self._history_index])
@@ -319,6 +347,7 @@ class ConfigPage(RoundedCanvasFrame):
         self._load_content(payload)
         self._history = [self.content()]
         self._history_index = 0
+        self._typing_key = None
         self.mark_saved()
         self.historyChanged.emit()
 
@@ -346,9 +375,8 @@ class ConfigPage(RoundedCanvasFrame):
                 if issue.table != name or issue.row is None or issue.column is None:
                     continue
                 col = columns.index(issue.column) if issue.column in columns else issue.column
+                # Every layer reports the table row, never a ctrl_id.
                 row = issue.row
-                if name == "controllers" and issue.layer == "topology":
-                    row = next((i for i, value in enumerate(editor.rows()) if value["ctrl_id"] == str(issue.row)), row)
                 if isinstance(col, int) and 0 <= col < len(columns) and 0 <= row < editor.table.rowCount():
                     errors[(row, col)] = str(issue)
                     if issue_index < first_issue_index:

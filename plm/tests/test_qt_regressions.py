@@ -49,18 +49,21 @@ class QtRegressionTests(unittest.TestCase):
             wait_for_idle(self.app)
         self.window.show()
         wait_for_idle(self.app)
-    def test_invalid_save_reports_inline_without_modal_dialog(self):
+    def test_invalid_draft_is_saved_and_still_reported_inline(self):
         page = self.window.config_page
         page.controllers_editor.table.item(0, 0).setText("invalid-id")
-        before = self.controller.current_project.controllers_csv.read_bytes()
         with patch.object(QtWidgets.QMessageBox, "warning") as warning:
             self.window.nav_panel.save_btn.click()
             wait_for_idle(self.app)
         warning.assert_not_called()
+        # Saving keeps work in progress; validation still flags the cell.
+        self.assertFalse(page.dirty)
+        self.assertIn(b"invalid-id", self.controller.current_project.controllers_csv.read_bytes())
         self.assertTrue(page.validation_issues)
-        self.assertTrue(page.dirty)
-        self.assertEqual(self.controller.current_project.controllers_csv.read_bytes(), before)
-        self.assertIn("保存失败", self.window.log_panel.output.toPlainText())
+        self.assertNotIn("<editor>", str(page.validation_issues[0]))
+        self.assertTrue(page.controllers_editor.table.item(0, 0).toolTip())
+        self.assertEqual(self.controller.generation_state, "invalid")
+        self.assertNotIn("保存失败", self.window.log_panel.output.toPlainText())
 
     def test_secondary_page_close_resets_nav_and_switch_preserves_active_page(self):
         nav = self.window.nav_panel

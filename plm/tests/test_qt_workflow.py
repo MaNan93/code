@@ -111,8 +111,10 @@ class QtWorkflowTests(unittest.TestCase):
             window.nav_panel.save_btn.click()
             wait_for_idle(self.app)
         warning.assert_not_called()
-        self.assertTrue(page.dirty)
-        self.assertEqual((self.root / "test/demo/config/controllers.csv").read_text(), csv_text)
+        # An invalid draft is still saved; only generation requires validity.
+        self.assertFalse(page.dirty)
+        self.assertIn("invalid-id", (self.root / "test/demo/config/controllers.csv").read_text())
+        self.assertTrue(page.validation_issues)
         page.controllers_editor.table.item(0, 0).setText("0")
 
         page.generation_editor.generate_btn.click()
@@ -866,9 +868,12 @@ class QtWorkflowTests(unittest.TestCase):
         item = page.mapping_editor.table.item(0, 1)
         self.assertIn("undefined", item.toolTip())
         self.assertIn((0, 1), page.mapping_editor.editor._cell_errors)
+        # Generation is what refuses an invalid config and jumps to the cell.
         with patch.object(QtWidgets.QMessageBox, "warning"):
-            self.assertFalse(controller.save_current())
+            controller.generate_current()
             wait_for_idle(self.app)
+        self.assertEqual(controller.generation_state, "failed")
+        self.assertFalse((self.root / "test/demo/rtl").exists())
         self.assertEqual(page.tabs.currentIndex(), 1)
         self.assertEqual(page.mapping_editor.table.currentColumn(), 1)
         page.undo()
@@ -876,7 +881,6 @@ class QtWorkflowTests(unittest.TestCase):
         wait_for_idle(self.app)
         self.assertNotIn((0, 1), page.mapping_editor.editor._cell_errors)
         self.assertNotIn("undefined", page.mapping_editor.table.item(0, 1).toolTip().lower())
-        self.assertFalse(page.dirty)
 
     def test_live_validation_timer_and_duplicate_ids_mark_both_rows(self):
         controller, window = self._editing_window()

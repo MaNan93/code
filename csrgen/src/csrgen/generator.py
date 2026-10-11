@@ -16,6 +16,10 @@ class ReservedFieldWarning(UserWarning):
     """Reserved field metadata is ignored in favor of constant zero / RO."""
 
 
+class NumericCellWarning(UserWarning):
+    """A numeric Excel cell was used as decimal where the column is hexadecimal."""
+
+
 # Verilog/SystemVerilog reserved words cannot be used as module/port identifiers.
 KEYWORDS = set("""
 accept_on alias always always_comb always_ff always_latch and assert assign assume
@@ -109,6 +113,18 @@ def _integer(value, base, label):
         return int(token, base)
     except ValueError as exc:
         raise TableError(f"{label}: invalid number {value!r}") from exc
+
+
+def _hex_cell(value, label):
+    """Parse an offset/reset cell; warn when a numeric cell reads differently as hex."""
+    number = _integer(value, 16, label)
+    if not isinstance(value, str) and abs(number) >= 10:
+        warnings.warn(
+            f"{label}: numeric cell {number} is used as decimal (0x{number:X}); "
+            f"enter it as text for hexadecimal 0x{number}",
+            NumericCellWarning, stacklevel=3,
+        )
+    return number
 
 
 def _normalize_reserved(item, offset):
@@ -206,13 +222,21 @@ def read_xlsx(path, sheet="sheet1", aw=16):
         )
         registers = {}
         current_offset = None
+        offset_rows = {}
         for row_num, values in rows:
             cells = dict(zip(TEMPLATE_COLUMNS, values))
             if all(_empty(value) for value in cells.values()):
                 continue
             label = f"row {row_num}"
             if not _empty(cells["offset"]):
-                current_offset = _integer(cells["offset"], 16, label + " offset")
+                offset = _hex_cell(cells["offset"], label + " offset")
+                # Repeating the offset on consecutive rows is fine; returning to an
+                # earlier one would silently merge two register blocks.
+                if offset != current_offset and offset in offset_rows:
+                    raise TableError(f"{label}: duplicate register offset 0x{offset:X}, "
+                                     f"already defined at row {offset_rows[offset]}")
+                offset_rows.setdefault(offset, row_num)
+                current_offset = offset
             if _empty(cells["signal"]):
                 if any(not _empty(cells[key]) for key in ("reset", "bit", "access")):
                     raise TableError(f"{label}: signal is missing")
@@ -237,7 +261,7 @@ def read_xlsx(path, sheet="sheet1", aw=16):
             lsb = int(match[2]) if match[2] is not None else msb
             item = Field(
                 name, msb, lsb,
-                cells["reset"] if reserved else _integer(cells["reset"], 16, label + " reset"),
+                cells["reset"] if reserved else _hex_cell(cells["reset"], label + " reset"),
                 str(cells["access"] or "").strip().lower(),
                 str(cells.get("description") or "").strip(), row_num,
             )

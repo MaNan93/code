@@ -6,7 +6,8 @@ from openpyxl import Workbook, load_workbook
 import pytest
 
 from csrgen.cli import main, write_template
-from csrgen.generator import Field, Register, ReservedFieldWarning, TableError, generate_rtl, read_xlsx
+from csrgen.generator import (Field, NumericCellWarning, Register, ReservedFieldWarning, TableError,
+                              generate_rtl, read_xlsx)
 
 
 @pytest.fixture
@@ -62,9 +63,33 @@ def test_fixed_columns_ignore_headers_and_description_is_optional(tmp_path, head
 
 def test_numeric_values_are_numbers_hex_strings_are_hex(table):
     change_cell(table, "D4", 10)
-    assert read_xlsx(table)[0].fields[2].reset == 10
+    with pytest.warns(NumericCellWarning, match=r"row 4 reset: numeric cell 10 .*\(0xA\).*0x10"):
+        assert read_xlsx(table)[0].fields[2].reset == 10
     change_cell(table, "D4", "10")
     assert read_xlsx(table)[0].fields[2].reset == 16
+
+
+def test_numeric_offset_warns_only_when_hex_reading_differs(table, tmp_path, capsys, recwarn):
+    change_cell(table, "B2", 0)
+    change_cell(table, "B6", 8)
+    assert [reg.offset for reg in read_xlsx(table)] == [0, 8]
+    assert not recwarn.list
+    change_cell(table, "B6", 20)
+    with pytest.warns(NumericCellWarning, match=r"row 6 offset: numeric cell 20 .*\(0x14\).*0x20"):
+        assert read_xlsx(table)[1].offset == 0x14
+    assert main([str(table), "-o", str(tmp_path / "apb_csr.sv")]) == 0
+    assert capsys.readouterr().err.count("csrgen: warning: row 6 offset") == 1
+
+
+def test_duplicate_offset_blocks_rejected(table):
+    # The same offset on consecutive rows of one block is still accepted.
+    change_cell(table, "B3", "0x0")
+    change_cell(table, "B4", "0")
+    assert len(read_xlsx(table)[0].fields) == 3
+    change_cell(table, "B9", "0x0")
+    change_cell(table, "E9", "31")
+    with pytest.raises(TableError, match="row 9: duplicate register offset 0x0, already defined at row 2"):
+        read_xlsx(table)
 
 
 @pytest.mark.parametrize("cell,value,message", [

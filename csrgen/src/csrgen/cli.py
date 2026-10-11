@@ -8,7 +8,7 @@ from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill
 from openpyxl.utils.exceptions import InvalidFileException
 
-from .generator import ReservedFieldWarning, TableError, generate_rtl, read_xlsx
+from .generator import NumericCellWarning, ReservedFieldWarning, TableError, generate_rtl, read_xlsx
 
 
 def write_template(path):
@@ -77,6 +77,7 @@ def main(argv=None):
             filename = f"{args.file_prefix}_apb_csr.sv"
         with warnings.catch_warnings(record=True) as notices:
             warnings.simplefilter("always", ReservedFieldWarning)
+            warnings.simplefilter("always", NumericCellWarning)
             registers = read_xlsx(args.xlsx, sheet=args.sheet, aw=args.aw)
             rtl = generate_rtl(registers, module=module, aw=args.aw)
         for notice in notices:

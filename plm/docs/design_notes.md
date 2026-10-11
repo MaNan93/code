@@ -50,7 +50,7 @@ controller lane 由跨 group 的多路 lane 驱动，这些驱动源各自收敛
 得多。所以设计上直接禁止：一旦某 controller 在不同 mode 下算出的工作
 时钟候选数 > 1，`validate()` 直接报错（详见 4.2 节）。
 
-**约束 C：controller 数量必须与"总 lane 数 / 最小分配颗粒度"对齐。**
+**建议 C：controller 数量宜与"总 lane 数 / 最小分配颗粒度"对齐（仅警告，不拦截）。**
 即使每个 controller 各自的最低编号 lane 都固定不变，如果 controller
 的**数量**跟 PHY 的 lane 资源、最小分配颗粒度对不上，也会间接破坏约束
 B，或者造成资源浪费：
@@ -64,17 +64,21 @@ B，或者造成资源浪费：
   B 冲突。
 
 `Config._min_granularity()` 从 `lane_mapping.csv` 的实际数据反推每个
-controller 拥有 lane 时的最小宽度，取全局最小值 `g_min`，`validate()`
-中据此检查：
+controller 拥有 lane 时的最小宽度，取全局最小值 `g_min`，`Config.warnings()`
+中据此检查，不满足时只在报告里给出警告：
 
 ```
 lane_count % g_min == 0                     # 否则无法被这个颗粒度均分
 len(controllers) == lane_count // g_min     # 数量必须与理想值一致
 ```
 
-现有的三套配置（`quad`：颗粒度 3、4 controller；`bifurcate`：
+现有的三套配置（`dpr`：颗粒度 3、4 controller；`bifurcate`：
 颗粒度 4、4 controller；`finegrain`：颗粒度 1、6 controller）均满足
 此式。
+
+它不是硬约束：它想防的两种后果（controller 永远分不到 lane、工作时钟
+漂移）已由 `validate()` 直接报错，而 x16 拆成 x8+x4+x4 这类 3 个
+controller 的合法拓扑并不满足此式。
 
 完整的校验规则清单见 4.3 节表 1。
 
@@ -135,18 +139,29 @@ PIPE 规范允许两种截然不同的 PCLK 归属方式，两者互斥，一次
 （`tool/common/pipe_lane_sel_sync.sv`）产生，其 `SYNC` 参数决定走
 哪种策略：
 
-- `sync`（默认，`SYNC=1'b1`）：真正的 non-overlap + 两级同步器，跨
+- `sync`（开 DPR 时，`SYNC=1'b1`）：真正的 non-overlap + 两级同步器，跨
   时钟域安全，每次切换都会经过一段真实的全 0 窗口。
-- `comb`（`SYNC=1'b0`）：`en` 直接等于 `tgt`，纯组合透传，没有寄存器、
-  没有同步。只有在每个候选 controller 真的共享同一个时钟域、且 `mode`
-  本身在这个域内已经无毛刺时才安全；否则多个分支可能短暂同时为 1，
-  `pipe_lane_data_mux` 会把两路数据相或。
+- `comb`（不开 DPR 时，`SYNC=1'b0`）：`en` 直接等于 `tgt`，纯组合透传，
+  没有寄存器、没有同步。前提是**只在受影响的 lane 处于复位时切换
+  `mode`**：这样选择信号在 lane 工作期间是静态的，同步没有意义。在工作中
+  的 lane 上切 `mode`，多个分支可能短暂同时为 1，`pipe_lane_data_mux`
+  会把两路数据相或。
 
-这个策略是 `pipe_lane_mapper` 顶层的一个模块参数（`SEL_SYNC`），不是
+这条前提由生成的 testbench 落实（生成的可综合 RTL 里不放断言）：不开
+DPR 时，testbench 按"拉低相关 controller 复位 → 切 `mode` → 释放
+复位"的顺序切换，并带一个监视块，`mode` 变化时若有 lane 换 owner 而
+新旧 owner 的 `rst_n` 没有同时为低就记一条错误、`TB_RESULT` 判 FAIL。
+集成环境需要自己遵守这条约定。
+
+选哪种不是用户选项，由是否开 DPR 决定：不开 DPR 时归属只随 `mode`
+变化，而 `mode` 只在复位期间切换；开 DPR 后 `v_lane_mask` 会在运行中
+变化，必须走 `sync`。
+
+这个策略是 `pipe_lane_mapper` 顶层的一个 `localparam`（`SEL_SYNC`），不是
 生成阶段写死进每个实例的字面量——`pipe_lane_sel_gen` 里所有数据路径的
 `pipe_lane_sel_sync`（`sel_tgt`/`seltgt_gN_lL` 那些）统一接到这一个
-参数上，值从顶层一路传下去，实例化时不改代码就能覆盖。`sync`/`comb`
-只是决定这个参数的默认值。
+参数上，值从顶层一路传下去。顶层和 connection 包装层把它（连同
+`NL`/`NC`）声明成 `localparam`，例化时不能覆盖；是否开 DPR 决定它的值。
 
 `rx_clk`、controller pclk 候选切换这些无毛刺时钟切换用的
 `pipe_lane_sel_sync`（3.5.2 节 `u_rxclk_sel_sync_*`、3.5.1 节
@@ -219,11 +234,11 @@ lane。PHY→MAC 信号必须是 `perlane`，配置成 `shared` 会在生成前�
 
 `{c}` 代表某个 controller 的 `lname`（比如 `ctrla`）；标 dpr 的端口只在
 `--dpr` 时才存在，标 phy_as_phy_output/phy_as_phy_input 的端口只在对应
-`--pclk-mode` 下才存在，两者互斥。宽度里的 `NL`/`NC` 是模块 parameter，
+`--pclk-mode` 下才存在，两者互斥。宽度里的 `NL`/`NC` 是模块参数（顶层和包装层为 localparam），
 每个 controller 自己的端口按它在 `controllers.csv` 里的 `max_width`
 各自定宽（不同 controller 可以不同宽）。
 
-**`pipe_lane_mapper`**（顶层 DUT）——parameter `NL`、`NC`、`SEL_SYNC`
+**`pipe_lane_mapper`**（顶层 DUT）——localparam `NL`、`NC`、`SEL_SYNC`（由配置固定，例化时不可覆盖）
 
 | 端口 | 方向 | 存在条件 | 说明 |
 |---|---|---|---|
@@ -245,7 +260,7 @@ lane。PHY→MAC 信号必须是 `perlane`，配置成 `shared` 会在生成前�
 | `{c}_rx_clk[max_width]` | out | 每个 controller + phy_as_phy_input | 无毛刺路由回给它的 rx_clk |
 | `{c}_pclk` | out | 每个 controller + phy_as_phy_output | controller 自己的单一工作时钟，标量 |
 
-**`pipe_lane_mapper_connection`**（可选 flat 包装层）——parameter 同上
+**`pipe_lane_mapper_connection`**（可选 flat 包装层）——localparam 同上
 
 跟 `pipe_lane_mapper` 端口形状一致，只有两处不同：PHY 侧和每个
 controller 的 `mac2phy`/`phy2mac` struct 数组按 `pipe_signals.csv` 逐行拆
@@ -312,7 +327,7 @@ group。这个分组规则不是任意选择，而是由 1.3 节约束 A 反推�
 保证每个 group 能独立、无需跨 group 互锁地完成自己的 NOV 判断。
 
 `Config._min_granularity()` 反推的最小颗粒度、以及数量对齐检查
-（1.3 节约束 C）都建立在这个分组结果之上。
+（1.3 节建议 C）都建立在这个分组结果之上。
 
 ### 3.3 dec_tgt 与 sel_tgt：两级选择信号
 
@@ -347,11 +362,11 @@ owner 没有变化的 group，它对应的选择信号在切换前后取值相�
 的性质；3.2 节的分组约束存在的意义，正是保证每个 group 能独立判断
 "要不要切"而不用跟别的 group 互锁。
 
-例（`quad`）：mode0→mode2 只切换 G2、G3，G0/G1 不受影响。若
+例（`dpr`）：mode0→mode2 只切换 G2、G3，G0/G1 不受影响。若
 CtrlA 当时正靠 G0+G1（lane0~5）在跑，这次改 mode 完全不影响它，同时
 G2/G3 从 CtrlA 断开、切给 CtrlC。
 
-![quad 从 mode0 切到 mode2：只有 G2、G3 经历 NOV 窗口，G0/G1 全程不受扰动](images/group_independence.png)
+![dpr 从 mode0 切到 mode2：只有 G2、G3 经历 NOV 窗口，G0/G1 全程不受扰动](images/group_independence.png)
 
 **图 2**：同一次 `mode0 → mode2` 切换里，G0/G1（图中合并为一行，owner
 全程是 CtrlA）从未离开过 CtrlA，`sel_tgt` 对应位不翻转，也就没有 NOV
@@ -579,7 +594,7 @@ controller（branch）：如果那个 branch 正好就是这条 lane 自己的
 controller，`din` 接真实的 `phy_phy2mac[l]`；如果是别的 controller，
 `din` 直接填 `{c.lname}_p2m_tie`（安全值常量）。
 
-例如 `quad` 里 `ctrla_phy2mac[9]`（G3 是 CtrlA/B/C/D 四路 BBM，
+例如 `dpr` 里 `ctrla_phy2mac[9]`（G3 是 CtrlA/B/C/D 四路 BBM，
 CtrlA 是 branch0）：
 
 ```verilog
@@ -661,7 +676,7 @@ controller 逻辑连续工作，性价比低。这条原则被 `validate()` 强�
 | 同一条 controller lane 的驱动源必须来自同一 group | 保证每个 group 能独立、无需互锁地完成 NOV 判断（1.3 节约束 A） |
 | controller 不能在所有 mode 下都没有 lane | 防止声明了但完全没用到的僵尸 controller |
 | controller 工作时钟候选数必须为 1 | 强制"工作时钟固定，只换宽度"（1.3 节约束 B / 4.2 节） |
-| controller 数量必须等于 `lane_count // g_min` | 数量与颗粒度对齐，避免僵尸 controller 或被迫破坏时钟固定约束（1.3 节约束 C） |
+| controller 数量宜等于 `lane_count // g_min`（仅警告） | 数量与颗粒度对齐，避免僵尸 controller 或被迫破坏时钟固定约束（1.3 节建议 C） |
 | controller 的 `max_width` 不能超过 PHY 总 lane 数 | 超过总 lane 数的宽度在任何 mode 下都不可能被分满，声明了也用不到（3.7 节） |
 | 同一条 phy lane 在其 owner 持有它的所有 mode 下，ctrl lane 下标必须固定 | 生成器对每条 lane 只解析一次 ctrl lane 下标（取该 owner 出现的第一个 mode），之后所有 mode 共用这一个下标；下标会动就会在其余 mode 接错（4.7 节） |
 

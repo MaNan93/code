@@ -62,6 +62,33 @@ def _require_sv_identifier(value, what):
         )
 
 
+_DECIMAL_RE = re.compile(r"-?[0-9]+")
+
+
+def _decimal_int(value):
+    """Parse a plain ASCII decimal integer.
+
+    int() alone also accepts digit-group underscores ("0_4"), a leading "+"
+    and non-ASCII digits, none of which belong in these CSVs.
+    """
+    text = str(value).strip()
+    if not _DECIMAL_RE.fullmatch(text):
+        raise ValueError(f"'{text}' is not a decimal integer")
+    return int(text)
+
+
+_LITERAL_RE = re.compile(r"-?(?:0[xX][0-9a-fA-F]+|0[bB][01]+|0[oO][0-7]+|[0-9]+)")
+
+
+def _literal_int(value):
+    """Parse a decimal or 0x/0b/0o-prefixed integer, without int()'s extras
+    (digit-group underscores, a leading "+", non-ASCII digits)."""
+    text = str(value).strip()
+    if not _LITERAL_RE.fullmatch(text):
+        raise ValueError(f"'{text}' is not an integer literal (e.g. 0, 1, 0x50)")
+    return int(text, 0)
+
+
 def _strip_dict(row):
     """Uniformly strip whitespace (including invisible chars) from a
     DictReader row.
@@ -92,9 +119,9 @@ def _stripped(reader):
 
 class Controller:
     def __init__(self, ctrl_id, name, max_width):
-        self.id = int(str(ctrl_id).strip())
+        self.id = _decimal_int(ctrl_id)
         self.name = str(name).strip()
-        self.max_width = int(str(max_width).strip())
+        self.max_width = _decimal_int(max_width)
 
     @property
     def lname(self):
@@ -132,20 +159,20 @@ class Signal:
         self.name = str(name).strip()
         self.signal_type = str(signal_type).strip().lower()  # perlane | shared
         self.direction = str(direction).strip()  # mac2phy | phy2mac
-        self.width = int(str(width).strip())
+        self.width = _decimal_int(width)
         ss = str(safe_state).strip()
-        self.safe_state = int(ss, 0) if ss else 0
+        self.safe_state = _literal_int(ss) if ss else 0
         self.tie_off = str(tie_off).strip().lower()
         if self.tie_off == "lane0":
             self.tie_value = None
         else:
-            # Any integer literal Python's int(x, 0) accepts: plain decimal
-            # ("0", "1"), or a prefixed literal ("0x50", "0b101"). This is
+            # Plain decimal ("0", "1") or a prefixed literal ("0x50",
+            # "0b101"), see _literal_int(). This is
             # deliberately more general than just 0/1 -- some phy2mac
             # signals need to tie to a specific non-boolean idle pattern
             # (e.g. a messagebus idle code), not just all-zero/all-one.
             try:
-                self.tie_value = int(self.tie_off, 0)
+                self.tie_value = _literal_int(self.tie_off)
             except ValueError as e:
                 raise ValueError(
                     f"tie_off must be 'lane0' or an integer literal "
@@ -259,9 +286,11 @@ class Config:
 
     @staticmethod
     def _open_csv(path, content):
+        # utf-8-sig: Excel's "CSV UTF-8" export prepends a BOM, which would
+        # otherwise become part of the first header name.
         if content is None:
-            return Path(path).open(newline="", encoding="utf-8")
-        return io.StringIO(content.decode("utf-8"), newline="")
+            return Path(path).open(newline="", encoding="utf-8-sig")
+        return io.StringIO(content.decode("utf-8-sig"), newline="")
 
     # -- controllers.csv
     @staticmethod
@@ -413,7 +442,7 @@ class Config:
                 if not mv:
                     raise SystemExit(f"{path} line {i}: mode is empty")
                 try:
-                    m = int(mv)
+                    m = _decimal_int(mv)
                 except ValueError as e:
                     raise SystemExit(f"{path} line {i}: mode='{mv}' is not an integer") from e
                 if m in mapping:
@@ -434,7 +463,7 @@ class Config:
                         )
                     a, b = cell.split("-")
                     try:
-                        per[idx] = (int(a), int(b))
+                        per[idx] = (_decimal_int(a), _decimal_int(b))
                     except ValueError as e:
                         raise SystemExit(f"{path} line {i} {col}: '{cell}' contains a non-integer") from e
                     if per[idx][0] < 0 or per[idx][1] < 0:
@@ -738,6 +767,13 @@ class Config:
                     f"stays the same across every mode where it's active."
                 )
 
+        return err
+
+    def warnings(self, *, _topology=None):
+        """Advisory findings for a config that validate() accepts."""
+        warnings = []
+        topology = _topology if _topology is not None else self.topology_indexes()
+
         # Controller count should align with "total PHY lane count / minimum
         # allocation granularity". The granularity is inferred from the
         # data: the minimum width a controller is ever allocated. Too many
@@ -746,13 +782,17 @@ class Config:
         # controller may be forced to change its lowest-numbered owned lane
         # across modes, breaking the "fixed working clock" premise above.
         # Example: an x16 PHY with a minimum granularity of 2 lanes ideally
-        # supports 8 controllers; more or fewer than 8 both violate this
-        # design constraint.
+        # supports 8 controllers.
+        #
+        # Only a hint, not an error: both failure modes it anticipates are
+        # already rejected directly by validate() (a controller that never
+        # gets a lane; a working clock that moves), and legal layouts such as
+        # x16 split x8+x4+x4 across three controllers do not match the ideal.
         gran = topology.minimum_widths
         if gran:
             g_min = min(gran.values())
             if self.lane_count % g_min != 0:
-                err.append(
+                warnings.append(
                     f"Total PHY lane count {self.lane_count} is not divisible by "
                     f"the minimum allocation granularity {g_min} (determined by "
                     f"{self.controllers[min(gran, key=gran.get)].name}); lanes "
@@ -762,7 +802,7 @@ class Config:
                 ideal = self.lane_count // g_min
                 actual = len(self.controllers)
                 if actual != ideal:
-                    err.append(
+                    warnings.append(
                         f"Controller count ({actual}) doesn't match the ideal count "
                         f"implied by the minimum granularity "
                         f"({self.lane_count}/{g_min}={ideal}). Too many leaves some "
@@ -772,7 +812,7 @@ class Config:
                         f"constraint."
                     )
 
-        return err
+        return warnings
 
     # ------------------------------------------------------------ report
 
@@ -780,6 +820,13 @@ class Config:
         L = []
         topology = _topology if _topology is not None else self.topology_indexes()
         cp, cc = topology.pclk_sources, topology.pclk_candidates
+
+        warnings = self.warnings(_topology=topology)
+        if warnings:
+            L.append("Warnings")
+            L.append("")
+            L.extend(f"  - {warning}" for warning in warnings)
+            L.append("")
 
         L.append(
             "Lane groups (lanes with an identical owner sequence are grouped "

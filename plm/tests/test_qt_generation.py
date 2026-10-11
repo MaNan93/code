@@ -295,26 +295,23 @@ class GenerationIntegrationTests(unittest.TestCase):
         self.assertEqual(controller.generation_state, "up_to_date")
         self.assertIn("Verible 不可用", window.log_panel.output.toPlainText())
 
-    def test_dpr_sync_linkage_is_one_undoable_edit_and_loaded_errors_survive(self):
+    def test_dpr_alone_decides_the_select_mode_and_is_one_undoable_edit(self):
         controller, window = self.window()
         page = window.config_page
-        page.generation_editor.sel_mode.setCurrentText("comb")
+        self.assertEqual(self.service.validate(page.content()).options.sel_mode, "comb")
         page.generation_editor.dpr.setChecked(True)
         wait_for_idle(self.app)
-        self.assertEqual(page.generation_editor.sel_mode.currentText(), "sync")
-        self.assertFalse(page.generation_editor.sel_mode.isEnabled())
+        self.assertEqual(self.service.validate(page.content()).options.sel_mode, "sync")
         page.undo()
-        self.assertEqual(page.generation_editor.sel_mode.currentText(), "comb")
         self.assertFalse(page.generation_editor.dpr.isChecked())
-        self.assertTrue(page.generation_editor.sel_mode.isEnabled())
         page.redo()
-        self.assertEqual(page.generation_editor.sel_mode.currentText(), "sync")
-        bad = page.content()
-        bad["gen_flags"]["sel-mode"] = "comb"
-        page.set_content(bad)
-        self.assertEqual(page.generation_editor.sel_mode.currentText(), "comb")
-        with self.assertRaises(ValidationError):
-            self.service.validate(page.content())
+        self.assertTrue(page.generation_editor.dpr.isChecked())
+        # A sel-mode key left in an older gen_flags.txt is ignored.
+        legacy = page.content()
+        legacy["gen_flags"]["sel-mode"] = "comb"
+        page.set_content(legacy)
+        self.assertNotIn("sel-mode", page.content()["gen_flags"])
+        self.assertEqual(self.service.validate(page.content()).options.sel_mode, "sync")
 
     def test_both_pclk_modes_generate_with_and_without_dpr(self):
         controller, window = self.window()

@@ -59,6 +59,53 @@ class CliEntryPointTests(unittest.TestCase):
             self.assertEqual(error.exception.code, 2)
             self.assertEqual(wrapper.read_bytes(), before)
 
+    def test_arch_and_pclk_mode_each_imply_the_other(self):
+        captured = {}
+
+        def fake_generate(_csv_dir, _out_rtl, options, **_kwargs):
+            captured["options"] = options
+            return mock.Mock(generated=True)
+
+        cases = (
+            ([], ("original_pipe", "pclk_as_phy_output")),
+            (["--arch", "serdes"], ("serdes", "pclk_as_phy_input")),
+            (["--pclk-mode", "pclk_as_phy_input"], ("serdes", "pclk_as_phy_input")),
+            (["--pclk-mode", "pclk_as_phy_output"], ("original_pipe", "pclk_as_phy_output")),
+            # A contradictory pair is passed through for validation to reject.
+            (["--arch", "serdes", "--pclk-mode", "pclk_as_phy_output"],
+             ("serdes", "pclk_as_phy_output")),
+        )
+        with mock.patch.object(cli, "resolve_set", return_value=(Path("cfg"), Path("rtl"))), \
+                mock.patch.object(cli, "generate", side_effect=fake_generate), \
+                contextlib.redirect_stdout(io.StringIO()):
+            for flags, expected in cases:
+                with self.subTest(flags=flags):
+                    cli.cmd_generate(["--config", "demo", *flags])
+                    options = captured["options"]
+                    self.assertEqual((options.arch, options.pclk_mode), expected)
+
+    def test_quiet_generate_still_reports_warnings(self):
+        result = mock.Mock(generated=True)
+        result.plan.warnings.return_value = ["Controller count (3) doesn't match"]
+        errors = io.StringIO()
+        with mock.patch.object(cli, "resolve_set", return_value=(Path("cfg"), Path("rtl"))), \
+                mock.patch.object(cli, "generate", return_value=result), \
+                contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(errors):
+            cli.cmd_generate(["--config", "demo", "--quiet"])
+        self.assertIn("warning: Controller count (3)", errors.getvalue())
+
+    def test_missing_config_never_falls_back_to_packaged_defaults(self):
+        from plm.core import paths
+
+        with tempfile.TemporaryDirectory() as temporary:
+            packaged = Path(temporary) / "packaged"
+            packaged.mkdir()
+            for name in paths.CSV_NAMES:
+                (packaged / name).write_text("", encoding="utf-8")
+            with mock.patch.object(paths, "BUILTIN_CFG", packaged):
+                with self.assertRaisesRegex(SystemExit, "not found"):
+                    paths.resolve_set(str(Path(temporary) / "typo"))
+
     def test_gui_long_flag_launches_qt(self):
         with mock.patch.object(cli, "cmd_gui", return_value=17) as launch:
             self.assertEqual(cli.main(["--gui", "-style", "Fusion"]), 17)

@@ -85,7 +85,7 @@ lane 归属要在运行时随 mode 切换，夹在 controller 和 PHY 中间的�
 | `lane_mapping.csv` | 每个 mode 下，每条 PHY lane 归哪个 controller 的哪条 lane |
 | `pipe_signals.csv` | 要经过 mapper 的 PIPE 信号，以及各自的 `safe_state` / `tie_off` |
 
-CLI 的生成参数（`--arch` / `--pclk-mode` / `--sel-mode` / `--dpr` / `--bus-type`）需要显式传入。Qt 直接使用同样的 GenerationOptions 调用核心。
+CLI 的生成参数（`--arch` / `--pclk-mode` / `--dpr` / `--bus-type`）需要显式传入。Qt 直接使用同样的 GenerationOptions 调用核心。
 同目录下的 `gen_flags.txt` 是 Qt 前端自己的记忆，CLI 不读，见 2.4 节。
 
 输出——`<SET>/rtl/` 和 `<SET>/tb/`：
@@ -175,15 +175,20 @@ PCLK/RXCLK、复位和 M2P/P2M 数据通路；该 Group 上已经工作的 PCIe 
 | 同一条 controller lane 的所有驱动源必须来自同一个组 | 跨组的 sel 位来自互相独立的 NOV，之间没有互锁，可能短暂同时为 1，两条数据通路会被或在一起 |
 | 一条 PHY lane 在其 owner 持有它的所有 mode 下，controller lane 下标必须固定 | 生成器对每条 lane 只解析一次下标，下标会动就会在其余 mode 接到错误的 controller lane 上 |
 | `mode` 取值必须从 0 开始连续 | 译码器的 `mode` 端口按 `$clog2(mode 数)` 声明位宽，跳号会让部分分支永远选不到 |
-| controller 数量 = PHY lane 总数 / 最小分配颗粒度 | 多了会有 controller 永远分不到 lane，少了会逼着某个 controller 跨 mode 换最低编号 owned lane，破坏上面的时钟固定约束 |
+| controller 数量 = PHY lane 总数 / 最小分配颗粒度（仅警告，不拦截） | 多了会有 controller 永远分不到 lane，少了会逼着某个 controller 跨 mode 换最低编号 owned lane，破坏上面的时钟固定约束 |
 
 还有三条不报错、但用之前要知道：
 
 - **不校验 PCIe 宽度合法性**。工具允许任意宽度，x3 / x5 / x6 都能生成；
   真实 PCIe 只允许 2 的幂（x1/x2/x4/x8/x16/x32）。`test/finegrain` 这类配置是用来压生成器的，
   不是真实拓扑。
-- **`--sel-mode comb` 下 `safe_state` / `tie_off` 不会真正出现**。组合直通没有全 0 空窗，
-  所以空窗值永远观察不到。只有候选 controller 确实在同一个时钟域才能用 `comb`。
+- **选择方式由 `--dpr` 决定，不是独立参数**。开 DPR 时选择信号经同步器（`sync`），不开时为
+  组合直通（`comb`）。不开 DPR 时归属只随 `mode` 变化，因此**只能在受影响的 lane 处于复位时
+  切换 `mode`**；在工作中的 lane 上切 `mode`，两路数据可能短暂相或。具体要求是换 owner 的
+  group 的新旧两个 controller 的 `rst_n` 同时为低。生成的 RTL 不含断言，这条约定由集成方
+  遵守；生成的 testbench 按这个顺序切换，并在违反时判 FAIL。
+- **不开 DPR 时 `safe_state` 的交接空窗值不会出现**。组合直通没有全 0 空窗，所以空窗值
+  永远观察不到；从未被映射的 controller lane 的 `tie_off` 不受影响。
 - **`--dpr` + `pclk_as_phy_input` 需要外部自由运行的 `dpr_pclk`**。生成顶层还会
   输出逐 lane 的 `dpr_rx_clk`；DPR 接管一个 group 时，数据、PCLK 和 RXCLK
   使用同一所有权切换，避免时钟与数据属于不同 owner。
@@ -221,7 +226,7 @@ plm/
 │     └─ frontend/
 │        └─ qt/                 桌面前端（PyQt5，`pip install -e ".[qt]"`）
 ├─ test/
-│  └─ <SET>/              一套配置集，SET 是自己起的名字（如 quad）
+│  └─ <SET>/              一套配置集，SET 是自己起的名字（如 bifurcate）
 │     ├─ config/           输入：三个 CSV（见第 2 节）
 │     │  ├─ controllers.csv
 │     │  ├─ lane_mapping.csv
@@ -337,21 +342,21 @@ connection 的外部端口表示，mapper 内部的 struct 端口、时钟/复�
 
 ### 2.4 生成参数不在配置文件里
 
-`--arch` / `--pclk-mode` / `--sel-mode` / `--dpr` / `--bus-type` 在 CLI 中**必须显式从命令行传入**；Qt 从界面构造 GenerationOptions。
+`--arch` / `--pclk-mode` / `--dpr` / `--bus-type` 在 CLI 中**必须显式从命令行传入**；Qt 从界面构造 GenerationOptions。
 CLI 不读任何文件来拿它们。
 
 | 谁来生成 | 参数从哪来 |
 |---|---|
 | 手敲命令行 | 自己写在命令里 |
 | `make <SET>` | 顶层 `Makefile` 里的 `SETFLAGS_<SET>` 变量（见 6.1 节） |
-| Qt 前端 | Generation 页上的架构、PCLK、选择方式、Connection 总线类型和 DPR 控件，构造 GenerationOptions 后直接调用核心 |
+| Qt 前端 | Generation 页上的架构、PCLK、Connection 总线类型和 DPR 控件，构造 GenerationOptions 后直接调用核心 |
 
 配置目录下还有个 `gen_flags.txt`，但那是 **Qt 前端自己的记忆**：前端保存时写、
 打开 workspace 时读回来恢复上次的选择。CLI 不看它，`make` 也不看它，
 所以手敲命令行或跑 `make` 时改这个文件没有任何效果。
 
 不传就是 CLI 默认值：`--arch original_pipe --pclk-mode pclk_as_phy_output
---sel-mode sync --bus-type bus`，不开 dpr。
+--bus-type bus`，不开 dpr。`--arch` 和 `--pclk-mode` 只传一个时，另一个自动补全。
 
 ## 3. `plm generate`：生成匹配的 RTL 与 testbench
 
@@ -363,11 +368,10 @@ plm generate --config <SET> [其它参数]
 | 参数 | 默认值 | 说明 |
 |---|---|---|
 | `--config SET` | 无（必填） | 配置集名字或路径 |
-| `--arch {original_pipe,serdes}` | `original_pipe` | PHY 宏类型，必须与 pclk-mode 匹配 |
-| `--pclk-mode {pclk_as_phy_output,pclk_as_phy_input}` | `pclk_as_phy_output` | PCLK 归属架构；方向名称以 PHY 端口为视角 |
-| `--sel-mode {sync,comb}` | `sync` | Group 选择同步方式；DPR 要求 sync |
+| `--arch {original_pipe,serdes}` | `original_pipe` | PHY 宏类型；只传它时 pclk-mode 自动补全 |
+| `--pclk-mode {pclk_as_phy_output,pclk_as_phy_input}` | `pclk_as_phy_output` | PCLK 归属架构；方向名称以 PHY 端口为视角；只传它时 arch 自动补全 |
 | `--bus-type {flat,bus}` | `bus` | Connection 信号端口：flat 为一维向量，bus 为二维 lane 数组 |
-| `--dpr` | 关闭 | 生成并例化 DPR overlay |
+| `--dpr` | 关闭 | 生成并例化 DPR overlay；同时决定选择方式（开为 sync，关为 comb） |
 | `--verible-path PATH` | 自动搜索 | SystemVerilog 格式化器 |
 | `--verible-flags JSON` | 内置默认值 | 覆盖 Verible 参数 |
 | `--quiet` | 关闭 | 不打印拓扑报告 |
@@ -403,8 +407,7 @@ plm generate --config <SET> [其它参数]
 
 ## 6. 用顶层 `Makefile` 批量生成
 
-顶层 `Makefile` 对每个正向配置集执行一次 `plm generate`。故意非法的
-`quad` 是负向校验 fixture，不参与批量生成。
+顶层 `Makefile` 对 `test/` 下每个配置集执行一次 `plm generate`。
 
 | 命令 | 作用 |
 |---|---|

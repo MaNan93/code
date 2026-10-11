@@ -175,8 +175,7 @@ dout = acc XOR safe
 |---|---|---|---|---|
 | `--arch` | `original_pipe` / `serdes` | `original_pipe` | 纯粹是跟 `--pclk-mode` 的一致性交叉校验 | 不匹配直接报错 |
 | `--pclk-mode` | `pclk_as_phy_output` / `pclk_as_phy_input` | `pclk_as_phy_output` | 选择时钟架构，生成物完全不兼容 | 必须和 `--arch` 匹配 |
-| `--sel-mode` | `sync` / `comb` | `sync` | 决定顶层 `SEL_SYNC` 参数的**默认值** | 例化时仍可覆盖；`--dpr` 时必须 `sync` |
-| `--dpr` | flag | 关闭 | 加 DPR(诊断探针)overlay | 必须 `--sel-mode sync`；两种PCLK架构都支持，PHY-input模式需要外部`dpr_pclk` |
+| `--dpr` | flag | 关闭 | 加 DPR(诊断探针)overlay，并决定顶层 `SEL_SYNC` 的值（开为 sync，关为 comb；localparam，例化时不可覆盖） | 两种PCLK架构都支持，PHY-input模式需要外部`dpr_pclk` |
 | `--verible-path` | 路径 | 无 | `verible-verilog-format` 路径 | 找不到就跳过（纯排版） |
 
 **设计上的克制**：时钟本身的无毛刺切换（`rx_clk` / `ctrl_pclk` 的那些 `pipe_lane_sel_sync`）永远硬编码 `SYNC=1'b1`，不接 `SEL_SYNC` 参数 —— 这条安全性质不允许使用者关掉。
@@ -243,7 +242,7 @@ dout = acc XOR safe
 
 - **RTL 和 TB 由一次 `generate` 使用同一组参数生成**；一边失败时两边旧输出都保持不变。
 - **生成参数只走命令行**。`make` 靠 `Makefile` 里的 `SETFLAGS_<SET>`，Qt 前端靠 Generation 页；CLI 不读任何文件。
-- **`--dpr` 强制要求 `--sel-mode sync`**，`--dpr` + `comb` 直接报错。
+- **选择方式跟 `--dpr` 走**：开 DPR 为 `sync`，不开为 `comb`，没有单独的 `--sel-mode`。
 - **`--dpr` 支持两种 PCLK 架构**。`pclk_as_phy_output` 下从当前Mask的PHY PCLK派生`dpr_pclk`；`pclk_as_phy_input` 下由外部提供自由运行的`dpr_pclk`，并输出逐Lane的`dpr_rx_clk`。
 - **生成物的正确性完全靠仿真验证**，`Makefile` 本身不做任何检查。
 
@@ -326,31 +325,10 @@ dout = acc XOR safe
 
 | 名称 | 模式数 | lane 总数 | controller | 特点 | 校验 |
 |---|---|---|---|---|---|
-| **bifurcate** | 4 | 16 | CtrlX16(x16), CtrlX8asdfadssssss(x8), CtrlX4a(x4), CtrlX4b(x4) | 分叉拓扑；controllers.csv 里有个手滑的长名字 | OK |
+| **bifurcate** | 4 | 16 | CtrlX16(x16), CtrlX8(x8), CtrlX4a(x4), CtrlX4b(x4) | 分叉拓扑 | OK |
 | **dpr** | 4 | 12 | CtrlA(x12), CtrlB(x6), CtrlC(x8), CtrlD(x3) | DPR overlay 演示 | OK |
 | **finegrain** | 3 | 6 | CtrlAlpha(x3), CtrlBeta(x2), CtrlGamma(x1), CtrlDelta(x1), CtrlEpsilon(x1), CtrlZeta(x1) | 最细颗粒度（x1） | OK |
 | **maxpclk** | 4 | 12 | CtrlA(x12), CtrlB(x6), CtrlC(x8), CtrlD(x3) | 演示 `pclk_as_phy_input` | OK |
-| **quad** | 4 | 12 | CtrlA(x12), CtrlB(x6), CtrlC(x8), CtrlD(x3) | **当前留作反例**，见 5.2 | **失效** |
-
-### 5.2 quad 配置的问题
-
-当前 `test/quad/` 的 `lane_mapping.csv` 存在配置冲突：
-
-```
-Mode 1: lane 6~11 给 CtrlB（lane6 是最低编号）
-Mode 3: lane 3~5 给 CtrlB（lane3 是最低编号）
-                 ↓
-CtrlB 的工作时钟候选数 > 1（违反约束 B）
-同时 CtrlB[0] 的驱动源跨 G1(lane3) 和 G2(lane6) 两个 group（违反约束 A）
-```
-
-**校验错误消息**：
-```
-- CtrlB[0]'s driving sources span multiple lane groups: G1(lane3), G2(lane6).
-- CtrlB's working clock comes from different lanes [3, 6] across modes
-```
-
-`docs/tool_architecture.md` 第 4 节的记录表明这可能是改到一半的中间状态。
 
 ---
 
@@ -360,7 +338,7 @@ CtrlB 的工作时钟候选数 > 1（违反约束 B）
 
 不是靠复杂的互锁逻辑或仲裁器，而是一个简单的分组规则：**同一 group 里的 lane 在所有 mode 下 owner 完全一致** → owner 不变的 group 的选择信号值永不改变 → `pipe_lane_sel_sync` 根本检测不到翻转，不会进 NOV。
 
-这个设计示例（quad）：mode0→mode2 只切 G2/G3，G0/G1 全程不受扰动。
+这个设计示例（dpr）：mode0→mode2 只切 G2/G3，G0/G1 全程不受扰动。
 
 ### 亮点 2：极性归一化无毛刺结构
 

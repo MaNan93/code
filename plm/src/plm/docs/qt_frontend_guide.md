@@ -82,9 +82,8 @@ Generation 页提供以下参数：
 |---|---|
 | `arch` | 用户选择 `original_pipe` / `serdes` |
 | `pclk-mode` | 只读显示，由 `arch` 自动决定：`original_pipe` → `pclk_as_phy_output`，`serdes` → `pclk_as_phy_input` |
-| `sel-mode` | `sync` / `comb` |
 | `bus-type` | Connection 端口形式：`bus`（默认二维数组） / `flat`（一维向量）；控制器端口仍各自独立 |
-| `dpr` | 两种 PCLK 模式都支持；启用时自动选择并锁定 `sync` |
+| `dpr` | 两种 PCLK 模式都支持；同时决定选择方式：启用为 `sync`，不启用为 `comb` |
 
 启用 DPR 是一次可撤销的编辑。磁盘上已存在的非法参数组合会保留并提示校验错误，
 不会在加载时悄悄改写。PHY input 模式的 DPR 使用外部 `dpr_pclk` 输入和逐 lane

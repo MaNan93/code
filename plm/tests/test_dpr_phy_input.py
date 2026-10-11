@@ -21,11 +21,11 @@ class DprClockTests(unittest.TestCase):
     def setUp(self):
         self.cfg = Config(sample_config("maxpclk"))
 
-    def test_input_mode_is_accepted_but_comb_stays_rejected(self):
-        GenerationOptions(dpr=True, sel_mode="sync").validated()
-        GenerationOptions(dpr=False, sel_mode="comb").validated()
-        with self.assertRaises(ValueError):
-            GenerationOptions(dpr=True, sel_mode="comb").validated()
+    def test_select_mode_is_derived_from_dpr_and_cannot_be_chosen(self):
+        self.assertEqual(GenerationOptions(dpr=True).validated().sel_mode, "sync")
+        self.assertEqual(GenerationOptions(dpr=False).validated().sel_mode, "comb")
+        with self.assertRaises(TypeError):
+            GenerationOptions(dpr=True, sel_mode="comb")
 
     def test_clock_ports_and_no_derived_input_clock(self):
         for generator in (rtl.gen_top, rtl.gen_connection):

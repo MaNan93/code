@@ -213,18 +213,19 @@ def gen_sel_gen(cfg, sel_mode="sync", pclk_mode="pclk_as_phy_output", dpr=False)
     (the group/lane selects that gate sel_tgt / seltgt_gN_lL) is wired to
     one module parameter, SEL_SYNC, so the choice is a single elaboration-
     time knob on pipe_lane_sel_gen itself (and, via pipe_lane_mapper's own
-    SEL_SYNC parameter, on the whole design) instead of something only
-    --sel-mode can set:
-      SEL_SYNC=1'b1 (default, sel_mode="sync") -- non-overlap + a
+    SEL_SYNC parameter, on the whole design):
+      SEL_SYNC=1'b1 (sel_mode="sync", with --dpr) -- non-overlap + a
                 two-stage synchronizer, safe across clock domains.
-      SEL_SYNC=1'b0 (sel_mode="comb")          -- en is directly tgt, pure
-                combinational passthrough. Only safe when every candidate
-                controller genuinely shares the same clock domain and mode
-                itself is already glitch-free within that domain;
-                otherwise multiple branches could briefly be 1 at once,
-                and pipe_lane_data_mux would OR the two data paths together.
-    --sel-mode only picks SEL_SYNC's default value at generation time; it
-    can still be overridden per-instantiation without regenerating.
+      SEL_SYNC=1'b0 (sel_mode="comb", without --dpr) -- en is directly
+                tgt, pure combinational passthrough. Safe because mode only
+                changes while the affected lanes are held in reset, so the
+                select is static whenever it matters; switching mode on
+                live lanes could briefly raise two branches at once, and
+                pipe_lane_data_mux would OR the two data paths together.
+    The generator picks SEL_SYNC from --dpr alone (see
+    GenerationOptions.sel_mode). pipe_lane_mapper and its connection wrapper
+    declare it as a localparam, so it cannot be overridden where the design
+    is instantiated; only this submodule still takes it as a parameter.
     The rx_clk and controller-pclk glitch-free-switching syncs elsewhere in
     this design are NOT tied to SEL_SYNC -- those always force SYNC=1'b1,
     unconditionally, because they gate a clock rather than select data;
@@ -263,7 +264,7 @@ def gen_sel_gen(cfg, sel_mode="sync", pclk_mode="pclk_as_phy_output", dpr=False)
         + (
             " (1'b1, safe across clock domains)"
             if sel_mode == "sync"
-            else " (1'b0, combinational passthrough, requires candidate controllers to share one clock domain)"
+            else " (1'b0, combinational passthrough; mode may only change while the affected lanes are in reset)"
         ),
         "import pipe_lane_signal_pkg::*;",
         "",
@@ -407,6 +408,10 @@ def gen_sel_gen(cfg, sel_mode="sync", pclk_mode="pclk_as_phy_output", dpr=False)
         else:
             L.append("    // One pipe_lane_sel_sync per non-direct group (SYNC=SEL_SYNC).")
         L.append("    //------------------------------------------------------------")
+        if not dpr and all(g.is_direct for g in cfg.groups):
+            # lane_sel_t is only its dummy field here; nothing below drives it.
+            L.append("    assign sel_tgt = '0;   // all groups are direct, nothing to select")
+            L.append("")
         for g in (cfg.groups if dpr else [g for g in cfg.groups if not g.is_direct]):
             names = ", ".join(cfg.controllers[c].name for c in g.cands) + (", DPR" if dpr else "")
             L.append(f"    // G{g.gid} lane{g.lanes[0]}~{g.lanes[-1]}: {names}")
@@ -1230,11 +1235,14 @@ def gen_top(cfg, pclk_mode="pclk_as_phy_output", sel_mode="sync", dpr=False):
         L.append(f"//   G{g.gid} {rng:<14} {owners:<24} {kind}")
     L.append("import pipe_lane_signal_pkg::*;")
     L.append("")
+    # localparam, not parameter: every value here is fixed by the config this
+    # file was generated from (port widths, mux shapes, the select strategy),
+    # so an instantiation must not be able to override any of them.
     L.append("module pipe_lane_mapper #(")
-    L.append(f"    parameter int NL = {LC},")
-    L.append(f"    parameter int NC = {NC},")
+    L.append(f"    localparam int NL = {LC},")
+    L.append(f"    localparam int NC = {NC},")
     L.append(
-        f"    parameter bit SEL_SYNC = {sync_lit}"
+        f"    localparam bit SEL_SYNC = {sync_lit}"
         "   // pipe_lane_sel_gen's data-path pipe_lane_sel_sync SYNC, see there"
     )
     L.append(") (")
@@ -1563,10 +1571,12 @@ def gen_connection(cfg, pclk_mode="pclk_as_phy_output", dpr=False, sel_mode="syn
     L.append("import pipe_lane_signal_pkg::*;")
     L.append("")
     L.append("module pipe_lane_mapper_connection #(")
-    L.append(f"    parameter int NL = {LC},")
-    L.append(f"    parameter int NC = {NC},")
+    # localparam for the same reason as pipe_lane_mapper's own: fixed by the
+    # generating config, never an instantiation-time choice.
+    L.append(f"    localparam int NL = {LC},")
+    L.append(f"    localparam int NC = {NC},")
     sync_lit = "1'b1" if sel_mode == "sync" else "1'b0"
-    L.append(f"    parameter bit SEL_SYNC = {sync_lit}")
+    L.append(f"    localparam bit SEL_SYNC = {sync_lit}")
     L.append(") (")
     if phy_input_mode:
         L.append(f"    input logic [{mode_width(nm)-1}:0] mode,")
@@ -1692,11 +1702,7 @@ def gen_connection(cfg, pclk_mode="pclk_as_phy_output", dpr=False, sel_mode="syn
     L.append("    //------------------------------------------------------------")
     L.append("    // Real DUT")
     L.append("    //------------------------------------------------------------")
-    L.append("    pipe_lane_mapper #(")
-    L.append("        .NL (NL),")
-    L.append("        .NC (NC),")
-    L.append("        .SEL_SYNC (SEL_SYNC)")
-    L.append("    ) u_pipe_lane_mapper (")
+    L.append("    pipe_lane_mapper u_pipe_lane_mapper (")
     if phy_input_mode:
         L.append("        .mode         (mode),")
         L.append("        .rx_clk       (rx_clk),")

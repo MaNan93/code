@@ -42,9 +42,9 @@ _TABLES = {
 def _csv_rows(path, content=None):
     try:
         handle = (
-            Path(path).open(newline="", encoding="utf-8")
+            Path(path).open(newline="", encoding="utf-8-sig")
             if content is None
-            else io.StringIO(content.decode("utf-8"), newline="")
+            else io.StringIO(content.decode("utf-8-sig"), newline="")
         )
         with handle:
             return list(csv.DictReader(handle))
@@ -117,8 +117,17 @@ def _topology_issue(config, message):
     table, row, column = None, None, None
     mode_lane = re.search(r"\[mode (\d+)\].*?lane(\d+)", message)
     lane = re.search(r"\blane(\d+)\b", message)
+    # Whole-name match, longest first: "Ctrl1" must not claim a message
+    # about "Ctrl10".
     controller = next(
-        (cid for cid, value in config.controllers.items() if value.name in message),
+        (
+            cid for cid, value in sorted(
+                config.controllers.items(), key=lambda item: -len(item[1].name)
+            )
+            if re.search(
+                rf"(?<![A-Za-z0-9_$]){re.escape(value.name)}(?![A-Za-z0-9_$])", message
+            )
+        ),
         None,
     )
     if mode_lane:
@@ -132,12 +141,10 @@ def _topology_issue(config, message):
         column = int(lane.group(1)) + 1
     elif controller is not None:
         table = "controllers"
-        row = controller
+        row = list(config.controllers).index(controller)
         column = "max_width" if "max_width" in message else "ctrl_id"
     elif message.startswith("mode values"):
         table, row, column = "mapping", 0, 0
-    elif message.startswith("Controller count"):
-        table, row, column = "controllers", 0, "ctrl_id"
     return ValidationIssue("topology", message, table, row, column)
 
 

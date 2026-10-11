@@ -43,7 +43,6 @@ class WorkspaceService:
         return GenerationOptions(
             arch=arch,
             pclk_mode=pclk_mode,
-            sel_mode=flags.get("sel-mode") or "sync",
             dpr=bool(flags.get("dpr")),
             bus_type=flags.get("bus-type") or "bus",
             module_prefix=flags.get("module_prefix", ""),

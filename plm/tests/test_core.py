@@ -142,6 +142,76 @@ class ConfigValidationTests(unittest.TestCase):
         )
         self.assertEqual(Config(cfg_dir).validate(), [])
 
+    def test_accepts_excel_utf8_bom(self):
+        config_dir = self.make_config()
+        for name in ("controllers.csv", "pipe_signals.csv", "lane_mapping.csv"):
+            path = config_dir / name
+            path.write_bytes(b"\xef\xbb\xbf" + path.read_bytes())
+        validation.load_validated_config(config_dir)
+        self.assertEqual(
+            list(read_csv_rows(config_dir / "controllers.csv")[0]),
+            ["ctrl_id", "ctrl_name", "max_width"],
+        )
+
+    def test_rejects_integers_that_are_not_plain_decimal(self):
+        for controllers, mapping in (
+            ([{"ctrl_id": "0", "ctrl_name": "CtrlA", "max_width": "0_2"}], None),
+            ([{"ctrl_id": "+0", "ctrl_name": "CtrlA", "max_width": "2"}], None),
+            (None, {"lane_count": 2, "rows": [{"mode": "0", "lane0": "0-0", "lane1": "+0-1"}]}),
+            (None, {"lane_count": 2, "rows": [{"mode": "0_0", "lane0": "0-0", "lane1": "0-1"}]}),
+        ):
+            with self.subTest(controllers=controllers, mapping=mapping):
+                with self.assertRaises(SystemExit):
+                    Config(self.make_config(controllers=controllers, mapping=mapping))
+
+    def test_signal_literals_accept_prefixes_but_not_python_extras(self):
+        def signals(safe_state, tie_off):
+            rows = valid_payload()["signals"]
+            rows[1].update(safe_state=safe_state, tie_off=tie_off)
+            return rows
+
+        config = Config(self.make_config(signals=signals("0x50", "0B101")))
+        self.assertEqual((config.signals[1].safe_state, config.signals[1].tie_value), (0x50, 5))
+        for safe_state, tie_off in (("1_0", "0"), ("+1", "0"), ("0", "0x_5"), ("0", "+1")):
+            with self.subTest(safe_state=safe_state, tie_off=tie_off):
+                with self.assertRaises(SystemExit):
+                    Config(self.make_config(signals=signals(safe_state, tie_off)))
+
+    def bifurcated_x8_x4_x4(self):
+        lanes = [f"lane{index}" for index in range(16)]
+        wide = [f"0-{index}" for index in range(16)]
+        split = wide[:8] + [f"1-{index}" for index in range(4)] + [f"2-{index}" for index in range(4)]
+        return self.make_config(
+            controllers=[
+                {"ctrl_id": "0", "ctrl_name": "CtrlA", "max_width": "16"},
+                {"ctrl_id": "1", "ctrl_name": "CtrlB", "max_width": "4"},
+                {"ctrl_id": "2", "ctrl_name": "CtrlC", "max_width": "4"},
+            ],
+            mapping={"lane_count": 16, "rows": [
+                dict(zip(["mode"] + lanes, ["0"] + wide)),
+                dict(zip(["mode"] + lanes, ["1"] + split)),
+            ]},
+        )
+
+    def test_controller_count_mismatch_is_a_warning_not_an_error(self):
+        config = validation.load_validated_config(self.bifurcated_x8_x4_x4())
+        warnings = config.warnings()
+        self.assertEqual(len(warnings), 1)
+        self.assertIn("Controller count (3)", warnings[0])
+        self.assertIn("Warnings", config.report())
+        self.assertEqual(Config(sample_config("bifurcate")).warnings(), [])
+        self.assertNotIn("Warnings", Config(sample_config("bifurcate")).report())
+
+    def test_topology_issue_points_at_the_named_controller_row(self):
+        config_dir = self.make_config(controllers=[
+            {"ctrl_id": "1", "ctrl_name": "Ctrl1", "max_width": "1"},
+            {"ctrl_id": "0", "ctrl_name": "Ctrl10", "max_width": "9"},
+        ], mapping={"lane_count": 2, "rows": [{"mode": "0", "lane0": "0-0", "lane1": "1-0"}]})
+        with self.assertRaises(ValidationError) as caught:
+            validation.load_validated_config(config_dir)
+        issue = next(issue for issue in caught.exception.issues if "max_width=9" in issue.message)
+        self.assertEqual((issue.table, issue.row, issue.column), ("controllers", 1, "max_width"))
+
     def test_rejects_non_sequential_lane_headers(self):
         cfg_dir = self.make_config()
         mapping = cfg_dir / "lane_mapping.csv"
@@ -222,8 +292,8 @@ class ExporterTests(unittest.TestCase):
                     for name, value in (("NL", plan.lane_count), ("NC", plan.num_ctrl)):
                         replacement = value * 10 if name == wrong_parameter else value
                         text = text.replace(
-                            f"parameter int {name} = {value}",
-                            f"parameter int {name}\t  =\n        {replacement}",
+                            f"localparam int {name} = {value}",
+                            f"localparam int {name}\t  =\n        {replacement}",
                         )
                     return text
 
@@ -283,13 +353,70 @@ class ExporterTests(unittest.TestCase):
             changed_options = generate(
                 config_dir,
                 workspace / "rtl",
-                GenerationOptions(sel_mode="comb", quiet=True),
+                GenerationOptions(dpr=True, quiet=True),
             )
             self.assertTrue(changed_options.generated)
             self.assertNotEqual(
                 repaired.plan.generation_key,
                 changed_options.plan.generation_key,
             )
+
+    @mock.patch("plm.core.verible.find_verible", return_value=None)
+    def test_generation_stages_inside_the_workspace(self, _formatter):
+        with tempfile.TemporaryDirectory() as temporary:
+            parent = Path(temporary)
+            root = parent / "workspace"
+            save_workspace_content(root, valid_payload())
+            staged = []
+            real_commit = exporter._commit_output_set
+
+            def spy(staging, workspace):
+                staged.append(Path(staging))
+                return real_commit(staging, workspace)
+
+            with mock.patch.object(exporter, "_commit_output_set", side_effect=spy), \
+                    mock.patch("builtins.print"):
+                generate(root / "config", root / "rtl", GenerationOptions(quiet=True))
+            self.assertEqual(staged[0].parent, root)
+            self.assertEqual([path.name for path in parent.iterdir()], ["workspace"])
+            self.assertEqual(
+                sorted(path.name for path in root.iterdir()),
+                sorted([WORKSPACE_MARKER, "config", "rtl", "tb"]),
+            )
+
+    @mock.patch("plm.core.verible.find_verible", return_value=None)
+    def test_all_direct_topology_drives_the_synchronized_select(self, _formatter):
+        from plm.core.generator import rtl
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            save_workspace_content(root, valid_payload())
+            plan = load_generation_plan(root / "config", GenerationOptions())
+        self.assertIn("assign sel_tgt = '0;", rtl.gen_sel_gen(plan))
+        self.assertNotIn("assign sel_tgt", rtl.gen_sel_gen(plan, dpr=True))
+        muxed = load_generation_plan(sample_config("bifurcate"), GenerationOptions())
+        self.assertNotIn("assign sel_tgt", rtl.gen_sel_gen(muxed))
+
+    def test_mode_switch_contract_is_checked_in_the_testbench_not_the_rtl(self):
+        from plm.core.generator import rtl, tb
+        config = Config(sample_config("bifurcate"))
+        for source in (rtl.gen_top(config, sel_mode="comb"), rtl.gen_sel_gen(config, "comb")):
+            for simulation_only in ("$error", "assert", "`ifndef SYNTHESIS", "initial "):
+                self.assertNotIn(simulation_only, source)
+
+        live = tb.gen_tb(config, dpr=True)
+        held = tb.gen_tb(config)
+        self.assertIn("        mode = 1; #SETTLE;", live)
+        self.assertNotIn("in reset across the switch", live)
+        self.assertNotIn("mode_prev", live)
+        self.assertIn("between controllers that are not both in reset", held)
+        # G2 (lane8~11) goes CtrlX16 -> CtrlX8 between mode 0 and mode 1.
+        self.assertIn("// mode 0 -> 1: hold CtrlX16, ", held)
+        switch = held[held.index("// mode 0 -> 1: hold"):].splitlines()[1:4]
+        self.assertEqual([line.strip() for line in switch], [
+            "ctrl_rst_n = ~4'b0011; #SETTLE;",
+            "mode = 1; #SETTLE;",
+            "ctrl_rst_n = '1; #SETTLE;",
+        ])
 
     def test_failed_generation_preserves_previous_output_set(self):
         cfg = Config(sample_config("bifurcate"))
@@ -479,22 +606,35 @@ class GenerationPlanTests(unittest.TestCase):
                 validation.load_validated_config(Path(td) / "config")
 
     @mock.patch("plm.core.verible.find_verible", return_value=None)
-    def test_connection_wrapper_preserves_the_generated_select_mode(self, _formatter):
+    def test_select_mode_follows_dpr_through_every_module(self, _formatter):
         for pclk_mode in ("pclk_as_phy_output", "pclk_as_phy_input"):
-            for sel_mode in ("sync", "comb"):
-                with self.subTest(pclk_mode=pclk_mode, sel_mode=sel_mode), tempfile.TemporaryDirectory() as td:
+            for dpr in (False, True):
+                with self.subTest(pclk_mode=pclk_mode, dpr=dpr), tempfile.TemporaryDirectory() as td:
                     root = Path(td)
                     options = GenerationOptions(
                         arch="serdes" if pclk_mode == "pclk_as_phy_input" else "original_pipe",
-                        pclk_mode=pclk_mode, sel_mode=sel_mode, quiet=True,
+                        pclk_mode=pclk_mode, dpr=dpr, quiet=True,
                     )
+                    self.assertEqual(options.sel_mode, "sync" if dpr else "comb")
                     generate(sample_config("bifurcate"), root / "rtl", options)
-                    default = "1'b1" if sel_mode == "sync" else "1'b0"
-                    for module in ("pipe_lane_mapper", "pipe_lane_mapper_connection", "pipe_lane_sel_gen"):
+                    default = "1'b1" if dpr else "1'b0"
+                    # Fixed at the two instantiable levels, passed down below them.
+                    for module, kind in (
+                        ("pipe_lane_mapper", "localparam"),
+                        ("pipe_lane_mapper_connection", "localparam"),
+                        ("pipe_lane_sel_gen", "parameter"),
+                    ):
                         text = (root / "rtl/src" / f"{module}.sv").read_text(encoding="utf-8")
-                        self.assertIn(f"parameter bit SEL_SYNC = {default}", text)
+                        self.assertIn(f"{kind} bit SEL_SYNC = {default}", text)
+                    for module in ("pipe_lane_mapper", "pipe_lane_mapper_connection"):
+                        text = (root / "rtl/src" / f"{module}.sv").read_text(encoding="utf-8")
+                        header = text[text.index(f"module {module} #("):]
+                        header = header[:header.index(") (")]
+                        self.assertNotRegex(header, r"\bparameter\b")
                     wrapper = (root / "rtl/src/pipe_lane_mapper_connection.sv").read_text(encoding="utf-8")
-                    self.assertIn(".SEL_SYNC (SEL_SYNC)", wrapper)
+                    self.assertIn("pipe_lane_mapper u_pipe_lane_mapper (", wrapper)
+                    bench = (root / "tb/tb_pipe_lane_mapper.sv").read_text(encoding="utf-8")
+                    self.assertIn("pipe_lane_mapper dut (", bench)
 
     def test_editor_payload_validation_matches_saved_config(self):
         payload = valid_payload()
@@ -670,7 +810,7 @@ class GenerationPlanTests(unittest.TestCase):
         with self.assertRaises(ValidationError) as caught:
             load_generation_plan(
                 sample_config("bifurcate"),
-                GenerationOptions(dpr=True, sel_mode="comb"),
+                GenerationOptions(arch="serdes"),
             )
         self.assertEqual(caught.exception.issues[0].layer, "generation")
 

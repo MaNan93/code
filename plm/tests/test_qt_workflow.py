@@ -456,7 +456,7 @@ class QtWorkflowTests(unittest.TestCase):
         saved = page.content()
         page.mapping_editor.lane_count.setValue(8)
         page.signals_editor.add_row()
-        page.generation_editor.sel_mode.setCurrentText("comb")
+        page.generation_editor.bus_type.setCurrentText("flat")
         last = page.content()
         for _ in range(3):
             window.undo_action.trigger()
@@ -664,7 +664,7 @@ class QtWorkflowTests(unittest.TestCase):
         controller.generate_current()
         wait_for_idle(self.app)
         self.assertEqual(controller.generation_state, "up_to_date")
-        page.generation_editor.sel_mode.setCurrentText("comb")
+        page.generation_editor.bus_type.setCurrentText("flat")
         wait_for_idle(self.app)
         self.assertEqual(controller.generation_state, "out_of_date")
         page.undo()

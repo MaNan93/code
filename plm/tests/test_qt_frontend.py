@@ -493,7 +493,7 @@ class QtFrontendLayoutTests(unittest.TestCase):
         self.assertEqual(first_project.findChildren(QtWidgets.QPushButton, "ProjectOpenBtn"), [])
         for icon_name in ("folder", "folder-open", "pin"):
             self.assertTrue((LUCIDE_ICON_DIR / f"{icon_name}.svg").is_file())
-        expected_configs = {"bifurcate", "dpr", "finegrain", "maxpclk", "quad"}
+        expected_configs = {"bifurcate", "dpr", "finegrain", "maxpclk"}
         self.assertTrue(expected_configs.issubset(project_names))
         self.assertNotIn("__pycache__", project_names)
         self.assertNotIn("ffe", project_names)

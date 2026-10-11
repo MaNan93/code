@@ -29,14 +29,13 @@ class GenerationEditorRestoreTests(unittest.TestCase):
 
         self.assertEqual(editor.arch.currentText(), "legacy_arch")
         self.assertEqual(editor.pclk_mode.currentText(), "legacy_pclk")
-        self.assertEqual(editor.sel_mode.currentText(), "legacy_sel")
+        self.assertFalse(hasattr(editor, "sel_mode"))
         self.assertEqual(editor.bus_type.currentText(), "legacy_bus")
         self.assertEqual(
             editor.flags(),
             {
                 "arch": "legacy_arch",
                 "pclk-mode": "legacy_pclk",
-                "sel-mode": "legacy_sel",
                 "bus-type": "legacy_bus",
                 "dpr": False,
             },

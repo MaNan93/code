@@ -10,7 +10,7 @@ This file finds src/ next to itself and adds it to sys.path on its own, so
 still needs the Qt extra (`pip install -e ".[qt]"`) since PyQt5 isn't vendored.
 
     python run.py generate --config bifurcate
-    python run.py validate     --config quad
+    python run.py validate     --config bifurcate
     python run.py -gui
 """
 

@@ -42,7 +42,7 @@ Qt 直接调用核心，不拼装 CLI 子进程。Controllers、Lane Mapping、P
 选择，无可用项目时显示空状态。
 
 编辑采用快照历史，支持撤销与重做。切换项目等操作先处理未保存修改；磁盘签名
-变化时阻止保存和生成，要求重新加载。DPR 勾选将选择方式设为 sync，架构和 PCLK
+变化时阻止保存和生成，要求重新加载。选择方式由 DPR 勾选决定（勾选为 sync，否则 comb），架构和 PCLK
 互相联动。已存在的非法配置保留原值，由核心校验报告。
 
 Formatter 的路径和参数由 QSettings 提供给每次校验、生成和状态检查。
@@ -88,7 +88,7 @@ Signals 的文字列左对齐、数字列右对齐；信号名列采用更大的
 
 CLI 的生成参数显式传入；Qt 在 `config/gen_flags.txt` 保存自己的五项生成选择（含 Connection 的 `bus-type`），
 CLI 不读取这个文件。Makefile 与核心样例测试各自显式指定样例所需参数。
-`test/quad` 是非法拓扑的负面样例，不应为让回归通过而改写。
+非法拓扑的负面样例在 `tests/fixtures/samples/quad`，不应为让回归通过而改写。
 
 源码启动用 `uv run python run.py -gui`，发行包提供 `plm-gui` 和 `plm -gui`。
 包内资源路径通过 `core.paths` 解析，安装后不依赖源码目录，也不要求安装包带

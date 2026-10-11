@@ -155,6 +155,9 @@ class GenerationPlan:
     def ctrl_pclk_cands(self):
         return self.pclk_candidates
 
+    def warnings(self):
+        return self.config.warnings(_topology=self.topology)
+
     def report(self):
         return self.config.report(_topology=self.topology)
 

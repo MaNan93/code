@@ -188,10 +188,10 @@ def _self_check_output_set(plan, workspace):
         for expected, pattern in (
             (f"module {names.identifier('pipe_lane_mapper')} #(",
              rf"\bmodule\s+{re.escape(names.identifier('pipe_lane_mapper'))}\s*#\s*\("),
-            (f"parameter int NL = {plan.lane_count}",
-             rf"\bparameter\s+int\s+NL\s*=\s*{plan.lane_count}\s*(?=[,)])"),
-            (f"parameter int NC = {plan.num_ctrl}",
-             rf"\bparameter\s+int\s+NC\s*=\s*{plan.num_ctrl}\s*(?=[,)])"),
+            (f"localparam int NL = {plan.lane_count}",
+             rf"\blocalparam\s+int\s+NL\s*=\s*{plan.lane_count}\s*(?=[,)])"),
+            (f"localparam int NC = {plan.num_ctrl}",
+             rf"\blocalparam\s+int\s+NC\s*=\s*{plan.num_ctrl}\s*(?=[,)])"),
         ):
             if not re.search(pattern, text):
                 issues.append(ValidationIssue("output", f"top-level port/width check failed: {expected}"))
@@ -278,13 +278,17 @@ def _remove_path(path):
 
 
 def _stage_output_set(workspace):
-    """Create an empty sibling staging directory for a fresh output set."""
+    """Create an empty staging directory inside the workspace.
+
+    Inside rather than beside it, like the save path and the commit backups:
+    the workspace's parent need not be writable.
+    """
     workspace = Path(workspace)
     workspace.mkdir(parents=True, exist_ok=True)
     return Path(
         tempfile.mkdtemp(
-            prefix=f".{workspace.name}-generate-",
-            dir=workspace.parent,
+            prefix=".plm-generate-",
+            dir=workspace,
         )
     )
 

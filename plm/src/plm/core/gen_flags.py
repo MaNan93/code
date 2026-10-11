@@ -1,7 +1,7 @@
 """
 Generation-flag vocabulary shared by the CLI and the Qt front end.
 
-These flags -- arch, pclk-mode, sel-mode, dpr, bus-type -- are generation
+These flags -- arch, pclk-mode, dpr, bus-type -- are generation
 *inputs*: they decide what the emitted RTL structurally looks like, not how
 it is displayed.
 
@@ -35,10 +35,9 @@ PCLK_MODE_ARCH = {v: k for k, v in ARCH_PCLK_MODE.items()}
 
 # Plain value tuples (no "(default: ...)"/placeholder entries -- that's a
 # Qt-combobox-specific display concern) shared by the CLI's own argparse
-# choices and by the front end's arch/pclk-mode/sel-mode selection widgets.
+# choices and by the front end's arch/pclk-mode selection widgets.
 ARCH_VALUES = ("original_pipe", "serdes")
 PCLK_MODE_VALUES = ("pclk_as_phy_output", "pclk_as_phy_input")
-SEL_MODE_VALUES = ("sync", "comb")
 BUS_TYPE_VALUES = ("flat", "bus")
 
 
@@ -53,7 +52,6 @@ class GenerationOptions:
 
     arch: str = "original_pipe"
     pclk_mode: str = "pclk_as_phy_output"
-    sel_mode: str = "sync"
     dpr: bool = False
     verible_path: str = None
     verible_flags: dict = None
@@ -63,6 +61,18 @@ class GenerationOptions:
     file_prefix: str = ""
     macro_prefix: str = ""
 
+    @property
+    def sel_mode(self):
+        """SEL_SYNC's generated default: "sync" with DPR, otherwise "comb".
+
+        Not a choice. Without DPR, ownership only changes with ``mode``, and
+        ``mode`` only changes while the affected lanes are held in reset, so
+        the select is static whenever it matters and synchronizing it buys
+        nothing. DPR's v_lane_mask moves at run time and needs the
+        non-overlap synchronizer.
+        """
+        return "sync" if self.dpr else "comb"
+
     def errors(self):
         errors = []
         if self.arch not in ARCH_VALUES:
@@ -71,11 +81,6 @@ class GenerationOptions:
             errors.append(
                 f"pclk_mode must be one of {', '.join(PCLK_MODE_VALUES)} "
                 f"(got {self.pclk_mode!r})"
-            )
-        if self.sel_mode not in SEL_MODE_VALUES:
-            errors.append(
-                f"sel_mode must be one of {', '.join(SEL_MODE_VALUES)} "
-                f"(got {self.sel_mode!r})"
             )
         if self.bus_type not in BUS_TYPE_VALUES:
             errors.append(
@@ -89,8 +94,6 @@ class GenerationOptions:
                     f"arch {self.arch} only supports pclk_mode {required} "
                     f"(got {self.pclk_mode})"
                 )
-        if self.dpr and self.sel_mode != "sync":
-            errors.append(f"dpr requires sel_mode sync (got {self.sel_mode})")
         if self.verible_flags is not None and not isinstance(self.verible_flags, dict):
             errors.append("verible_flags must be a JSON object")
         for name in ("module_prefix", "macro_prefix", "file_prefix"):

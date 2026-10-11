@@ -13,7 +13,6 @@ from plm.core.gen_flags import (
     ARCH_VALUES,
     BUS_TYPE_VALUES,
     PCLK_MODE_VALUES,
-    SEL_MODE_VALUES,
 )
 from plm.frontend.qt.widgets.lanegrid import LaneGrid
 from plm.frontend.qt.widgets.common import StatusBadge, StyledComboBox
@@ -239,16 +238,14 @@ class GenerationEditor(QtWidgets.QWidget):
         # an independent generation choice.
         self.pclk_mode.setEnabled(False)
         self.pclk_mode.setToolTip("PCLK 模式由 PHY 架构自动决定。")
-        self.sel_mode = StyledComboBox()
-        self.sel_mode.addItems(SEL_MODE_VALUES)
         self.bus_type = StyledComboBox()
         self.bus_type.addItems(BUS_TYPE_VALUES)
         self.bus_type.setCurrentText("bus")
         self.bus_type.setToolTip("flat：一维向量；bus：二维 lane 数组。")
         self.dpr = QtWidgets.QCheckBox("启用 DPR")
+        self.dpr.setToolTip("启用后选择信号经同步器（sync）；不启用为组合直通（comb）。")
         layout.addRow("PHY 架构", self.arch)
         layout.addRow("PCLK 模式", self.pclk_mode)
-        layout.addRow("选择方式", self.sel_mode)
         layout.addRow("Connection 总线类型", self.bus_type)
         layout.addRow("DPR", self.dpr)
         self._prefix_edits = {}
@@ -279,9 +276,9 @@ class GenerationEditor(QtWidgets.QWidget):
         actions.addWidget(self.generate_btn)
         layout.addRow("", actions)
         self.arch.currentIndexChanged.connect(self._sync_pclk)
-        for control in (self.arch, self.pclk_mode, self.sel_mode, self.bus_type):
+        for control in (self.arch, self.pclk_mode, self.bus_type):
             control.currentIndexChanged.connect(self.changed.emit)
-        self.dpr.toggled.connect(self._sync_dpr)
+        self.dpr.toggled.connect(lambda _enabled: self.changed.emit())
 
     @classmethod
     def _set_combo_value(cls, combo, value):
@@ -310,15 +307,6 @@ class GenerationEditor(QtWidgets.QWidget):
         self.status_label.style().polish(self.status_label)
         self.generate_btn.setEnabled(state not in ("no_project", "generating"))
 
-    def _sync_dpr(self, enabled):
-        if enabled:
-            self.sel_mode.blockSignals(True)
-            self._set_combo_value(self.sel_mode, "sync")
-            self.sel_mode.blockSignals(False)
-        self.sel_mode.setEnabled(not enabled)
-        self.sel_mode.setToolTip("DPR 需要 sync 选择方式。" if enabled else "")
-        self.changed.emit()
-
     def _sync_pclk(self, _index):
         target = ARCH_PCLK_MODE.get(self.arch.currentText())
         if target is None:
@@ -328,7 +316,7 @@ class GenerationEditor(QtWidgets.QWidget):
         self.pclk_mode.blockSignals(False)
 
     def set_flags(self, flags):
-        controls = (self.arch, self.pclk_mode, self.sel_mode, self.bus_type, self.dpr,
+        controls = (self.arch, self.pclk_mode, self.bus_type, self.dpr,
                     *self._prefix_edits.values())
         for widget in controls:
             widget.blockSignals(True)
@@ -339,11 +327,8 @@ class GenerationEditor(QtWidgets.QWidget):
         pclk_mode = flags.get("pclk-mode") or ARCH_PCLK_MODE.get(arch)
         if pclk_mode:
             self._set_combo_value(self.pclk_mode, pclk_mode)
-        self._set_combo_value(self.sel_mode, flags.get("sel-mode") or "sync")
         self._set_combo_value(self.bus_type, flags.get("bus-type") or "bus")
         self.dpr.setChecked(bool(flags.get("dpr")))
-        self.sel_mode.setEnabled(not self.dpr.isChecked())
-        self.sel_mode.setToolTip("DPR 需要 sync 选择方式。" if self.dpr.isChecked() else "")
         for name, edit in self._prefix_edits.items():
             edit.setText(flags.get(name) or "")
         for widget in controls:
@@ -353,7 +338,6 @@ class GenerationEditor(QtWidgets.QWidget):
         flags = {
             "arch": self.arch.currentText(),
             "pclk-mode": self.pclk_mode.currentText(),
-            "sel-mode": self.sel_mode.currentText(),
             "dpr": self.dpr.isChecked(),
             "bus-type": self.bus_type.currentText(),
         }

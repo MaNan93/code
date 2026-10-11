@@ -8,7 +8,7 @@ safely. Each front end is responsible for translating its own widget state
 into the plain rows shapes these functions take, and back.
 
 A workspace holds those three CSVs plus gen_flags.txt, which remembers the
-generation flags (arch, pclk-mode, sel-mode, dpr, bus-type) the front end last used for
+generation flags (arch, pclk-mode, dpr, bus-type) the front end last used for
 it. That file is read and written HERE ONLY, by and for the editor front end.
 The CLI never looks at it: the front end passes the flags it holds on the
 `plm generate ...` command line like any other caller, so there is exactly one
@@ -33,7 +33,6 @@ from plm.core.gen_flags import (
     ARCH_VALUES,
     BUS_TYPE_VALUES,
     PCLK_MODE_VALUES,
-    SEL_MODE_VALUES,
     GenerationOptions,
     complete_arch_pclk,
 )
@@ -82,7 +81,7 @@ def read_csv_rows(path, required_cols=None):
     path = Path(path)
     if not path.is_file():
         return []
-    with open(path, newline="", encoding="utf-8") as f:
+    with open(path, newline="", encoding="utf-8-sig") as f:
         rd = csv.DictReader(f)
         rd.fieldnames = [c.strip() if c else c for c in (rd.fieldnames or [])]
         if len(rd.fieldnames) != len(set(rd.fieldnames)):
@@ -105,7 +104,7 @@ def read_mapping_csv(path):
     path = Path(path)
     if not path.is_file():
         return [], 4
-    with open(path, newline="", encoding="utf-8") as f:
+    with open(path, newline="", encoding="utf-8-sig") as f:
         rd = csv.DictReader(f)
         fieldnames = [c.strip() if c else c for c in (rd.fieldnames or [])]
         if len(fieldnames) != len(set(fieldnames)):
@@ -148,7 +147,7 @@ GEN_FLAGS_FILENAME = "gen_flags.txt"
 def read_gen_flags(path):
     """Read a workspace's gen_flags.txt into the front ends' own shape.
 
-    An unset or unrecognized arch/pclk-mode/sel-mode comes back as None (not a
+    An unset or unrecognized arch/pclk-mode comes back as None (not a
     placeholder string -- each front end maps that to whatever its own "unset"
     widget value is), dpr is already a bool. bus-type defaults to bus for old
     workspaces; unknown explicit values survive for generation validation.
@@ -168,11 +167,9 @@ def read_gen_flags(path):
     raw_pclk_mode = flags.get("pclk-mode", "")
     pclk_mode_val = _PCLK_MODE_MIGRATION.get(raw_pclk_mode, raw_pclk_mode)
     arch_val, pclk_mode_val = complete_arch_pclk(flags.get("arch"), pclk_mode_val)
-    sel_val = flags.get("sel-mode")
     result = {
         "arch": arch_val,
         "pclk-mode": pclk_mode_val,
-        "sel-mode": sel_val if sel_val in SEL_MODE_VALUES else None,
         "dpr": flags.get("dpr", "").strip().lower() in ("1", "true", "yes", "on"),
         "bus-type": flags.get("bus-type") or "bus",
     }
@@ -184,7 +181,7 @@ def read_gen_flags(path):
 def write_gen_flags(path, flags):
     """Write the front end's current choices back to gen_flags.txt.
 
-    Anything that isn't a real arch/pclk-mode/sel-mode value is dropped, so a
+    Anything that isn't a real arch/pclk-mode value is dropped, so a
     combo still showing its own "(default: ...)" placeholder can be passed
     straight through. A set of choices that pins nothing at all removes the
     file instead of leaving an empty one behind.
@@ -197,20 +194,16 @@ def write_gen_flags(path, flags):
         "# Written by the PLM Qt front end; the CLI does not read this file.",
         "# arch      = original_pipe | serdes",
         "# pclk-mode = pclk_as_phy_output | pclk_as_phy_input",
-        "# sel-mode  = sync | comb",
         "# bus-type  = flat | bus",
-        "# dpr       = true | false (dpr=true requires sel-mode=sync)",
+        "# dpr       = true | false (selects are sync with dpr, comb without)",
     ]
     header_lines = len(lines)
     arch = flags.get("arch")
     pclk = flags.get("pclk-mode")
-    sel = flags.get("sel-mode")
     if arch in ARCH_VALUES:
         lines.append(f"arch = {arch}")
     if pclk in PCLK_MODE_VALUES:
         lines.append(f"pclk-mode = {pclk}")
-    if sel in SEL_MODE_VALUES:
-        lines.append(f"sel-mode = {sel}")
     bus_type = flags.get("bus-type")
     if bus_type in BUS_TYPE_VALUES:
         lines.append(f"bus-type = {bus_type}")
@@ -349,7 +342,7 @@ def write_mapping_csv(path, lane_count, rows):
 def load_default_signals():
     """Copy an existing bundled sample workspace's pipe_signals.csv as a
     ready-made starting point for a brand-new, still-empty workspace --
-    this project's own bundled sample workspaces (test/quad, etc.)
+    this project's own bundled sample workspaces (test/bifurcate, etc.)
     always exist regardless of which workspace is currently open, so
     they're a reliable template source."""
     packaged = BUILTIN_CFG / "pipe_signals.csv"
@@ -374,7 +367,7 @@ def workspace_content(ws_root):
             "controllers": [],
             "signals": [],
             "mapping": {"lane_count": 4, "rows": []},
-            "gen_flags": {"arch": None, "pclk-mode": None, "sel-mode": None, "dpr": False, "bus-type": "bus"},
+            "gen_flags": {"arch": None, "pclk-mode": None, "dpr": False, "bus-type": "bus"},
             "empty": True,
         }
     ctrls = read_csv_rows(cfg_dir / "controllers.csv", ("ctrl_id", "ctrl_name", "max_width"))
@@ -439,7 +432,7 @@ def scaffold_default_content(ws_root):
         "signals": load_default_signals(),
         "mapping": {"lane_count": 4, "rows": [{"mode": "0", "lane0": "0-0", "lane1": "0-1",
                                                 "lane2": "0-2", "lane3": "0-3"}]},
-        "gen_flags": {"arch": None, "pclk-mode": None, "sel-mode": None, "dpr": False},
+        "gen_flags": {"arch": None, "pclk-mode": None, "dpr": False},
     }
     save_workspace_content(ws_root, payload)
     return payload

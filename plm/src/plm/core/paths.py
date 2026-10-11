@@ -129,8 +129,6 @@ def resolve_set(arg):
         if set_dir.name == "config" and set_dir.parent != SCRIPT_DIR:
             return set_dir, set_dir.parent / "rtl"
         return set_dir, set_dir / "rtl"
-    if has_csvs(BUILTIN_CFG):
-        return BUILTIN_CFG, set_dir / "rtl"
 
     avail = list_configs()
     raise SystemExit(

@@ -214,10 +214,7 @@ def gen_tb(cfg, pclk_mode="pclk_as_phy_output", dpr=False):
         L.append("")
 
     # ---- DUT instance
-    L.append("    pipe_lane_mapper #(")
-    L.append("        .NL (NL),")
-    L.append("        .NC (NC)")
-    L.append("    ) dut (")
+    L.append("    pipe_lane_mapper dut (")
     if phy_input_mode:
         L.append("        .mode           (mode),")
         L.append("        .rx_clk         (rx_clk),")
@@ -632,6 +629,28 @@ def gen_tb(cfg, pclk_mode="pclk_as_phy_output", dpr=False):
     # breakdown the categories give at the end doesn't need five separate
     # SV tasks to work -- chk()'s own category dispatch is what actually
     # provides it.
+    if not dpr:
+        # The contract lives here rather than in the generated RTL, which
+        # stays free of simulation-only code. With combinational selects a
+        # mode change may overlap two branches for a moment; that is only
+        # harmless while the lanes changing hands are in reset.
+        L.append("    //------------------------------------------------------------ mode-switch contract")
+        L.append("    // Selects are combinational without DPR: mode may only change while every")
+        L.append("    // lane that changes owner is in reset (old and new owner both hold rst_n low).")
+        L.append(f"    logic [{mode_width(nm)-1}:0] mode_prev = '0;")
+        L.append("    always @(mode) begin")
+        L.append("        for (int lane_idx = 0; lane_idx < NL; lane_idx++)")
+        L.append("            if (owner_of(mode_prev, lane_idx) != owner_of(mode, lane_idx))")
+        L.append("                chk(ctrl_rst_n[owner_of(mode_prev, lane_idx)] === 1'b0 &&")
+        L.append("                    ctrl_rst_n[owner_of(mode, lane_idx)] === 1'b0,")
+        L.append(
+            '                    $sformatf("mode %0d -> %0d moves lane%0d between controllers '
+            'that are not both in reset",'
+        )
+        L.append("                              mode_prev, mode, lane_idx));")
+        L.append("        mode_prev = mode;")
+        L.append("    end")
+        L.append("")
     L.append(
         "    //------------------------------------------------------------ steady-state data-routing check"
     )
@@ -923,12 +942,42 @@ def gen_tb(cfg, pclk_mode="pclk_as_phy_output", dpr=False):
     # sequencing below actually does: 1 (initial reset) + (nm-1) mode
     # transitions + 2 for the non-adjacent jump (if nm>=2) + 2 per
     # controller for the reset-pulse checks + 2 per group for the dpr
-    # test (claim + release), if --dpr. 3x that (plus a fixed pad for the
+    # test (claim + release), if --dpr. Without --dpr each mode switch is
+    # three waits, not one (assert reset, switch, release -- see
+    # switch_mode() below). 3x that (plus a fixed pad for the
     # small non-SETTLE delays: #100, #20 phystatus toggles, and
     # check_mode()'s own per-lane/per-controller clock-period checks,
     # which each block for a couple of clock edges) keeps this from
     # nuisance-timing-out just because SETTLE (or NC) changes later.
-    n_settle_waits = 1 + (nm - 1) + (2 if nm >= 2 else 0) + 2 * NC + (2 * len(cfg.groups) if dpr else 0)
+    n_switches = (nm - 1) + (2 if nm >= 2 else 0)
+    n_settle_waits = (
+        1 + n_switches * (1 if dpr else 3) + 2 * NC + (2 * len(cfg.groups) if dpr else 0)
+    )
+
+    def switch_mode(old, new):
+        """Emit one mode change the way the generated design allows it.
+
+        With --dpr the selects are synchronized (non-overlap), so mode moves
+        on live lanes and the NOV monitors above see the handoff. Without it
+        they are combinational: every controller that gains or loses a lane
+        is held in reset across the change, which is the usage contract the
+        mode-switch monitor above checks.
+        """
+        moved = sorted({
+            cid for g in cfg.groups if g.owners[old] != g.owners[new]
+            for cid in (g.owners[old], g.owners[new])
+        })
+        if dpr or not moved:
+            return [f"        mode = {new}; #SETTLE;"]
+        held = sum(1 << cid for cid in moved)
+        names = ", ".join(cfg.controllers[cid].name for cid in moved)
+        return [
+            f"        // mode {old} -> {new}: hold {names} in reset across the switch",
+            f"        ctrl_rst_n = ~{NC}'b{held:0{NC}b}; #SETTLE;",
+            f"        mode = {new}; #SETTLE;",
+            "        ctrl_rst_n = '1; #SETTLE;",
+        ]
+
     watchdog_ns = n_settle_waits * settle * 3 + 10000
     L.append("    initial begin")
     L.append("`ifdef DUMP_FSDB")
@@ -965,13 +1014,15 @@ def gen_tb(cfg, pclk_mode="pclk_as_phy_output", dpr=False):
         L.append("        phy_phystatus_stim[0] = 1'b0; #20;")
         L.append(f"        check_mode({m});")
         if i < len(cfg.modes) - 1:
-            L.append(f"        mode = {cfg.modes[i+1]}; #SETTLE;")
+            L += switch_mode(m, cfg.modes[i + 1])
     # Switch back after the last mode, to exercise a non-adjacent jump
     if nm >= 2:
         L.append("")
         L.append("        // non-adjacent jump")
-        L.append(f"        mode = {cfg.modes[0]}; #SETTLE; check_mode({cfg.modes[0]});")
-        L.append(f"        mode = {cfg.modes[-1]}; #SETTLE; check_mode({cfg.modes[-1]});")
+        L += switch_mode(cfg.modes[-1], cfg.modes[0])
+        L.append(f"        check_mode({cfg.modes[0]});")
+        L += switch_mode(cfg.modes[0], cfg.modes[-1])
+        L.append(f"        check_mode({cfg.modes[-1]});")
     L.append("")
 
     # ---- reset pulse checks (last mode)

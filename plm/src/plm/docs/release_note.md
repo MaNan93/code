@@ -3,6 +3,56 @@
 本文件统一记录版本与同版本内的修订，按发布时间从新到旧排列。
 后续版本更新继续修改本文件，记录改动、兼容性/迁移方法及验证结果。
 
+## 3.0.1（2026-10-11）
+
+发布日期：2026-10-11。从 `3.0.0` 升级为 `3.0.1`。本版去掉了 `--sel-mode`
+并把顶层参数改为 `localparam`，已有的命令行脚本和例化代码需要按下面的
+迁移说明调整。
+
+### 选择方式改为由 DPR 决定
+
+`--sel-mode` 参数、Qt Generation 页的"选择方式"下拉框和 `gen_flags.txt`
+的 `sel-mode` 键已移除。开 DPR 时选择信号走 `sync`，不开时走 `comb`。
+不开 DPR 时只能在受影响的 lane 处于复位时切换 `mode`。
+
+迁移：命令行去掉 `--sel-mode`；旧 `gen_flags.txt` 里的 `sel-mode` 键会被
+忽略，下次保存时消失。不开 DPR 的配置重新生成后，`pipe_lane_mapper`、
+`pipe_lane_mapper_connection`、`pipe_lane_sel_gen` 的 `SEL_SYNC` 默认值从
+`1'b1` 变为 `1'b0`。
+
+`pipe_lane_mapper` 和 `pipe_lane_mapper_connection` 的 `NL`、`NC`、`SEL_SYNC`
+由 `parameter` 改为 `localparam`：它们由生成时的配置固定，例化时不能再
+覆盖。迁移：例化这两个模块时去掉 `#(...)` 参数列表。
+
+不开 DPR 时生成的 testbench 改为先拉低相关 controller 的复位再切换
+`mode`，并新增监视块：在未复位的 lane 上切换 `mode` 判 FAIL。生成的
+可综合 RTL 不含断言。
+
+### 其他改动
+
+- controller 数量与最小颗粒度不对齐由报错降为警告，警告显示在报告开头的
+  `Warnings` 段；`--quiet` 生成时打到 stderr。x16 拆成 x8+x4+x4 这类
+  三个 controller 的拓扑现在可以生成。
+- CSV 接受 UTF-8 BOM（Excel 的"CSV UTF-8"导出）。
+- `--arch` / `--pclk-mode` 只传一个时自动补全另一个。
+- `ctrl_id`、`max_width`、`width`、`mode`、lane 单元格只接受纯十进制；
+  `safe_state`、`tie_off` 只接受十进制或 `0x`/`0b`/`0o` 字面量。`0_4`、
+  `+1` 这类写法现在报格式错误。
+- 全直连拓扑（如单模式配置）下 `pipe_lane_sel_gen` 的 `sel_tgt` 不再无驱动。
+- 校验错误定位到正确的 controller 行（名字互为前缀时不再错位）。
+- 生成时的暂存目录建在工作区内，不再要求工作区的父目录可写。
+- `--config` 路径下找不到 CSV 时一律报错，不再回退到包内置配置。
+- 删除 `test/quad` 示例（非法拓扑反例保留在 `tests/fixtures/samples/quad`）；
+  `test/bifurcate` 的 controller 名和 mode 行顺序整理。
+
+### 验证
+
+`QT_QPA_PLATFORM=offscreen python -m unittest discover -s tests`：332 项，
+329 通过，2 跳过，1 失败（macOS 下的 `test_toolbar_path_tracks_selection_and_elides_without_moving_buttons`，
+与本版改动无关）。四套示例 × 两种时钟架构 × 开关 DPR 共 16 种组合：
+Verilator `-Wall` lint 无诊断，生成的 testbench 仿真全部 PASS。未安装
+verible，格式化路径未覆盖。
+
 ## 3.0.0（2026-10-10）
 
 发布日期：2026-10-10。当前开发版本从 `2.0.8` 升级为 `3.0.0`。

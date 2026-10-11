@@ -29,7 +29,6 @@ def fixture_options(name):
     return GenerationOptions(
         arch=flags["arch"] or "original_pipe",
         pclk_mode=flags["pclk-mode"] or "pclk_as_phy_output",
-        sel_mode=flags["sel-mode"] or "sync",
         dpr=flags["dpr"], quiet=True,
     )
 

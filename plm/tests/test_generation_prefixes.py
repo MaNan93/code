@@ -61,7 +61,7 @@ class GenerationPrefixTests(unittest.TestCase):
         self.assertEqual(listed, {path.relative_to(self.root / "rtl").as_posix() for path in sources})
         tb = (self.root / "tb/rtl_tb_pipe_lane_mapper.sv").read_text()
         self.assertIn("module soc_tb_pipe_lane_mapper;", tb)
-        self.assertIn("soc_pipe_lane_mapper #(", tb)
+        self.assertIn("soc_pipe_lane_mapper dut (", tb)
         self.assertIn("$dumpvars(0, soc_tb_pipe_lane_mapper)", tb)
         self.assertIn('$fsdbDumpvars(0, soc_tb_pipe_lane_mapper, "+all")', tb)
         self.assertIn("`ifdef SOC_DUMP_FSDB", tb)
@@ -155,8 +155,8 @@ class GenerationPrefixTests(unittest.TestCase):
         self.assertRegex(package, r"logic\s+\[7:0\]\s+pipe_lane_mapper\s*;")
         self.assertNotRegex(package, r"logic\s+\[7:0\]\s+soc_pipe_lane_mapper\s*;")
         tb = (self.root / "tb/tb_pipe_lane_mapper.sv").read_text()
-        self.assertIn("soc_pipe_lane_mapper #(", tb)
-        self.assertRegex(tb, r"\)\s+dut\s*\(")
+        self.assertIn("soc_pipe_lane_mapper dut (", tb)
+        self.assertNotIn(" soc_dut ", tb)
 
     def test_lexical_context_preserves_comments_strings_fields_and_directives(self):
         source = '''// module pipe_lane_mapper; `PIPE_ICG_CELL

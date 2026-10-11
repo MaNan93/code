@@ -20,8 +20,8 @@ from plm.core.gen_flags import (
     ARCH_VALUES,
     BUS_TYPE_VALUES,
     PCLK_MODE_VALUES,
-    SEL_MODE_VALUES,
     GenerationOptions,
+    complete_arch_pclk,
 )
 from plm.core.paths import resolve_set
 from plm.core.service import generate
@@ -34,8 +34,8 @@ ARCH_HELP = (
 )
 PCLK_MODE_HELP = "PCLK architecture: PHY output or controller-provided PHY input."
 DPR_HELP = (
-    "Generate the DPR diagnostic-probe overlay. Requires --sel-mode sync; "
-    "PHY-input mode needs an external dpr_pclk."
+    "Generate the DPR diagnostic-probe overlay, with synchronized selects "
+    "(combinational without it). PHY-input mode needs an external dpr_pclk."
 )
 
 
@@ -53,16 +53,11 @@ def _add_generation_args(parser):
         "bus=two-dimensional lane arrays (default).",
     )
     parser.add_argument(
-        "--sel-mode", choices=list(SEL_MODE_VALUES), default="sync",
-        help="sync=break-before-make plus synchronization; "
-        "comb=passthrough for a shared clock domain only",
-    )
-    parser.add_argument(
-        "--arch", choices=list(ARCH_VALUES), default="original_pipe", help=ARCH_HELP
+        "--arch", choices=list(ARCH_VALUES), default=None, help=ARCH_HELP
     )
     parser.add_argument(
         "--pclk-mode", choices=list(PCLK_MODE_VALUES),
-        default="pclk_as_phy_output", help=PCLK_MODE_HELP,
+        default=None, help=PCLK_MODE_HELP,
     )
     parser.add_argument(
         "--verible-path", default=None, metavar="PATH",
@@ -108,10 +103,13 @@ def cmd_generate(argv):
     _add_generation_args(parser)
     args = parser.parse_args(argv)
     csv_dir, out_rtl = resolve_set(args.config)
+    # Either flag implies the other; with neither, the classic PIPE default.
+    arch, pclk_mode = complete_arch_pclk(args.arch, args.pclk_mode)
+    if arch is None:
+        arch, pclk_mode = "original_pipe", "pclk_as_phy_output"
     options = GenerationOptions(
-        arch=args.arch,
-        pclk_mode=args.pclk_mode,
-        sel_mode=args.sel_mode,
+        arch=arch,
+        pclk_mode=pclk_mode,
         dpr=args.dpr,
         verible_path=args.verible_path,
         verible_flags=_parse_verible_flags(args.verible_flags),
@@ -131,6 +129,10 @@ def cmd_generate(argv):
         )
     except ValidationError as error:
         raise SystemExit(f"Generation validation failed:\n{error}") from error
+    if args.quiet:
+        # Without --quiet the report printed after generation carries these.
+        for warning in result.plan.warnings():
+            print(f"warning: {warning}", file=sys.stderr)
     if not result.generated:
         print("Outputs are up to date; generation skipped.")
 

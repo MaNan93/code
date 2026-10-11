@@ -138,7 +138,6 @@ with tempfile.TemporaryDirectory(prefix="plm-ui-") as td:
     # Make the business state concrete before visual review: choose a valid
     # generation configuration and generate real RTL/TB artifacts.
     w.config_page.generation_editor.arch.setCurrentText("original_pipe")
-    w.config_page.generation_editor.sel_mode.setCurrentText("sync")
     controller.generate_current()
     wait_for_idle(app)
     assert controller.generation_state == "up_to_date", controller.generation_state
@@ -177,7 +176,7 @@ with tempfile.TemporaryDirectory(prefix="plm-ui-") as td:
         ("归档项目", "归档后，项目会从当前列表移除，但源文件不会删除。", "archive"),
     ):
         box = QtWidgets.QMessageBox(QtWidgets.QMessageBox.Question, title,
-                                   f"确定要{title} [quad] 吗？\n\n{description}",
+                                   f"确定要{title} [bifurcate] 吗？\n\n{description}",
                                    QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No, w)
         prepare_capture(box)
         box.show(); app.processEvents()

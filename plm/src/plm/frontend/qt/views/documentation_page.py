@@ -144,7 +144,26 @@ class DocumentationPage(SecondaryPage):
         finally:
             cursor.endEditBlock()
 
+    @staticmethod
+    def _drop_empty_fence_tails(document):
+        """Qt's Markdown import ends every fence with an empty code line."""
+        fence = QtGui.QTextFormat.BlockCodeFence
+        tails = []
+        block = document.begin()
+        while block.isValid():
+            if (block.blockFormat().property(fence) and not block.text()
+                    and block.previous().isValid()
+                    and block.previous().blockFormat().property(fence)
+                    and not block.next().blockFormat().property(fence)):
+                tails.append(block.position())
+            block = block.next()
+        for position in reversed(tails):
+            cursor = QtGui.QTextCursor(document)
+            cursor.setPosition(position)
+            cursor.deletePreviousChar()
+
     def _format_document_blocks(self, document):
+        self._drop_empty_fence_tails(document)
         formatted_tables = set()
         block = document.begin()
         while block.isValid():
@@ -165,7 +184,10 @@ class DocumentationPage(SecondaryPage):
                 cursor.setCharFormat(heading_format)
                 block_format.setTopMargin(16 if heading_level == 1 else 12)
                 block_format.setBottomMargin(8 if heading_level == 1 else 6)
-                cursor.setBlockFormat(block_format)
+                # BlockUnderCursor also selects the separator that ends the
+                # previous block; a block format set through that selection
+                # would restyle the previous paragraph as well.
+                QtGui.QTextCursor(block).setBlockFormat(block_format)
             elif cursor.currentTable() is None:
                 block_format.setLineHeight(
                     160, QtGui.QTextBlockFormat.ProportionalHeight
@@ -218,14 +240,20 @@ class DocumentationPage(SecondaryPage):
                     QtGui.QTextFormat.FontPixelSize, FONT_SIZE_BODY
                 )
                 cursor.setCharFormat(code_format)
-                cursor.setBlockCharFormat(code_format)
+                own = QtGui.QTextCursor(block)
+                own.setBlockCharFormat(code_format)
+                fence = QtGui.QTextFormat.BlockCodeFence
+                first = not block.previous().blockFormat().property(fence)
+                last = not block.next().blockFormat().property(fence)
                 block_format.setBackground(QtGui.QColor(BG_SUBTLE))
                 block_format.setLeftMargin(12)
                 block_format.setRightMargin(12)
-                block_format.setTopMargin(6)
-                block_format.setBottomMargin(6)
-                block_format.setLineHeight(
-                    160, QtGui.QTextBlockFormat.ProportionalHeight
-                )
-                cursor.setBlockFormat(block_format)
+                # Margins only around the whole fence: per-line margins show
+                # the page through as stripes between the lines.
+                block_format.setTopMargin(6 if first else 0)
+                block_format.setBottomMargin(6 if last else 0)
+                # Single height: the background is painted per text line, so
+                # extra leading would show through as stripes too.
+                block_format.setLineHeight(0, QtGui.QTextBlockFormat.SingleHeight)
+                own.setBlockFormat(block_format)
             block = block.next()

@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-from PyQt5 import QtCore, QtWidgets
+from PyQt5 import QtCore, QtGui, QtWidgets
 
 from plm.frontend.qt.styles.tokens import CONTROL_HEIGHT, CONTROL_PADDING_X, DANGER, ICON_SIZE, ICON_TEXT_GAP, NAV_ICON_INSET, NAV_ITEM_GAP, TEXT_SUB
 from plm.frontend.qt.widgets.common import (
@@ -20,6 +20,28 @@ class ProjectContextMenu(StyledMenu):
     def __init__(self, parent):
         super().__init__(parent)
         self.setObjectName("ProjectContextMenu")
+
+class ElidedNameLabel(QtWidgets.QLabel):
+    """Show a long name with an ellipsis; the row offers the full one on hover.
+
+    text() stays the full name; only the painting is shortened. The label
+    itself ignores the mouse, so the tooltip goes on its parent.
+    """
+
+    def paintEvent(self, _event):
+        painter = QtGui.QPainter(self)
+        rect = self.contentsRect()
+        full = self.text()
+        shown = self.fontMetrics().elidedText(full, QtCore.Qt.ElideRight, rect.width())
+        tooltip = full if shown != full else ""
+        owner = self.parentWidget()
+        if owner is not None and owner.toolTip() != tooltip:
+            owner.setToolTip(tooltip)
+        self.style().drawItemText(
+            painter, rect, int(QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter),
+            self.palette(), self.isEnabled(), shown, self.foregroundRole(),
+        )
+
 
 class ProjectItemWidget(QtWidgets.QWidget):
     """Single-line selectable project row with semantic interaction signals."""
@@ -63,7 +85,7 @@ class ProjectItemWidget(QtWidgets.QWidget):
             ).pixmap(ICON_SIZE, ICON_SIZE)
         )
         self.folder_icon.setAttribute(QtCore.Qt.WA_TransparentForMouseEvents)
-        self.project_name_label = QtWidgets.QLabel(self.project_name)
+        self.project_name_label = ElidedNameLabel(self.project_name)
         self.project_name_label.setObjectName("ProjectName")
         self.project_name_label.setSizePolicy(
             QtWidgets.QSizePolicy.Ignored, QtWidgets.QSizePolicy.Preferred

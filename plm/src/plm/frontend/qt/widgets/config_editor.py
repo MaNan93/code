@@ -274,11 +274,13 @@ class GenerationEditor(QtWidgets.QWidget):
         actions.setContentsMargins(0, 12, 0, 0)
         self.status_label = StatusBadge("请选择项目")
         self.status_label.setObjectName("GenerationStatus")
+        # Left-aligned: the artifacts drawer slides in over the right edge.
+        actions.setSpacing(12)
+        actions.addWidget(self.generate_btn)
         actions.addWidget(
             self.status_label, 0, QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter
         )
         actions.addStretch(1)
-        actions.addWidget(self.generate_btn)
         self.arch.currentIndexChanged.connect(self._sync_pclk)
         for control in (self.arch, self.pclk_mode, self.bus_type):
             control.currentIndexChanged.connect(self.changed.emit)

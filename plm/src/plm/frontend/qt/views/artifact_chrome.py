@@ -63,7 +63,9 @@ class ArtifactPathLabel(QtWidgets.QLabel):
         font = QtGui.QFont(self.font())
         font.setWeight(QtGui.QFont.Medium)
         filename_metrics = QtGui.QFontMetrics(font)
-        filename = filename_metrics.elidedText(self._filename, QtCore.Qt.ElideMiddle, width)
+        # Generated files share a long prefix (pipe_lane_...); keep the tail,
+        # which is the part that tells them apart.
+        filename = filename_metrics.elidedText(self._filename, QtCore.Qt.ElideLeft, width)
         directory = ""
         if filename == self._filename and self._directory:
             available = width - filename_metrics.horizontalAdvance(filename)

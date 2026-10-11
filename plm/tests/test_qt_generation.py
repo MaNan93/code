@@ -428,6 +428,99 @@ class GenerationIntegrationTests(unittest.TestCase):
         printed.assert_not_called()
         self.assertIn("generated", report)
 
+    def test_generation_status_strip_does_not_outlive_its_project(self):
+        scaffold_default_content(self.root / "test/other")
+        controller, window = self.window()
+        strip = window.log_panel.status_label
+        controller.generate_current()
+        wait_for_idle(self.app)
+        self.assertIn("生成完成", strip.text())
+        other = "other" if controller.current_name == "demo" else "demo"
+        window.nav_panel.project_list.select_project(other)
+        wait_for_idle(self.app)
+        self.assertEqual(controller.current_name, other)
+        self.assertEqual(strip.text(), "")
+        self.assertFalse(window.log_panel.status_bar.isVisible())
+
+    def test_long_project_name_is_elided_with_the_full_name_on_hover(self):
+        long_name = "a_rather_long_project_name_for_the_sidebar_to_elide"
+        scaffold_default_content(self.root / "test" / long_name)
+        controller, window = self.window()
+        row = next(w for w in window.nav_panel.project_list.project_widgets if w.project_name == long_name)
+        row.project_name_label.repaint()
+        self.assertEqual(row.project_name_label.text(), long_name)
+        self.assertEqual(row.header.toolTip(), long_name)
+        short = next(w for w in window.nav_panel.project_list.project_widgets if w.project_name == "demo")
+        short.project_name_label.repaint()
+        self.assertEqual(short.header.toolTip(), "")
+
+    def test_documentation_code_fence_does_not_restyle_its_neighbours(self):
+        from PyQt5 import QtGui
+        from plm.frontend.qt.views.documentation_page import DocumentationPage
+
+        page = DocumentationPage()
+        self.addCleanup(page.close)
+        document = QtGui.QTextDocument()
+        document.setMarkdown("intro `x`:\n\n```bash\none\ntwo\n```\n\nafter\n")
+        page._format_document(document)
+        blocks = []
+        block = document.begin()
+        while block.isValid():
+            blocks.append((block.text(), bool(block.blockFormat().property(QtGui.QTextFormat.BlockCodeFence)),
+                           block.blockFormat().background().style() != QtCore.Qt.NoBrush))
+            block = block.next()
+        # (text, is code, has background): no empty code tail, no shaded prose.
+        self.assertEqual(blocks, [
+            ("intro x:", False, False), ("one", True, True), ("two", True, True), ("after", False, False),
+        ])
+
+    def test_error_summary_names_the_first_error_and_jumps_to_it(self):
+        controller, window = self.window()
+        page = window.config_page
+        summary = page.error_summary
+        self.assertFalse(summary.isVisible())
+        page.mapping_editor.table.item(0, 2).setText("9-0")
+        page.controllers_editor.table.item(0, 1).setText("bad name")
+        controller.validate_current()
+        wait_for_idle(self.app)
+        self.assertTrue(summary.isVisible())
+        self.assertIn("ctrl_name", summary.text())
+        self.assertNotIn("\n", summary.text())
+        page.tabs.setCurrentIndex(3)
+        QtTest.QTest.mouseClick(summary, QtCore.Qt.LeftButton)
+        self.assertEqual(page.tabs.currentIndex(), 0)
+        self.assertEqual(page.controllers_editor.table.currentColumn(), 1)
+        page.undo()
+        page.undo()
+        controller.validate_current()
+        wait_for_idle(self.app)
+        self.assertFalse(summary.isVisible())
+
+    def test_editors_are_locked_until_a_project_is_open(self):
+        controller, window = self.window()
+        page = window.config_page
+        editors = (page.controllers_editor, page.mapping_editor, page.signals_editor, page.generation_editor)
+        self.assertTrue(all(editor.isEnabled() for editor in editors))
+        controller.archive_project(controller.current_name)
+        wait_for_idle(self.app)
+        self.assertIsNone(controller.current_project)
+        self.assertFalse(any(editor.isEnabled() for editor in editors))
+        self.assertTrue(page.tabs.isEnabled())
+        self.assertFalse(page.generation_editor.generate_btn.isEnabled())
+        self.assertFalse(page.error_summary.isVisible())
+
+    def test_generate_sits_left_of_the_status_clear_of_the_drawer(self):
+        controller, window = self.window()
+        page = window.config_page
+        page.tabs.setCurrentIndex(3)
+        page.toggle_artifacts()
+        QtTest.QTest.qWait(500)
+        wait_for_idle(self.app)
+        editor = page.generation_editor
+        self.assertLess(editor.generate_btn.x(), editor.status_label.x())
+        button_right = editor.generate_btn.mapTo(page, QtCore.QPoint(editor.generate_btn.width(), 0)).x()
+        self.assertLess(button_right, page.artifacts_panel.geometry().left())
+
     def test_both_pclk_modes_generate_with_and_without_dpr(self):
         controller, window = self.window()
         editor = window.config_page.generation_editor

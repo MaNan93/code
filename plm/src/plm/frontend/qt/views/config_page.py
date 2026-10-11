@@ -145,6 +145,38 @@ class ConfigHeader(QtWidgets.QFrame):
         self.title_label.show()
 
 
+class ErrorSummary(QtWidgets.QLabel):
+    """One-line account of the validation errors; click to jump to the first."""
+
+    clicked = QtCore.pyqtSignal()
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setObjectName("ConfigErrorSummary")
+        self.setWordWrap(True)
+        self.setCursor(QtCore.Qt.PointingHandCursor)
+        self.hide()
+
+    def set_issues(self, issues):
+        issues = tuple(issues)
+        if not issues:
+            self.clear()
+            self.setToolTip("")
+            self.hide()
+            return
+        # Some messages carry an indented explanation; the headline is enough.
+        first = str(issues[0]).splitlines()[0]
+        more = f"（共 {len(issues)} 处，点击定位第一处）" if len(issues) > 1 else "（点击定位）"
+        self.setText(f"{first} {more}")
+        self.setToolTip("\n".join(str(issue) for issue in issues))
+        self.show()
+
+    def mouseReleaseEvent(self, event):
+        if event.button() == QtCore.Qt.LeftButton:
+            self.clicked.emit()
+        super().mouseReleaseEvent(event)
+
+
 class ConfigTabPage(QtWidgets.QWidget):
     def __init__(self, editor, fill_editor=False, parent=None):
         super().__init__(parent)
@@ -240,6 +272,12 @@ class ConfigPage(RoundedCanvasFrame):
                 ConfigTabPage(editor, fill_editor=fill_editor), tab_name
             )
         config_layout.addWidget(self.tabs, 1)
+        self.error_summary = ErrorSummary()
+        self.error_summary.clicked.connect(self.focus_first_error)
+        summary_row = QtWidgets.QHBoxLayout()
+        summary_row.setContentsMargins(SPACING_LG, 0, SPACING_LG, 0)
+        summary_row.addWidget(self.error_summary, 1)
+        config_layout.addLayout(summary_row)
         root.addWidget(self.config_area, 1)
 
         self.artifacts_panel = ArtifactsPanel(
@@ -264,6 +302,16 @@ class ConfigPage(RoundedCanvasFrame):
     def _raise_artifacts(self, *_args):
         if self.artifacts_panel.isVisible():
             self.artifacts_panel.raise_()
+
+    def set_editable(self, editable):
+        """Lock the four editors while no project is open.
+
+        The tab bar stays live so the pages can still be looked at, and the
+        Generate bar manages its own enabled state.
+        """
+        for editor in (self.controllers_editor, self.mapping_editor,
+                       self.signals_editor, self.generation_editor):
+            editor.setEnabled(bool(editable))
 
     def update_title(self, project_name):
         self.header.title_label.setText(project_name)
@@ -383,6 +431,7 @@ class ConfigPage(RoundedCanvasFrame):
                         first_issue_index = issue_index
                         self._first_error = (tab, editor.table, row, col)
             editor.set_cell_errors(errors)
+        self.error_summary.set_issues(issues)
         self.header.setToolTip("\n".join(str(issue) for issue in issues))
         self.generation_editor.setToolTip("\n".join(str(issue) for issue in issues if issue.layer == "generation"))
 

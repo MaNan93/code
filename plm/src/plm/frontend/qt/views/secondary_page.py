@@ -105,7 +105,7 @@ class SecondaryPage(QtWidgets.QFrame):
         entries = (
             ("通用", "工具")
             if page == "settings"
-            else ("Getting Started", "Configuration", "Generation")
+            else ("使用入门", "配置文件", "生成命令")
         )
         for index, text in enumerate(entries):
             button = SecondaryMenuButton(text)

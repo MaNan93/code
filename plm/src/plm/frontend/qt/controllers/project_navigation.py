@@ -162,6 +162,9 @@ class ProjectNavigation:
             self.current_project = project
             self._saved_signature = signature
             self._generation_failure = None
+            # The status strip describes the last generation of the project
+            # that was open; it says nothing about this one.
+            self.log_panel.set_status("")
             if invalidate_outputs:
                 self._reload_stale_projects.add(project.config_dir)
             # A load that follows "save first" was started by the controller,
@@ -169,6 +172,7 @@ class ProjectNavigation:
             self.nav.current_project_name = name
             self.nav.project_list.select_project(name, emit_signal=False)
             self.config_page.set_content(payload)
+            self.config_page.set_editable(True)
             self.config_page.update_title(name)
             self.settings.set_recent_project(name)
             self.refresh_artifacts()
@@ -191,7 +195,10 @@ class ProjectNavigation:
 
     def _show_empty_project(self):
         if self.current_project is None:
+            self.log_panel.set_status("")
             self.config_page.set_content({})
+            self.config_page.set_validation_issues(())
+            self.config_page.set_editable(False)
             self.config_page.update_title("无项目")
             self.refresh_artifacts()
             self._update_window_title()

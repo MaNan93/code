@@ -90,6 +90,12 @@ QPushButton#ConfigGenerateButton {
     border: none;
     color: $bg_surface;
 }
+/* The ID rule above outranks QPushButton:disabled; without this a disabled
+   Generate button (no project, or generating) still looks clickable. */
+QPushButton#ConfigGenerateButton:disabled {
+    background-color: $bg_subtle;
+    color: $text_muted;
+}
 QPushButton#PrimaryBtn:hover, QPushButton#SettingsPrimaryButton:hover,
 QPushButton#ConfigGenerateButton:hover {
     background-color: $primary_hover;
@@ -536,11 +542,22 @@ QFrame#LogStatusBar {
 }
 QLabel#LogStatusText { color: $text_sub; font-size: $font_size_body; }
 
+QLabel#ConfigErrorSummary {
+    background-color: $danger_bg;
+    color: $danger_text;
+    border: none;
+    border-radius: 8px;
+    padding: 6px 12px;
+    margin: 8px 0 0 0;
+    font-size: $font_size_body;
+}
 QLabel#GenerationStatus {
     background-color: $bg_subtle;
     color: $text_sub;
     border: none;
-    border-radius: $radius_hover;
+    /* Qt drops a radius larger than half the box; the badge is shorter than
+       a control, so the shared pill radius left it square. */
+    border-radius: 8px;
     padding: 3px 8px;
     font-size: $font_size_body;
 }
@@ -563,7 +580,14 @@ QLabel#GenerationStatus[state="invalid"] {
     color: $danger_text;
 }
 
-QFrame#SecondaryPage, QWidget#SecondaryPageArea { background-color: $bg_main; }
+/* The page reaches the window's bottom-right corner; follow its rounding
+   instead of painting a square over it. */
+QFrame#SecondaryPage {
+    background-color: $bg_main;
+    border-bottom-right-radius: 16px;
+}
+QWidget#WindowShell[maximized="true"] QFrame#SecondaryPage { border-bottom-right-radius: 0; }
+QWidget#SecondaryPageArea { background-color: transparent; }
 QFrame#SecondaryPageHeader {
     background: transparent;
     border: none;

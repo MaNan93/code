@@ -133,7 +133,7 @@ class SettingsPage(SecondaryPage):
         self.editor_path_edit.setFixedHeight(CONTROL_HEIGHT)
         browse_btn = QtWidgets.QPushButton("浏览…")
         browse_btn.setObjectName("SettingsBrowseButton")
-        browse_btn.setFixedWidth(68)
+        browse_btn.setMinimumWidth(68)
         browse_btn.clicked.connect(self._browse_editor)
         editor_layout.addWidget(self.editor_path_edit, 1, QtCore.Qt.AlignVCenter)
         editor_layout.addWidget(browse_btn, 0, QtCore.Qt.AlignVCenter)

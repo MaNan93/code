@@ -6,30 +6,31 @@ Controls use a 40 px grid; every 18 px Lucide glyph occupies a centered 20 px sl
 from pathlib import Path
 import sys
 
-# neutral ramp
+# neutral ramp: greys carry a little of the primary hue so the chrome,
+# secondary text and the icons tinted with it read as one family
 N0 = "#FFFFFF"
-N25 = "#FAFBFC"
-N50 = "#F6F7F9"
-N100 = "#EEF0F4"
-N200 = "#E1E5EB"
-N300 = "#CBD2DC"
-N400 = "#8B94A3"
+N25 = "#F8F9FE"
+N50 = "#EEF1FB"
+N100 = "#E4E8F7"
+N200 = "#D5DBF0"
+N300 = "#BCC5E3"
+N400 = "#8A91B4"
 # N400 is too light for 16 px text; N450 meets 4.5:1 on all resting surfaces.
-N450 = "#656E7D"
-N500 = "#626C7B"
-N600 = "#4A5462"
-N800 = "#23272F"
+N450 = "#5C638B"
+N500 = "#575E87"
+N600 = "#444B72"
+N800 = "#1B1F3B"
 
 # primary ramp
-P50 = "#E8F0FE"
-P100 = "#D6E4FD"
-P500 = "#3B82F6"
-P600 = "#2563EB"
-P700 = "#1D4ED8"
+P50 = "#E7E9FF"
+P100 = "#D4D8FF"
+P500 = "#4F46E5"
+P600 = "#4338CA"
+P700 = "#3730A3"
 
 # semantic pairs (background, icon, text)
 SEMANTIC_COLORS = {
-    "info": ("#DBEAFE", P700, P700),
+    "info": ("#E0E7FF", P700, P700),
     "success": ("#DCFCE7", "#16A34A", "#15803D"),
     "warning": ("#FEF3C7", "#B45309", "#B45309"),
     "danger": ("#FEE2E2", "#EF4444", "#B91C1C"),
@@ -51,7 +52,7 @@ BG_CARD = N50
 BG_SUBTLE = N100
 BG_ALTERNATE = N25
 BG_HOVER = N200
-BG_SWITCH_HOVER = "#F3F4F6"
+BG_SWITCH_HOVER = "#E9ECF9"
 BG_FOCUS = N200
 # GitHub Primer light surfaces and foregrounds for the source viewer.
 BG_ARTIFACTS = "#FFFFFF"
@@ -65,12 +66,12 @@ BORDER_ARTIFACTS = "#D1D9E0"
 TEXT_ARTIFACTS = "#1F2328"
 TEXT_ARTIFACTS_MUTED = "#59636E"
 ACCENT_ARTIFACTS = "#0969DA"
-BORDER = "#E5E8ED"
+BORDER = "#DCE1F2"
 BORDER_HOVER = N300
 BORDER_FOCUS = P500
 TEXT_MAIN = N800
 TEXT_SUB = N500
-TEXT_HEADER = "#475569"
+TEXT_HEADER = "#3B4268"
 TEXT_MUTED = N450
 TOOLTIP_BG = N800
 TOOLTIP_TEXT = N0

@@ -1192,7 +1192,12 @@ class QtFrontendLayoutTests(unittest.TestCase):
         hover_row(2)
         self.app.processEvents()
         image = table.viewport().grab().toImage()
-        for row, color in ((0, "#e8f0fe"), (1, "#fafbfc"), (2, "#eef0f4")):
+        from plm.frontend.qt.styles import tokens
+        selected, alternate, hovered = (
+            value.lower() for value in (tokens.PRIMARY_SOFT, tokens.BG_ALTERNATE, tokens.BG_SUBTLE)
+        )
+        self.assertEqual(len({selected, alternate, hovered, tokens.BG_SURFACE.lower()}), 4)
+        for row, color in ((0, selected), (1, alternate), (2, hovered)):
             for column in range(table.columnCount()):
                 rect = table.visualRect(table.model().index(row, column))
                 self.assertEqual(image.pixelColor(rect.right() - 4, rect.center().y()).name(), color)
@@ -1202,7 +1207,7 @@ class QtFrontendLayoutTests(unittest.TestCase):
         self.app.processEvents()
         image = table.viewport().grab().toImage()
         rect = table.visualRect(table.model().index(0, 1))
-        self.assertEqual(image.pixelColor(rect.right() - 4, rect.center().y()).name(), "#e8f0fe")
+        self.assertEqual(image.pixelColor(rect.right() - 4, rect.center().y()).name(), selected)
 
     def test_artifacts_drag_visibility_and_maximize(self):
         page = self.window.config_page

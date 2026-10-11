@@ -103,8 +103,9 @@ CLI 的生成参数（`--arch` / `--pclk-mode` / `--dpr` / `--bus-type`）需要
 - **自动分组**。owner 序列完全相同的 lane 会被归成一组，一组共用一套 NOV。
   `test/bifurcate` 16 条 lane 只分出 4 组、其中 3 组需要 NOV，不是 16 套。
 - **只扰动真正变化的部分**。mode 切换时，owner 没变的组完全不受影响，时钟不停、数据不断。
-- **切换无重叠**。每组一个 `pipe_lane_sel_sync`，保证任何时刻最多一个候选被使能。
-- **空窗值正确且无毛刺**。`safe_state` 用极性归一化实现，不是外挂一个"全 0 时选 SAFE"的并联分支
+- **切换无重叠**（开 DPR 时）。每组一个 `pipe_lane_sel_sync`，保证任何时刻最多一个候选被使能。
+  不开 DPR 时选择信号是 `mode` 的组合译码，没有这层保护，靠“只在复位期间切 mode”保证，见 0.6 节。
+- **空窗值正确且无毛刺**（开 DPR 时）。`safe_state` 用极性归一化实现，不是外挂一个"全 0 时选 SAFE"的并联分支
   （那种写法在 sel 落 0 和 `~|sel` 拉高之间有一段全 0 窗口，会产生尖峰）。
 - **时钟切换 glitch-free**。所有时钟选择都走 `pipe_lane_clk_gate` + `pipe_lane_clk_or`。
 - **配置非法直接报错**。拓扑上做不出正确硬件的配置在生成前就被拒绝，
@@ -120,7 +121,7 @@ Lane Mapper 只负责在 controller 与 PHY 之间切换 PIPE 数据、时钟和
 | 前置条件 | 上层责任 |
 |---|---|
 | `mode`合法且稳定 | 只提供配置中存在的mode；输入不能有组合毛刺，并在一次切换收敛期间保持不变 |
-| 变化Group可切换 | 先让owner将发生变化的Group停止使用对应PIPE lane；是否需要复位由系统方案决定 |
+| 变化Group可切换 | 先让owner将发生变化的Group停止使用对应PIPE lane。不开DPR时，新旧两个owner的`rst_n`在`mode`变化期间必须同时为低；开DPR时是否复位由系统方案决定 |
 | 未变化Group继续工作 | 不要因为其他Group切换而停止其时钟、数据或链路 |
 | 时钟和复位有效 | 按所选PCLK架构提供符合接口要求的Controller/PHY时钟与复位 |
 | DPR按Group控制 | 同一Group的`v_lane_mask`只能全0或全1，不能逐Lane任意屏蔽 |
@@ -133,9 +134,9 @@ Lane Mapper 只负责在 controller 与 PHY 之间切换 PIPE 数据、时钟和
 
 mode 切换不是让一条正在传输的 PCIe Link 瞬间换到另一个 controller，也不是
 要求整个 mapper 一起停机。系统必须先让 **ownership 将发生变化的 Group 所涉及的
-controller** 停止使用对应 PIPE lane；这些 lane 在切换期间的数据没有功能意义，
-随后由该 Group 自己完成 break-before-make，等选择、时钟和复位稳定后，新 owner
-才能重新启动链路训练。
+controller** 停止使用对应 PIPE lane；这些 lane 在切换期间的数据没有功能意义。
+开 DPR 时由该 Group 自己完成 break-before-make；不开 DPR 时没有这一步，
+新旧 owner 必须在复位中。等选择、时钟和复位稳定后，新 owner 才能重新启动链路训练。
 
 与此同时，起始 mode 和目标 mode 之间 **owner 没有变化的 Group 是独立的**：
 
@@ -167,7 +168,7 @@ PCLK/RXCLK、复位和 M2P/P2M 数据通路；该 Group 上已经工作的 PCIe 
 
 ### 0.6 硬性限制
 
-下面这些不满足，`validate` 会直接报错：
+下面这些不满足，`validate` 会直接报错（最后一行除外，只给警告）：
 
 | 限制 | 原因 |
 |---|---|
@@ -177,7 +178,7 @@ PCLK/RXCLK、复位和 M2P/P2M 数据通路；该 Group 上已经工作的 PCIe 
 | `mode` 取值必须从 0 开始连续 | 译码器的 `mode` 端口按 `$clog2(mode 数)` 声明位宽，跳号会让部分分支永远选不到 |
 | controller 数量 = PHY lane 总数 / 最小分配颗粒度（仅警告，不拦截） | 多了会有 controller 永远分不到 lane，少了会逼着某个 controller 跨 mode 换最低编号 owned lane，破坏上面的时钟固定约束 |
 
-还有三条不报错、但用之前要知道：
+还有四条不报错、但用之前要知道：
 
 - **不校验 PCIe 宽度合法性**。工具允许任意宽度，x3 / x5 / x6 都能生成；
   真实 PCIe 只允许 2 的幂（x1/x2/x4/x8/x16/x32）。`test/finegrain` 这类配置是用来压生成器的，
@@ -206,6 +207,7 @@ plm/
 │     │  ├─ paths.py          配置集路径解析（PLM_ROOT/CONFIGS_ROOT/resolve_set/...）
 │     │  ├─ verible.py        verible-verilog-format 自动格式化
 │     │  ├─ gen_flags.py      GenerationOptions + flag 合法取值和组合规则
+│     │  ├─ naming.py         模块名/文件名/宏名前缀
 │     │  ├─ plan.py           GenerationPlan：RTL/TB/Report 共用的已解析计划
 │     │  ├─ validation.py     format/topology/generation/output 四层校验
 │     │  ├─ service.py        共用生成流程：校验、no-op 判断、导出
@@ -223,6 +225,10 @@ plm/
 │     │      └─ pipe_lane_data_mux.sv
 │     ├─ cli/
 │     │  └─ main.py           统一 CLI：`plm generate`、`plm validate`
+│     ├─ docs/
+│     │  ├─ tool_usage.md       本文档
+│     │  ├─ qt_frontend_guide.md Qt 前端操作说明
+│     │  └─ release_note.md     版本记录与迁移方法
 │     └─ frontend/
 │        └─ qt/                 桌面前端（PyQt5，`pip install -e ".[qt]"`）
 ├─ test/
@@ -241,9 +247,6 @@ plm/
 │        ├─ tb_pipe_lane_mapper.sv
 │        ├─ makefile          从 plm.core 的 tb_makefile.mk 复制来的（VCS 仿真用）
 │        └─ manifest.json     与 RTL 相同的 generation_key 和 TB 文件 hash
-│     └─ docs/
-│        ├─ tool_usage.md       本文档
-│        └─ qt_frontend_guide.md Qt 前端操作说明
 └─ Makefile                 批量生成所有配置集（对每套配置集各调用一次 `plm generate`）
 ```
 
@@ -253,7 +256,9 @@ plm/
 
 ## 2. 配置文件格式（`config/` 下三个 CSV）
 
-两个生成器读的是同一份配置，格式定义如下。
+RTL 和 testbench 两个生成器读的是同一份配置，格式定义如下。文件为 UTF-8 编码，
+可以带 BOM（Excel 的“CSV UTF-8”导出）；`ctrl_id`、`max_width`、`width`、`mode` 和
+lane 单元格里的数字只接受十进制。
 
 ### 2.1 `controllers.csv`：声明每个 controller
 
@@ -267,7 +272,7 @@ ctrl_id,ctrl_name,max_width
 
 | 列 | 含义 |
 |---|---|
-| `ctrl_id` | 整数，从 0 开始，唯一标识一个 controller |
+| `ctrl_id` | 十进制整数，从 0 开始连续编号，唯一标识一个 controller；行的顺序不要求按编号排列 |
 | `ctrl_name` | controller 名字，生成的信号名会用它的小写形式做前缀（如 `CtrlA` → `ctrla_mac2phy`） |
 | `max_width` | 这个 controller 真实支持的最大 lane 数（它在 RTL 上的端口数组按这个宽度声明，不做统一 padding） |
 
@@ -306,7 +311,7 @@ phy_mac_messagebus,perlane,phy2mac,8,0x50,0x50
 | `signal_type` | `perlane`（默认语义，每条 lane 各自独立取值）或 `shared`（同一个 controller 自己的所有 lane 只驱动一个值，比如真实 PIPE 里的 Rate/PowerDown），大小写不敏感。`shared` 只允许用于 `mac2phy`；`phy2mac` 信号必须是 `perlane`。该列只影响 `pipe_lane_mapper_connection.sv` 这个 flat 包装层怎么给 controller 生成端口——mapper 本体始终把信号作为 per-lane struct 字段处理 |
 | `direction` | `mac2phy`（controller→PHY）或 `phy2mac`（PHY→controller） |
 | `width` | 信号位宽 |
-| `safe_state` | 该信号在"没有 owner"时应呈现的值（`pipe_lane_data_mux.safe()` 的取值）。整数字面量，支持 `int(x, 0)` 认得的写法：十进制、`0x..`、`0b..` |
+| `safe_state` | 该信号在"没有 owner"时应呈现的值（`pipe_lane_data_mux.safe()` 的取值）。整数字面量：十进制，或带 `0x`、`0b`、`0o` 前缀；不接受下划线分隔和 Verilog 常量写法 |
 | `tie_off` | p2m 方向没分到 PHY lane 的那条 controller lane 应该 tie 成什么。要么是字面量 `lane0`（意为"跟随最低编号 lane 的值"），要么是整数字面量（同 `safe_state` 的格式），必须落在 `[0, 2^width)` 范围内 |
 
 两个方向各需要至少一个信号。`signal_name` 不能使用 SystemVerilog 关键字，
@@ -348,7 +353,7 @@ CLI 不读任何文件来拿它们。
 | 谁来生成 | 参数从哪来 |
 |---|---|
 | 手敲命令行 | 自己写在命令里 |
-| `make <SET>` | 顶层 `Makefile` 里的 `SETFLAGS_<SET>` 变量（见 6.1 节） |
+| `make <SET>` | 顶层 `Makefile` 里的 `SETFLAGS_<SET>` 变量（见第 5 节） |
 | Qt 前端 | Generation 页上的架构、PCLK、Connection 总线类型和 DPR 控件，构造 GenerationOptions 后直接调用核心 |
 
 配置目录下还有个 `gen_flags.txt`，但那是 **Qt 前端自己的记忆**：前端保存时写、
@@ -372,6 +377,9 @@ plm generate --config <SET> [其它参数]
 | `--pclk-mode {pclk_as_phy_output,pclk_as_phy_input}` | `pclk_as_phy_output` | PCLK 归属架构；方向名称以 PHY 端口为视角；只传它时 arch 自动补全 |
 | `--bus-type {flat,bus}` | `bus` | Connection 信号端口：flat 为一维向量，bus 为二维 lane 数组 |
 | `--dpr` | 关闭 | 生成并例化 DPR overlay；同时决定选择方式（开为 sync，关为 comb） |
+| `--module-prefix TEXT` | 空 | 给生成的模块名和 package 名加前缀，末尾缺 `_` 时自动补上 |
+| `--file-prefix TEXT` | 空 | 给所有 `.sv` 文件名加前缀，末尾缺 `_` 时自动补上 |
+| `--macro-prefix TEXT` | 空 | 给生成代码里的宏名（如 `PIPE_USE_ICG_CELL`、`DUMP_FSDB`）加前缀 |
 | `--verible-path PATH` | 自动搜索 | SystemVerilog 格式化器 |
 | `--verible-flags JSON` | 内置默认值 | 覆盖 Verible 参数 |
 | `--quiet` | 关闭 | 不打印拓扑报告 |
@@ -392,26 +400,28 @@ plm generate --config <SET> [其它参数]
 接口一致。
 
 生成器先建立统一的 `GenerationPlan`，让 RTL、TB 和 Report 使用同一份已解析
-拓扑；随后在 workspace 旁建立 staging，同时生成 `rtl/` 和 `tb/`。生成完成后
+拓扑；随后在 workspace 内建立临时 staging 目录，同时生成 `rtl/` 和 `tb/`。生成完成后
 写入两份 Manifest，并检查文件列表、hash、顶层模块、NL/NC 宽度和模板残留。
 全部通过后才替换旧输出；生成或自检任意一步失败，旧的两套输出都保持不变。
 如果现有两份 Manifest 的 `generation_key` 匹配且所有文件 hash 均通过自检，
 本次操作会报告输出已是最新并跳过写盘；配置、参数或文件内容有任何变化都会重新生成。
 
-错误按 `[format]`、`[topology]`、`[generation]`、`[output]` 分层报告。
+错误按 `[format]`、`[topology]`、`[generation]`、`[output]` 分层报告。不拦截生成的
+提示（目前只有 controller 数量与最小颗粒度不对齐）作为警告列在报告开头的
+`Warnings` 段；`--quiet` 时改为打到 stderr。
 
-## 5. `plm validate`
+## 4. `plm validate`
 
 `plm validate --config <SET>` 只解析并校验配置，不写任何文件。校验通过会
 打印配置报告；失败时打印所有校验错误并以非零状态退出。
 
-## 6. 用顶层 `Makefile` 批量生成
+## 5. 用顶层 `Makefile` 批量生成
 
 顶层 `Makefile` 对 `test/` 下每个配置集执行一次 `plm generate`。
 
 | 命令 | 作用 |
 |---|---|
-| `make` / `make all` | 生成所有正向配置集 |
+| `make` / `make all` | 生成所有配置集 |
 | `make -k` | 出错后继续处理其余配置集 |
 | `make <SET>` | 生成一套配置，如 `make bifurcate` |
 | `make list` | 列出参与生成的配置集 |
@@ -421,7 +431,7 @@ plm generate --config <SET> [其它参数]
 `GENFLAGS` 追加到本次 make 涉及的每一个 `plm generate` 命令；
 `SETFLAGS_<SET>` 保存某套样例所需的非默认参数。
 
-## 7. 仿真
+## 6. 仿真
 
 `plm generate` 生成 testbench 时会把 `plm.core` 的 `tb_makefile.mk` 复制成
 每个配置集的 `tb/makefile`（VCS + Verdi 流程）：
@@ -451,13 +461,14 @@ verilator --binary -f flist.f ../tb/tb_pipe_lane_mapper.sv --top-module tb_pipe_
 `TB_RESULT: PASS`，否则打印 `TB_RESULT: FAIL (N errors)` 并给出
 `err_count`。
 
-## 8. 生成时的终端输出
+## 7. 生成时的终端输出
 
 不加 `--quiet` 时，`plm generate` 会依次打印：
 
 1. 用到的配置目录以及 RTL、TB 输出目录；
 2. 自己生成的每个文件的路径；
 3. `Config.report()` 给出的配置概览，包括：
+   - 警告（如果有），列在最前面；
    - 各 lane group 的分组结果、每个 mode 下的 owner、是否需要 NOV；
    - 每个 controller 的工作时钟来源（各 mode 下取自哪条 lane）与
      候选数；

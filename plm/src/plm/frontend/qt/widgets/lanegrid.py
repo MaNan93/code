@@ -12,7 +12,7 @@ from PyQt5 import QtCore, QtGui, QtWidgets
 
 from plm.frontend.qt.widgets.common import StyledMenu, apply_drop_shadow
 from plm.frontend.qt.widgets.tables import RowDragTable
-from plm.frontend.qt.styles.tokens import LANE_GRID_PALETTE as LANE_GRID_PALETTE, get_active_theme
+from plm.frontend.qt.styles.tokens import LANE_GRID_PALETTE as LANE_GRID_PALETTE
 from plm.frontend.qt.styles.tokens import get_theme_color
 from plm.frontend.qt.styles.tokens import (
     CONTROL_HEIGHT, FONT_SIZE_BODY,
@@ -50,12 +50,16 @@ def _contrast_text_color(hex_color):
     return get_theme_color("text_on_light_swatch" if use_dark else "text_on_dark_swatch")
 
 
-def _marker_text_color(color, opacity):
+def _marker_background_color(color, opacity, background=None):
     foreground = QtGui.QColor(color)
-    background = QtGui.QColor(get_theme_color("bg_surface"))
+    background = QtGui.QColor(background or get_theme_color("bg_surface"))
     blended = QtGui.QColor(*(round(front * opacity + back * (1 - opacity))
                             for front, back in zip(foreground.getRgb()[:3], background.getRgb()[:3])))
-    return _contrast_text_color(blended.name())
+    return blended.name()
+
+
+def _marker_text_color(color, opacity):
+    return _contrast_text_color(_marker_background_color(color, opacity))
 
 
 @lru_cache(maxsize=64)
@@ -170,18 +174,15 @@ class _LaneCellDelegate(QtWidgets.QStyledItemDelegate):
         elif is_hover and active_color and paint_color != active_color:
             self._draw_marker_band(painter, rect, active_color, PREVIEW_OPACITY, False, False)
 
-        # Draw text
-        if paint_color:
-            text_color = QtGui.QColor(_marker_text_color(paint_color, PAINT_OPACITY) if get_active_theme() == "dark"
-                                     else _darken_color(paint_color, 0.82))
-            painter.setPen(text_color)
-            font = painter.font()
-            font.setBold(True)
-            painter.setFont(font)
-        elif is_hover and active_color:
-            text_color = QtGui.QColor(_marker_text_color(active_color, PREVIEW_OPACITY) if get_active_theme() == "dark"
-                                     else _darken_color(active_color, 0.84))
-            painter.setPen(text_color)
+        # Contrast against the composited selection, marker and hover layers.
+        if paint_color or (is_hover and active_color):
+            background = get_theme_color("primary_soft" if option.state & QtWidgets.QStyle.State_Selected
+                                         else "bg_surface" if paint_color else "bg_subtle")
+            if paint_color:
+                background = _marker_background_color(paint_color, PAINT_OPACITY, background)
+            if is_hover and active_color and paint_color != active_color:
+                background = _marker_background_color(active_color, PREVIEW_OPACITY, background)
+            painter.setPen(QtGui.QColor(_contrast_text_color(background)))
             font = painter.font()
             font.setBold(True)
             painter.setFont(font)

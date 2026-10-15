@@ -81,7 +81,7 @@ class PanelContractTests(unittest.TestCase):
             if panel.isVisible() and panel.height() > 0:
                 position = panel.mapTo(shell, QtCore.QPoint())
                 self.assertEqual(shell.width() - position.x() - panel.width(), 4)
-        bottom = w.log_panel if w.log_panel.isVisible() else self.page
+        bottom = w.log_panel if w.log_panel.isVisible() else w.collapsed_log
         position = bottom.mapTo(shell, QtCore.QPoint())
         self.assertEqual(shell.height() - position.y() - bottom.height(), 4)
 

@@ -102,6 +102,7 @@ class AppController(WorkspaceActions, ProjectNavigation, ProjectActions):
             return
         marker = " *" if self.current_name and self.config_page.dirty else ""
         self.window.setWindowTitle(f"plmConsultant{marker}")
+        self.config_page.header.set_path(self.current_project.config_dir.parent if self.current_project else None)
 
     def _set_output_state(self, state, detail=""):
         labels = {
@@ -111,6 +112,7 @@ class AppController(WorkspaceActions, ProjectNavigation, ProjectActions):
         }
         self.generation_state = state
         text = labels[state]
+        self.window.update_log_summary(text)
         self.config_page.generation_editor.set_output_state(state, text, detail)
         self.config_page.artifacts_panel.set_output_state(state, text, detail)
 

@@ -1,10 +1,12 @@
 """Capture the current Qt UI pages for visual review."""
 import os
+import html
+import json
 import shutil
 import tempfile
 from pathlib import Path
 from unittest.mock import patch
-from PyQt5 import QtCore, QtTest, QtWidgets
+from PyQt5 import QtCore, QtGui, QtTest, QtWidgets
 from plm.core.workspace import scaffold_default_content
 from plm.frontend.qt.controllers import AppController
 from plm.frontend.qt.main_window import MainWindow
@@ -22,8 +24,15 @@ app.setStyle("Fusion")
 
 
 def shot(widget,name):
+    QtTest.QTest.qWait(200)
+    wait_for_idle(app)
+    QtTest.QTest.qWait(300)
+    wait_for_idle(app)
     app.processEvents()
-    widget.grab().save(str(OUT/f"{name}.png"))
+    if "docs-" in name:
+        assert len(widget.view_stack.currentWidget().doc_browser.toPlainText().strip()) > 80
+    assert widget.grab().save(str(OUT/f"{name}.png")), name
+    print(f"Captured: {name}", flush=True)
 
 
 def screen_shot(name):
@@ -149,12 +158,17 @@ with tempfile.TemporaryDirectory(prefix="plm-ui-") as td:
     assert w.log_panel.status_bar.isVisible(), "generation status bar is hidden"
     assert w.log_panel.status_label.text().startswith(("生成完成：", "输出已是最新："))
     assert "生成完成：" not in w.log_panel.output.toPlainText()
+    w.hide_log()
 
     for idx,name in enumerate(("controller","lane-mapping","signals","generation")):
         w.config_page.tabs.setCurrentIndex(idx); app.processEvents()
         if name == "signals":
             assert w.config_page.signals_editor.table.height() > 300, "Signals table did not fill available height"
         shot(w,f"01-{name}")
+        if name == "signals":
+            w.config_page.signals_editor.editor.search_input.setText("txdata")
+            shot(w, "01-signals-search")
+            w.config_page.signals_editor.editor.search_input.clear()
     w.toggle_log(); shot(w,"02-main-with-log")
 
     # New projects without an active workspace use a stable user directory,
@@ -220,6 +234,10 @@ with tempfile.TemporaryDirectory(prefix="plm-ui-") as td:
             align_control.showPopup()
             shot(align_control.popup_menu,"04-settings-formatter-defaults")
             align_control.hidePopup()
+            page.formatter_group.setCurrentIndex(1)
+            shot(w, "04-settings-indentation")
+            page.formatter_group.setCurrentIndex(2)
+            shot(w, "04-settings-other")
             numeric = page._flag_controls["line_break_penalty"]
             row = list(page._flag_controls).index("line_break_penalty")
             page.flag_table.scrollToItem(page.flag_table.item(row, 0))
@@ -262,4 +280,58 @@ with tempfile.TemporaryDirectory(prefix="plm-ui-") as td:
     assert artifacts.diff_button.isEnabled()
     assert artifacts.preview.toPlainText().startswith("--- previous/")
     shot(w,"08-artifacts-diff")
+    w.config_page.toggle_artifacts_maximized()
+    w.config_page.hide_artifacts()
+    w.hide_log()
+    from plm.frontend.qt.services.themes import apply_application_theme
+    apply_application_theme("dark")
+    for idx, name in enumerate(("controller", "lane-mapping", "signals", "generation")):
+        w.config_page.tabs.setCurrentIndex(idx)
+        shot(w, f"dark-{name}")
+    w.on_open_settings()
+    wait_for_idle(app)
+    for idx, name in enumerate(("general", "formatter")):
+        page = w.view_stack.currentWidget()
+        page.menu_buttons[idx].click()
+        shot(w, f"dark-settings-{name}")
+    for idx, name in ((1, "indentation"), (2, "other")):
+        page.formatter_group.setCurrentIndex(idx)
+        shot(w, f"dark-settings-{name}")
+    w.on_open_docs()
+    for idx, name in enumerate(("getting-started", "configuration", "generation")):
+        w.view_stack.currentWidget().menu_buttons[idx].click()
+        shot(w, f"dark-docs-{name}")
+    w._close_secondary_page()
+    w.config_page.toggle_artifacts()
+    shot(w, "dark-artifacts")
+    w.config_page.hide_artifacts()
+    w.resize(960, 640)
+    w.config_page.tabs.setCurrentIndex(3)
+    shot(w, "09-compact-generation-dark")
+    w.on_open_settings()
+    shot(w, "09-compact-settings-dark")
+    w.on_open_docs()
+    shot(w, "09-compact-docs-dark")
+    w._close_secondary_page()
+    w.config_page.mark_saved()
     w.close()
+
+manifest = []
+cards = []
+for path in sorted(OUT.glob("*.png")):
+    picture = QtGui.QImage(str(path))
+    assert not picture.isNull(), path
+    manifest.append({"file": path.name, "width": picture.width(), "height": picture.height()})
+    filename = html.escape(path.name)
+    cards.append(f'<figure><a href="{filename}"><img loading="lazy" src="{filename}" alt="{filename}"></a>'
+                 f'<figcaption>{filename} · {picture.width()} × {picture.height()}</figcaption></figure>')
+(OUT / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+(OUT / "index.html").write_text(
+    '<!doctype html><html lang="zh-CN"><meta charset="utf-8"><title>PLM Qt 界面截图</title>'
+    '<style>body{font:14px system-ui;background:#edf1f7;margin:24px;color:#172033}'
+    'main{display:grid;grid-template-columns:repeat(auto-fit,minmax(360px,1fr));gap:20px}'
+    'figure{margin:0;padding:12px;background:white;border-radius:10px}img{width:100%;height:280px;object-fit:contain}'
+    'figcaption{padding-top:10px}a{color:inherit}</style>'
+    f'<h1>PLM Qt 界面截图</h1><p>{len(manifest)} 张截图，包含深浅主题与窄窗口。点击查看原图。</p>'
+    '<main>' + ''.join(cards) + '</main></html>', encoding="utf-8")
+print(f"Gallery: {OUT / 'index.html'} ({len(manifest)} screenshots)")

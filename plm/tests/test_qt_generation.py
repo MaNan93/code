@@ -229,6 +229,7 @@ class GenerationIntegrationTests(unittest.TestCase):
         page = SettingsPage(preferences=self.store.preferences())
         self.addCleanup(page.close)
         page._show_section(1)
+        page.formatter_group.setCurrentIndex(3)
         page.show()
         wait_for_idle(self.app)
         row = list(page._flag_controls).index("verify_convergence")

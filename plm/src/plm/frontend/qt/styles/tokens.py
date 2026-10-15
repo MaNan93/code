@@ -89,7 +89,7 @@ SYNTAX_STRING = "#0A3069"
 SYNTAX_DIRECTIVE = SYNTAX_KEYWORD
 TEXT_ON_LIGHT_SWATCH = "#000000"
 TEXT_ON_DARK_SWATCH = N0
-LANE_GRID_PALETTE = ("#6366F1", "#0EA5E9", "#8B5CF6", "#F59E0B", "#14B8A6", "#EC4899")
+LANE_GRID_PALETTE = ("#4F46E5", "#0D9488", "#7C3AED", "#D97706", "#059669", "#E11D48")
 
 NAV_ITEM_GAP = 2
 
@@ -164,6 +164,10 @@ TOAST_HOLD = 1800
 TOAST_FADE_OUT = 200
 
 FORM_FIELD_MAX_WIDTH = 360
+FORM_MAX_WIDTH = 760
+SETTINGS_MAX_WIDTH = 640
+DOCS_MAX_WIDTH = 800
+LOG_COLLAPSED_HEIGHT = 34
 FORM_ACTION_WIDTH = 120
 FORMATTER_MAX_WIDTH = 760
 
@@ -260,17 +264,17 @@ for _semantic in SEMANTIC_COLORS:
         LIGHT_COLORS[_role] = globals()[_role.upper()]
 
 DARK_COLORS = {
-    "bg_main": "#0D1117", "bg_surface": "#161B22",
-    "bg_sidebar": "#090D13", "bg_sidebar_hover": "#1C2128",
-    "bg_card": "#161B22", "bg_subtle": "#21262D",
-    "bg_alternate": "#12171F", "bg_hover": "#262C36",
-    "bg_switch_hover": "#262C36", "bg_focus": "#262C36",
+    "bg_main": "#0D1117", "bg_surface": "#151D2B",
+    "bg_sidebar": "#0D1322", "bg_sidebar_hover": "#1C2638",
+    "bg_card": "#182238", "bg_subtle": "#1E2942",
+    "bg_alternate": "#111A28", "bg_hover": "#253352",
+    "bg_switch_hover": "#253352", "bg_focus": "#253352",
     "primary": "#4F46E5", "primary_hover": "#4338CA",
     "primary_soft": "#1E2238", "primary_pressed": "#30365C",
     "border": "#30363D", "border_panel": "#30363D",
     "border_hover": "#6E7681", "border_focus": "#818CF8",
-    "text_main": "#F0F6FC", "text_sub": "#94A3B8",
-    "text_header": "#C9D1D9", "text_muted": "#94A3B8",
+    "text_main": "#F0F6FC", "text_sub": "#B0BDD0",
+    "text_header": "#D5DEEB", "text_muted": "#B0BDD0",
     "text_on_primary": "#FFFFFF", "text_primary": "#A5B4FC",
     "text_on_light_swatch": "#000000", "text_on_dark_swatch": "#FFFFFF",
     "tooltip_bg": "#21262D", "tooltip_text": "#F0F6FC",

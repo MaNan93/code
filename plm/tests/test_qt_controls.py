@@ -75,15 +75,16 @@ class QtControlLogicTests(unittest.TestCase):
         wait_for_signal(hidden)
         self.assertFalse(page.artifacts_panel.isVisible())
 
-        self.assertGreater(self.window.content_splitter.sizes()[1], 0)
-        self.window.log_toggle_button.click()
-        wait_for_idle(self.app)
         self.assertEqual(self.window.content_splitter.sizes()[1], 0)
         self.window.log_toggle_button.click()
         wait_for_idle(self.app)
         self.assertGreater(self.window.content_splitter.sizes()[1], 0)
+        self.window.log_toggle_button.click()
+        wait_for_idle(self.app)
+        self.assertEqual(self.window.content_splitter.sizes()[1], 0)
 
     def test_log_clear_and_close_buttons_execute_actions(self):
+        self.window.show_log()
         panel = self.window.log_panel
         panel.append_log("ordinary log line")
         panel.append_log("生成完成：3 个文件")

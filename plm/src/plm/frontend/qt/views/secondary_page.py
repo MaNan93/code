@@ -1,6 +1,6 @@
 from PyQt5 import QtCore, QtGui, QtWidgets
 from plm.frontend.qt.widgets.common import ICON_SIZE, load_lucide_icon
-from plm.frontend.qt.styles.tokens import HEADER_HEIGHT, SPACING_LG, SPACING_SM, SPACING_XL
+from plm.frontend.qt.styles.tokens import DOCS_MAX_WIDTH, HEADER_HEIGHT, SPACING_LG, SPACING_SM, SPACING_XL
 
 
 class SecondaryMenuButton(QtWidgets.QPushButton):
@@ -67,14 +67,14 @@ class SecondaryPage(QtWidgets.QFrame):
         page_area_layout = QtWidgets.QHBoxLayout(page_area)
         page_area_layout.setContentsMargins(SPACING_XL, SPACING_XL, SPACING_XL, SPACING_XL)
         page_area_layout.setSpacing(0)
-        page_area_layout.addStretch(0 if page == "settings" else 1)
+        page_area_layout.addStretch(0)
 
         self.page_panel = QtWidgets.QWidget()
         self.page_panel.setObjectName("SecondaryPagePanel")
         if page == "settings":
             self.page_panel.setMaximumWidth(1040)
         else:
-            self.page_panel.setFixedWidth(800)
+            self.page_panel.setMaximumWidth(DOCS_MAX_WIDTH)
         self.page_panel.setSizePolicy(
             QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Expanding
         )
@@ -92,8 +92,8 @@ class SecondaryPage(QtWidgets.QFrame):
         )
         panel_layout.addItem(self.content_top_spacing)
         panel_layout.addWidget(self.content, 1)
-        page_area_layout.addWidget(self.page_panel, 1 if page == "settings" else 0)
-        page_area_layout.addStretch(0 if page == "settings" else 1)
+        page_area_layout.addWidget(self.page_panel, 1)
+        page_area_layout.addStretch(0)
         root.addWidget(page_area, 1)
         self._select_section(0)
 

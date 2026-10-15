@@ -48,7 +48,7 @@ class GenerationEditorRestoreTests(unittest.TestCase):
 
     def test_generation_action_uses_the_single_generate_label(self):
         editor = GenerationEditor()
-        self.assertEqual(editor.generate_btn.text(), "生成")
+        self.assertEqual(editor.generate_btn.text(), "生成 RTL / TB")
 
     def test_prefix_inputs_keep_stable_names_and_localized_labels(self):
         editor = GenerationEditor()
@@ -58,7 +58,7 @@ class GenerationEditorRestoreTests(unittest.TestCase):
                 control = getattr(editor, name)
                 self.assertIsInstance(control, QtWidgets.QLineEdit)
                 self.assertEqual(control.text(), "")
-                self.assertEqual(editor.layout().labelForField(control).text(), label)
+                self.assertEqual(editor.naming_card.layout().labelForField(control).text(), label)
                 self.assertEqual(control.accessibleName(), name)
                 self.assertNotIn(name, editor.flags())
 

@@ -224,14 +224,16 @@ QTabWidget#ConfigTabs QTabBar::tab {
     padding: 0 16px;
     margin-right: 0;
     border: none;
-    border-radius: $radius_hover;
+    border-bottom: 2px solid transparent;
+    border-radius: 0;
     font-size: $font_size_body;
     font-weight: $font_weight_medium;
 }
 QTabWidget#ConfigTabs QTabBar::tab:selected {
-    background-color: $primary_soft;
+    background-color: transparent;
+    border-bottom: 2px solid $primary;
     color: $text_primary;
-    font-weight: $font_weight_medium;
+    font-weight: $font_weight_semibold;
 }
 QTabWidget#ConfigTabs QTabBar::tab:first { padding-left: 16px; }
 QTabWidget#ConfigTabs QTabBar::tab:hover:!selected {
@@ -409,8 +411,46 @@ QLabel#ConfigProjectStatus {
     padding: 0;
 }
 QLabel#ConfigProjectStatus[dirty="true"] {
-    background-color: $primary;
+    background-color: $warning_text;
 }
+
+QLabel#ConfigSessionTitle { font-size: 15px; font-weight: 600; }
+QLabel#ConfigSaveState, QLabel#ProjectPath, QLabel#SettingsDescription, QLabel#TableFilterCount {
+    color: $text_muted;
+    font-size: 12px;
+    background: transparent;
+}
+QPushButton#LogCollapsedButton {
+    text-align: left;
+    background-color: $bg_subtle;
+    color: $text_sub;
+    border: 1px solid $border;
+    border-radius: 6px;
+    padding: 0 12px;
+}
+QPushButton#LogCollapsedButton:hover { background-color: $bg_hover; }
+QPushButton#TableActionButton { padding: 0 10px; }
+QGroupBox#FormCard {
+    background-color: $bg_surface;
+    border: 1px solid $border;
+    border-radius: 8px;
+    margin-top: 10px;
+    font-size: 14px;
+    font-weight: 600;
+    color: $text_main;
+}
+QGroupBox#FormCard::title {
+    subcontrol-origin: margin;
+    subcontrol-position: top left;
+    left: 12px;
+    padding: 0 4px;
+    color: $text_main;
+}
+QGroupBox#FormCard QLabel { font-size: $font_size_body; font-weight: 400; }
+QGroupBox#FormCard QLabel#SettingsDescription { font-size: 12px; }
+QGroupBox#FormCard QCheckBox,
+QGroupBox#FormCard QFrame#SettingsRow,
+QGroupBox#FormCard QWidget#SettingsEditorControl { background: transparent; }
 QTableWidget#laneGrid {
     background-color: $bg_surface;
     selection-background-color: $primary_soft;

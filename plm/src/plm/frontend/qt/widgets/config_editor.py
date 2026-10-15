@@ -18,7 +18,7 @@ from plm.frontend.qt.widgets.lanegrid import LaneGrid
 from plm.frontend.qt.widgets.common import StatusBadge, StyledComboBox
 from plm.frontend.qt.widgets.tables import EditableTable
 from plm.frontend.qt.styles.tokens import (
-    FORM_ACTION_WIDTH, FORM_FIELD_MAX_WIDTH, SPACING_MD, SPACING_XL,
+    FORM_ACTION_WIDTH, FORM_FIELD_MAX_WIDTH, FORM_MAX_WIDTH, SPACING_MD, SPACING_XL,
 )
 
 
@@ -73,6 +73,10 @@ class CsvTableEditor(QtWidgets.QWidget):
             layout.addLayout(controls)
 
             self.editor = LaneGrid()
+            self.editor.layout().removeWidget(self.editor.palette_bar)
+            controls.takeAt(2)
+            controls.addSpacing(SPACING_MD)
+            controls.addWidget(self.editor.palette_bar, 1)
             self.table = self.editor.table
             self.editor.set_columns(self.lane_count.value())
             self.editor.changed.connect(self.changed.emit)
@@ -80,8 +84,11 @@ class CsvTableEditor(QtWidgets.QWidget):
             return
 
         specs = []
+        headings = {"ctrl_id": "编号", "ctrl_name": "控制器名称", "max_width": "最大通道数",
+                    "signal_name": "信号名称", "signal_type": "类型", "direction": "方向",
+                    "width": "位宽", "safe_state": "安全值", "tie_off": "Tie-off"}
         for key in self._keys:
-            spec = {"key": key, "heading": key}
+            spec = {"key": key, "heading": headings.get(key, key)}
             if key in ("ctrl_id", "max_width"):
                 spec["alignment"] = QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter
             elif key == "ctrl_name":
@@ -108,6 +115,8 @@ class CsvTableEditor(QtWidgets.QWidget):
             id_column="ctrl_id" if "ctrl_id" in self._keys else None,
             equal_columns="ctrl_id" in self._keys,
         )
+        if "ctrl_id" in self._keys:
+            self.setMaximumWidth(800)
         self.table = self.editor.table
         self.editor.changed.connect(self.changed.emit)
         self._setup_table_layout(layout)
@@ -230,9 +239,18 @@ class GenerationEditor(QtWidgets.QWidget):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        layout = QtWidgets.QFormLayout(self)
+        self.setMaximumWidth(FORM_MAX_WIDTH)
+        layout = QtWidgets.QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(SPACING_MD)
+        self.architecture_card = QtWidgets.QGroupBox("硬件与架构")
+        self.architecture_card.setObjectName("FormCard")
+        architecture = QtWidgets.QFormLayout(self.architecture_card)
+        architecture.setSpacing(SPACING_MD)
+        architecture.setContentsMargins(16, 24, 16, 16)
+        architecture.setFieldGrowthPolicy(QtWidgets.QFormLayout.AllNonFixedFieldsGrow)
+        architecture.setRowWrapPolicy(QtWidgets.QFormLayout.WrapLongRows)
+        layout.addWidget(self.architecture_card)
         self.arch = StyledComboBox()
         self.arch.addItems(ARCH_VALUES)
         self.pclk_mode = StyledComboBox()
@@ -249,10 +267,20 @@ class GenerationEditor(QtWidgets.QWidget):
             control.setMaximumWidth(FORM_FIELD_MAX_WIDTH)
         self.dpr = QtWidgets.QCheckBox("启用 DPR")
         self.dpr.setToolTip("启用后选择信号经同步器（sync）；不启用为组合直通（comb）。")
-        layout.addRow("PHY 架构", self.arch)
-        layout.addRow("PCLK 模式", self.pclk_mode)
-        layout.addRow("Connection 总线类型", self.bus_type)
-        layout.addRow("DPR", self.dpr)
+        architecture.addRow("PHY 架构", self.arch)
+        architecture.addRow("PCLK 模式", self.pclk_mode)
+        architecture.addRow("Connection 总线类型", self.bus_type)
+        architecture.addRow("DPR", self.dpr)
+        for row in range(architecture.rowCount()):
+            architecture.itemAt(row, QtWidgets.QFormLayout.LabelRole).widget().setMinimumWidth(120)
+        self.naming_card = QtWidgets.QGroupBox("模块与命名")
+        self.naming_card.setObjectName("FormCard")
+        naming = QtWidgets.QFormLayout(self.naming_card)
+        naming.setSpacing(SPACING_MD)
+        naming.setContentsMargins(16, 24, 16, 16)
+        naming.setFieldGrowthPolicy(QtWidgets.QFormLayout.AllNonFixedFieldsGrow)
+        naming.setRowWrapPolicy(QtWidgets.QFormLayout.WrapLongRows)
+        layout.addWidget(self.naming_card)
         self._prefix_edits = {}
         for name, label, description, example in (
             ("module_prefix", "模块名前缀", "模块和 package 名称前缀", "soc_"),
@@ -268,8 +296,9 @@ class GenerationEditor(QtWidgets.QWidget):
             edit.textChanged.connect(self.changed.emit)
             self._prefix_edits[name] = edit
             setattr(self, name, edit)
-            layout.addRow(label, edit)
-        self.generate_btn = QtWidgets.QPushButton("生成")
+            naming.addRow(label, edit)
+            naming.labelForField(edit).setMinimumWidth(120)
+        self.generate_btn = QtWidgets.QPushButton("生成 RTL / TB")
         self.generate_btn.setObjectName("ConfigGenerateButton")
         self.generate_btn.setFixedWidth(FORM_ACTION_WIDTH)
         self.generate_btn.clicked.connect(self.generateRequested.emit)
@@ -292,6 +321,25 @@ class GenerationEditor(QtWidgets.QWidget):
         for control in (self.arch, self.pclk_mode, self.bus_type):
             control.currentIndexChanged.connect(self.changed.emit)
         self.dpr.toggled.connect(lambda _enabled: self.changed.emit())
+        self._label_timer = QtCore.QTimer(self)
+        self._label_timer.setSingleShot(True)
+        self._label_timer.timeout.connect(self._align_form_labels)
+        self._label_timer.start(0)
+
+    def _align_form_labels(self):
+        labels = []
+        for card in (self.architecture_card, self.naming_card):
+            form = card.layout()
+            labels.extend(form.itemAt(row, QtWidgets.QFormLayout.LabelRole).widget()
+                          for row in range(form.rowCount()))
+        width = max(label.fontMetrics().horizontalAdvance(label.text()) for label in labels)
+        for label in labels:
+            label.setMinimumWidth(width)
+
+    def changeEvent(self, event):
+        super().changeEvent(event)
+        if event.type() in (QtCore.QEvent.FontChange, QtCore.QEvent.StyleChange) and hasattr(self, "_label_timer"):
+            self._label_timer.start(0)
 
     @classmethod
     def _set_combo_value(cls, combo, value):

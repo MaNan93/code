@@ -19,6 +19,7 @@ from plm.frontend.qt.styles.tokens import (
     TITLEBAR_HEIGHT,
     TITLEBAR_BUTTON_WIDTH,
     RADIUS_WINDOW,
+    LOG_COLLAPSED_HEIGHT,
 )
 from plm.frontend.qt.views.config_page import ConfigPage
 from plm.frontend.qt.views.log_panel import LogPanel
@@ -414,7 +415,17 @@ class MainWindow(QtWidgets.QMainWindow):
         main_layout = QtWidgets.QVBoxLayout(self.main_container)
         main_layout.setContentsMargins(*([SPACING_XS] * 4))
         main_layout.setSpacing(0)
-        main_layout.addWidget(self.content_splitter)
+        main_layout.addWidget(self.content_splitter, 1)
+        self.collapsed_log = QtWidgets.QPushButton("输出日志  ·  就绪")
+        self.collapsed_log.setObjectName("LogCollapsedButton")
+        self.collapsed_log.setIcon(load_lucide_icon("panel-bottom", "text_sub"))
+        self.collapsed_log.setIconSize(QtCore.QSize(ICON_SIZE, ICON_SIZE))
+        self.collapsed_log.setFixedHeight(LOG_COLLAPSED_HEIGHT)
+        self.collapsed_log.setToolTip("展开输出日志；生成时会自动展开。")
+        self.collapsed_log.clicked.connect(self.show_log)
+        self.log_panel.statusChanged.connect(self.update_log_summary)
+        main_layout.addWidget(self.collapsed_log)
+        self.log_panel.hide()
 
         self.view_stack = QtWidgets.QStackedWidget(self.body_container)
         self.view_stack.setObjectName("ViewStack")
@@ -633,18 +644,28 @@ class MainWindow(QtWidgets.QMainWindow):
             self.controller.validate_current()
 
     def _apply_initial_sizes(self):
-        self.content_splitter.setSizes(self._log_sizes)
+        if not self.log_panel.isHidden():
+            self.content_splitter.setSizes(self._log_sizes)
+
+    def update_log_summary(self, text):
+        self.collapsed_log.setText("输出日志  ·  " + (text or "就绪"))
+        self.collapsed_log.setToolTip(text or "展开输出日志")
+
+    def show_log(self):
+        if not self.log_panel.isHidden():
+            return
+        total = sum(self.content_splitter.sizes())
+        self.collapsed_log.hide()
+        self.log_panel.show()
+        self.content_splitter.setStretchFactor(1, 0)
+        bottom = min(max(140, self._log_sizes[1]), max(140, total // 2))
+        self.content_splitter.setSizes([max(1, total - bottom), bottom])
 
     def toggle_log(self):
-        sizes = self.content_splitter.sizes()
-        total = sum(sizes)
-        if self.log_panel.isVisible() and sizes[1] > 0:
+        if not self.log_panel.isHidden():
             self.hide_log()
         else:
-            self.log_panel.show()
-            self.content_splitter.setStretchFactor(1, 1)
-            bottom = max(140, int(total * 0.25))
-            self.content_splitter.setSizes([max(1, total - bottom), bottom])
+            self.show_log()
 
     def hide_log(self):
         sizes = self.content_splitter.sizes()
@@ -653,6 +674,7 @@ class MainWindow(QtWidgets.QMainWindow):
             self._log_sizes = sizes
         # Collapsing to height zero leaves the splitter handle in the layout.
         self.log_panel.hide()
+        self.collapsed_log.show()
     def on_save(self):
         self.nav_panel.set_active(None)
         self.controller.save_current()

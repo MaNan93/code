@@ -11,7 +11,7 @@ from PyQt5 import QtCore, QtGui, QtSvg, QtWidgets
 from plm.core.paths import PLM_ROOT
 from plm.frontend.qt.styles.tokens import get_theme_color
 from plm.frontend.qt.styles.tokens import (
-    CONTROL_HEIGHT, CONTROL_PADDING_X, ICON_BUTTON_SIZE, ICON_GLYPH_SIZE, ICON_SIZE, ICON_TEXT_GAP,
+    CONTROL_HEIGHT, CONTROL_PADDING_X, ICON_BUTTON_SIZE, ICON_GLYPH_SIZE, ICON_SIZE, ICON_TEXT_GAP, LOG_COLLAPSED_HEIGHT,
     LINE_HEIGHT, MENU_GAP, MENU_ICON_TEXT_GAP, MENU_ITEM_PADDING_X, MENU_PADDING, MENU_RADIUS,
     MENU_SHADOW_LAYER_ALPHA, MENU_SHADOW_MARGIN, MENU_SHADOW_OFFSET, MENU_SHADOW_SPREAD,
     MENU_MIN_WIDTH,
@@ -25,7 +25,8 @@ PROJECT_ROOT = PLM_ROOT
 
 def button_height(widget):
     """Shared total height; independent of native font metrics and Qt scaling."""
-    return {"ProjectMoreBtn": 28, "ArtifactsToolButton": ICON_BUTTON_SIZE}.get(widget.objectName(), CONTROL_HEIGHT)
+    return {"ProjectMoreBtn": 28, "ArtifactsToolButton": ICON_BUTTON_SIZE,
+            "LogCollapsedButton": LOG_COLLAPSED_HEIGHT}.get(widget.objectName(), CONTROL_HEIGHT)
 
 
 class FixedHeightItemDelegate(QtWidgets.QStyledItemDelegate):
@@ -157,7 +158,7 @@ def draw_icon_text_label(style, option, painter, widget):
     rect = QtCore.QRect(option.rect)
     text_width = option.fontMetrics.horizontalAdvance(option.text)
     total = ICON_SIZE + (ICON_TEXT_GAP + text_width if option.text else 0)
-    left_aligned = widget is not None and widget.objectName() in ("NavActionButton", "NavFooterButton")
+    left_aligned = widget is not None and widget.objectName() in ("NavActionButton", "NavFooterButton", "LogCollapsedButton")
     x = rect.left() if left_aligned else rect.left() + max(0, (rect.width() - total) // 2)
     enabled = bool(option.state & QtWidgets.QStyle.State_Enabled)
     if option.state & QtWidgets.QStyle.State_HasFocus and not option.state & QtWidgets.QStyle.State_Sunken:

@@ -11,6 +11,7 @@ class LogPanel(RoundedCanvasFrame):
     """Region 4: output tab, clear action, and auto-scrolling log."""
 
     closeRequested = QtCore.pyqtSignal()
+    statusChanged = QtCore.pyqtSignal(str)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -74,6 +75,7 @@ class LogPanel(RoundedCanvasFrame):
     def set_status(self, text):
         self.status_label.setText(text)
         self.status_bar.setVisible(bool(text))
+        self.statusChanged.emit(text)
 
     def clear(self):
         self.output.clear()

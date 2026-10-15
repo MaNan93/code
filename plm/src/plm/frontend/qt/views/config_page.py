@@ -1,6 +1,7 @@
 from PyQt5 import QtCore, QtGui, QtWidgets
 from plm.frontend.qt.widgets.common import (
     RoundedCanvasFrame,
+    set_label_icon,
 )
 from plm.frontend.qt.widgets.config_editor import CsvTableEditor, GenerationEditor
 from plm.frontend.qt.views.artifacts_panel import ArtifactsPanel
@@ -73,6 +74,14 @@ class DoubleClickLabel(QtWidgets.QLabel):
 
 
 
+class ProjectPathLabel(QtWidgets.QLabel):
+    def paintEvent(self, event):
+        painter = QtGui.QPainter(self)
+        text = self.fontMetrics().elidedText(self.text(), QtCore.Qt.ElideMiddle, self.width())
+        self.style().drawItemText(painter, self.rect(), QtCore.Qt.AlignVCenter | QtCore.Qt.AlignLeft,
+                                  self.palette(), self.isEnabled(), text, self.foregroundRole())
+
+
 class ConfigHeader(QtWidgets.QFrame):
     """Region 2.1: editable project title and dirty status."""
 
@@ -86,8 +95,12 @@ class ConfigHeader(QtWidgets.QFrame):
         self._original_title = ""
         self._editing_title = False
         layout = QtWidgets.QHBoxLayout(self)
-        layout.setContentsMargins(SPACING_LG, 0, 0, 0)
+        layout.setContentsMargins(SPACING_LG, 0, SPACING_LG, 0)
         layout.setSpacing(0)
+        self.project_icon = QtWidgets.QLabel()
+        set_label_icon(self.project_icon, "folder-open", "text_sub")
+        layout.addWidget(self.project_icon)
+        layout.addSpacing(8)
         self.title_label = DoubleClickLabel("未命名配置")
         self.title_label.setObjectName("ConfigSessionTitle")
         self.title_label.setToolTip("双击重命名")
@@ -110,11 +123,26 @@ class ConfigHeader(QtWidgets.QFrame):
         self.status_badge.setAccessibleName("有未保存的修改")
         self.status_badge.hide()
         layout.addWidget(self.status_badge, 0, QtCore.Qt.AlignVCenter)
-        layout.addStretch(1)
+        self.save_state = QtWidgets.QLabel("已保存")
+        self.save_state.setObjectName("ConfigSaveState")
+        layout.addSpacing(6)
+        layout.addWidget(self.save_state)
+        self.path_label = ProjectPathLabel()
+        self.path_label.setObjectName("ProjectPath")
+        self.path_label.setSizePolicy(QtWidgets.QSizePolicy.Ignored, QtWidgets.QSizePolicy.Preferred)
+        layout.addSpacing(SPACING_MD)
+        layout.addWidget(self.path_label, 1)
+
+    def set_path(self, path):
+        text = str(path) if path else ""
+        self.path_label.setText(text)
+        self.path_label.setToolTip(text)
+        self.save_state.setVisible(bool(path))
 
     def set_dirty(self, dirty):
         self.status_badge.setProperty("dirty", bool(dirty))
         self.status_badge.setVisible(bool(dirty))
+        self.save_state.setText("未保存" if dirty else "已保存")
         self.status_badge.style().unpolish(self.status_badge)
         self.status_badge.style().polish(self.status_badge)
 

@@ -81,7 +81,7 @@ class RowDragTable(QtWidgets.QTableWidget):
         super().mousePressEvent(event)
         allowed = index.isValid() and (
             self._drag_columns is None or index.column() in self._drag_columns
-        )
+        ) and not self.property("filterActive")
         if event.button() == QtCore.Qt.LeftButton and allowed:
             self.selectRow(index.row())
             self._row_drag_start = QtCore.QPoint(event.pos())
@@ -261,6 +261,8 @@ class EditableTable(QtWidgets.QWidget):
         self.table.setItemDelegate(_PaddedItemDelegate(self.table))
         self.table.setColumnCount(len(columns))
         self.table.setHorizontalHeaderLabels([c.get("heading", c["key"]) for c in columns])
+        for index, column in enumerate(columns):
+            self.table.horizontalHeaderItem(index).setToolTip(column["key"])
         header = self.table.horizontalHeader()
         header.setTextElideMode(QtCore.Qt.ElideRight)
         for index, column in enumerate(columns):
@@ -278,7 +280,34 @@ class EditableTable(QtWidgets.QWidget):
         row_header.hide()
         self.table.rowMoveRequested.connect(self._on_row_drop)
         self.table.itemChanged.connect(self._on_item_changed)
+        toolbar = QtWidgets.QHBoxLayout()
+        toolbar.setSpacing(8)
+        self.add_button = QtWidgets.QPushButton("＋ 添加行")
+        self.duplicate_button = QtWidgets.QPushButton("复制行")
+        self.delete_button = QtWidgets.QPushButton("删除行")
+        for button in (self.add_button, self.duplicate_button, self.delete_button):
+            button.setObjectName("TableActionButton")
+            button.setFocusPolicy(QtCore.Qt.NoFocus)
+            toolbar.addWidget(button)
+        self.add_button.clicked.connect(lambda: self._insert_row_at(len(self._data)))
+        self.duplicate_button.clicked.connect(self.duplicate_selected_row)
+        self.delete_button.clicked.connect(self.delete_selected_row)
+        self.search_input = QtWidgets.QLineEdit()
+        self.search_input.setPlaceholderText("搜索当前表格…")
+        self.search_input.setClearButtonEnabled(True)
+        self.search_input.setMinimumWidth(100)
+        self.search_input.setMaximumWidth(260)
+        self.search_input.setToolTip("按任意列的内容过滤；过滤期间暂停拖动排序。")
+        self.search_input.textChanged.connect(self._apply_filter)
+        toolbar.addStretch(1)
+        toolbar.addWidget(self.search_input, 1)
+        self.filter_count = QtWidgets.QLabel()
+        self.filter_count.setObjectName("TableFilterCount")
+        toolbar.addWidget(self.filter_count)
+        layout.addLayout(toolbar)
+        layout.setSpacing(8)
         layout.addWidget(self.table)
+        self.table.currentCellChanged.connect(self._update_row_actions)
         self._option_probes = {}
         for index, column in enumerate(columns):
             if column.get("options"):
@@ -398,6 +427,57 @@ class EditableTable(QtWidgets.QWidget):
             self._data[row][key] = value
             self.changed.emit()
 
+    def _update_row_actions(self, *_):
+        row = self.table.currentRow()
+        selected = 0 <= row < len(self._data) and not self.table.isRowHidden(row)
+        self.duplicate_button.setEnabled(selected)
+        self.delete_button.setEnabled(selected and len(self._data) > 1)
+
+    def _apply_filter(self, *_):
+        query = self.search_input.text().strip().casefold()
+        self.table.setProperty("filterActive", bool(query))
+        first = -1
+        for row, values in enumerate(self.get_rows()):
+            hidden = bool(query) and not any(query in value.casefold() for value in values.values())
+            self.table.setRowHidden(row, hidden)
+            if not hidden and first < 0:
+                first = row
+        current = self.table.currentRow()
+        if current < 0 or self.table.isRowHidden(current):
+            self.table.setCurrentCell(first, 0)
+        self._update_row_actions()
+        visible = sum(not self.table.isRowHidden(row) for row in range(len(self._data)))
+        self.filter_count.setText(f"{visible}/{len(self._data)} 行" if query else f"{len(self._data)} 行")
+
+    def duplicate_selected_row(self):
+        row = self.table.currentRow()
+        if not 0 <= row < len(self._data) or self.table.isRowHidden(row):
+            return
+        self._data = self.get_rows()
+        duplicate = dict(self._data[row])
+        if self.id_column:
+            duplicate[self.id_column] = self._next_free_id()
+        # Names identify signals/controllers too; keep the copy distinct.
+        for key in ("ctrl_name", "signal_name"):
+            if key in duplicate:
+                names = {value[key] for value in self._data}
+                base, suffix = duplicate[key] + "_copy", 1
+                name = base
+                while name in names:
+                    suffix += 1
+                    name = f"{base}{suffix}"
+                duplicate[key] = name
+        self._data.insert(row + 1, duplicate)
+        self.search_input.clear()
+        self._render_body()
+        self.table.setCurrentCell(row + 1, 0)
+        self.changed.emit()
+
+    def delete_selected_row(self):
+        row = self.table.currentRow()
+        if 0 <= row < len(self._data) and not self.table.isRowHidden(row):
+            self.delete_row(row)
+
     def set_cell_errors(self, errors):
         """Highlight invalid cells; errors maps (row, column-key) to text."""
         errors = errors or {}
@@ -447,7 +527,9 @@ class EditableTable(QtWidgets.QWidget):
         if self.id_column:
             new_row[self.id_column] = self._next_free_id()
         self._data.insert(idx, new_row)
+        self.search_input.clear()
         self._render_body()
+        self.table.setCurrentCell(idx, 0)
         self.changed.emit()
 
     def _next_free_id(self):
@@ -466,10 +548,12 @@ class EditableTable(QtWidgets.QWidget):
 
     def delete_row(self, idx):
         self._data = self.get_rows()
-        if len(self._data) <= 1:
+        if len(self._data) <= 1 or not 0 <= idx < len(self._data):
             return  # always keep at least one row -- an empty table can't be saved anyway
         del self._data[idx]
         self._render_body()
+        self.table.setCurrentCell(min(idx, len(self._data) - 1), 0)
+        self._apply_filter()
         self.changed.emit()
 
     # ------------------------------------------------------------ rendering
@@ -522,6 +606,7 @@ class EditableTable(QtWidgets.QWidget):
                         item.setText(str(value))
                         item.setTextAlignment(col.get("alignment", QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter))
             self.set_cell_errors({})
+            self._apply_filter()
         finally:
             self._building = False
             if updates_enabled:

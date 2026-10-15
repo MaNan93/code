@@ -8,7 +8,7 @@ from plm.core.verible import (
 from plm.frontend.qt.models.preferences import DEFAULT_EDITOR
 from plm.frontend.qt.services.tasks import TaskRunner
 from plm.frontend.qt.styles.tokens import (
-    CONTROL_HEIGHT, FORMATTER_MAX_WIDTH, SPACING_LG, SPACING_MD,
+    CONTROL_HEIGHT, FORMATTER_MAX_WIDTH, SETTINGS_MAX_WIDTH, SPACING_LG, SPACING_MD,
 )
 from plm.frontend.qt.widgets.common import StyledComboBox
 from .secondary_page import SecondaryPage
@@ -96,6 +96,11 @@ class SettingsPage(SecondaryPage):
         }
         self.flag_table = None
         self._flag_controls = {}
+        self._formatter_groups = {
+            **dict.fromkeys(VERIBLE_ALIGN_PARAMS, 0),
+            **dict.fromkeys(VERIBLE_INDENT_PARAMS, 1),
+            **dict.fromkeys(VERIBLE_BOOL_PARAMS + VERIBLE_INT_PARAMS + VERIBLE_STR_PARAMS, 2),
+        }
         self._fill_flags(self.initial_preferences["verible_flags"])
         super().__init__("settings", parent)
         self._detection_started = False
@@ -112,12 +117,19 @@ class SettingsPage(SecondaryPage):
     def _setting_row(self, label, control):
         row = QtWidgets.QFrame()
         row.setObjectName("SettingsRow")
-        row.setFixedHeight(CONTROL_HEIGHT)
+        row.setMinimumHeight(64)
         row_layout = QtWidgets.QHBoxLayout(row)
         row_layout.setContentsMargins(16, 0, 16, 0)
+        labels = QtWidgets.QVBoxLayout()
+        labels.setSpacing(2)
         key_label = QtWidgets.QLabel(label)
         key_label.setObjectName("SettingsRowLabel")
-        row_layout.addWidget(key_label)
+        labels.addWidget(key_label)
+        description = QtWidgets.QLabel({"界面主题": "立即切换并自动保存", "默认编辑器": "用于打开生成的 RTL 与测试文件"}.get(label, ""))
+        description.setObjectName("SettingsDescription")
+        description.setWordWrap(True)
+        labels.addWidget(description)
+        row_layout.addLayout(labels, 1)
         row_layout.addStretch(1)
         row_layout.addWidget(control, 0, QtCore.Qt.AlignVCenter)
         return row
@@ -133,7 +145,9 @@ class SettingsPage(SecondaryPage):
 
         editor_control = QtWidgets.QWidget()
         editor_control.setObjectName("SettingsEditorControl")
-        editor_control.setFixedSize(280, CONTROL_HEIGHT)
+        editor_control.setMaximumWidth(280)
+        editor_control.setFixedHeight(CONTROL_HEIGHT)
+        editor_control.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Fixed)
         editor_layout = QtWidgets.QHBoxLayout(editor_control)
         editor_layout.setContentsMargins(0, 0, 0, 0)
         editor_layout.setSpacing(8)
@@ -151,6 +165,7 @@ class SettingsPage(SecondaryPage):
 
         self.theme_combo = StyledComboBox()
         self.theme_combo.setObjectName("SettingsTheme")
+        self.theme_combo.setMinimumWidth(140)
         self.theme_combo.addItem("浅色", "light")
         self.theme_combo.addItem("深色", "dark")
         self.theme_combo.setCurrentIndex(max(0, self.theme_combo.findData(preferences["theme"])))
@@ -161,12 +176,14 @@ class SettingsPage(SecondaryPage):
             "theme": self._setting_row("界面主题", self.theme_combo),
             "editor": self._setting_row("默认编辑器", editor_control),
         }
-        rows_layout = QtWidgets.QVBoxLayout()
-        rows_layout.setContentsMargins(0, 0, 0, 0)
+        self.general_card = QtWidgets.QGroupBox("通用偏好")
+        self.general_card.setObjectName("FormCard")
+        rows_layout = QtWidgets.QVBoxLayout(self.general_card)
+        rows_layout.setContentsMargins(0, 16, 0, 8)
         rows_layout.setSpacing(0)
         for row in self.setting_rows.values():
             rows_layout.addWidget(row)
-        layout.addLayout(rows_layout)
+        layout.addWidget(self.general_card)
         self.general_rows_spacing = QtWidgets.QSpacerItem(
             0, 24, QtWidgets.QSizePolicy.Minimum, QtWidgets.QSizePolicy.Fixed
         )
@@ -179,6 +196,7 @@ class SettingsPage(SecondaryPage):
         actions.setSpacing(12)
         self.settings_status = QtWidgets.QLabel("")
         self.settings_status.setObjectName("SettingsStatus")
+        self.settings_status.setWordWrap(True)
         actions.addWidget(self.settings_status)
         actions.addStretch(1)
         self.save_settings_btn = QtWidgets.QPushButton("保存设置")
@@ -191,6 +209,8 @@ class SettingsPage(SecondaryPage):
         return content
 
     def _show_section(self, index):
+        self.page_panel.setMaximumWidth(SETTINGS_MAX_WIDTH if index == 0 else FORMATTER_MAX_WIDTH)
+        self.general_card.setVisible(index == 0)
         visible_rows = ({"theme", "editor"}, set())[index]
         for name, row in self.setting_rows.items():
             row.setVisible(name in visible_rows)
@@ -236,7 +256,31 @@ class SettingsPage(SecondaryPage):
         browse_button.clicked.connect(self._browse_verible)
         path_row.addWidget(browse_button)
         layout.addLayout(path_row)
+        filters = QtWidgets.QHBoxLayout()
+        filters.setSpacing(8)
+        self.formatter_group = StyledComboBox()
+        self.formatter_group.addItems(("对齐规则", "缩进规则", "其它参数", "全部参数"))
+        self.formatter_group.setMinimumWidth(130)
+        self.formatter_group.currentIndexChanged.connect(self._apply_formatter_filter)
+        filters.addWidget(self.formatter_group)
+        self.formatter_search = QtWidgets.QLineEdit()
+        self.formatter_search.setPlaceholderText("搜索全部参数…")
+        self.formatter_search.setClearButtonEnabled(True)
+        self.formatter_search.textChanged.connect(self._apply_formatter_filter)
+        filters.addWidget(self.formatter_search, 1)
+        layout.addLayout(filters)
         return panel
+
+    def _apply_formatter_filter(self, *_):
+        if self.flag_table is None:
+            return
+        query = self.formatter_search.text().strip().casefold()
+        group = self.formatter_group.currentIndex()
+        for row, name in enumerate(self._flag_controls):
+            # A text search spans all categories, so a hidden group cannot
+            # conceal a matching parameter or discard an edited value.
+            hidden = query not in name.casefold() if query else group != 3 and self._formatter_groups[name] != group
+            self.flag_table.setRowHidden(row, hidden)
 
     def _ensure_formatter_controls(self):
         if self.flag_table is not None:
@@ -275,6 +319,16 @@ class SettingsPage(SecondaryPage):
         for params, choices in groups:
             for name in params:
                 item = QtWidgets.QTableWidgetItem(name)
+                description = {
+                    "column_limit": "每行建议最大列数；过长代码按规则换行。",
+                    "indentation_spaces": "每层代码缩进使用的空格数。",
+                    "line_break_penalty": "换行的代价，数值越大越倾向保留在同一行。",
+                    "line_terminator": "输出文件的换行格式。",
+                }.get(name, ("代码结构的对齐方式：对齐、左对齐、保留或自动推断。"
+                             if name in VERIBLE_ALIGN_PARAMS else
+                             "代码结构的缩进方式：缩进或续行。" if name in VERIBLE_INDENT_PARAMS else
+                             "Verible 格式化选项；参数名称与命令行选项一致。"))
+                item.setToolTip(description)
                 item.setFlags(item.flags() & ~QtCore.Qt.ItemIsEditable)
                 self.flag_table.setItem(row, 0, item)
                 value_item = QtWidgets.QTableWidgetItem()
@@ -288,12 +342,12 @@ class SettingsPage(SecondaryPage):
                     for choice in choices:
                         if choice != default_value:
                             control.addItem(choice, choice)
-                    control.setToolTip(f"PLM 默认值：{default_value}")
+                    control.setToolTip(f"{description}\nPLM 默认值：{default_value}")
                     control.currentIndexChanged.connect(self._flags_changed)
                 else:
                     control = QtWidgets.QLineEdit()
                     control.setFixedHeight(CONTROL_HEIGHT - 4)
-                    control.setToolTip(f"PLM 默认值：{default_value}")
+                    control.setToolTip(f"{description}\nPLM 默认值：{default_value}")
                     if name in VERIBLE_INT_PARAMS:
                         control.setValidator(QtGui.QIntValidator(0, 2147483647, control))
                         control.setAlignment(QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter)
@@ -313,6 +367,7 @@ class SettingsPage(SecondaryPage):
         self.flag_table.applyRowHeight()
         formatter_header.setSectionResizeMode(1, QtWidgets.QHeaderView.ResizeToContents)
         self.flag_table.setUpdatesEnabled(True)
+        self._apply_formatter_filter()
 
     def changeEvent(self, event):
         super().changeEvent(event)

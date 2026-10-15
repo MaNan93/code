@@ -212,6 +212,7 @@ class WorkspaceActions:
         self._validation_revision += 1
         self._generation_failure = None
         self.log_panel.set_status("")
+        self.window.show_log()
         self._set_output_state("generating", "正在校验、保存并生成 RTL 和 Testbench。")
         self.config_page.tabs.setEnabled(False)
         self.nav.setEnabled(False)
@@ -261,6 +262,7 @@ class WorkspaceActions:
             self._show_validation_error(error)
             self.refresh_artifacts()
             self.log_panel.append_log(f"生成失败：{error}")
+            self.window.show_log()
 
         def finished(data):
             unlock()

@@ -1005,6 +1005,7 @@ class QtFrontendLayoutTests(unittest.TestCase):
         page.mark_saved()  # Discard this test's lane-count changes before closing.
 
     def test_log_auto_scroll_clear_and_splitter_toggle(self):
+        self.window.show_log()
         log_panel = self.window.log_panel
         for index in range(30):
             log_panel.append_log(f"line {index}")
@@ -1092,7 +1093,7 @@ class QtFrontendLayoutTests(unittest.TestCase):
         self.assertEqual(bar.elideMode(), QtCore.Qt.ElideNone)
         self.assertEqual(
             bar.mapTo(page, QtCore.QPoint()).x(),
-            page.header.title_label.mapTo(page, QtCore.QPoint()).x(),
+            page.header.project_icon.mapTo(page, QtCore.QPoint()).x(),
         )
         for selected in range(tabs.count()):
             tabs.setCurrentIndex(selected)
@@ -1350,7 +1351,7 @@ class QtFrontendLayoutTests(unittest.TestCase):
         self.assertGreater(overlay.back_btn.width(), 32)
         self.assertEqual(overlay.back_btn.iconSize(), QtCore.QSize(ICON_SIZE, ICON_SIZE))
         panel = overlay.findChild(QtWidgets.QWidget, "SecondaryPagePanel")
-        self.assertEqual(panel.width(), min(1040, overlay.width() - 48))
+        self.assertEqual(panel.width(), min(640, overlay.width() - 48))
         self.assertEqual(panel.mapTo(overlay, QtCore.QPoint()).y(), 64)
         self.assertEqual(
             panel.mapTo(overlay, panel.rect().center()).x(),
@@ -1359,7 +1360,7 @@ class QtFrontendLayoutTests(unittest.TestCase):
         divider = overlay.findChild(QtWidgets.QFrame, "SecondaryTabDivider")
         self.assertEqual(divider.height(), 1)
         for row in overlay.setting_rows.values():
-            self.assertEqual(row.height(), CONTROL_HEIGHT)
+            self.assertGreaterEqual(row.height(), 64)
 
         nav.docs_btn.click()
         wait_for_idle(self.app)

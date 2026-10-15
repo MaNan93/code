@@ -116,6 +116,7 @@ class QtRegressionTests(unittest.TestCase):
         self.window.on_open_settings()
         page = self.window.view_stack.currentWidget()
         page._select_section(1)
+        page.formatter_group.setCurrentIndex(3)
         font = QtGui.QFont(page.font())
         font.setPixelSize(20)
         page.setFont(font)

@@ -50,12 +50,16 @@ Qt 不支持的浏览器 CSS 属性不用于实现；文档装饰由 QPainter �
 - [x] RTL CI 同时执行 DPR 时钟覆盖与独立 PERST 路由仿真。
 - [x] 回归 CI 增加 macOS / Python 3.12，并在三平台运行四档缩放，上传 JSON 和截图。
 - [x] 截图 CI 上传完整图库，包含 HTML 索引、清单和 PNG。
+- [x] 首轮 macOS 实测发现 Generation 卡片字段错列；显式指定表单左对齐，
+  回归通过模拟宿主默认居中样式验证两张卡片在窄/宽布局中保持同一输入起点。
 
 ## 验证记录
 
-- Windows 全量 391 项：389 通过，2 项可选仿真跳过；Linux 开启真实 Verilator 验证。
-- Windows 专项：文档装饰 2 项、工作区交互 12 项通过，包括两种主题的真实像素、
+- Windows 全量 391 项：389 通过，2 项可选仿真跳过；WSL Linux 开启真实 Verilator
+  后全量 391 项全部通过，没有跳过。代码块后紧接表格的间距回归随后另行补充。
+- Windows 与 Linux 文档装饰专项各 3 项、工作区交互专项各 13 项通过，覆盖两种主题的真实像素、
   滚动偏移、原生选择/复制、日志清空和主按钮状态。
+  文档间距回归确保紧随代码块的表格不会遮住底部圆角。
 - Windows 与 WSL Linux：各四档缩放 × 44 个页面状态，共 352 个状态通过。
   原始结果见 `benchmarks/ui_completion_{windows,linux}_2026-10-16.json`。
 - WSL Linux 未安装 Verible，完整 43 张截图生成通过；Windows 安装工具环境继续

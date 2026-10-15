@@ -238,6 +238,8 @@ class DocumentationPage(SecondaryPage):
                 table_format.setBorderStyle(QtGui.QTextFrameFormat.BorderStyle_None)
                 table_format.setCellPadding(8)
                 table_format.setCellSpacing(0)
+                table_format.setTopMargin(12)
+                table_format.setBottomMargin(12)
                 table_format.setWidth(
                     QtGui.QTextLength(QtGui.QTextLength.PercentageLength, 100)
                 )

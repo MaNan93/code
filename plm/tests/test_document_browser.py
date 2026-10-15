@@ -66,6 +66,19 @@ class DocumentDecorationTests(unittest.TestCase):
         browser.copy()
         self.assertEqual(self.app.clipboard().text(), "module sample;")
 
+    def test_table_after_code_does_not_cover_the_bottom_rounded_corners(self):
+        self.page._render_document("```sv\nmodule sample;\nendmodule\n```\n\n| A | B |\n|---|---|\n| x | y |")
+        browser = self.page.doc_browser
+        self.app.processEvents()
+        fence = browser.decoration_rects()[1][0]
+        document = browser.document()
+        table = next(frame for frame in document.rootFrame().childFrames()
+                     if isinstance(frame, QtGui.QTextTable))
+        first = document.begin()
+        offset = browser.cursorRect(QtGui.QTextCursor(first)).top() - document.documentLayout().blockBoundingRect(first).top()
+        table_top = document.documentLayout().frameBoundingRect(table).top() + offset
+        self.assertGreaterEqual(table_top - fence.bottom(), 6)
+
 
 if __name__ == "__main__":
     unittest.main()

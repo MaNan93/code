@@ -15,6 +15,7 @@ from sample_data import sample_config
 from test_qt_colors import luminance
 from plm.frontend.qt.controllers import AppController
 from plm.frontend.qt.main_window import MainWindow
+from plm.frontend.qt.widgets.config_editor import GenerationEditor
 from plm.frontend.qt.services import ProjectService, SettingsStore
 from plm.frontend.qt.styles.tokens import LANE_GRID_PALETTE, get_theme_color, set_active_theme
 from plm.frontend.qt.widgets.lanegrid import (
@@ -158,6 +159,24 @@ class RedesignTests(unittest.TestCase):
             picture = button.grab().toImage()
             self.assertEqual(picture.pixelColor(round(5 * ratio), round(button.height() / 2 * ratio)).name(),
                              get_theme_color("bg_subtle").lower())
+
+    def test_generation_cards_align_under_a_host_style_that_centers_forms(self):
+        class CenteredFormStyle(QtWidgets.QProxyStyle):
+            def styleHint(self, hint, option=None, widget=None, returnData=None):
+                if hint == QtWidgets.QStyle.SH_FormLayoutFormAlignment:
+                    return int(QtCore.Qt.AlignHCenter | QtCore.Qt.AlignTop)
+                return super().styleHint(hint, option, widget, returnData)
+
+        # macOS centers forms by default, so the naming card used to shift
+        # right when its fixed-width fields left spare horizontal space.
+        self.app.setStyle(CenteredFormStyle("Fusion"))
+        editor = GenerationEditor()
+        editor.show()
+        controls = (editor.arch, editor.pclk_mode, editor.bus_type, *editor._prefix_edits.values())
+        for width in (520, 760):
+            editor.resize(width, 600)
+            wait_for_idle(self.app)
+            self.assertEqual(len({control.mapTo(editor, QtCore.QPoint()).x() for control in controls}), 1)
 
     def test_log_animation_has_intermediate_frames_and_can_reverse_twice(self):
         window = self.window

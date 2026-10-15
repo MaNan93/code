@@ -283,8 +283,7 @@ with tempfile.TemporaryDirectory(prefix="plm-ui-") as td:
     w.config_page.toggle_artifacts_maximized()
     w.config_page.hide_artifacts()
     w.hide_log()
-    from plm.frontend.qt.services.themes import apply_application_theme
-    apply_application_theme("dark")
+    w.apply_theme("dark")
     for idx, name in enumerate(("controller", "lane-mapping", "signals", "generation")):
         w.config_page.tabs.setCurrentIndex(idx)
         shot(w, f"dark-{name}")
@@ -293,6 +292,7 @@ with tempfile.TemporaryDirectory(prefix="plm-ui-") as td:
     for idx, name in enumerate(("general", "formatter")):
         page = w.view_stack.currentWidget()
         page.menu_buttons[idx].click()
+        assert page.theme_combo.currentData() == "dark"
         shot(w, f"dark-settings-{name}")
     for idx, name in ((1, "indentation"), (2, "other")):
         page.formatter_group.setCurrentIndex(idx)

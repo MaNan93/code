@@ -8,7 +8,10 @@ from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill
 from openpyxl.utils.exceptions import InvalidFileException
 
-from .generator import NumericCellWarning, ReservedFieldWarning, TableError, generate_rtl, read_xlsx
+from .diagnostics import NumericCellWarning, ReservedFieldWarning, TableError
+from .layout import layout_from_overrides
+from .pipeline import GenerationOptions, run_pipeline
+from .reader import ReadOptions
 
 
 def write_template(path):
@@ -48,6 +51,14 @@ def main(argv=None):
     parser.add_argument("xlsx", nargs="?", type=Path, help="input register table")
     parser.add_argument("--sheet", "-s", default="sheet1", help="worksheet name (default: sheet1, case insensitive fallback)")
     parser.add_argument("--aw", "-aw", type=int, default=16, help="address width, 2..32 (default: 16)")
+    parser.add_argument("--header-rows", type=int, default=1,
+                        help="rows to skip before register data; 0 for no header (default: 1)")
+    parser.add_argument("--column", action="append", default=[], metavar="FIELD=COLUMN",
+                        help="override a template column, e.g. offset=A; letters or 1-based numbers")
+    parser.add_argument("--lint", action="store_true", help="review RTL with Verilator before writing output")
+    parser.add_argument("--lint-tool", default="verilator", help="Verilator executable name or path")
+    parser.add_argument("--format", action="store_true", help="format RTL with Verible before writing output")
+    parser.add_argument("--format-tool", default="verible-verilog-format", help="Verible formatter executable name or path")
     module_group = parser.add_mutually_exclusive_group()
     module_group.add_argument("--module", "-m", help="explicit RTL module name (default: apb_csr)")
     module_group.add_argument("--module-prefix", help="module name: <prefix>_apb_csr; does not change the filename")
@@ -75,20 +86,30 @@ def main(argv=None):
             if not args.file_prefix or any(ord(ch) < 32 or ch in '<>:"/\\|?*' for ch in args.file_prefix):
                 raise TableError("file prefix must be nonempty and contain no path separators or invalid filename characters")
             filename = f"{args.file_prefix}_apb_csr.sv"
-        with warnings.catch_warnings(record=True) as notices:
-            warnings.simplefilter("always", ReservedFieldWarning)
-            warnings.simplefilter("always", NumericCellWarning)
-            registers = read_xlsx(args.xlsx, sheet=args.sheet, aw=args.aw)
-            rtl = generate_rtl(registers, module=module, aw=args.aw)
-        for notice in notices:
-            print(f"csrgen: warning: {notice.message}", file=sys.stderr)
         output = args.output or Path(filename)
         if output.resolve() == args.xlsx.resolve():
             raise TableError("output must not overwrite the input XLSX")
+        options = GenerationOptions(
+            read=ReadOptions(sheet=args.sheet),
+            layout=layout_from_overrides(args.header_rows, args.column),
+            module=module, aw=args.aw,
+            lint=args.lint, format=args.format,
+            lint_tool=args.lint_tool, format_tool=args.format_tool,
+        )
+        with warnings.catch_warnings(record=True) as notices:
+            warnings.simplefilter("always", ReservedFieldWarning)
+            warnings.simplefilter("always", NumericCellWarning)
+            result = run_pipeline(args.xlsx, options)
+        for notice in notices:
+            print(f"csrgen: warning: {notice.message}", file=sys.stderr)
         output.parent.mkdir(parents=True, exist_ok=True)
-        output.write_text(rtl, encoding="utf-8")
-        count = sum(not item.reserved for reg in registers for item in reg.fields)
-        print(f"Generated {output.resolve()} ({len(registers)} registers, {count} fields, aw={args.aw})")
+        output.write_text(result.rtl, encoding="utf-8")
+        if result.reviews:
+            print(f"RTL review passed ({len(result.reviews)} checks)")
+        if args.format:
+            print("RTL formatting applied")
+        count = sum(not item.reserved for reg in result.registers for item in reg.fields)
+        print(f"Generated {output.resolve()} ({len(result.registers)} registers, {count} fields, aw={args.aw})")
         return 0
     except (TableError, OSError, ValueError, BadZipFile, InvalidFileException) as exc:
         print(f"csrgen: error: {exc}", file=sys.stderr)

@@ -5,7 +5,7 @@
 仅依赖 `openpyxl>=3.1,<4`，兼容你已有的 **openpyxl 3.1.5**；不使用 xlrd、xlwt。
 Python 版本要求 3.10 或更高。
 
-逐版本的改动、历史行为差异和升级说明见 [Release Notes](RELEASE_NOTES.md)，当前版本为 0.1.12。
+逐版本的改动、历史行为差异和升级说明见 [Release Notes](RELEASE_NOTES.md)，当前版本为 0.1.15。模块职责见 [分层架构](docs/ARCHITECTURE.md)，数据契约、时序和扩展方案见 [设计文档](docs/DESIGN.md)。
 
 ## 直接运行
 
@@ -62,7 +62,7 @@ csrgen input.xlsx --sheet sheet1 --aw 16 -o apb_csr.sv
 
 ## Excel 格式
 
-严格按模板的固定位置读取，**不匹配或检查表头文字**：第 1 行直接跳过，第 2 行开始读取数据。
+默认按模板的固定位置读取，**不匹配或检查表头文字**：第 1 行直接跳过，第 2 行开始读取数据。可显式配置 header 行数与列位置。
 
 | Excel 列 | 内容 |
 | --- | --- |
@@ -73,7 +73,15 @@ csrgen input.xlsx --sheet sheet1 --aw 16 -o apb_csr.sv
 | F | access，访问属性 |
 | G | description，可留空 |
 
-A 列和 G 列之后的列忽略。支持空行和合并 Offset 单元格；列位置和数据起始行须保持模板格式。
+默认忽略 A 列和 G 列之后的列。支持空行和合并 Offset 单元格；默认列位置和数据起始行保持模板格式。
+
+无 header 的文件使用 `--header-rows 0`，有两行标题/header 时使用 `--header-rows 2`。列位置可重复指定 `--column FIELD=COLUMN`，FIELD 为 `offset`、`signal`、`reset`、`bit`、`access` 或 `description`，COLUMN 为 Excel 列字母或从 1 开始的数字。例如数据位于 A:E 且没有 header：
+
+```powershell
+csrgen input.xlsx --header-rows 0 --column offset=A --column signal=B --column reset=C --column bit=D --column access=E --column description=none
+```
+
+必需字段不能缺列，多个字段不能映射到同一列；缺少 header 时需要显式指定 0，不自动根据内容猜测。内置读入目前仍仅支持 XLSX，CSV 适配器及编码配置接口预留在文件读入层。
 
 | Offset(hex) | signal | Rst Value(hexadecimal) | bit | access | description |
 | --- | --- | --- | --- | --- | --- |
@@ -95,7 +103,7 @@ A 列和 G 列之后的列忽略。支持空行和合并 Offset 单元格；列�
 - 每个地址对应完整的 32 bit 寄存器。未定义的高位、低位、字段间的空隙都自动按 `reserved` 处理，生成 RTL 时明确标注 `ro, tie0`。例如最高只定义到 bit 15，则 `[31:16]` 全部为保留位。
 - `reserved` 的位段越界或与其他字段重叠仍属于结构错误，会停止生成。
 - 不支持 Excel 公式，请使用明确的字面值。无效输入会报告行号和错误原因，退出码为 2。
-- G 列的 description 保留为表格说明，不写入生成的 RTL。
+- description 列保留为表格说明，不写入生成的 RTL；默认位置为 G 列。
 - 所有 `csr_reg_data_0x0`、`csr_reg_data_0x4` 等 32-bit 信号按十六进制地址 offset 命名，统一在模块内部信号声明区定义，每条声明末尾标注对应的地址 offset。名称中的十六进制字母使用小写，例如地址 0x1C 对应 `csr_reg_data_0x1c`。各地址区域用一条多行 `assign` 按 bit 31 到 bit 0 拼接全部字段及补零的保留位，每行一个字段，行尾注释标明 bit 范围、复位值及访问属性。`ro` 接外部输入，其他属性的写逻辑紧随其后。中央 `always_comb` 按地址选择完整读值赋给 `csr_data`。
 - 地址常量使用 `OFFSET_0x0`、`OFFSET_0x4` 等命名。字段的 bit、reset、属性只标注在拼接行尾，保留必要的时序说明，省略表格 description、重复的地址和 storage 注释。
 
@@ -151,6 +159,14 @@ assign csr_read  = psel && !penable && !pwrite && csr_addr_hit;
 
 ## 验证
 
+生成时可选用 Verilator 审查代码、Verible 格式化代码：
+
+```powershell
+csrgen input.xlsx --lint --format -o apb_csr.sv
+```
+
+两个选项默认关闭。启用时需要对应工具在 PATH 中，也可用 `--lint-tool`、`--format-tool` 指定可执行文件的路径。同时启用时，会在格式化前后分别审查；任何工具失败会报错，退出码为 2，不覆盖已有输出。格式化只改变代码排版，寄存器行为仍由下面的仿真检查。
+
 Python 测试覆盖截图格式、指定 sheet、合并单元格、字段/地址错误和 CLI：
 
 ```powershell
@@ -177,7 +193,7 @@ verilator --binary --timing --top-module tb_apb_csr --Mdir build/rtl_sim -Wno-TI
 .\build\rtl_sim\Vtb_apb_csr.exe
 ```
 
-当前验证结果：70 项 Python 测试通过；RTL 在 `AW=3/16/24/32` 的语法检查通过；行为仿真输出 `PASS`。仿真还验证读数据只在时钟沿变化、SETUP 采样、ACCESS 保持、未命中读地址保持当前值及外部 RO 变化不会影响已采样读响应。
+当前验证结果：92 项 Python 测试通过，其中包含默认输出逐字兼容、无 header、列映射、自定义读入适配器、工具失败保护及真实审查/格式化流程。未安装外部 RTL 工具时，相关集成测试会跳过；普通生成无需这些工具。RTL 在 `AW=3/16/24/32` 的语法检查通过；行为仿真输出 `PASS`。仿真还验证读数据只在时钟沿变化、SETUP 采样、ACCESS 保持、未命中读地址保持当前值及外部 RO 变化不会影响已采样读响应。
 
 `rwsc` 专项仿真覆盖单 bit、多 bit、完整 32 bit 字段、写 0、自动清零、复位值、连续写入及清零时的读采样：
 

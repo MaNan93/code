@@ -1,0 +1,4 @@
+include csrgen.py requirements.txt RELEASE_NOTES.md
+recursive-include docs *.md
+recursive-include examples *.xlsx *.sv
+recursive-include tests *.py *.sv

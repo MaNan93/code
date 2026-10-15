@@ -87,7 +87,7 @@ class ConfigHeader(QtWidgets.QFrame):
         layout = QtWidgets.QHBoxLayout(self)
         layout.setContentsMargins(SPACING_LG, 0, 0, 0)
         layout.setSpacing(0)
-        self.title_label = DoubleClickLabel("重写 PLM Qt 前端布局")
+        self.title_label = DoubleClickLabel("未命名配置")
         self.title_label.setObjectName("ConfigSessionTitle")
         self.title_label.setToolTip("双击重命名")
         self.title_label.doubleClicked.connect(self.enter_edit_mode)

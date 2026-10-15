@@ -48,16 +48,18 @@ class GenerationEditorRestoreTests(unittest.TestCase):
 
     def test_generation_action_uses_the_single_generate_label(self):
         editor = GenerationEditor()
-        self.assertEqual(editor.generate_btn.text(), "Generate")
+        self.assertEqual(editor.generate_btn.text(), "生成")
 
-    def test_prefix_inputs_have_requested_labels_and_start_empty(self):
+    def test_prefix_inputs_keep_stable_names_and_localized_labels(self):
         editor = GenerationEditor()
-        for name in ("module_prefix", "file_prefix", "macro_prefix"):
+        for name, label in (("module_prefix", "模块名前缀"),
+                            ("file_prefix", "文件名前缀"), ("macro_prefix", "宏名前缀")):
             with self.subTest(name=name):
                 control = getattr(editor, name)
                 self.assertIsInstance(control, QtWidgets.QLineEdit)
                 self.assertEqual(control.text(), "")
-                self.assertEqual(editor.layout().labelForField(control).text(), name)
+                self.assertEqual(editor.layout().labelForField(control).text(), label)
+                self.assertEqual(control.accessibleName(), name)
                 self.assertNotIn(name, editor.flags())
 
     def test_loading_prefixes_is_silent_and_old_projects_clear_previous_values(self):

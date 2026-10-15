@@ -30,7 +30,7 @@ class QtMenuStyleTests(unittest.TestCase):
         self.menu.popup(QtCore.QPoint(100, 100))
         self.app.processEvents()
 
-    def test_capsule_geometry_and_transparent_shadow_corners(self):
+    def test_compact_rows_and_transparent_shadow_corners(self):
         first = self.menu.addAction("打开项目")
         self.menu.addSeparator()
         second = self.menu.addAction("删除当前行")
@@ -89,7 +89,7 @@ class QtMenuStyleTests(unittest.TestCase):
         option = QtWidgets.QStyleOptionMenuItem()
         self.menu.initStyleOption(option, action)
         width = QtGui.QFontMetrics(option.font).horizontalAdvance(action.text())
-        self.assertGreaterEqual(self.menu.actionGeometry(action).width(), width + 20 + 10 + 24)
+        self.assertGreaterEqual(self.menu.actionGeometry(action).width(), width + 16 + 10 + 24)
 
     def test_combo_menu_keyboard_selection_and_escape_preserve_value_signals(self):
         combo = StyledComboBox()

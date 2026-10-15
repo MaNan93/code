@@ -369,11 +369,27 @@ class GenerationIntegrationTests(unittest.TestCase):
         page.tabs.setCurrentIndex(3)
         wait_for_idle(self.app)
         tab = page.tabs.widget(3)
-        button = page.generation_editor.generate_btn
+        editor = page.generation_editor
+        button = editor.generate_btn
         self.assertFalse(tab.scroll.isAncestorOf(button))
-        bottom = button.mapTo(tab, QtCore.QPoint(0, button.height())).y()
-        self.assertLessEqual(bottom, tab.height())
-        self.assertTrue(button.isVisible())
+        controls = (editor.arch, editor.pclk_mode, editor.bus_type, *editor._prefix_edits.values())
+        for width, height in ((960, 640), (1600, 1000)):
+            window.resize(width, height)
+            wait_for_idle(self.app)
+            with self.subTest(size=(width, height)):
+                self.assertEqual(len({control.mapTo(editor, QtCore.QPoint()).x() for control in controls}), 1)
+                for control in controls:
+                    self.assertGreater(control.width(), 0)
+                    self.assertLessEqual(control.width(), 360)
+                    self.assertEqual(control.height(), 32)
+                self.assertEqual(button.size(), QtCore.QSize(120, 32))
+                bottom = button.mapTo(tab, QtCore.QPoint(0, button.height())).y()
+                self.assertLessEqual(bottom, tab.height())
+                self.assertTrue(button.isVisible())
+                before = button.mapTo(tab, QtCore.QPoint())
+                tab.scroll.verticalScrollBar().setValue(tab.scroll.verticalScrollBar().maximum())
+                self.app.processEvents()
+                self.assertEqual(button.mapTo(tab, QtCore.QPoint()), before)
 
     def test_typing_a_prefix_is_one_undo_step(self):
         controller, window = self.window()

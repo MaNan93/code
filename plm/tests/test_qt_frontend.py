@@ -17,7 +17,7 @@ from plm.frontend.qt.controllers import AppController
 from plm.frontend.qt.services import ProjectService, SettingsStore
 from plm.frontend.qt.styles.tokens import (
     BG_ARTIFACTS, BG_ARTIFACTS_HEADER, BG_FOCUS, BG_SUBTLE, BORDER, BORDER_HOVER, CONTROL_HEIGHT, FONT_CODE_PRIMARY, FONT_MONO, FONT_SCALE, FONT_SIZE_BODY,
-    ICON_GLYPH_SIZE, NAV_COLLAPSED_WIDTH, NAV_ICON_INSET, NAV_ITEM_GAP, SPACING_MD, PRIMARY_SOFT, PRIMARY_PRESSED, TEXT_MAIN, TOOLTIP_BG,
+    CONTROL_PADDING_X, ICON_GLYPH_SIZE, NAV_COLLAPSED_WIDTH, NAV_ICON_INSET, NAV_ITEM_GAP, SPACING_MD, PRIMARY_SOFT, PRIMARY_PRESSED, TEXT_MAIN, TOOLTIP_BG,
 )
 from plm.frontend.qt.models import ProjectInfo
 from plm.frontend.qt.main_window import MainWindow
@@ -131,10 +131,10 @@ class QtFrontendLayoutTests(unittest.TestCase):
             self.window.title_bar.close_btn.iconSize(), QtCore.QSize(ICON_SIZE, ICON_SIZE)
         )
         self.assertEqual(
-            self.window.log_toggle_button.size(), QtCore.QSize(32, CONTROL_HEIGHT)
+            self.window.log_toggle_button.size(), QtCore.QSize(28, CONTROL_HEIGHT)
         )
         self.assertEqual(
-            self.window.artifacts_toggle_button.size(), QtCore.QSize(32, CONTROL_HEIGHT)
+            self.window.artifacts_toggle_button.size(), QtCore.QSize(28, CONTROL_HEIGHT)
         )
         self.assertEqual(self.window.content_splitter.orientation(), QtCore.Qt.Vertical)
         self.assertEqual(self.window.nav_panel.minimumWidth(), 260)
@@ -153,11 +153,15 @@ class QtFrontendLayoutTests(unittest.TestCase):
             QtCore.QSize(ICON_SIZE, ICON_SIZE),
         )
 
-    def test_all_font_tokens_are_sixteen_pixels(self):
+    def test_desktop_text_and_code_use_thirteen_pixels(self):
         self.assertEqual(FONT_SCALE, 1.0)
-        self.assertEqual(FONT_SIZE_BODY, 16)
+        self.assertEqual(FONT_SIZE_BODY, 13)
         preview_font = self.window.config_page.artifacts_panel.preview.font()
-        self.assertEqual(preview_font.pixelSize(), 16)
+        self.assertEqual(preview_font.pixelSize(), 13)
+        self.assertEqual(CONTROL_HEIGHT, 32)
+        self.assertEqual(ICON_SIZE, 16)
+        self.assertEqual(self.window.log_panel.output.font().pixelSize(), 13)
+        self.assertTrue(self.window.log_panel.output.font().fixedPitch())
         self.assertTrue(preview_font.fixedPitch())
         self.assertNotEqual(FONT_CODE_PRIMARY, self.window.font().family())
         self.assertIn("monospace", FONT_MONO)
@@ -328,6 +332,7 @@ class QtFrontendLayoutTests(unittest.TestCase):
             nav.docs_btn,
         ]
         for widget in aligned_widgets:
+            self.assertEqual(widget.accessibleName(), widget.toolTip())
             self.assertEqual(widget.mapTo(nav, QtCore.QPoint()).x(), SPACING_MD)
             self.assertEqual(widget.width(), NAV_COLLAPSED_WIDTH - 2 * SPACING_MD)
         self.assertEqual(nav.layout().contentsMargins().right(), SPACING_MD)
@@ -474,7 +479,7 @@ class QtFrontendLayoutTests(unittest.TestCase):
         self.assertEqual(first_project.folder_icon.size(), QtCore.QSize(ICON_SIZE, ICON_SIZE))
         self.assertEqual(
             first_project.header.layout().contentsMargins(),
-            QtCore.QMargins(NAV_ICON_INSET, 0, 16, 0),
+            QtCore.QMargins(NAV_ICON_INSET, 0, CONTROL_PADDING_X, 0),
         )
         self.assertEqual(
             first_project.header.layout().itemAt(1).spacerItem().sizeHint().width(), 6
@@ -635,7 +640,7 @@ class QtFrontendLayoutTests(unittest.TestCase):
             )
         self.assertEqual(
             first_project.header.layout().contentsMargins(),
-            QtCore.QMargins(NAV_ICON_INSET, 0, 16, 0),
+            QtCore.QMargins(NAV_ICON_INSET, 0, CONTROL_PADDING_X, 0),
         )
 
         nav_buttons = (
@@ -696,7 +701,7 @@ class QtFrontendLayoutTests(unittest.TestCase):
             nav.docs_btn.icon().pixmap(ICON_SIZE, ICON_SIZE),
         )
         for pixmap in icon_pixmaps:
-            self.assertEqual(pixmap.size(), QtCore.QSize(20, 20))
+            self.assertEqual(pixmap.size(), QtCore.QSize(16, 16))
             bounds = QtGui.QRegion(pixmap.mask()).boundingRect()
             inset = (ICON_SIZE - ICON_GLYPH_SIZE) // 2
             self.assertGreaterEqual(bounds.left(), inset)
@@ -713,7 +718,7 @@ class QtFrontendLayoutTests(unittest.TestCase):
         self.assertEqual(nav.collapsed_width, 56)
         self.assertEqual(nav.minimumWidth(), 260)
         self.assertEqual(nav.maximumWidth(), 260)
-        self.assertEqual(self.window.title_bar.collapse_btn.size(), QtCore.QSize(32, CONTROL_HEIGHT))
+        self.assertEqual(self.window.title_bar.collapse_btn.size(), QtCore.QSize(28, CONTROL_HEIGHT))
 
         for row_layout in (
             nav.new_chat_row_layout,
@@ -1346,7 +1351,7 @@ class QtFrontendLayoutTests(unittest.TestCase):
         self.assertEqual(overlay.back_btn.iconSize(), QtCore.QSize(ICON_SIZE, ICON_SIZE))
         panel = overlay.findChild(QtWidgets.QWidget, "SecondaryPagePanel")
         self.assertEqual(panel.width(), min(1040, overlay.width() - 48))
-        self.assertEqual(panel.mapTo(overlay, QtCore.QPoint()).y(), 72)
+        self.assertEqual(panel.mapTo(overlay, QtCore.QPoint()).y(), 64)
         self.assertEqual(
             panel.mapTo(overlay, panel.rect().center()).x(),
             overlay.rect().center().x(),

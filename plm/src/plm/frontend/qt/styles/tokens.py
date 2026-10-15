@@ -1,29 +1,28 @@
 """Modern desktop design tokens shared by QSS, painters and widgets.
 
-Controls use a 40 px grid; every 18 px Lucide glyph occupies a centered 20 px slot.
+Controls use a 32 px grid with 13 px text and 16 px Lucide icons.
 """
 
 from pathlib import Path
 import sys
 
-# neutral ramp: greys carry a little of the primary hue so the chrome,
-# secondary text and the icons tinted with it read as one family
+# neutral ramp: slate surfaces and text, independent of the primary hue
 N0 = "#FFFFFF"
-N25 = "#F8F9FE"
-N50 = "#EEF1FB"
-N100 = "#E4E8F7"
-N200 = "#D5DBF0"
-N300 = "#BCC5E3"
-N400 = "#8A91B4"
-# N400 is too light for 16 px text; N450 meets 4.5:1 on all resting surfaces.
-N450 = "#596088"
-N500 = "#575E87"
-N600 = "#444B72"
-N800 = "#1B1F3B"
+N25 = "#F8FAFC"
+N50 = "#F1F5F9"
+N100 = "#E2E8F0"
+N200 = "#CBD5E1"
+N300 = "#94A3B8"
+N400 = "#64748B"
+# Small muted labels meet 4.5:1 on every resting surface.
+N450 = "#475569"
+N500 = "#334155"
+N600 = "#1E293B"
+N800 = "#0F172A"
 
 # primary ramp
-P50 = "#E7E9FF"
-P100 = "#D4D8FF"
+P50 = "#EEF2FF"
+P100 = "#E0E7FF"
 P500 = "#4F46E5"
 P600 = "#4338CA"
 P700 = "#3730A3"
@@ -47,16 +46,15 @@ PRIMARY_SOFT = P50
 PRIMARY_PRESSED = P100
 BG_MAIN = N0
 BG_SURFACE = N0
-# The chrome behind the panels. Deliberately a step darker than N50: white
-# panels on N50 are only 1.13:1 apart and read as one surface.
-BG_SIDEBAR = "#DDE2F3"
-BG_SIDEBAR_HOVER = "#CCD3EB"
+# Light chrome; panel outlines preserve the boundary against white surfaces.
+BG_SIDEBAR = N25
+BG_SIDEBAR_HOVER = "#EDF2F7"
 BG_CARD = N50
-BG_SUBTLE = N100
+BG_SUBTLE = N50
 BG_ALTERNATE = N25
-BG_HOVER = N200
-BG_SWITCH_HOVER = "#E9ECF9"
-BG_FOCUS = N200
+BG_HOVER = N100
+BG_SWITCH_HOVER = N50
+BG_FOCUS = N100
 # GitHub Primer light surfaces and foregrounds for the source viewer.
 BG_ARTIFACTS = "#FFFFFF"
 DIFF_ADDED_BG = "#E6FFEC"
@@ -64,19 +62,19 @@ DIFF_REMOVED_BG = "#FFEBE9"
 DIFF_ADDED_GUTTER = "#CCFFD8"
 DIFF_REMOVED_GUTTER = "#FFD7D5"
 DIFF_HUNK_BG = "#DDF4FF"
-BG_ARTIFACTS_HEADER = N100
-BORDER_ARTIFACTS = N300
+BG_ARTIFACTS_HEADER = BG_SUBTLE
+BORDER_ARTIFACTS = N200
 TEXT_ARTIFACTS = "#1F2328"
 TEXT_ARTIFACTS_MUTED = "#59636E"
 ACCENT_ARTIFACTS = "#0969DA"
-BORDER = "#DCE1F2"
+BORDER = N100
 # Outline of the top-level panels (config, output, settings, docs).
-BORDER_PANEL = N300
+BORDER_PANEL = N200
 BORDER_HOVER = N300
 BORDER_FOCUS = P500
 TEXT_MAIN = N800
 TEXT_SUB = N500
-TEXT_HEADER = "#3B4268"
+TEXT_HEADER = N600
 TEXT_MUTED = N450
 TOOLTIP_BG = N800
 TOOLTIP_TEXT = N0
@@ -90,9 +88,9 @@ FONT_MONO = f'"{FONT_CODE_PRIMARY}", "Cascadia Code", "Courier New", monospace'
 ICON_DIR = Path(__file__).resolve().parents[1] / "assets" / "icons"
 UI_CONTENT_SCALE = 1.2
 FONT_SCALE = 1.0
-CONTROL_HEIGHT = 40
+CONTROL_HEIGHT = 32
 TITLEBAR_HEIGHT = 44
-HEADER_HEIGHT = 48
+HEADER_HEIGHT = 40
 TITLEBAR_BUTTON_WIDTH = 46
 TITLEBAR_CONTROLS_WIDTH = 3 * TITLEBAR_BUTTON_WIDTH
 LOG_HEADER_HEIGHT = 32
@@ -104,11 +102,12 @@ NAV_COLLAPSED_WIDTH = 56
 ARTIFACTS_DEFAULT_WIDTH = 380
 ARTIFACTS_MIN_WIDTH = 300
 PANEL_ANIMATION_DURATION = 200
-LINE_HEIGHT = 24
-CONTROL_PADDING_Y = 8
-CONTROL_PADDING_X = 16
+LINE_HEIGHT = 20
+CONTROL_PADDING_Y = 6
+CONTROL_PADDING_X = 12
+FIELD_PADDING_Y = 4
 ICON_TEXT_GAP = 6
-MENU_RADIUS = 14
+MENU_RADIUS = 6
 MENU_PADDING = 8
 MENU_GAP = 4
 MENU_ICON_TEXT_GAP = 10
@@ -128,16 +127,16 @@ def scale_content_size(size):
     return round(size * UI_CONTENT_SCALE)
 
 
-FONT_SIZE_BODY = 16
-ICON_SIZE = 20
-ICON_GLYPH_SIZE = 18
+FONT_SIZE_BODY = 13
+ICON_SIZE = 16
+ICON_GLYPH_SIZE = 16
 ICON_STROKE_WIDTH = 2
-ICON_BUTTON_SIZE = 32
+ICON_BUTTON_SIZE = 28
 
-RADIUS_CHIP = CONTROL_HEIGHT // 2
-RADIUS_CONTROL = 12
+RADIUS_CHIP = 4
+RADIUS_CONTROL = 6
 RADIUS_CARD = 16
-RADIUS_HOVER = CONTROL_HEIGHT // 2
+RADIUS_HOVER = 6
 RADIUS_WINDOW = 16
 
 SPACING_XS = 4
@@ -145,6 +144,10 @@ SPACING_SM = 8
 SPACING_MD = 12
 SPACING_LG = 16
 SPACING_XL = 24
+
+FORM_FIELD_MAX_WIDTH = 360
+FORM_ACTION_WIDTH = 120
+FORMATTER_MAX_WIDTH = 760
 
 # Keep nav icons centered on the collapsed rail in both states.
 NAV_ICON_INSET = (NAV_COLLAPSED_WIDTH - ICON_SIZE) // 2 - SPACING_MD
@@ -156,6 +159,7 @@ QSS_TOKENS = {
     "titlebar_button_width": f"{TITLEBAR_BUTTON_WIDTH}px",
     "control_padding_y": f"{CONTROL_PADDING_Y}px",
     "control_padding_x": f"{CONTROL_PADDING_X}px",
+    "field_padding_y": f"{FIELD_PADDING_Y}px",
     "nav_icon_inset": f"{NAV_ICON_INSET}px",
     "menu_radius": f"{MENU_RADIUS}px",
     "menu_padding": f"{MENU_PADDING}px",
@@ -165,6 +169,7 @@ QSS_TOKENS = {
     "menu_outer_padding": f"{MENU_SHADOW_MARGIN + MENU_PADDING}px",
     "menu_bottom_padding": f"{MENU_SHADOW_MARGIN + MENU_PADDING - MENU_GAP}px",
     "icon_size": f"{ICON_SIZE}px",
+    "icon_button_size": f"{ICON_BUTTON_SIZE}px",
     "icon_glyph_size": f"{ICON_GLYPH_SIZE}px",
     "primary": PRIMARY,
     "primary_hover": PRIMARY_HOVER,

@@ -110,7 +110,7 @@ QLineEdit, QComboBox, QSpinBox {
     background-color: $bg_subtle;
     border: 1px solid transparent;
     border-radius: $radius_control;
-    padding: 7px $control_padding_x;
+    padding: $field_padding_y $control_padding_x;
     color: $text_main;
     font-size: $font_size_body;
     selection-background-color: $primary_soft;
@@ -320,7 +320,7 @@ QLabel#ProjectName { color: $text_main; font-size: $font_size_body; }
 QLabel#ProjectName[selected="true"] { color: $text_main; font-weight: $font_weight_medium; }
 QLineEdit#ProjectNameEditor { padding: 0 4px; }
 QPushButton#NavCollapseButton {
-    min-width: 32px; max-width: 32px;
+    min-width: $icon_button_size; max-width: $icon_button_size;
     background: transparent; border: none; border-radius: $radius_control; padding: 0;
 }
 QPushButton#ProjectMoreBtn {
@@ -556,9 +556,7 @@ QLabel#GenerationStatus {
     background-color: $bg_subtle;
     color: $text_sub;
     border: none;
-    /* Qt drops a radius larger than half the box; the badge is shorter than
-       a control, so the shared pill radius left it square. */
-    border-radius: 8px;
+    border-radius: $radius_chip;
     padding: 3px 8px;
     font-size: $font_size_body;
 }
@@ -687,7 +685,7 @@ QPushButton#ProjectButton:pressed { background-color: $border_hover; }
 QPushButton#ProjectMoreBtn {
     min-width: 28px; max-width: 28px;
     min-height: 28px; max-height: 28px;
-    border-radius: 14px;
+    border-radius: $radius_hover;
 }
 QPushButton#ProjectMoreBtn:hover {
     background-color: $bg_hover;

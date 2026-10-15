@@ -54,7 +54,7 @@ class ArtifactPreviewTests(unittest.TestCase):
 
     def test_toolbar_path_tracks_selection_and_elides_without_moving_buttons(self):
         one = self.file("rtl/first.sv", "module first; endmodule")
-        two = self.file("rtl/second.sv", "module second; endmodule")
+        two = self.file("rtl/pipe_lane_mapper_connection_with_a_long_integration_specific_name.sv", "module second; endmodule")
         path_width = self.panel.path_label.fontMetrics().horizontalAdvance(str(one))
         self.panel.resize(path_width + 400, 630)
         self.panel.set_files([one, two], self.root)
@@ -78,8 +78,8 @@ class ArtifactPreviewTests(unittest.TestCase):
         wait_for_idle(self.app)
         self.assertEqual(label.toolTip(), "")
         self.assertEqual(self.panel.preview.toolTip(), "")
-        self.assertNotEqual(label.display_path, "rtl / second.sv")
-        self.assertTrue(label.display_path == "second.sv" or "\u2026" in label.display_path)
+        self.assertNotEqual(label.display_path, f"rtl / {two.name}")
+        self.assertTrue(label.display_path == two.name or "\u2026" in label.display_path)
         self.assertTrue(self.panel.maximize_button.isVisible())
         self.panel.set_files([], self.root)
         wait_for_idle(self.app)

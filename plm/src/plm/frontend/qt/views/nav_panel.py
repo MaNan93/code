@@ -205,6 +205,7 @@ class NavPanel(QtWidgets.QFrame):
     def _action_button(self, icon_name, text, requested_signal):
         button = QtWidgets.QPushButton(text)
         button.setToolTip(text)
+        button.setAccessibleName(text)
         button.setObjectName("NavActionButton")
         button.setFocusPolicy(QtCore.Qt.StrongFocus)
         button.setIcon(load_lucide_icon(icon_name, align_visible_left=True))
@@ -218,6 +219,7 @@ class NavPanel(QtWidgets.QFrame):
     def _footer_button(self, icon_name, text, requested_signal):
         button = QtWidgets.QPushButton(text)
         button.setToolTip(text)
+        button.setAccessibleName(text)
         button.setObjectName("NavFooterButton")
         button.setFocusPolicy(QtCore.Qt.StrongFocus)
         button.setIcon(load_lucide_icon(icon_name, align_visible_left=True))

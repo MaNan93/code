@@ -121,6 +121,10 @@ class QtRegressionTests(unittest.TestCase):
         page.setFont(font)
         wait_for_idle(self.app)
         header = page.flag_table.horizontalHeader()
+        self.assertLessEqual(page.formatter_panel.width(), 760)
+        for row in range(page.flag_table.rowCount()):
+            required = page.flag_table.fontMetrics().horizontalAdvance(page.flag_table.item(row, 0).text()) + 20
+            self.assertGreaterEqual(header.sectionSize(0), required)
         self.assertEqual(header.sectionResizeMode(1), QtWidgets.QHeaderView.ResizeToContents)
         for control in page._flag_controls.values():
             self.assertGreaterEqual(header.sectionSize(1), control.sizeHint().width())
@@ -224,7 +228,7 @@ class QtRegressionTests(unittest.TestCase):
         option = QtWidgets.QStyleOptionViewItem()
         option.rect = QtCore.QRect(0, 0, 200, 40)
         delegate.updateEditorGeometry(editor, option, QtCore.QModelIndex())
-        self.assertEqual(editor.geometry(), QtCore.QRect(16, 0, 168, 40))
+        self.assertEqual(editor.geometry(), QtCore.QRect(12, 0, 176, 40))
         sip.delete(editor)
         delegate.updateEditorGeometry(editor, option, QtCore.QModelIndex())
 

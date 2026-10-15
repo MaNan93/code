@@ -7,7 +7,9 @@ from plm.core.verible import (
 )
 from plm.frontend.qt.models.preferences import DEFAULT_EDITOR
 from plm.frontend.qt.services.tasks import TaskRunner
-from plm.frontend.qt.styles.tokens import CONTROL_HEIGHT, SPACING_MD
+from plm.frontend.qt.styles.tokens import (
+    CONTROL_HEIGHT, FORMATTER_MAX_WIDTH, SPACING_LG, SPACING_MD,
+)
 from plm.frontend.qt.widgets.common import StyledComboBox
 from .secondary_page import SecondaryPage
 
@@ -203,9 +205,10 @@ class SettingsPage(SecondaryPage):
 
     def _build_formatter(self, preferences):
         panel = QtWidgets.QWidget()
+        panel.setMaximumWidth(FORMATTER_MAX_WIDTH)
         layout = QtWidgets.QVBoxLayout(panel)
-        layout.setContentsMargins(0, 0, 0, 16)
-        layout.setSpacing(12)
+        layout.setContentsMargins(0, 0, 0, SPACING_LG)
+        layout.setSpacing(SPACING_MD)
         path_row = QtWidgets.QHBoxLayout()
         self.verible_path_edit = QtWidgets.QLineEdit(preferences["verible_path"])
         self.verible_path_edit.setPlaceholderText("留空自动搜索 verible-verilog-format")
@@ -243,7 +246,7 @@ class SettingsPage(SecondaryPage):
         formatter_header = self.flag_table.horizontalHeader()
         formatter_header.hide()
         formatter_header.setFixedHeight(CONTROL_HEIGHT)
-        formatter_header.setSectionResizeMode(0, QtWidgets.QHeaderView.Stretch)
+        formatter_header.setSectionResizeMode(0, QtWidgets.QHeaderView.ResizeToContents)
         formatter_header.setSectionResizeMode(1, QtWidgets.QHeaderView.Fixed)
         self.flag_table.setAlternatingRowColors(True)
         self.flag_table.setVerticalScrollMode(QtWidgets.QAbstractItemView.ScrollPerPixel)

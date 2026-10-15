@@ -1,5 +1,7 @@
-from PyQt5 import QtCore, QtWidgets
-from plm.frontend.qt.styles.tokens import LOG_HEADER_HEIGHT, LOG_STATUS_HEIGHT
+from PyQt5 import QtCore, QtGui, QtWidgets
+from plm.frontend.qt.styles.tokens import (
+    FONT_CODE_PRIMARY, FONT_SIZE_BODY, LOG_HEADER_HEIGHT, LOG_STATUS_HEIGHT,
+)
 from plm.frontend.qt.widgets.common import (
     ICON_SIZE, RoundedCanvasFrame, make_icon_button,
 )
@@ -39,6 +41,12 @@ class LogPanel(RoundedCanvasFrame):
         root.addWidget(header)
         self.output = QtWidgets.QPlainTextEdit()
         self.output.setObjectName("LogOutput")
+        font = QtGui.QFont(FONT_CODE_PRIMARY)
+        font.setStyleHint(QtGui.QFont.Monospace)
+        font.setFixedPitch(True)
+        font.setPixelSize(FONT_SIZE_BODY)
+        self.output.setFont(font)
+        self.output.setLineWrapMode(QtWidgets.QPlainTextEdit.NoWrap)
         self.output.setReadOnly(True)
         root.addWidget(self.output, 1)
 

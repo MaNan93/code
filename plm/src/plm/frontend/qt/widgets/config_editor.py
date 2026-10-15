@@ -17,6 +17,9 @@ from plm.core.gen_flags import (
 from plm.frontend.qt.widgets.lanegrid import LaneGrid
 from plm.frontend.qt.widgets.common import StatusBadge, StyledComboBox
 from plm.frontend.qt.widgets.tables import EditableTable
+from plm.frontend.qt.styles.tokens import (
+    FORM_ACTION_WIDTH, FORM_FIELD_MAX_WIDTH, SPACING_MD, SPACING_XL,
+)
 
 
 LANE_COUNTS = (2, 4, 8, 16, 32)
@@ -229,7 +232,7 @@ class GenerationEditor(QtWidgets.QWidget):
         super().__init__(parent)
         layout = QtWidgets.QFormLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(12)
+        layout.setSpacing(SPACING_MD)
         self.arch = StyledComboBox()
         self.arch.addItems(ARCH_VALUES)
         self.pclk_mode = StyledComboBox()
@@ -242,6 +245,8 @@ class GenerationEditor(QtWidgets.QWidget):
         self.bus_type.addItems(BUS_TYPE_VALUES)
         self.bus_type.setCurrentText("bus")
         self.bus_type.setToolTip("flat：一维向量；bus：二维 lane 数组。")
+        for control in (self.arch, self.pclk_mode, self.bus_type):
+            control.setMaximumWidth(FORM_FIELD_MAX_WIDTH)
         self.dpr = QtWidgets.QCheckBox("启用 DPR")
         self.dpr.setToolTip("启用后选择信号经同步器（sync）；不启用为组合直通（comb）。")
         layout.addRow("PHY 架构", self.arch)
@@ -249,33 +254,35 @@ class GenerationEditor(QtWidgets.QWidget):
         layout.addRow("Connection 总线类型", self.bus_type)
         layout.addRow("DPR", self.dpr)
         self._prefix_edits = {}
-        for name, description, example in (
-            ("module_prefix", "模块和 package 名称前缀", "soc_"),
-            ("file_prefix", "所有 .sv 文件名称前缀", "rtl_"),
-            ("macro_prefix", "宏名称前缀", "SOC_"),
+        for name, label, description, example in (
+            ("module_prefix", "模块名前缀", "模块和 package 名称前缀", "soc_"),
+            ("file_prefix", "文件名前缀", "所有 .sv 文件名称前缀", "rtl_"),
+            ("macro_prefix", "宏名前缀", "宏名称前缀", "SOC_"),
         ):
             edit = QtWidgets.QLineEdit()
             edit.setObjectName(name)
             edit.setAccessibleName(name)
+            edit.setMaximumWidth(FORM_FIELD_MAX_WIDTH)
             edit.setPlaceholderText(description)
             edit.setToolTip(f"自动补齐末尾下划线，例如 {example.rstrip('_')} → {example}；已有 _ 不重复添加，留空保持原名称。")
             edit.textChanged.connect(self.changed.emit)
             self._prefix_edits[name] = edit
             setattr(self, name, edit)
-            layout.addRow(name, edit)
-        self.generate_btn = QtWidgets.QPushButton("Generate")
+            layout.addRow(label, edit)
+        self.generate_btn = QtWidgets.QPushButton("生成")
         self.generate_btn.setObjectName("ConfigGenerateButton")
+        self.generate_btn.setFixedWidth(FORM_ACTION_WIDTH)
         self.generate_btn.clicked.connect(self.generateRequested.emit)
         # Not a form row: the page pins this bar below the scrolled form, so
         # the primary action stays visible at any window height.
         self.footer = QtWidgets.QWidget()
         self.footer.setObjectName("GenerationFooter")
         actions = QtWidgets.QHBoxLayout(self.footer)
-        actions.setContentsMargins(0, 12, 0, 0)
+        actions.setContentsMargins(0, SPACING_XL, 0, 0)
         self.status_label = StatusBadge("请选择项目")
         self.status_label.setObjectName("GenerationStatus")
         # Left-aligned: the artifacts drawer slides in over the right edge.
-        actions.setSpacing(12)
+        actions.setSpacing(SPACING_MD)
         actions.addWidget(self.generate_btn)
         actions.addWidget(
             self.status_label, 0, QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter

@@ -1,7 +1,7 @@
 """User-facing panel contracts, measured after real layout and painting.
 
 Expected values come from the UI requirements: 4 px content inset, a 1 px
-#BCC5E3 outline and 16 px corners. Do not derive them from implementation tokens.
+#CBD5E1 outline and 16 px corners. Do not derive them from implementation tokens.
 """
 
 import math
@@ -101,7 +101,7 @@ class PanelContractTests(unittest.TestCase):
         # Check physical pixels so the same test works with fractional/high DPI.
         ratio = image.devicePixelRatio()
         width, height = self.panel.width(), self.panel.height()
-        expected = QtGui.QColor("#BCC5E3")
+        expected = QtGui.QColor("#CBD5E1")
         expected_rgb = (expected.red(), expected.green(), expected.blue())
 
         def has_border(x, y, neighborhood=0):

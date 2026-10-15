@@ -1,0 +1,2154 @@
+[
+  {
+    "requested_scale": 1.0,
+    "os": "Windows-11-10.0.26300-SP0",
+    "python": "3.12.10",
+    "qt": "5.15.2",
+    "platform": "windows",
+    "borrowed_font_directory": null,
+    "checks": [
+      {
+        "page": "1-960-light-controller",
+        "logical_size": [
+          960,
+          640
+        ],
+        "pixel_size": [
+          960,
+          640
+        ],
+        "device_pixel_ratio": 1.0
+      },
+      {
+        "page": "1-960-light-lanes",
+        "logical_size": [
+          960,
+          640
+        ],
+        "pixel_size": [
+          960,
+          640
+        ],
+        "device_pixel_ratio": 1.0
+      },
+      {
+        "page": "1-960-light-signals",
+        "logical_size": [
+          960,
+          640
+        ],
+        "pixel_size": [
+          960,
+          640
+        ],
+        "device_pixel_ratio": 1.0
+      },
+      {
+        "page": "1-960-light-generation",
+        "logical_size": [
+          960,
+          640
+        ],
+        "pixel_size": [
+          960,
+          640
+        ],
+        "device_pixel_ratio": 1.0
+      },
+      {
+        "page": "1-960-light-log-open",
+        "logical_size": [
+          960,
+          640
+        ],
+        "pixel_size": [
+          960,
+          640
+        ],
+        "device_pixel_ratio": 1.0
+      },
+      {
+        "page": "1-960-light-settings",
+        "logical_size": [
+          960,
+          640
+        ],
+        "pixel_size": [
+          960,
+          640
+        ],
+        "device_pixel_ratio": 1.0
+      },
+      {
+        "page": "1-960-light-formatter",
+        "logical_size": [
+          960,
+          640
+        ],
+        "pixel_size": [
+          960,
+          640
+        ],
+        "device_pixel_ratio": 1.0
+      },
+      {
+        "page": "1-960-light-preview",
+        "logical_size": [
+          960,
+          640
+        ],
+        "pixel_size": [
+          960,
+          640
+        ],
+        "device_pixel_ratio": 1.0
+      },
+      {
+        "page": "1-960-light-docs-intro",
+        "logical_size": [
+          960,
+          640
+        ],
+        "pixel_size": [
+          960,
+          640
+        ],
+        "device_pixel_ratio": 1.0
+      },
+      {
+        "page": "1-960-light-docs-config",
+        "logical_size": [
+          960,
+          640
+        ],
+        "pixel_size": [
+          960,
+          640
+        ],
+        "device_pixel_ratio": 1.0
+      },
+      {
+        "page": "1-960-light-docs-generate",
+        "logical_size": [
+          960,
+          640
+        ],
+        "pixel_size": [
+          960,
+          640
+        ],
+        "device_pixel_ratio": 1.0
+      },
+      {
+        "page": "1-960-dark-controller",
+        "logical_size": [
+          960,
+          640
+        ],
+        "pixel_size": [
+          960,
+          640
+        ],
+        "device_pixel_ratio": 1.0
+      },
+      {
+        "page": "1-960-dark-lanes",
+        "logical_size": [
+          960,
+          640
+        ],
+        "pixel_size": [
+          960,
+          640
+        ],
+        "device_pixel_ratio": 1.0
+      },
+      {
+        "page": "1-960-dark-signals",
+        "logical_size": [
+          960,
+          640
+        ],
+        "pixel_size": [
+          960,
+          640
+        ],
+        "device_pixel_ratio": 1.0
+      },
+      {
+        "page": "1-960-dark-generation",
+        "logical_size": [
+          960,
+          640
+        ],
+        "pixel_size": [
+          960,
+          640
+        ],
+        "device_pixel_ratio": 1.0
+      },
+      {
+        "page": "1-960-dark-log-open",
+        "logical_size": [
+          960,
+          640
+        ],
+        "pixel_size": [
+          960,
+          640
+        ],
+        "device_pixel_ratio": 1.0
+      },
+      {
+        "page": "1-960-dark-settings",
+        "logical_size": [
+          960,
+          640
+        ],
+        "pixel_size": [
+          960,
+          640
+        ],
+        "device_pixel_ratio": 1.0
+      },
+      {
+        "page": "1-960-dark-formatter",
+        "logical_size": [
+          960,
+          640
+        ],
+        "pixel_size": [
+          960,
+          640
+        ],
+        "device_pixel_ratio": 1.0
+      },
+      {
+        "page": "1-960-dark-preview",
+        "logical_size": [
+          960,
+          640
+        ],
+        "pixel_size": [
+          960,
+          640
+        ],
+        "device_pixel_ratio": 1.0
+      },
+      {
+        "page": "1-960-dark-docs-intro",
+        "logical_size": [
+          960,
+          640
+        ],
+        "pixel_size": [
+          960,
+          640
+        ],
+        "device_pixel_ratio": 1.0
+      },
+      {
+        "page": "1-960-dark-docs-config",
+        "logical_size": [
+          960,
+          640
+        ],
+        "pixel_size": [
+          960,
+          640
+        ],
+        "device_pixel_ratio": 1.0
+      },
+      {
+        "page": "1-960-dark-docs-generate",
+        "logical_size": [
+          960,
+          640
+        ],
+        "pixel_size": [
+          960,
+          640
+        ],
+        "device_pixel_ratio": 1.0
+      },
+      {
+        "page": "1-1280-light-controller",
+        "logical_size": [
+          1280,
+          800
+        ],
+        "pixel_size": [
+          1280,
+          800
+        ],
+        "device_pixel_ratio": 1.0
+      },
+      {
+        "page": "1-1280-light-lanes",
+        "logical_size": [
+          1280,
+          800
+        ],
+        "pixel_size": [
+          1280,
+          800
+        ],
+        "device_pixel_ratio": 1.0
+      },
+      {
+        "page": "1-1280-light-signals",
+        "logical_size": [
+          1280,
+          800
+        ],
+        "pixel_size": [
+          1280,
+          800
+        ],
+        "device_pixel_ratio": 1.0
+      },
+      {
+        "page": "1-1280-light-generation",
+        "logical_size": [
+          1280,
+          800
+        ],
+        "pixel_size": [
+          1280,
+          800
+        ],
+        "device_pixel_ratio": 1.0
+      },
+      {
+        "page": "1-1280-light-log-open",
+        "logical_size": [
+          1280,
+          800
+        ],
+        "pixel_size": [
+          1280,
+          800
+        ],
+        "device_pixel_ratio": 1.0
+      },
+      {
+        "page": "1-1280-light-settings",
+        "logical_size": [
+          1280,
+          800
+        ],
+        "pixel_size": [
+          1280,
+          800
+        ],
+        "device_pixel_ratio": 1.0
+      },
+      {
+        "page": "1-1280-light-formatter",
+        "logical_size": [
+          1280,
+          800
+        ],
+        "pixel_size": [
+          1280,
+          800
+        ],
+        "device_pixel_ratio": 1.0
+      },
+      {
+        "page": "1-1280-light-preview",
+        "logical_size": [
+          1280,
+          800
+        ],
+        "pixel_size": [
+          1280,
+          800
+        ],
+        "device_pixel_ratio": 1.0
+      },
+      {
+        "page": "1-1280-light-docs-intro",
+        "logical_size": [
+          1280,
+          800
+        ],
+        "pixel_size": [
+          1280,
+          800
+        ],
+        "device_pixel_ratio": 1.0
+      },
+      {
+        "page": "1-1280-light-docs-config",
+        "logical_size": [
+          1280,
+          800
+        ],
+        "pixel_size": [
+          1280,
+          800
+        ],
+        "device_pixel_ratio": 1.0
+      },
+      {
+        "page": "1-1280-light-docs-generate",
+        "logical_size": [
+          1280,
+          800
+        ],
+        "pixel_size": [
+          1280,
+          800
+        ],
+        "device_pixel_ratio": 1.0
+      },
+      {
+        "page": "1-1280-dark-controller",
+        "logical_size": [
+          1280,
+          800
+        ],
+        "pixel_size": [
+          1280,
+          800
+        ],
+        "device_pixel_ratio": 1.0
+      },
+      {
+        "page": "1-1280-dark-lanes",
+        "logical_size": [
+          1280,
+          800
+        ],
+        "pixel_size": [
+          1280,
+          800
+        ],
+        "device_pixel_ratio": 1.0
+      },
+      {
+        "page": "1-1280-dark-signals",
+        "logical_size": [
+          1280,
+          800
+        ],
+        "pixel_size": [
+          1280,
+          800
+        ],
+        "device_pixel_ratio": 1.0
+      },
+      {
+        "page": "1-1280-dark-generation",
+        "logical_size": [
+          1280,
+          800
+        ],
+        "pixel_size": [
+          1280,
+          800
+        ],
+        "device_pixel_ratio": 1.0
+      },
+      {
+        "page": "1-1280-dark-log-open",
+        "logical_size": [
+          1280,
+          800
+        ],
+        "pixel_size": [
+          1280,
+          800
+        ],
+        "device_pixel_ratio": 1.0
+      },
+      {
+        "page": "1-1280-dark-settings",
+        "logical_size": [
+          1280,
+          800
+        ],
+        "pixel_size": [
+          1280,
+          800
+        ],
+        "device_pixel_ratio": 1.0
+      },
+      {
+        "page": "1-1280-dark-formatter",
+        "logical_size": [
+          1280,
+          800
+        ],
+        "pixel_size": [
+          1280,
+          800
+        ],
+        "device_pixel_ratio": 1.0
+      },
+      {
+        "page": "1-1280-dark-preview",
+        "logical_size": [
+          1280,
+          800
+        ],
+        "pixel_size": [
+          1280,
+          800
+        ],
+        "device_pixel_ratio": 1.0
+      },
+      {
+        "page": "1-1280-dark-docs-intro",
+        "logical_size": [
+          1280,
+          800
+        ],
+        "pixel_size": [
+          1280,
+          800
+        ],
+        "device_pixel_ratio": 1.0
+      },
+      {
+        "page": "1-1280-dark-docs-config",
+        "logical_size": [
+          1280,
+          800
+        ],
+        "pixel_size": [
+          1280,
+          800
+        ],
+        "device_pixel_ratio": 1.0
+      },
+      {
+        "page": "1-1280-dark-docs-generate",
+        "logical_size": [
+          1280,
+          800
+        ],
+        "pixel_size": [
+          1280,
+          800
+        ],
+        "device_pixel_ratio": 1.0
+      }
+    ]
+  },
+  {
+    "requested_scale": 1.25,
+    "os": "Windows-11-10.0.26300-SP0",
+    "python": "3.12.10",
+    "qt": "5.15.2",
+    "platform": "windows",
+    "borrowed_font_directory": null,
+    "checks": [
+      {
+        "page": "1.25-960-light-controller",
+        "logical_size": [
+          960,
+          640
+        ],
+        "pixel_size": [
+          1200,
+          800
+        ],
+        "device_pixel_ratio": 1.25
+      },
+      {
+        "page": "1.25-960-light-lanes",
+        "logical_size": [
+          960,
+          640
+        ],
+        "pixel_size": [
+          1200,
+          800
+        ],
+        "device_pixel_ratio": 1.25
+      },
+      {
+        "page": "1.25-960-light-signals",
+        "logical_size": [
+          960,
+          640
+        ],
+        "pixel_size": [
+          1200,
+          800
+        ],
+        "device_pixel_ratio": 1.25
+      },
+      {
+        "page": "1.25-960-light-generation",
+        "logical_size": [
+          960,
+          640
+        ],
+        "pixel_size": [
+          1200,
+          800
+        ],
+        "device_pixel_ratio": 1.25
+      },
+      {
+        "page": "1.25-960-light-log-open",
+        "logical_size": [
+          960,
+          640
+        ],
+        "pixel_size": [
+          1200,
+          800
+        ],
+        "device_pixel_ratio": 1.25
+      },
+      {
+        "page": "1.25-960-light-settings",
+        "logical_size": [
+          960,
+          640
+        ],
+        "pixel_size": [
+          1200,
+          800
+        ],
+        "device_pixel_ratio": 1.25
+      },
+      {
+        "page": "1.25-960-light-formatter",
+        "logical_size": [
+          960,
+          640
+        ],
+        "pixel_size": [
+          1200,
+          800
+        ],
+        "device_pixel_ratio": 1.25
+      },
+      {
+        "page": "1.25-960-light-preview",
+        "logical_size": [
+          960,
+          640
+        ],
+        "pixel_size": [
+          1200,
+          800
+        ],
+        "device_pixel_ratio": 1.25
+      },
+      {
+        "page": "1.25-960-light-docs-intro",
+        "logical_size": [
+          960,
+          640
+        ],
+        "pixel_size": [
+          1200,
+          800
+        ],
+        "device_pixel_ratio": 1.25
+      },
+      {
+        "page": "1.25-960-light-docs-config",
+        "logical_size": [
+          960,
+          640
+        ],
+        "pixel_size": [
+          1200,
+          800
+        ],
+        "device_pixel_ratio": 1.25
+      },
+      {
+        "page": "1.25-960-light-docs-generate",
+        "logical_size": [
+          960,
+          640
+        ],
+        "pixel_size": [
+          1200,
+          800
+        ],
+        "device_pixel_ratio": 1.25
+      },
+      {
+        "page": "1.25-960-dark-controller",
+        "logical_size": [
+          960,
+          640
+        ],
+        "pixel_size": [
+          1200,
+          800
+        ],
+        "device_pixel_ratio": 1.25
+      },
+      {
+        "page": "1.25-960-dark-lanes",
+        "logical_size": [
+          960,
+          640
+        ],
+        "pixel_size": [
+          1200,
+          800
+        ],
+        "device_pixel_ratio": 1.25
+      },
+      {
+        "page": "1.25-960-dark-signals",
+        "logical_size": [
+          960,
+          640
+        ],
+        "pixel_size": [
+          1200,
+          800
+        ],
+        "device_pixel_ratio": 1.25
+      },
+      {
+        "page": "1.25-960-dark-generation",
+        "logical_size": [
+          960,
+          640
+        ],
+        "pixel_size": [
+          1200,
+          800
+        ],
+        "device_pixel_ratio": 1.25
+      },
+      {
+        "page": "1.25-960-dark-log-open",
+        "logical_size": [
+          960,
+          640
+        ],
+        "pixel_size": [
+          1200,
+          800
+        ],
+        "device_pixel_ratio": 1.25
+      },
+      {
+        "page": "1.25-960-dark-settings",
+        "logical_size": [
+          960,
+          640
+        ],
+        "pixel_size": [
+          1200,
+          800
+        ],
+        "device_pixel_ratio": 1.25
+      },
+      {
+        "page": "1.25-960-dark-formatter",
+        "logical_size": [
+          960,
+          640
+        ],
+        "pixel_size": [
+          1200,
+          800
+        ],
+        "device_pixel_ratio": 1.25
+      },
+      {
+        "page": "1.25-960-dark-preview",
+        "logical_size": [
+          960,
+          640
+        ],
+        "pixel_size": [
+          1200,
+          800
+        ],
+        "device_pixel_ratio": 1.25
+      },
+      {
+        "page": "1.25-960-dark-docs-intro",
+        "logical_size": [
+          960,
+          640
+        ],
+        "pixel_size": [
+          1200,
+          800
+        ],
+        "device_pixel_ratio": 1.25
+      },
+      {
+        "page": "1.25-960-dark-docs-config",
+        "logical_size": [
+          960,
+          640
+        ],
+        "pixel_size": [
+          1200,
+          800
+        ],
+        "device_pixel_ratio": 1.25
+      },
+      {
+        "page": "1.25-960-dark-docs-generate",
+        "logical_size": [
+          960,
+          640
+        ],
+        "pixel_size": [
+          1200,
+          800
+        ],
+        "device_pixel_ratio": 1.25
+      },
+      {
+        "page": "1.25-1280-light-controller",
+        "logical_size": [
+          1280,
+          800
+        ],
+        "pixel_size": [
+          1600,
+          1000
+        ],
+        "device_pixel_ratio": 1.25
+      },
+      {
+        "page": "1.25-1280-light-lanes",
+        "logical_size": [
+          1280,
+          800
+        ],
+        "pixel_size": [
+          1600,
+          1000
+        ],
+        "device_pixel_ratio": 1.25
+      },
+      {
+        "page": "1.25-1280-light-signals",
+        "logical_size": [
+          1280,
+          800
+        ],
+        "pixel_size": [
+          1600,
+          1000
+        ],
+        "device_pixel_ratio": 1.25
+      },
+      {
+        "page": "1.25-1280-light-generation",
+        "logical_size": [
+          1280,
+          800
+        ],
+        "pixel_size": [
+          1600,
+          1000
+        ],
+        "device_pixel_ratio": 1.25
+      },
+      {
+        "page": "1.25-1280-light-log-open",
+        "logical_size": [
+          1280,
+          800
+        ],
+        "pixel_size": [
+          1600,
+          1000
+        ],
+        "device_pixel_ratio": 1.25
+      },
+      {
+        "page": "1.25-1280-light-settings",
+        "logical_size": [
+          1280,
+          800
+        ],
+        "pixel_size": [
+          1600,
+          1000
+        ],
+        "device_pixel_ratio": 1.25
+      },
+      {
+        "page": "1.25-1280-light-formatter",
+        "logical_size": [
+          1280,
+          800
+        ],
+        "pixel_size": [
+          1600,
+          1000
+        ],
+        "device_pixel_ratio": 1.25
+      },
+      {
+        "page": "1.25-1280-light-preview",
+        "logical_size": [
+          1280,
+          800
+        ],
+        "pixel_size": [
+          1600,
+          1000
+        ],
+        "device_pixel_ratio": 1.25
+      },
+      {
+        "page": "1.25-1280-light-docs-intro",
+        "logical_size": [
+          1280,
+          800
+        ],
+        "pixel_size": [
+          1600,
+          1000
+        ],
+        "device_pixel_ratio": 1.25
+      },
+      {
+        "page": "1.25-1280-light-docs-config",
+        "logical_size": [
+          1280,
+          800
+        ],
+        "pixel_size": [
+          1600,
+          1000
+        ],
+        "device_pixel_ratio": 1.25
+      },
+      {
+        "page": "1.25-1280-light-docs-generate",
+        "logical_size": [
+          1280,
+          800
+        ],
+        "pixel_size": [
+          1600,
+          1000
+        ],
+        "device_pixel_ratio": 1.25
+      },
+      {
+        "page": "1.25-1280-dark-controller",
+        "logical_size": [
+          1280,
+          800
+        ],
+        "pixel_size": [
+          1600,
+          1000
+        ],
+        "device_pixel_ratio": 1.25
+      },
+      {
+        "page": "1.25-1280-dark-lanes",
+        "logical_size": [
+          1280,
+          800
+        ],
+        "pixel_size": [
+          1600,
+          1000
+        ],
+        "device_pixel_ratio": 1.25
+      },
+      {
+        "page": "1.25-1280-dark-signals",
+        "logical_size": [
+          1280,
+          800
+        ],
+        "pixel_size": [
+          1600,
+          1000
+        ],
+        "device_pixel_ratio": 1.25
+      },
+      {
+        "page": "1.25-1280-dark-generation",
+        "logical_size": [
+          1280,
+          800
+        ],
+        "pixel_size": [
+          1600,
+          1000
+        ],
+        "device_pixel_ratio": 1.25
+      },
+      {
+        "page": "1.25-1280-dark-log-open",
+        "logical_size": [
+          1280,
+          800
+        ],
+        "pixel_size": [
+          1600,
+          1000
+        ],
+        "device_pixel_ratio": 1.25
+      },
+      {
+        "page": "1.25-1280-dark-settings",
+        "logical_size": [
+          1280,
+          800
+        ],
+        "pixel_size": [
+          1600,
+          1000
+        ],
+        "device_pixel_ratio": 1.25
+      },
+      {
+        "page": "1.25-1280-dark-formatter",
+        "logical_size": [
+          1280,
+          800
+        ],
+        "pixel_size": [
+          1600,
+          1000
+        ],
+        "device_pixel_ratio": 1.25
+      },
+      {
+        "page": "1.25-1280-dark-preview",
+        "logical_size": [
+          1280,
+          800
+        ],
+        "pixel_size": [
+          1600,
+          1000
+        ],
+        "device_pixel_ratio": 1.25
+      },
+      {
+        "page": "1.25-1280-dark-docs-intro",
+        "logical_size": [
+          1280,
+          800
+        ],
+        "pixel_size": [
+          1600,
+          1000
+        ],
+        "device_pixel_ratio": 1.25
+      },
+      {
+        "page": "1.25-1280-dark-docs-config",
+        "logical_size": [
+          1280,
+          800
+        ],
+        "pixel_size": [
+          1600,
+          1000
+        ],
+        "device_pixel_ratio": 1.25
+      },
+      {
+        "page": "1.25-1280-dark-docs-generate",
+        "logical_size": [
+          1280,
+          800
+        ],
+        "pixel_size": [
+          1600,
+          1000
+        ],
+        "device_pixel_ratio": 1.25
+      }
+    ]
+  },
+  {
+    "requested_scale": 1.5,
+    "os": "Windows-11-10.0.26300-SP0",
+    "python": "3.12.10",
+    "qt": "5.15.2",
+    "platform": "windows",
+    "borrowed_font_directory": null,
+    "checks": [
+      {
+        "page": "1.5-960-light-controller",
+        "logical_size": [
+          960,
+          640
+        ],
+        "pixel_size": [
+          1440,
+          960
+        ],
+        "device_pixel_ratio": 1.5
+      },
+      {
+        "page": "1.5-960-light-lanes",
+        "logical_size": [
+          960,
+          640
+        ],
+        "pixel_size": [
+          1440,
+          960
+        ],
+        "device_pixel_ratio": 1.5
+      },
+      {
+        "page": "1.5-960-light-signals",
+        "logical_size": [
+          960,
+          640
+        ],
+        "pixel_size": [
+          1440,
+          960
+        ],
+        "device_pixel_ratio": 1.5
+      },
+      {
+        "page": "1.5-960-light-generation",
+        "logical_size": [
+          960,
+          640
+        ],
+        "pixel_size": [
+          1440,
+          960
+        ],
+        "device_pixel_ratio": 1.5
+      },
+      {
+        "page": "1.5-960-light-log-open",
+        "logical_size": [
+          960,
+          640
+        ],
+        "pixel_size": [
+          1440,
+          960
+        ],
+        "device_pixel_ratio": 1.5
+      },
+      {
+        "page": "1.5-960-light-settings",
+        "logical_size": [
+          960,
+          640
+        ],
+        "pixel_size": [
+          1440,
+          960
+        ],
+        "device_pixel_ratio": 1.5
+      },
+      {
+        "page": "1.5-960-light-formatter",
+        "logical_size": [
+          960,
+          640
+        ],
+        "pixel_size": [
+          1440,
+          960
+        ],
+        "device_pixel_ratio": 1.5
+      },
+      {
+        "page": "1.5-960-light-preview",
+        "logical_size": [
+          960,
+          640
+        ],
+        "pixel_size": [
+          1440,
+          960
+        ],
+        "device_pixel_ratio": 1.5
+      },
+      {
+        "page": "1.5-960-light-docs-intro",
+        "logical_size": [
+          960,
+          640
+        ],
+        "pixel_size": [
+          1440,
+          960
+        ],
+        "device_pixel_ratio": 1.5
+      },
+      {
+        "page": "1.5-960-light-docs-config",
+        "logical_size": [
+          960,
+          640
+        ],
+        "pixel_size": [
+          1440,
+          960
+        ],
+        "device_pixel_ratio": 1.5
+      },
+      {
+        "page": "1.5-960-light-docs-generate",
+        "logical_size": [
+          960,
+          640
+        ],
+        "pixel_size": [
+          1440,
+          960
+        ],
+        "device_pixel_ratio": 1.5
+      },
+      {
+        "page": "1.5-960-dark-controller",
+        "logical_size": [
+          960,
+          640
+        ],
+        "pixel_size": [
+          1440,
+          960
+        ],
+        "device_pixel_ratio": 1.5
+      },
+      {
+        "page": "1.5-960-dark-lanes",
+        "logical_size": [
+          960,
+          640
+        ],
+        "pixel_size": [
+          1440,
+          960
+        ],
+        "device_pixel_ratio": 1.5
+      },
+      {
+        "page": "1.5-960-dark-signals",
+        "logical_size": [
+          960,
+          640
+        ],
+        "pixel_size": [
+          1440,
+          960
+        ],
+        "device_pixel_ratio": 1.5
+      },
+      {
+        "page": "1.5-960-dark-generation",
+        "logical_size": [
+          960,
+          640
+        ],
+        "pixel_size": [
+          1440,
+          960
+        ],
+        "device_pixel_ratio": 1.5
+      },
+      {
+        "page": "1.5-960-dark-log-open",
+        "logical_size": [
+          960,
+          640
+        ],
+        "pixel_size": [
+          1440,
+          960
+        ],
+        "device_pixel_ratio": 1.5
+      },
+      {
+        "page": "1.5-960-dark-settings",
+        "logical_size": [
+          960,
+          640
+        ],
+        "pixel_size": [
+          1440,
+          960
+        ],
+        "device_pixel_ratio": 1.5
+      },
+      {
+        "page": "1.5-960-dark-formatter",
+        "logical_size": [
+          960,
+          640
+        ],
+        "pixel_size": [
+          1440,
+          960
+        ],
+        "device_pixel_ratio": 1.5
+      },
+      {
+        "page": "1.5-960-dark-preview",
+        "logical_size": [
+          960,
+          640
+        ],
+        "pixel_size": [
+          1440,
+          960
+        ],
+        "device_pixel_ratio": 1.5
+      },
+      {
+        "page": "1.5-960-dark-docs-intro",
+        "logical_size": [
+          960,
+          640
+        ],
+        "pixel_size": [
+          1440,
+          960
+        ],
+        "device_pixel_ratio": 1.5
+      },
+      {
+        "page": "1.5-960-dark-docs-config",
+        "logical_size": [
+          960,
+          640
+        ],
+        "pixel_size": [
+          1440,
+          960
+        ],
+        "device_pixel_ratio": 1.5
+      },
+      {
+        "page": "1.5-960-dark-docs-generate",
+        "logical_size": [
+          960,
+          640
+        ],
+        "pixel_size": [
+          1440,
+          960
+        ],
+        "device_pixel_ratio": 1.5
+      },
+      {
+        "page": "1.5-1280-light-controller",
+        "logical_size": [
+          1280,
+          800
+        ],
+        "pixel_size": [
+          1920,
+          1200
+        ],
+        "device_pixel_ratio": 1.5
+      },
+      {
+        "page": "1.5-1280-light-lanes",
+        "logical_size": [
+          1280,
+          800
+        ],
+        "pixel_size": [
+          1920,
+          1200
+        ],
+        "device_pixel_ratio": 1.5
+      },
+      {
+        "page": "1.5-1280-light-signals",
+        "logical_size": [
+          1280,
+          800
+        ],
+        "pixel_size": [
+          1920,
+          1200
+        ],
+        "device_pixel_ratio": 1.5
+      },
+      {
+        "page": "1.5-1280-light-generation",
+        "logical_size": [
+          1280,
+          800
+        ],
+        "pixel_size": [
+          1920,
+          1200
+        ],
+        "device_pixel_ratio": 1.5
+      },
+      {
+        "page": "1.5-1280-light-log-open",
+        "logical_size": [
+          1280,
+          800
+        ],
+        "pixel_size": [
+          1920,
+          1200
+        ],
+        "device_pixel_ratio": 1.5
+      },
+      {
+        "page": "1.5-1280-light-settings",
+        "logical_size": [
+          1280,
+          800
+        ],
+        "pixel_size": [
+          1920,
+          1200
+        ],
+        "device_pixel_ratio": 1.5
+      },
+      {
+        "page": "1.5-1280-light-formatter",
+        "logical_size": [
+          1280,
+          800
+        ],
+        "pixel_size": [
+          1920,
+          1200
+        ],
+        "device_pixel_ratio": 1.5
+      },
+      {
+        "page": "1.5-1280-light-preview",
+        "logical_size": [
+          1280,
+          800
+        ],
+        "pixel_size": [
+          1920,
+          1200
+        ],
+        "device_pixel_ratio": 1.5
+      },
+      {
+        "page": "1.5-1280-light-docs-intro",
+        "logical_size": [
+          1280,
+          800
+        ],
+        "pixel_size": [
+          1920,
+          1200
+        ],
+        "device_pixel_ratio": 1.5
+      },
+      {
+        "page": "1.5-1280-light-docs-config",
+        "logical_size": [
+          1280,
+          800
+        ],
+        "pixel_size": [
+          1920,
+          1200
+        ],
+        "device_pixel_ratio": 1.5
+      },
+      {
+        "page": "1.5-1280-light-docs-generate",
+        "logical_size": [
+          1280,
+          800
+        ],
+        "pixel_size": [
+          1920,
+          1200
+        ],
+        "device_pixel_ratio": 1.5
+      },
+      {
+        "page": "1.5-1280-dark-controller",
+        "logical_size": [
+          1280,
+          800
+        ],
+        "pixel_size": [
+          1920,
+          1200
+        ],
+        "device_pixel_ratio": 1.5
+      },
+      {
+        "page": "1.5-1280-dark-lanes",
+        "logical_size": [
+          1280,
+          800
+        ],
+        "pixel_size": [
+          1920,
+          1200
+        ],
+        "device_pixel_ratio": 1.5
+      },
+      {
+        "page": "1.5-1280-dark-signals",
+        "logical_size": [
+          1280,
+          800
+        ],
+        "pixel_size": [
+          1920,
+          1200
+        ],
+        "device_pixel_ratio": 1.5
+      },
+      {
+        "page": "1.5-1280-dark-generation",
+        "logical_size": [
+          1280,
+          800
+        ],
+        "pixel_size": [
+          1920,
+          1200
+        ],
+        "device_pixel_ratio": 1.5
+      },
+      {
+        "page": "1.5-1280-dark-log-open",
+        "logical_size": [
+          1280,
+          800
+        ],
+        "pixel_size": [
+          1920,
+          1200
+        ],
+        "device_pixel_ratio": 1.5
+      },
+      {
+        "page": "1.5-1280-dark-settings",
+        "logical_size": [
+          1280,
+          800
+        ],
+        "pixel_size": [
+          1920,
+          1200
+        ],
+        "device_pixel_ratio": 1.5
+      },
+      {
+        "page": "1.5-1280-dark-formatter",
+        "logical_size": [
+          1280,
+          800
+        ],
+        "pixel_size": [
+          1920,
+          1200
+        ],
+        "device_pixel_ratio": 1.5
+      },
+      {
+        "page": "1.5-1280-dark-preview",
+        "logical_size": [
+          1280,
+          800
+        ],
+        "pixel_size": [
+          1920,
+          1200
+        ],
+        "device_pixel_ratio": 1.5
+      },
+      {
+        "page": "1.5-1280-dark-docs-intro",
+        "logical_size": [
+          1280,
+          800
+        ],
+        "pixel_size": [
+          1920,
+          1200
+        ],
+        "device_pixel_ratio": 1.5
+      },
+      {
+        "page": "1.5-1280-dark-docs-config",
+        "logical_size": [
+          1280,
+          800
+        ],
+        "pixel_size": [
+          1920,
+          1200
+        ],
+        "device_pixel_ratio": 1.5
+      },
+      {
+        "page": "1.5-1280-dark-docs-generate",
+        "logical_size": [
+          1280,
+          800
+        ],
+        "pixel_size": [
+          1920,
+          1200
+        ],
+        "device_pixel_ratio": 1.5
+      }
+    ]
+  },
+  {
+    "requested_scale": 2.0,
+    "os": "Windows-11-10.0.26300-SP0",
+    "python": "3.12.10",
+    "qt": "5.15.2",
+    "platform": "windows",
+    "borrowed_font_directory": null,
+    "checks": [
+      {
+        "page": "2-960-light-controller",
+        "logical_size": [
+          960,
+          640
+        ],
+        "pixel_size": [
+          1920,
+          1280
+        ],
+        "device_pixel_ratio": 2.0
+      },
+      {
+        "page": "2-960-light-lanes",
+        "logical_size": [
+          960,
+          640
+        ],
+        "pixel_size": [
+          1920,
+          1280
+        ],
+        "device_pixel_ratio": 2.0
+      },
+      {
+        "page": "2-960-light-signals",
+        "logical_size": [
+          960,
+          640
+        ],
+        "pixel_size": [
+          1920,
+          1280
+        ],
+        "device_pixel_ratio": 2.0
+      },
+      {
+        "page": "2-960-light-generation",
+        "logical_size": [
+          960,
+          640
+        ],
+        "pixel_size": [
+          1920,
+          1280
+        ],
+        "device_pixel_ratio": 2.0
+      },
+      {
+        "page": "2-960-light-log-open",
+        "logical_size": [
+          960,
+          640
+        ],
+        "pixel_size": [
+          1920,
+          1280
+        ],
+        "device_pixel_ratio": 2.0
+      },
+      {
+        "page": "2-960-light-settings",
+        "logical_size": [
+          960,
+          640
+        ],
+        "pixel_size": [
+          1920,
+          1280
+        ],
+        "device_pixel_ratio": 2.0
+      },
+      {
+        "page": "2-960-light-formatter",
+        "logical_size": [
+          960,
+          640
+        ],
+        "pixel_size": [
+          1920,
+          1280
+        ],
+        "device_pixel_ratio": 2.0
+      },
+      {
+        "page": "2-960-light-preview",
+        "logical_size": [
+          960,
+          640
+        ],
+        "pixel_size": [
+          1920,
+          1280
+        ],
+        "device_pixel_ratio": 2.0
+      },
+      {
+        "page": "2-960-light-docs-intro",
+        "logical_size": [
+          960,
+          640
+        ],
+        "pixel_size": [
+          1920,
+          1280
+        ],
+        "device_pixel_ratio": 2.0
+      },
+      {
+        "page": "2-960-light-docs-config",
+        "logical_size": [
+          960,
+          640
+        ],
+        "pixel_size": [
+          1920,
+          1280
+        ],
+        "device_pixel_ratio": 2.0
+      },
+      {
+        "page": "2-960-light-docs-generate",
+        "logical_size": [
+          960,
+          640
+        ],
+        "pixel_size": [
+          1920,
+          1280
+        ],
+        "device_pixel_ratio": 2.0
+      },
+      {
+        "page": "2-960-dark-controller",
+        "logical_size": [
+          960,
+          640
+        ],
+        "pixel_size": [
+          1920,
+          1280
+        ],
+        "device_pixel_ratio": 2.0
+      },
+      {
+        "page": "2-960-dark-lanes",
+        "logical_size": [
+          960,
+          640
+        ],
+        "pixel_size": [
+          1920,
+          1280
+        ],
+        "device_pixel_ratio": 2.0
+      },
+      {
+        "page": "2-960-dark-signals",
+        "logical_size": [
+          960,
+          640
+        ],
+        "pixel_size": [
+          1920,
+          1280
+        ],
+        "device_pixel_ratio": 2.0
+      },
+      {
+        "page": "2-960-dark-generation",
+        "logical_size": [
+          960,
+          640
+        ],
+        "pixel_size": [
+          1920,
+          1280
+        ],
+        "device_pixel_ratio": 2.0
+      },
+      {
+        "page": "2-960-dark-log-open",
+        "logical_size": [
+          960,
+          640
+        ],
+        "pixel_size": [
+          1920,
+          1280
+        ],
+        "device_pixel_ratio": 2.0
+      },
+      {
+        "page": "2-960-dark-settings",
+        "logical_size": [
+          960,
+          640
+        ],
+        "pixel_size": [
+          1920,
+          1280
+        ],
+        "device_pixel_ratio": 2.0
+      },
+      {
+        "page": "2-960-dark-formatter",
+        "logical_size": [
+          960,
+          640
+        ],
+        "pixel_size": [
+          1920,
+          1280
+        ],
+        "device_pixel_ratio": 2.0
+      },
+      {
+        "page": "2-960-dark-preview",
+        "logical_size": [
+          960,
+          640
+        ],
+        "pixel_size": [
+          1920,
+          1280
+        ],
+        "device_pixel_ratio": 2.0
+      },
+      {
+        "page": "2-960-dark-docs-intro",
+        "logical_size": [
+          960,
+          640
+        ],
+        "pixel_size": [
+          1920,
+          1280
+        ],
+        "device_pixel_ratio": 2.0
+      },
+      {
+        "page": "2-960-dark-docs-config",
+        "logical_size": [
+          960,
+          640
+        ],
+        "pixel_size": [
+          1920,
+          1280
+        ],
+        "device_pixel_ratio": 2.0
+      },
+      {
+        "page": "2-960-dark-docs-generate",
+        "logical_size": [
+          960,
+          640
+        ],
+        "pixel_size": [
+          1920,
+          1280
+        ],
+        "device_pixel_ratio": 2.0
+      },
+      {
+        "page": "2-1280-light-controller",
+        "logical_size": [
+          1280,
+          800
+        ],
+        "pixel_size": [
+          2560,
+          1600
+        ],
+        "device_pixel_ratio": 2.0
+      },
+      {
+        "page": "2-1280-light-lanes",
+        "logical_size": [
+          1280,
+          800
+        ],
+        "pixel_size": [
+          2560,
+          1600
+        ],
+        "device_pixel_ratio": 2.0
+      },
+      {
+        "page": "2-1280-light-signals",
+        "logical_size": [
+          1280,
+          800
+        ],
+        "pixel_size": [
+          2560,
+          1600
+        ],
+        "device_pixel_ratio": 2.0
+      },
+      {
+        "page": "2-1280-light-generation",
+        "logical_size": [
+          1280,
+          800
+        ],
+        "pixel_size": [
+          2560,
+          1600
+        ],
+        "device_pixel_ratio": 2.0
+      },
+      {
+        "page": "2-1280-light-log-open",
+        "logical_size": [
+          1280,
+          800
+        ],
+        "pixel_size": [
+          2560,
+          1600
+        ],
+        "device_pixel_ratio": 2.0
+      },
+      {
+        "page": "2-1280-light-settings",
+        "logical_size": [
+          1280,
+          800
+        ],
+        "pixel_size": [
+          2560,
+          1600
+        ],
+        "device_pixel_ratio": 2.0
+      },
+      {
+        "page": "2-1280-light-formatter",
+        "logical_size": [
+          1280,
+          800
+        ],
+        "pixel_size": [
+          2560,
+          1600
+        ],
+        "device_pixel_ratio": 2.0
+      },
+      {
+        "page": "2-1280-light-preview",
+        "logical_size": [
+          1280,
+          800
+        ],
+        "pixel_size": [
+          2560,
+          1600
+        ],
+        "device_pixel_ratio": 2.0
+      },
+      {
+        "page": "2-1280-light-docs-intro",
+        "logical_size": [
+          1280,
+          800
+        ],
+        "pixel_size": [
+          2560,
+          1600
+        ],
+        "device_pixel_ratio": 2.0
+      },
+      {
+        "page": "2-1280-light-docs-config",
+        "logical_size": [
+          1280,
+          800
+        ],
+        "pixel_size": [
+          2560,
+          1600
+        ],
+        "device_pixel_ratio": 2.0
+      },
+      {
+        "page": "2-1280-light-docs-generate",
+        "logical_size": [
+          1280,
+          800
+        ],
+        "pixel_size": [
+          2560,
+          1600
+        ],
+        "device_pixel_ratio": 2.0
+      },
+      {
+        "page": "2-1280-dark-controller",
+        "logical_size": [
+          1280,
+          800
+        ],
+        "pixel_size": [
+          2560,
+          1600
+        ],
+        "device_pixel_ratio": 2.0
+      },
+      {
+        "page": "2-1280-dark-lanes",
+        "logical_size": [
+          1280,
+          800
+        ],
+        "pixel_size": [
+          2560,
+          1600
+        ],
+        "device_pixel_ratio": 2.0
+      },
+      {
+        "page": "2-1280-dark-signals",
+        "logical_size": [
+          1280,
+          800
+        ],
+        "pixel_size": [
+          2560,
+          1600
+        ],
+        "device_pixel_ratio": 2.0
+      },
+      {
+        "page": "2-1280-dark-generation",
+        "logical_size": [
+          1280,
+          800
+        ],
+        "pixel_size": [
+          2560,
+          1600
+        ],
+        "device_pixel_ratio": 2.0
+      },
+      {
+        "page": "2-1280-dark-log-open",
+        "logical_size": [
+          1280,
+          800
+        ],
+        "pixel_size": [
+          2560,
+          1600
+        ],
+        "device_pixel_ratio": 2.0
+      },
+      {
+        "page": "2-1280-dark-settings",
+        "logical_size": [
+          1280,
+          800
+        ],
+        "pixel_size": [
+          2560,
+          1600
+        ],
+        "device_pixel_ratio": 2.0
+      },
+      {
+        "page": "2-1280-dark-formatter",
+        "logical_size": [
+          1280,
+          800
+        ],
+        "pixel_size": [
+          2560,
+          1600
+        ],
+        "device_pixel_ratio": 2.0
+      },
+      {
+        "page": "2-1280-dark-preview",
+        "logical_size": [
+          1280,
+          800
+        ],
+        "pixel_size": [
+          2560,
+          1600
+        ],
+        "device_pixel_ratio": 2.0
+      },
+      {
+        "page": "2-1280-dark-docs-intro",
+        "logical_size": [
+          1280,
+          800
+        ],
+        "pixel_size": [
+          2560,
+          1600
+        ],
+        "device_pixel_ratio": 2.0
+      },
+      {
+        "page": "2-1280-dark-docs-config",
+        "logical_size": [
+          1280,
+          800
+        ],
+        "pixel_size": [
+          2560,
+          1600
+        ],
+        "device_pixel_ratio": 2.0
+      },
+      {
+        "page": "2-1280-dark-docs-generate",
+        "logical_size": [
+          1280,
+          800
+        ],
+        "pixel_size": [
+          2560,
+          1600
+        ],
+        "device_pixel_ratio": 2.0
+      }
+    ]
+  }
+]

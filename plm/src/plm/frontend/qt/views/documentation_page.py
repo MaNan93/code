@@ -3,9 +3,11 @@ import re
 import unicodedata
 from PyQt5 import QtCore, QtGui, QtWidgets, sip
 from plm.frontend.qt.services.tasks import TaskRunner
+from plm.frontend.qt.widgets.document_browser import DocumentationBrowser
 from plm.frontend.qt.styles.tokens import get_theme_color
 from plm.frontend.qt.styles.tokens import (
     FONT_CODE_PRIMARY, FONT_WEIGHT_MEDIUM, FONT_SIZE_BODY,
+    FONT_SIZE_DOC_TITLE, FONT_SIZE_DOC_SECTION, FONT_SIZE_DOC_SUBSECTION,
 )
 from .secondary_page import SecondaryPage
 DOCS_DIR = Path(__file__).resolve().parents[3] / "docs"
@@ -23,7 +25,7 @@ class DocumentationPage(SecondaryPage):
         layout = QtWidgets.QVBoxLayout(content)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
-        self.doc_browser = QtWidgets.QTextBrowser()
+        self.doc_browser = DocumentationBrowser()
         self.doc_browser.setObjectName("DocumentationBrowser")
         self.doc_browser.setOpenExternalLinks(True)
         self.doc_browser.setSearchPaths([str(DOCS_DIR)])
@@ -42,8 +44,8 @@ class DocumentationPage(SecondaryPage):
         td {{ color: {text_main}; font-size: {body_size}px; font-weight: 400; padding: 8px 16px; }}
         """.format(
             text_main=get_theme_color("text_main"), bg_subtle=get_theme_color("bg_subtle"),
-            heading_size=FONT_SIZE_BODY,
-            subheading_size=FONT_SIZE_BODY,
+            heading_size=FONT_SIZE_DOC_TITLE,
+            subheading_size=FONT_SIZE_DOC_SECTION,
             body_size=FONT_SIZE_BODY,
             header_weight=FONT_WEIGHT_MEDIUM,
         )
@@ -201,12 +203,14 @@ class DocumentationPage(SecondaryPage):
                 heading_format.clearProperty(QtGui.QTextFormat.FontSizeAdjustment)
                 heading_format.setProperty(
                     QtGui.QTextFormat.FontPixelSize,
-                    FONT_SIZE_BODY,
+                    (FONT_SIZE_DOC_TITLE if heading_level == 1 else
+                     FONT_SIZE_DOC_SECTION if heading_level == 2 else FONT_SIZE_DOC_SUBSECTION),
                 )
                 heading_format.setFontWeight(QtGui.QFont.Bold)
                 cursor.setCharFormat(heading_format)
                 block_format.setTopMargin(16 if heading_level == 1 else 12)
                 block_format.setBottomMargin(8 if heading_level == 1 else 6)
+                block_format.setLeftMargin(12)
                 # BlockUnderCursor also selects the separator that ends the
                 # previous block; a block format set through that selection
                 # would restyle the previous paragraph as well.
@@ -259,6 +263,7 @@ class DocumentationPage(SecondaryPage):
                 cursor.select(QtGui.QTextCursor.BlockUnderCursor)
                 code_format = QtGui.QTextCharFormat()
                 code_format.setFontFamilies([FONT_CODE_PRIMARY, "Courier New", "monospace"])
+                code_format.setForeground(QtGui.QColor(get_theme_color("text_document_code")))
                 code_format.setProperty(
                     QtGui.QTextFormat.FontPixelSize, FONT_SIZE_BODY
                 )
@@ -268,15 +273,14 @@ class DocumentationPage(SecondaryPage):
                 fence = QtGui.QTextFormat.BlockCodeFence
                 first = not block.previous().blockFormat().property(fence)
                 last = not block.next().blockFormat().property(fence)
-                block_format.setBackground(QtGui.QColor(get_theme_color("bg_subtle")))
+                block_format.clearBackground()
                 block_format.setLeftMargin(12)
                 block_format.setRightMargin(12)
-                # Margins only around the whole fence: per-line margins show
-                # the page through as stripes between the lines.
-                block_format.setTopMargin(6 if first else 0)
-                block_format.setBottomMargin(6 if last else 0)
-                # Single height: the background is painted per text line, so
-                # extra leading would show through as stripes too.
+                # Reserve padding around the whole painted fence, keeping
+                # adjacent source lines together.
+                block_format.setTopMargin(10 if first else 0)
+                block_format.setBottomMargin(10 if last else 0)
+                # Keep the native glyph line height within the rounded box.
                 block_format.setLineHeight(0, QtGui.QTextBlockFormat.SingleHeight)
                 own.setBlockFormat(block_format)
             block = block.next()

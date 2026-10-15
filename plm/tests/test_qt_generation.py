@@ -486,9 +486,10 @@ class GenerationIntegrationTests(unittest.TestCase):
             blocks.append((block.text(), bool(block.blockFormat().property(QtGui.QTextFormat.BlockCodeFence)),
                            block.blockFormat().background().style() != QtCore.Qt.NoBrush))
             block = block.next()
-        # (text, is code, has background): no empty code tail, no shaded prose.
+        # The browser paints rounded code backgrounds beneath native text.
+        # Block brushes stay empty so they cannot cover the rounded corners.
         self.assertEqual(blocks, [
-            ("intro x:", False, False), ("one", True, True), ("two", True, True), ("after", False, False),
+            ("intro x:", False, False), ("one", True, False), ("two", True, False), ("after", False, False),
         ])
 
     def test_error_summary_names_the_first_error_and_jumps_to_it(self):

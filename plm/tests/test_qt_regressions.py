@@ -20,7 +20,7 @@ from plm.frontend.qt.main_window import MainWindow
 from plm.frontend.qt.services import ProjectService, SettingsStore
 from plm.frontend.qt.views.config_page import ConfigPage
 from plm.frontend.qt.views.documentation_page import DocumentationPage
-from plm.frontend.qt.styles.tokens import BG_SUBTLE, FONT_CODE_PRIMARY
+from plm.frontend.qt.styles.tokens import FONT_CODE_PRIMARY, get_theme_color
 from plm.frontend.qt.widgets.common import load_lucide_icon
 from plm.frontend.qt.widgets.lanegrid import LaneGrid
 from plm.frontend.qt.widgets.tables import _PaddedItemDelegate
@@ -158,7 +158,8 @@ class QtRegressionTests(unittest.TestCase):
             block = block.next()
         self.assertTrue(code_blocks)
         for block in code_blocks:
-            self.assertEqual(block.blockFormat().background().color().name().lower(), BG_SUBTLE.lower())
+            self.assertEqual(block.blockFormat().background().style(), QtCore.Qt.NoBrush)
+            self.assertEqual(block.charFormat().foreground().color().name(), get_theme_color("text_document_code").lower())
             self.assertGreater(block.blockFormat().leftMargin(), 0)
             self.assertGreater(block.blockFormat().rightMargin(), 0)
             self.assertIn(FONT_CODE_PRIMARY, block.charFormat().fontFamilies())

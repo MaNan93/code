@@ -100,14 +100,17 @@ QPushButton#ConfigGenerateButton {
 }
 /* The ID rule above outranks QPushButton:disabled; without this a disabled
    Generate button (no project, or generating) still looks clickable. */
+QPushButton#PrimaryBtn:disabled, QPushButton#SettingsPrimaryButton:disabled,
 QPushButton#ConfigGenerateButton:disabled {
     background-color: $bg_subtle;
     color: $text_muted;
 }
-QPushButton#PrimaryBtn:hover, QPushButton#SettingsPrimaryButton:hover,
-QPushButton#ConfigGenerateButton:hover {
+QPushButton#PrimaryBtn:hover:enabled, QPushButton#SettingsPrimaryButton:hover:enabled,
+QPushButton#ConfigGenerateButton:hover:enabled {
     background-color: $primary_hover;
 }
+QPushButton#PrimaryBtn:pressed:enabled, QPushButton#SettingsPrimaryButton:pressed:enabled,
+QPushButton#ConfigGenerateButton:pressed:enabled { background-color: $primary_active; }
 QPushButton#SettingsSecondaryButton, QPushButton#SettingsBrowseButton {
     background-color: $bg_subtle;
     border: none;
@@ -403,7 +406,9 @@ QWidget#ConfigCsvEditor QHeaderView::section:last { border-top-right-radius: $ra
 QWidget#ConfigCsvEditor QHeaderView::section {
     border: none;
     border-bottom: 1px solid $border;
+    border-right: 1px solid $border;
 }
+QWidget#ConfigCsvEditor QTableWidget::item { border-bottom: 1px solid $border; }
 QLabel#ConfigProjectStatus {
     background: transparent;
     border: none;

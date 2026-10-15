@@ -27,6 +27,8 @@ def worker(scale, screenshots, font_dir):
     QtWidgets.QApplication.setAttribute(QtCore.Qt.AA_UseHighDpiPixmaps, True)
     app = QtWidgets.QApplication([])
     app.setStyle("Fusion")
+    if not font_dir and os.name == "nt" and not QtGui.QFontDatabase().families():
+        font_dir = Path(os.environ.get("WINDIR", "C:/Windows")) / "Fonts"
     if font_dir:
         for name in ("segoeui.ttf", "consola.ttf", "msyh.ttc"):
             path = font_dir / name

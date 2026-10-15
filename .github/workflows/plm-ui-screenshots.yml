@@ -31,4 +31,4 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: plm-ui-screenshots
-          path: plm/ui-screenshots/*.png
+          path: plm/ui-screenshots/

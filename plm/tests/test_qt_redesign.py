@@ -124,6 +124,41 @@ class RedesignTests(unittest.TestCase):
         self.assertTrue(self.window.log_panel.isVisible())
         self.assertIn("test generation failure", self.window.log_panel.output.toPlainText())
 
+    def test_collapsed_log_clear_resets_summary_without_opening_panel(self):
+        window = self.window
+        window.log_panel.append_log("old output")
+        window.log_panel.set_status("生成完成：18 个文件")
+        self.assertIn("18", window.collapsed_log.text())
+        window.collapsed_log_clear.click()
+        self.assertEqual(window.log_panel.output.toPlainText(), "")
+        self.assertIn("就绪", window.collapsed_log.text())
+        self.assertTrue(window.collapsed_log.isVisible())
+        self.assertFalse(window.log_panel.isVisible())
+        window.show_log()
+        wait_for_idle(self.app)
+        self.assertFalse(window.collapsed_log_clear.isVisible())
+
+    def test_primary_pressed_and_disabled_hover_use_readable_colors(self):
+        window = self.window
+        window.config_page.tabs.setCurrentIndex(3)
+        button = window.config_page.generation_editor.generate_btn
+        for theme in ("light", "dark"):
+            window.apply_theme(theme)
+            button.setEnabled(True)
+            button.setDown(True)
+            self.app.processEvents()
+            picture = button.grab().toImage()
+            ratio = picture.devicePixelRatio()
+            self.assertEqual(picture.pixelColor(round(5 * ratio), round(button.height() / 2 * ratio)).name(),
+                             get_theme_color("primary_active").lower())
+            button.setDown(False)
+            button.setEnabled(False)
+            QtTest.QTest.mouseMove(button, button.rect().center())
+            self.app.processEvents()
+            picture = button.grab().toImage()
+            self.assertEqual(picture.pixelColor(round(5 * ratio), round(button.height() / 2 * ratio)).name(),
+                             get_theme_color("bg_subtle").lower())
+
     def test_log_animation_has_intermediate_frames_and_can_reverse_twice(self):
         window = self.window
         window.show_log()

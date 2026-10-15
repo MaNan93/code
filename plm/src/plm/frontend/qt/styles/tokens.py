@@ -42,6 +42,7 @@ DANGER_BG, DANGER, DANGER_TEXT = SEMANTIC_COLORS["danger"]
 # derived roles
 PRIMARY = P500
 PRIMARY_HOVER = P600
+PRIMARY_ACTIVE = P700
 PRIMARY_SOFT = P50
 PRIMARY_PRESSED = P100
 BG_MAIN = N0
@@ -58,15 +59,18 @@ BG_FOCUS = N100
 # GitHub Primer light surfaces and foregrounds for the source viewer.
 BG_ARTIFACTS = "#FFFFFF"
 DIFF_ADDED_BG = "#E6FFEC"
-DIFF_REMOVED_BG = "#FFEBE9"
+DIFF_REMOVED_BG = "#FFF1F0"
 DIFF_ADDED_GUTTER = "#CCFFD8"
-DIFF_REMOVED_GUTTER = "#FFD7D5"
+DIFF_REMOVED_GUTTER = "#FFDEDB"
 DIFF_HUNK_BG = "#DDF4FF"
 BG_ARTIFACTS_HEADER = BG_SUBTLE
 BORDER_ARTIFACTS = N200
 TEXT_ARTIFACTS = "#1F2328"
 TEXT_ARTIFACTS_MUTED = "#59636E"
 ACCENT_ARTIFACTS = "#0969DA"
+BG_DOCUMENT_CODE = "#182238"
+TEXT_DOCUMENT_CODE = "#E2E8F0"
+BORDER_DOCUMENT_CODE = "#334155"
 BORDER = N100
 # Outline of the top-level panels (config, output, settings, docs).
 BORDER_PANEL = N200
@@ -140,6 +144,9 @@ def scale_content_size(size):
 
 
 FONT_SIZE_BODY = 13
+FONT_SIZE_DOC_TITLE = 18
+FONT_SIZE_DOC_SECTION = 15
+FONT_SIZE_DOC_SUBSECTION = 14
 ICON_SIZE = 16
 ICON_GLYPH_SIZE = 16
 ICON_STROKE_WIDTH = 2
@@ -270,6 +277,7 @@ DARK_COLORS = {
     "bg_alternate": "#111A28", "bg_hover": "#253352",
     "bg_switch_hover": "#253352", "bg_focus": "#253352",
     "primary": "#4F46E5", "primary_hover": "#4338CA",
+    "primary_active": "#3730A3",
     "primary_soft": "#1E2238", "primary_pressed": "#30365C",
     "border": "#30363D", "border_panel": "#30363D",
     "border_hover": "#6E7681", "border_focus": "#818CF8",
@@ -281,9 +289,11 @@ DARK_COLORS = {
     "bg_artifacts": "#0D1117", "bg_artifacts_header": "#161B22",
     "border_artifacts": "#30363D", "text_artifacts": "#F0F6FC",
     "text_artifacts_muted": "#94A3B8", "accent_artifacts": "#79C0FF",
-    "diff_added_bg": "#12261E", "diff_removed_bg": "#301C23",
-    "diff_added_gutter": "#17392A", "diff_removed_gutter": "#48242C",
+    "diff_added_bg": "#12261E", "diff_removed_bg": "#3B1C1D",
+    "diff_added_gutter": "#17392A", "diff_removed_gutter": "#54272A",
     "diff_hunk_bg": "#172B42",
+    "bg_document_code": "#111827", "text_document_code": "#E2E8F0",
+    "border_document_code": "#334155",
     "syntax_comment": "#94A3B8", "syntax_keyword": "#FF7B72",
     "syntax_port": "#FFA657", "syntax_number": "#79C0FF",
     "syntax_string": "#A5D6FF", "syntax_directive": "#FF7B72",

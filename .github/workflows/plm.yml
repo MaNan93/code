@@ -24,9 +24,13 @@ jobs:
   test:
     if: github.ref != 'refs/heads/plm-ui-refactor'
     strategy:
+      fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest]
         python: ["3.9", "3.12"]
+        include:
+          - os: macos-latest
+            python: "3.12"
     runs-on: ${{ matrix.os }}
     defaults:
       run:
@@ -42,10 +46,18 @@ jobs:
           enable-cache: true
           cache-dependency-glob: uv.lock
       - if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y libgl1 libegl1
+        run: sudo apt-get update && sudo apt-get install -y libgl1 libegl1 fonts-noto-cjk fonts-roboto fonts-dejavu-core
       - run: uv sync --extra qt --locked
       - run: uv run python -m compileall -q src run.py tests
       - run: uv run python -m unittest discover -s tests -v
+      - name: Check both themes at four display scales
+        if: matrix.python == '3.12'
+        run: uv run python scripts/check_ui_scaling.py --output build/ui-scaling/report.json --screenshots build/ui-scaling/screenshots
+      - uses: actions/upload-artifact@v4
+        if: always() && matrix.python == '3.12'
+        with:
+          name: plm-ui-scaling-${{ matrix.os }}
+          path: plm/build/ui-scaling/
 
   rtl-sim:
     if: github.ref != 'refs/heads/plm-ui-refactor'
@@ -53,6 +65,8 @@ jobs:
     defaults:
       run:
         working-directory: plm
+    env:
+      PLM_RUN_RTL_SIM: "1"
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v10.2.0
@@ -63,7 +77,8 @@ jobs:
           cache-dependency-glob: uv.lock
       - run: sudo apt-get update && sudo apt-get install -y verilator
       - run: uv sync --locked
-      - run: PLM_RUN_RTL_SIM=1 uv run python -m unittest -v tests.test_dpr_phy_input
+      - run: uv run python -m unittest discover -s tests -p test_dpr_phy_input.py -v
+      - run: uv run python -m unittest discover -s tests -p test_perst_reset.py -v
 
   wheel:
     if: github.ref != 'refs/heads/plm-ui-refactor'

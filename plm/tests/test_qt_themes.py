@@ -61,7 +61,9 @@ class ThemePaletteTests(unittest.TestCase):
     def test_primary_semantic_tooltip_and_preview_contrast(self):
         for theme in (LIGHT_COLORS, DARK_COLORS):
             pairs = [("text_on_primary", "primary"), ("text_on_primary", "primary_hover"),
-                     ("text_primary", "primary_soft"), ("tooltip_text", "tooltip_bg")]
+                     ("text_on_primary", "primary_active"),
+                     ("text_primary", "primary_soft"), ("tooltip_text", "tooltip_bg"),
+                     ("text_document_code", "bg_document_code")]
             pairs += [(f"{role}_text", f"{role}_bg")
                       for role in ("info", "success", "warning", "danger")]
             pairs += [(role, surface) for role in ("text_artifacts", "text_artifacts_muted")

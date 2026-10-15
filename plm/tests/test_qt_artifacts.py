@@ -346,7 +346,7 @@ class ArtifactPreviewTests(unittest.TestCase):
         viewport_image = preview.viewport().grab().toImage()
         gutter_image = preview.line_numbers.grab().toImage()
         for prefix, background, gutter in (
-            ("-assign", "#ffebe9", "#ffd7d5"),
+            ("-assign", "#fff1f0", "#ffdedb"),
             ("+assign", "#e6ffec", "#ccffd8"),
             ("@@", "#ddf4ff", "#ddf4ff"),
         ):

@@ -425,7 +425,17 @@ class MainWindow(QtWidgets.QMainWindow):
         self.collapsed_log.setToolTip("展开输出日志；生成时会自动展开。")
         self.collapsed_log.clicked.connect(self.show_log)
         self.log_panel.statusChanged.connect(self.update_log_summary)
-        main_layout.addWidget(self.collapsed_log)
+        self.collapsed_log_bar = QtWidgets.QWidget()
+        self.collapsed_log_bar.setFixedHeight(LOG_COLLAPSED_HEIGHT)
+        collapsed_layout = QtWidgets.QHBoxLayout(self.collapsed_log_bar)
+        collapsed_layout.setContentsMargins(0, 0, 0, 0)
+        collapsed_layout.setSpacing(4)
+        collapsed_layout.addWidget(self.collapsed_log, 1)
+        self.collapsed_log_clear = make_icon_button(
+            "trash-2", "清空日志", "LogClearButton", ICON_BUTTON_SIZE, ICON_SIZE)
+        self.collapsed_log_clear.clicked.connect(self.log_panel.clear)
+        collapsed_layout.addWidget(self.collapsed_log_clear)
+        main_layout.addWidget(self.collapsed_log_bar)
         self.log_panel.hide()
         self._log_expanded = False
         self._log_animation = QtCore.QVariantAnimation(self)
@@ -667,7 +677,7 @@ class MainWindow(QtWidgets.QMainWindow):
         start = 0 if self.log_panel.isHidden() else self.content_splitter.sizes()[1]
         self._log_expanded = True
         total = sum(self.content_splitter.sizes())
-        self.collapsed_log.hide()
+        self.collapsed_log_bar.hide()
         self.log_panel.show()
         self.content_splitter.setStretchFactor(1, 0)
         bottom = min(max(140, self._log_sizes[1]), max(140, total // 2))
@@ -694,7 +704,7 @@ class MainWindow(QtWidgets.QMainWindow):
             self._log_sizes = self.content_splitter.sizes()
         else:
             self.log_panel.hide()
-            self.collapsed_log.show()
+            self.collapsed_log_bar.show()
 
     def toggle_log(self):
         if self._log_expanded:

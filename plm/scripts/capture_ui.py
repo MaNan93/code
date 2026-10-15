@@ -8,6 +8,7 @@ from pathlib import Path
 from unittest.mock import patch
 from PyQt5 import QtCore, QtGui, QtTest, QtWidgets
 from plm.core.workspace import scaffold_default_content
+from plm.core.verible import find_verible
 from plm.frontend.qt.controllers import AppController
 from plm.frontend.qt.main_window import MainWindow
 from plm.frontend.qt.services import SettingsStore
@@ -38,6 +39,16 @@ def shot(widget,name):
 def screen_shot(name):
     app.processEvents()
     app.primaryScreen().grabWindow(0).save(str(OUT/f"{name}.png"))
+
+
+def assert_formatter_preview(page):
+    preview = page.formatter_preview
+    if find_verible(page.verible_path_edit.text().strip() or None):
+        assert preview.status.text().startswith("预览已更新"), preview.status.text()
+        assert preview.result.toPlainText().strip()
+    else:
+        assert preview.status.text().startswith("无法预览"), preview.status.text()
+        assert not preview.result.toPlainText().strip()
 
 
 def prepare_capture(widget):
@@ -251,8 +262,7 @@ with tempfile.TemporaryDirectory(prefix="plm-ui-") as td:
             shot(w, "04-tools-numeric")
             page.formatter_mode.setCurrentIndex(1)
             shot(w, "04-settings-formatter-preview")
-            assert page.formatter_preview.status.text().startswith("预览已更新"), page.formatter_preview.status.text()
-            assert page.formatter_preview.result.toPlainText().strip()
+            assert_formatter_preview(page)
             page.formatter_mode.setCurrentIndex(0)
     w._close_secondary_page()
     w.on_open_docs(); app.processEvents()
@@ -304,7 +314,7 @@ with tempfile.TemporaryDirectory(prefix="plm-ui-") as td:
         shot(w, f"dark-settings-{name}")
     page.formatter_mode.setCurrentIndex(1)
     shot(w, "dark-settings-formatter-preview")
-    assert page.formatter_preview.status.text().startswith("预览已更新"), page.formatter_preview.status.text()
+    assert_formatter_preview(page)
     page.formatter_mode.setCurrentIndex(0)
     w.on_open_docs()
     for idx, name in enumerate(("getting-started", "configuration", "generation")):

@@ -1,0 +1,233 @@
+[
+  {
+    "file": "00-project-context-menu.png",
+    "title": "项目菜单",
+    "width": 184,
+    "height": 246,
+    "bytes": 7466
+  },
+  {
+    "file": "00-project-more-active.png",
+    "title": "项目菜单按钮",
+    "width": 236,
+    "height": 34,
+    "bytes": 1497
+  },
+  {
+    "file": "00-sidebar-collapsed.png",
+    "title": "侧边栏收起",
+    "width": 56,
+    "height": 708,
+    "bytes": 2373
+  },
+  {
+    "file": "01-controller-context-menu.png",
+    "title": "表格行菜单",
+    "width": 184,
+    "height": 138,
+    "bytes": 4635
+  },
+  {
+    "file": "01-controller.png",
+    "title": "Controller 控制器",
+    "width": 1280,
+    "height": 800,
+    "bytes": 42535
+  },
+  {
+    "file": "01-generation.png",
+    "title": "Generation 生成配置",
+    "width": 1280,
+    "height": 800,
+    "bytes": 58073
+  },
+  {
+    "file": "01-lane-mapping.png",
+    "title": "LaneMapping 通道映射",
+    "width": 1280,
+    "height": 800,
+    "bytes": 52360
+  },
+  {
+    "file": "01-signals.png",
+    "title": "Signals 信号配置",
+    "width": 1280,
+    "height": 800,
+    "bytes": 63163
+  },
+  {
+    "file": "02-main-with-log.png",
+    "title": "主界面 / 输出面板收起",
+    "width": 1280,
+    "height": 800,
+    "bytes": 46572
+  },
+  {
+    "file": "03-confirm-archive.png",
+    "title": "归档确认",
+    "width": 375,
+    "height": 127,
+    "bytes": 7024
+  },
+  {
+    "file": "03-confirm-delete.png",
+    "title": "删除确认",
+    "width": 297,
+    "height": 127,
+    "bytes": 6136
+  },
+  {
+    "file": "03-new-project.png",
+    "title": "新建项目",
+    "width": 540,
+    "height": 238,
+    "bytes": 10687
+  },
+  {
+    "file": "04-settings-editor-row.png",
+    "title": "默认编辑器设置",
+    "width": 924,
+    "height": 32,
+    "bytes": 3604
+  },
+  {
+    "file": "04-settings-formatter-defaults.png",
+    "title": "格式化选项菜单",
+    "width": 184,
+    "height": 174,
+    "bytes": 3368
+  },
+  {
+    "file": "04-settings-formatter.png",
+    "title": "设置 / 工具",
+    "width": 1280,
+    "height": 800,
+    "bytes": 56037
+  },
+  {
+    "file": "04-settings-general.png",
+    "title": "设置 / 通用",
+    "width": 1280,
+    "height": 800,
+    "bytes": 31075
+  },
+  {
+    "file": "04-tools-numeric.png",
+    "title": "格式化数值参数",
+    "width": 1280,
+    "height": 800,
+    "bytes": 55464
+  },
+  {
+    "file": "05-docs-configuration.png",
+    "title": "文档 / 配置文件",
+    "width": 1280,
+    "height": 800,
+    "bytes": 86776
+  },
+  {
+    "file": "05-docs-generation.png",
+    "title": "文档 / 生成命令",
+    "width": 1280,
+    "height": 800,
+    "bytes": 80584
+  },
+  {
+    "file": "05-docs-getting-started.png",
+    "title": "文档 / 使用入门",
+    "width": 1280,
+    "height": 800,
+    "bytes": 102742
+  },
+  {
+    "file": "06-artifacts-search.png",
+    "title": "生成结果 / 搜索",
+    "width": 1280,
+    "height": 800,
+    "bytes": 99670
+  },
+  {
+    "file": "07-artifacts-maximized.png",
+    "title": "生成结果 / 最大化",
+    "width": 1280,
+    "height": 800,
+    "bytes": 81016
+  },
+  {
+    "file": "08-artifacts-diff.png",
+    "title": "生成结果 / 差异",
+    "width": 1280,
+    "height": 800,
+    "bytes": 80204
+  },
+  {
+    "file": "dark-artifacts.png",
+    "title": "深色 / 生成结果",
+    "width": 1280,
+    "height": 800,
+    "bytes": 98295
+  },
+  {
+    "file": "dark-controller.png",
+    "title": "深色 / Controller",
+    "width": 1280,
+    "height": 800,
+    "bytes": 30791
+  },
+  {
+    "file": "dark-docs-configuration.png",
+    "title": "深色 / 文档 / 配置文件",
+    "width": 1280,
+    "height": 800,
+    "bytes": 85671
+  },
+  {
+    "file": "dark-docs-generation.png",
+    "title": "深色 / 文档 / 生成命令",
+    "width": 1280,
+    "height": 800,
+    "bytes": 79697
+  },
+  {
+    "file": "dark-docs-getting-started.png",
+    "title": "深色 / 文档 / 使用入门",
+    "width": 1280,
+    "height": 800,
+    "bytes": 100472
+  },
+  {
+    "file": "dark-generation.png",
+    "title": "深色 / Generation",
+    "width": 1280,
+    "height": 800,
+    "bytes": 46684
+  },
+  {
+    "file": "dark-lane-mapping.png",
+    "title": "深色 / LaneMapping",
+    "width": 1280,
+    "height": 800,
+    "bytes": 40745
+  },
+  {
+    "file": "dark-settings-formatter.png",
+    "title": "深色 / 设置 / 工具",
+    "width": 1280,
+    "height": 800,
+    "bytes": 55728
+  },
+  {
+    "file": "dark-settings-general.png",
+    "title": "深色 / 设置 / 通用",
+    "width": 1280,
+    "height": 800,
+    "bytes": 30914
+  },
+  {
+    "file": "dark-signals.png",
+    "title": "深色 / Signals",
+    "width": 1280,
+    "height": 800,
+    "bytes": 51459
+  }
+]

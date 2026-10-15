@@ -165,6 +165,49 @@ class LiveThemeTests(unittest.TestCase):
         raw.sync()
         self.assertEqual(SettingsStore(raw).theme(), "light")
 
+    def test_theme_switch_does_not_repeat_style_changes_for_every_ancestor(self):
+        self.window.on_open_settings()
+        wait_for_idle(self.app)
+        settings = self.window.view_stack.currentWidget()
+        settings.menu_buttons[1].click()
+        wait_for_idle(self.app)
+        numeric = settings._flag_controls["column_limit"]
+        numeric.setText("137")
+        numeric.selectAll()
+
+        class StyleChanges(QtCore.QObject):
+            count = 0
+
+            def eventFilter(self, watched, event):
+                if event.type() == QtCore.QEvent.StyleChange:
+                    self.count += 1
+                return False
+
+        counter = StyleChanges()
+        self.app.installEventFilter(counter)
+        try:
+            for theme in ("dark", "light"):
+                counter.count = 0
+                widget_count = len(self.app.allWidgets())
+                self.window.apply_theme(theme)
+                self.app.processEvents()
+                # Bound the real work, rather than asserting machine-specific
+                # milliseconds. A stylesheet replacement needs two style passes.
+                self.assertLess(counter.count, 4 * widget_count)
+                self.assertIs(settings._flag_controls["column_limit"], numeric)
+                self.assertEqual(numeric.text(), "137")
+                self.assertEqual(numeric.selectedText(), "137")
+        finally:
+            self.app.removeEventFilter(counter)
+
+    def test_theme_switch_preserves_disabled_updates(self):
+        self.window.setUpdatesEnabled(False)
+        try:
+            self.window.apply_theme("dark")
+            self.assertFalse(self.window.updatesEnabled())
+        finally:
+            self.window.setUpdatesEnabled(True)
+
     def test_artifact_files_without_workspace_root_survive_theme_switch(self):
         path = self.root / "outside.sv"
         path.write_text("module outside; endmodule", encoding="utf-8")

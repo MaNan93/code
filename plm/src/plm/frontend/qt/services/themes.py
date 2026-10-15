@@ -52,8 +52,24 @@ def apply_application_theme(theme):
         palette.setColor(role, QtGui.QColor(get_theme_color(color)))
     for role in (QtGui.QPalette.Text, QtGui.QPalette.WindowText, QtGui.QPalette.ButtonText):
         palette.setColor(QtGui.QPalette.Disabled, role, QtGui.QColor(get_theme_color("text_muted")))
-    app.setPalette(palette)
-    app.setStyleSheet(get_app_qss(theme))
+    qss = get_app_qss(theme)
+    # Qt 5's in-place stylesheet repolish starts from every cached widget and
+    # recursively visits its children again. Deep tables therefore receive a
+    # StyleChange for each ancestor, including repeated font/layout work.
+    # Replacing the stylesheet instead uses two flat style passes. Freeze native
+    # windows so the intervening unstyled state is never painted, and preserve
+    # windows whose updates were already disabled by their caller.
+    windows = [widget for widget in app.topLevelWidgets() if widget.updatesEnabled()]
+    try:
+        for widget in windows:
+            widget.setUpdatesEnabled(False)
+        if app.styleSheet():
+            app.setStyleSheet("")
+        app.setPalette(palette)
+        app.setStyleSheet(qss)
+    finally:
+        for widget in windows:
+            widget.setUpdatesEnabled(True)
     for setter, descriptor in icons:
         if descriptor:
             name, role, color, size, aligned = descriptor

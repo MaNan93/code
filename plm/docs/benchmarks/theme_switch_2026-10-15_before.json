@@ -1,0 +1,52 @@
+{
+  "environment": {
+    "os": "Windows-11-10.0.26300-SP0",
+    "python": "3.12.10",
+    "qt": "5.15.2",
+    "platform": "windows",
+    "window": "1280 x 800",
+    "device_pixel_ratio": 1.0
+  },
+  "metrics": {
+    "main": {
+      "widgets": 338,
+      "style_change_events": 4517,
+      "samples": 6,
+      "synchronous_median_ms": 397.738,
+      "rendered_median_ms": 412.71,
+      "rendered_max_ms": 429.256
+    },
+    "settings_general": {
+      "widgets": 370,
+      "style_change_events": 4853,
+      "samples": 6,
+      "synchronous_median_ms": 411.295,
+      "rendered_median_ms": 427.371,
+      "rendered_max_ms": 465.246
+    },
+    "settings_tools": {
+      "widgets": 674,
+      "style_change_events": 9118,
+      "samples": 6,
+      "synchronous_median_ms": 988.61,
+      "rendered_median_ms": 1029.143,
+      "rendered_max_ms": 1097.323
+    },
+    "general_after_tools": {
+      "widgets": 674,
+      "style_change_events": 9118,
+      "samples": 6,
+      "synchronous_median_ms": 985.313,
+      "rendered_median_ms": 1016.156,
+      "rendered_max_ms": 1102.624
+    },
+    "docs": {
+      "widgets": 355,
+      "style_change_events": 4676,
+      "samples": 6,
+      "synchronous_median_ms": 508.99,
+      "rendered_median_ms": 536.311,
+      "rendered_max_ms": 559.118
+    }
+  }
+}

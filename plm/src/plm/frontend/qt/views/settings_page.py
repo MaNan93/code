@@ -95,6 +95,7 @@ class SettingsPage(SecondaryPage):
             **(preferences or {}),
         }
         self.flag_table = None
+        self.formatter_preview = None
         self._flag_controls = {}
         self._formatter_groups = {
             **dict.fromkeys(VERIBLE_ALIGN_PARAMS, 0),
@@ -250,6 +251,7 @@ class SettingsPage(SecondaryPage):
         path_row = QtWidgets.QHBoxLayout()
         self.verible_path_edit = QtWidgets.QLineEdit(preferences["verible_path"])
         self.verible_path_edit.setPlaceholderText("留空自动搜索 verible-verilog-format")
+        self.verible_path_edit.textChanged.connect(self._sync_formatter_preview)
         path_row.addWidget(self.verible_path_edit, 1)
         browse_button = QtWidgets.QPushButton("浏览…")
         browse_button.setObjectName("SettingsSecondaryButton")
@@ -269,7 +271,36 @@ class SettingsPage(SecondaryPage):
         self.formatter_search.textChanged.connect(self._apply_formatter_filter)
         filters.addWidget(self.formatter_search, 1)
         layout.addLayout(filters)
+        self.formatter_mode = QtWidgets.QTabBar()
+        self.formatter_mode.setObjectName("FormatterMode")
+        self.formatter_mode.setExpanding(False)
+        self.formatter_mode.setDrawBase(False)
+        self.formatter_mode.setFixedHeight(CONTROL_HEIGHT)
+        self.formatter_mode.addTab("参数")
+        self.formatter_mode.addTab("效果预览")
+        self.formatter_mode.currentChanged.connect(self._show_formatter_mode)
+        layout.addWidget(self.formatter_mode)
+        self.formatter_stack = QtWidgets.QStackedWidget()
+        self.parameter_page = QtWidgets.QWidget()
+        parameter_layout = QtWidgets.QVBoxLayout(self.parameter_page)
+        parameter_layout.setContentsMargins(0, 0, 0, 0)
+        self.formatter_stack.addWidget(self.parameter_page)
+        layout.addWidget(self.formatter_stack, 1)
         return panel
+
+    def _show_formatter_mode(self, index):
+        if index == 1 and self.formatter_preview is None:
+            from .formatter_preview import FormatterPreview
+            self.formatter_preview = FormatterPreview()
+            self.formatter_stack.addWidget(self.formatter_preview)
+        self._sync_formatter_preview()
+        self.formatter_stack.setCurrentIndex(index)
+        self.formatter_group.setVisible(index == 0)
+        self.formatter_search.setVisible(index == 0)
+
+    def _sync_formatter_preview(self, *_):
+        if self.formatter_preview is not None:
+            self.formatter_preview.set_options(self.verible_path_edit.text().strip(), self._formatter_flags())
 
     def _apply_formatter_filter(self, *_):
         if self.flag_table is None:
@@ -362,7 +393,7 @@ class SettingsPage(SecondaryPage):
                 self.flag_table.setCellWidget(row, 1, value_cell)
                 self._flag_controls[name] = control
                 row += 1
-        self.formatter_panel.layout().addWidget(self.flag_table, 1)
+        self.parameter_page.layout().addWidget(self.flag_table, 1)
         self._fill_flags(self._original_flags)
         self.flag_table.applyRowHeight()
         formatter_header.setSectionResizeMode(1, QtWidgets.QHeaderView.ResizeToContents)
@@ -376,6 +407,7 @@ class SettingsPage(SecondaryPage):
 
     def _flags_changed(self, *_):
         self._flags_dirty = True
+        self._sync_formatter_preview()
 
     def _fill_flags(self, flags):
         values = dict(DEFAULT_VERIBLE_FLAGS)
@@ -395,6 +427,7 @@ class SettingsPage(SecondaryPage):
                 control.setText(value)
             control.blockSignals(False)
         self._flags_dirty = False
+        self._sync_formatter_preview()
 
     def _formatter_flags(self):
         if not self._flags_dirty:
@@ -470,6 +503,8 @@ class SettingsPage(SecondaryPage):
                 formatter_index = next((i for i, button in enumerate(self.menu_buttons)
                                         if button.text() == "工具"), 1)
                 self._select_section(formatter_index)
+                self.formatter_mode.setCurrentIndex(0)
+                self.formatter_search.setText(name)
                 row = list(self._flag_controls).index(name)
                 self.flag_table.scrollToItem(self.flag_table.item(row, 0))
                 control.setFocus(QtCore.Qt.OtherFocusReason)

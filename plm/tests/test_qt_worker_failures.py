@@ -1,7 +1,6 @@
 """Worker exceptions release keys, and the GUI entry point drains its pool."""
 
 import os
-import shutil
 import subprocess
 import sys
 import tempfile
@@ -129,11 +128,10 @@ gui.MainWindow = Window
 print("MAIN_RESULT", gui.main([]), flush=True)
 '''
         environment = dict(os.environ, QT_QPA_PLATFORM="offscreen", PYTHONNOUSERSITE="1")
-        environment.pop("PYTHONPATH", None)
         environment.pop("PYTHONHOME", None)
         with tempfile.TemporaryDirectory() as directory:
             result = subprocess.run(
-                [shutil.which("uv"), "run", "--no-project", "--python", sys.executable, "python", "-X", "faulthandler", "-c", script],
+                [sys.executable, "-X", "faulthandler", "-c", script],
                 cwd=directory, env=environment, capture_output=True, text=True, timeout=15,
             )
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)

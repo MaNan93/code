@@ -249,6 +249,11 @@ with tempfile.TemporaryDirectory(prefix="plm-ui-") as td:
             table_image = page.flag_table.viewport().grab().toImage()
             assert table_image.pixelColor(2, rect.top() + 1) == table_image.pixelColor(value_rect.left() + 2, rect.top() + 1)
             shot(w, "04-tools-numeric")
+            page.formatter_mode.setCurrentIndex(1)
+            shot(w, "04-settings-formatter-preview")
+            assert page.formatter_preview.status.text().startswith("预览已更新"), page.formatter_preview.status.text()
+            assert page.formatter_preview.result.toPlainText().strip()
+            page.formatter_mode.setCurrentIndex(0)
     w._close_secondary_page()
     w.on_open_docs(); app.processEvents()
     for idx,name in enumerate(("getting-started","configuration","generation")):
@@ -297,6 +302,10 @@ with tempfile.TemporaryDirectory(prefix="plm-ui-") as td:
     for idx, name in ((1, "indentation"), (2, "other")):
         page.formatter_group.setCurrentIndex(idx)
         shot(w, f"dark-settings-{name}")
+    page.formatter_mode.setCurrentIndex(1)
+    shot(w, "dark-settings-formatter-preview")
+    assert page.formatter_preview.status.text().startswith("预览已更新"), page.formatter_preview.status.text()
+    page.formatter_mode.setCurrentIndex(0)
     w.on_open_docs()
     for idx, name in enumerate(("getting-started", "configuration", "generation")):
         w.view_stack.currentWidget().menu_buttons[idx].click()

@@ -356,6 +356,7 @@ print("event loop survived")
             wait_for_idle(self.app)
             self.assertEqual(self.window.content_splitter.sizes()[1], 0)
         self.window.toggle_log()
+        wait_for_idle(self.app)
         self.assertGreater(self.window.content_splitter.sizes()[1], 0)
 
     def test_external_change_validation_is_debounced_without_modal_warning(self):

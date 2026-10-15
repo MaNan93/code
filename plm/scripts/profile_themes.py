@@ -90,11 +90,13 @@ def run(iterations, screenshots=None):
         if screenshots:
             screenshots.mkdir(parents=True, exist_ok=True)
         try:
-            for scenario in ("main", "settings_general", "settings_tools", "general_after_tools", "docs"):
+            for scenario in ("main", "settings_general", "settings_tools", "formatter_preview", "general_after_tools", "docs"):
                 if scenario == "settings_general":
                     window.on_open_settings()
                 elif scenario == "settings_tools":
                     window.view_stack.currentWidget().menu_buttons[1].click()
+                elif scenario == "formatter_preview":
+                    window.view_stack.currentWidget().formatter_mode.setCurrentIndex(1)
                 elif scenario == "general_after_tools":
                     window.view_stack.currentWidget().menu_buttons[0].click()
                 elif scenario == "docs":

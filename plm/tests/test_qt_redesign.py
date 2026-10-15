@@ -9,7 +9,7 @@ from unittest.mock import patch
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from PyQt5 import QtCore, QtWidgets
+from PyQt5 import QtCore, QtTest, QtWidgets
 from qt_test_support import dispose_new_widgets, isolate_host_formatter, preserve_application_state, wait_for_idle
 from sample_data import sample_config
 from test_qt_colors import luminance
@@ -123,6 +123,36 @@ class RedesignTests(unittest.TestCase):
             wait_for_idle(self.app)
         self.assertTrue(self.window.log_panel.isVisible())
         self.assertIn("test generation failure", self.window.log_panel.output.toPlainText())
+
+    def test_log_animation_has_intermediate_frames_and_can_reverse_twice(self):
+        window = self.window
+        window.show_log()
+        QtTest.QTest.qWait(70)
+        self.assertEqual(window._log_animation.state(), QtCore.QAbstractAnimation.Running)
+        self.assertGreater(window.content_splitter.sizes()[1], 0)
+        self.assertLess(window.content_splitter.sizes()[1], 200)
+        window.toggle_log()
+        QtTest.QTest.qWait(35)
+        window.toggle_log()
+        wait_for_idle(self.app)
+        self.assertTrue(window.log_panel.isVisible())
+        self.assertFalse(window.collapsed_log.isVisible())
+        self.assertAlmostEqual(window.content_splitter.sizes()[1], 200, delta=2)
+
+    def test_log_collapse_finishes_after_resize_and_retains_its_height(self):
+        window = self.window
+        window.show_log()
+        wait_for_idle(self.app)
+        window.content_splitter.setSizes([400, 170])
+        height = window.content_splitter.sizes()[1]
+        window.hide_log()
+        window.resize(960, 640)
+        wait_for_idle(self.app)
+        self.assertFalse(window.log_panel.isVisible())
+        self.assertTrue(window.collapsed_log.isVisible())
+        window.show_log()
+        wait_for_idle(self.app)
+        self.assertAlmostEqual(window.content_splitter.sizes()[1], height, delta=2)
 
     def test_project_path_and_small_window_document_container(self):
         path = str(self.controller.current_project.config_dir.parent)

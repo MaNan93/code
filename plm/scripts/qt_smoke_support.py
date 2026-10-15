@@ -14,7 +14,9 @@ def wait_for_idle(app, timeout=10):
         runners = [runner for widget in widgets for runner in widget.findChildren(TaskRunner)]
         timers = [timer for widget in widgets for timer in widget.findChildren(QtCore.QTimer)
                   if timer.isSingleShot() and timer.isActive()]
-        if not any(runner._tasks for runner in runners) and not timers:
+        animations = [animation for widget in widgets for animation in widget.findChildren(QtCore.QAbstractAnimation)
+                      if animation.state() == QtCore.QAbstractAnimation.Running]
+        if not any(runner._tasks for runner in runners) and not timers and not animations:
             return
         QtTest.QTest.qWait(5)
     raise AssertionError("GUI background work did not finish before the smoke-test timeout")

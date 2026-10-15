@@ -20,6 +20,7 @@ from plm.frontend.qt.styles.tokens import (
     TITLEBAR_BUTTON_WIDTH,
     RADIUS_WINDOW,
     LOG_COLLAPSED_HEIGHT,
+    PANEL_ANIMATION_DURATION,
 )
 from plm.frontend.qt.views.config_page import ConfigPage
 from plm.frontend.qt.views.log_panel import LogPanel
@@ -426,6 +427,14 @@ class MainWindow(QtWidgets.QMainWindow):
         self.log_panel.statusChanged.connect(self.update_log_summary)
         main_layout.addWidget(self.collapsed_log)
         self.log_panel.hide()
+        self._log_expanded = False
+        self._log_animation = QtCore.QVariantAnimation(self)
+        self._log_animation.setDuration(PANEL_ANIMATION_DURATION)
+        self._log_animation.setEasingCurve(QtCore.QEasingCurve.InOutCubic)
+        self._log_animation.valueChanged.connect(self._set_log_extent)
+        self._log_animation.finished.connect(self._finish_log_animation)
+        self.log_panel.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Ignored)
+        self.log_panel.layout().setSizeConstraint(QtWidgets.QLayout.SetNoConstraint)
 
         self.view_stack = QtWidgets.QStackedWidget(self.body_container)
         self.view_stack.setObjectName("ViewStack")
@@ -652,29 +661,63 @@ class MainWindow(QtWidgets.QMainWindow):
         self.collapsed_log.setToolTip(text or "展开输出日志")
 
     def show_log(self):
-        if not self.log_panel.isHidden():
+        if self._log_expanded:
             return
+        self._log_animation.stop()
+        start = 0 if self.log_panel.isHidden() else self.content_splitter.sizes()[1]
+        self._log_expanded = True
         total = sum(self.content_splitter.sizes())
         self.collapsed_log.hide()
         self.log_panel.show()
         self.content_splitter.setStretchFactor(1, 0)
         bottom = min(max(140, self._log_sizes[1]), max(140, total // 2))
-        self.content_splitter.setSizes([max(1, total - bottom), bottom])
+        self._animate_log(start, bottom)
+
+    def _set_log_extent(self, value):
+        total = sum(self.content_splitter.sizes())
+        extent = max(0, min(round(value), total))
+        self.content_splitter.setSizes([max(1, total - extent), extent])
+
+    def _animate_log(self, start, end):
+        self.main_container.layout().activate()
+        self._log_animation.setStartValue(start)
+        self._log_animation.setEndValue(end)
+        self._set_log_extent(start)
+        if not self.isVisible() or start == end:
+            self._set_log_extent(end)
+            self._finish_log_animation()
+        else:
+            self._log_animation.start()
+
+    def _finish_log_animation(self):
+        if self._log_expanded:
+            self._log_sizes = self.content_splitter.sizes()
+        else:
+            self.log_panel.hide()
+            self.collapsed_log.show()
 
     def toggle_log(self):
-        if not self.log_panel.isHidden():
+        if self._log_expanded:
             self.hide_log()
         else:
             self.show_log()
 
     def hide_log(self):
+        if not self._log_expanded:
+            return
         sizes = self.content_splitter.sizes()
         self.content_splitter.setStretchFactor(1, 0)
-        if sizes[1] > 0:
+        if self._log_animation.state() == QtCore.QAbstractAnimation.Running:
+            # A reversal keeps the intended open height rather than storing
+            # whichever partial frame happened to be on screen.
+            if self._log_expanded:
+                self._log_sizes[1] = round(self._log_animation.endValue())
+        elif sizes[1] > 0:
             self._log_sizes = sizes
-        # Collapsing to height zero leaves the splitter handle in the layout.
-        self.log_panel.hide()
-        self.collapsed_log.show()
+        self._log_animation.stop()
+        self._log_expanded = False
+        self._animate_log(sizes[1], 0)
+
     def on_save(self):
         self.nav_panel.set_active(None)
         self.controller.save_current()

@@ -451,6 +451,13 @@ QGroupBox#FormCard QLabel#SettingsDescription { font-size: 12px; }
 QGroupBox#FormCard QCheckBox,
 QGroupBox#FormCard QFrame#SettingsRow,
 QGroupBox#FormCard QWidget#SettingsEditorControl { background: transparent; }
+QTabBar#FormatterMode::tab {
+    background: transparent;
+    color: $text_sub;
+    padding: 4px 12px;
+    border-bottom: 2px solid transparent;
+}
+QTabBar#FormatterMode::tab:selected { color: $text_primary; border-bottom-color: $primary; }
 QTableWidget#laneGrid {
     background-color: $bg_surface;
     selection-background-color: $primary_soft;

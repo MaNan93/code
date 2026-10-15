@@ -228,7 +228,7 @@ def _cache_format(key, formatted):
             _FORMAT_CACHE_BYTES -= removed_size
 
 
-def format_sv(text, verible_path=None, verible_flags=None, *, cache=False):
+def format_sv(text, verible_path=None, verible_flags=None, *, cache=False, strict=False, timeout=10):
     """Best-effort auto-format via verible-verilog-format, if it can be found.
 
     The generators build .sv content as hand-typed Python string literals,
@@ -255,9 +255,14 @@ def format_sv(text, verible_path=None, verible_flags=None, *, cache=False):
     the uncached behavior. A missing or failing tool is always retried, and
     output is cached only after the whitespace and token checks pass. Script
     wrappers cannot identify their downstream binary and remain uncached.
+
+    ``strict=True`` reports missing tools, process failures and invalid output
+    to interactive previews. Generator callers retain best-effort fallback.
     """
     exe = find_verible(verible_path)
     if exe is None:
+        if strict:
+            raise OSError("未找到 Verible，请先选择格式化工具。")
         return text
     flags = DEFAULT_VERIBLE_FLAGS if verible_flags is None else verible_flags
     source = text.encode("utf-8")
@@ -282,7 +287,10 @@ def format_sv(text, verible_path=None, verible_flags=None, *, cache=False):
         # internal "formatted output doesn't match input" self-check on
         # those injected \r's and returns the input unformatted. Encoding
         # ourselves sends exactly the bytes we mean to send.
-        r = subprocess.run(args, input=source, capture_output=True, timeout=10)
+        r = subprocess.run(args, input=source, capture_output=True, timeout=timeout)
+        if strict and r.returncode != 0:
+            detail = r.stderr.decode("utf-8", errors="replace").strip()
+            raise ValueError(detail or f"Verible 返回错误状态 {r.returncode}。")
         if r.returncode == 0 and r.stdout:
             formatted = r.stdout.decode("utf-8")
             # Formatting must only touch whitespace -- the token stream has
@@ -294,13 +302,17 @@ def format_sv(text, verible_path=None, verible_flags=None, *, cache=False):
             # corrupted RTL. Comparing token streams catches that (and any
             # other misbehavior) before it can reach disk.
             same_whitespace = "".join(formatted.split()) == "".join(text.split())
-            same_tokens = not cache or _format_tokens(formatted) == _format_tokens(text)
+            same_tokens = not (cache or strict) or _format_tokens(formatted) == _format_tokens(text)
             if same_whitespace and same_tokens:
                 # A replaced executable must not poison the old binary's
                 # cache entry with the new binary's output.
                 if cache_key is not None and cache_key == _format_cache_key(source, exe, flags):
                     _cache_format(cache_key, formatted)
                 return formatted
+        if strict:
+            raise ValueError("Verible 返回了空内容或改变了源代码标记，无法显示预览。")
     except (OSError, subprocess.SubprocessError, UnicodeError):
+        if strict:
+            raise
         pass
     return text

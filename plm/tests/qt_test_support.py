@@ -106,7 +106,9 @@ def wait_for_idle(app, timeout=10000):
             timer for widget in widgets for timer in widget.findChildren(QtCore.QTimer)
             if timer.isSingleShot() and timer.isActive()
         ]
-        if not any(runner._tasks for runner in runners) and not timers:
+        animations = [animation for widget in widgets for animation in widget.findChildren(QtCore.QAbstractAnimation)
+                      if animation.state() == QtCore.QAbstractAnimation.Running]
+        if not any(runner._tasks for runner in runners) and not timers and not animations:
             return
         QtTest.QTest.qWait(5)
     raise AssertionError("Qt workers or debounced callbacks did not finish within 10 seconds")

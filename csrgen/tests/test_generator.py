@@ -250,19 +250,23 @@ def test_same_named_script_does_not_shadow_package(table, tmp_path, mode):
         cwd=root, capture_output=True, text=True,
     )
     assert result.returncode == 0, result.stderr
-    assert "module apb_csr" in output.read_text()
+    assert f"module {table.stem} #(" in output.read_text()
 
 
 @pytest.mark.parametrize("options,filename,module", [
-    ([], "apb_csr.sv", "apb_csr"),
-    (["--module-prefix", "device"], "apb_csr.sv", "device_apb_csr"),
-    (["--file-prefix", "rtl"], "rtl_apb_csr.sv", "apb_csr"),
-    (["--module-prefix", "device", "--file-prefix", "rtl"], "rtl_apb_csr.sv", "device_apb_csr"),
-    (["--module", "custom_csr"], "custom_csr.sv", "custom_csr"),
+    ([], "apb_csr_common.sv", "apb_csr_common"),
+    (["--module-prefix", "AAA"], "apb_csr_common.sv", "AAA_apb_csr_common"),
+    (["--file-prefix", "rtl"], "rtl_apb_csr_common.sv", "apb_csr_common"),
+    (["--module-prefix", "AAA", "--file-prefix", "rtl"], "rtl_apb_csr_common.sv", "AAA_apb_csr_common"),
+    (["--module", "ccc"], "apb_csr_common.sv", "ccc"),
+    (["--module", "ccc", "--module-prefix", "AAA"], "apb_csr_common.sv", "AAA_ccc"),
+    (["--module", "ccc", "--module-prefix", "AAA", "--file-prefix", "rtl"], "rtl_apb_csr_common.sv", "AAA_ccc"),
 ])
 def test_output_names_are_independent(table, tmp_path, monkeypatch, options, filename, module):
     monkeypatch.chdir(tmp_path)
-    assert main([str(table), *options]) == 0
+    source = tmp_path / "apb_csr_common.xlsx"
+    source.write_bytes(table.read_bytes())
+    assert main([str(source), *options]) == 0
     outputs = list(tmp_path.glob("*.sv"))
     assert [output.name for output in outputs] == [filename]
     assert f"module {module} #(" in outputs[0].read_text()

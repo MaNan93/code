@@ -4,24 +4,26 @@ from dataclasses import dataclass, field
 from .formatter import format_rtl
 from .layout import TableLayout, map_rows
 from .models import Register
+from .naming import resolve_module_name
 from .parser import parse_registers
 from .quality import review_rtl
 from .reader import ReadOptions, read_table, read_xlsx_table
 from .rtl import generate_rtl
 from .tooling import ToolReport
-from .validation import validate_aw, validate_identifier
+from .validation import validate_aw
 
 
 @dataclass(frozen=True)
 class GenerationOptions:
     read: ReadOptions = field(default_factory=ReadOptions)
     layout: TableLayout = field(default_factory=TableLayout)
-    module: str = "apb_csr"
+    module: str | None = None
     aw: int = 16
     lint: bool = False
     format: bool = False
     lint_tool: str = "verilator"
     format_tool: str = "verible-verilog-format"
+    module_prefix: str | None = None
 
 
 @dataclass(frozen=True)
@@ -41,15 +43,15 @@ def read_xlsx(path, sheet="sheet1", aw=16, *, layout=None):
 def run_pipeline(path, options=None, *, readers=None):
     options = options or GenerationOptions()
     validate_aw(options.aw)
-    validate_identifier(options.module, "module name")
+    module = resolve_module_name(path, options.module, options.module_prefix)
     table = read_table(path, options.read, readers=readers)
     registers = parse_registers(map_rows(table, options.layout), aw=options.aw)
-    rtl = generate_rtl(registers, module=options.module, aw=options.aw)
+    rtl = generate_rtl(registers, module=module, aw=options.aw)
     reviews = []
     if options.lint:
-        reviews.append(review_rtl(rtl, options.module, options.lint_tool))
+        reviews.append(review_rtl(rtl, module, options.lint_tool))
     if options.format:
         rtl = format_rtl(rtl, options.format_tool)
         if options.lint:
-            reviews.append(review_rtl(rtl, options.module, options.lint_tool))
+            reviews.append(review_rtl(rtl, module, options.lint_tool))
     return GenerationResult(registers, rtl, tuple(reviews))

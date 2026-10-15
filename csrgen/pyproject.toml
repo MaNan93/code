@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "csrgen"
-version = "0.1.15"
+version = "0.1.17"
 description = "Generate synthesizable APB3 register RTL from an XLSX field table"
 requires-python = ">=3.10"
 dependencies = ["openpyxl>=3.1,<4"]

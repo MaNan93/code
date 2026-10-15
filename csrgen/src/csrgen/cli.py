@@ -10,6 +10,7 @@ from openpyxl.utils.exceptions import InvalidFileException
 
 from .diagnostics import NumericCellWarning, ReservedFieldWarning, TableError
 from .layout import layout_from_overrides
+from .naming import resolve_output_path
 from .pipeline import GenerationOptions, run_pipeline
 from .reader import ReadOptions
 
@@ -59,12 +60,11 @@ def main(argv=None):
     parser.add_argument("--lint-tool", default="verilator", help="Verilator executable name or path")
     parser.add_argument("--format", action="store_true", help="format RTL with Verible before writing output")
     parser.add_argument("--format-tool", default="verible-verilog-format", help="Verible formatter executable name or path")
-    module_group = parser.add_mutually_exclusive_group()
-    module_group.add_argument("--module", "-m", help="explicit RTL module name (default: apb_csr)")
-    module_group.add_argument("--module-prefix", help="module name: <prefix>_apb_csr; does not change the filename")
+    parser.add_argument("--module", "-m", help="base RTL module name (default: input filename stem)")
+    parser.add_argument("--module-prefix", help="prepend <prefix>_ to the base module name; does not change the filename")
     output_group = parser.add_mutually_exclusive_group()
-    output_group.add_argument("--output", "-o", type=Path, help="explicit output file (default: ./apb_csr.sv)")
-    output_group.add_argument("--file-prefix", help="filename: <prefix>_apb_csr.sv; does not change the module name")
+    output_group.add_argument("--output", "-o", type=Path, help="output filename and path (default: ./<input-stem>.sv)")
+    output_group.add_argument("--file-prefix", help="filename: <prefix>_<input-stem>.sv; does not change the module name")
     parser.add_argument("--template", type=Path, metavar="XLSX", help="create an example XLSX table and exit")
     args = parser.parse_args(argv)
     if args.template and args.xlsx:
@@ -76,23 +76,11 @@ def main(argv=None):
             write_template(args.template)
             print(f"Created template: {args.template.resolve()}")
             return 0
-        module = args.module or "apb_csr"
-        if args.module_prefix is not None:
-            if not args.module_prefix:
-                raise TableError("module prefix must not be empty")
-            module = f"{args.module_prefix}_apb_csr"
-        filename = f"{args.module or 'apb_csr'}.sv"
-        if args.file_prefix is not None:
-            if not args.file_prefix or any(ord(ch) < 32 or ch in '<>:"/\\|?*' for ch in args.file_prefix):
-                raise TableError("file prefix must be nonempty and contain no path separators or invalid filename characters")
-            filename = f"{args.file_prefix}_apb_csr.sv"
-        output = args.output or Path(filename)
-        if output.resolve() == args.xlsx.resolve():
-            raise TableError("output must not overwrite the input XLSX")
+        output = resolve_output_path(args.xlsx, args.output, args.file_prefix)
         options = GenerationOptions(
             read=ReadOptions(sheet=args.sheet),
             layout=layout_from_overrides(args.header_rows, args.column),
-            module=module, aw=args.aw,
+            module=args.module, module_prefix=args.module_prefix, aw=args.aw,
             lint=args.lint, format=args.format,
             lint_tool=args.lint_tool, format_tool=args.format_tool,
         )

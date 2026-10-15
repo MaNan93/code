@@ -1,6 +1,6 @@
 # csrgen 分层架构
 
-入口 `csrgen.py` 只负责加载包并调用 CLI；业务处理由 `pipeline.py` 组织。默认 XLSX 模板、APB3 行为及生成的 RTL 文本保持兼容。
+入口 `csrgen.py` 只负责加载包并调用 CLI；业务处理由 `pipeline.py` 组织。XLSX 模板和 APB3 行为保持兼容；CLI 和完整流程默认按输入文件主名命名模块，显式指定旧模块名时生成的 RTL 文本保持一致。
 
 数据契约、寄存器规范、APB 时序、诊断及发布设计见 [设计文档](DESIGN.md)。
 
@@ -13,7 +13,7 @@
 | 5. 代码质量审查 | `quality.py` | RTL 字符串 → `ToolReport` | 使用真实 Verilator 检查语法、类型和工具能诊断的 RTL 问题 |
 | 6. 可选格式化 | `formatter.py` | RTL 字符串 → 格式化字符串 | 调用 Verible，不参与寄存器内容解析 |
 
-`models.py` 定义寄存器模型，`diagnostics.py` 定义共享异常和警告，`tooling.py` 管理外部工具与临时文件。`generator.py` 保留旧导入路径，只作为兼容入口。
+`models.py` 定义寄存器模型，`diagnostics.py` 定义共享异常和警告，`tooling.py` 管理外部工具与临时文件，`naming.py` 独立处理模块命名和输出路径。`generator.py` 保留旧导入路径，只作为兼容入口。
 
 ## 执行顺序
 
@@ -76,6 +76,8 @@ print(result.rtl)
 ```
 
 `run_pipeline()` 返回寄存器模型、最终 RTL 和审查报告，不写输出文件；CLI 负责文件名、模块名前缀、告警显示及最终写入。
+
+`GenerationOptions.module` 默认为 None，使用输入文件主名；`module_prefix` 可在推导名或显式基础名前加前缀。例如 `GenerationOptions(module="ccc", module_prefix="AAA")` 生成 `AAA_ccc`。模块名不影响 CLI 默认输出文件名，文件名始终取输入主名，除非用 `--output` 或 `--file-prefix` 覆盖。没有文件上下文的 `generate_rtl(registers)` 仍默认生成 `apb_csr`。
 
 ## 后续扩展 CSV
 

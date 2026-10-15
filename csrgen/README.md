@@ -5,7 +5,7 @@
 仅依赖 `openpyxl>=3.1,<4`，兼容你已有的 **openpyxl 3.1.5**；不使用 xlrd、xlwt。
 Python 版本要求 3.10 或更高。
 
-逐版本的改动、历史行为差异和升级说明见 [Release Notes](RELEASE_NOTES.md)，当前版本为 0.1.15。模块职责见 [分层架构](docs/ARCHITECTURE.md)，数据契约、时序和扩展方案见 [设计文档](docs/DESIGN.md)。
+逐版本的改动、历史行为差异和升级说明见 [Release Notes](RELEASE_NOTES.md)，当前版本为 0.1.17。模块职责见 [分层架构](docs/ARCHITECTURE.md)，数据契约、时序和扩展方案见 [设计文档](docs/DESIGN.md)。
 
 ## 直接运行
 
@@ -13,7 +13,7 @@ Python 版本要求 3.10 或更高。
 
 ```powershell
 cd D:\Users\man\Desktop\code\csrgen
-python csrgen.py .\examples\registers.xlsx -o .\generated\apb_csr.sv
+python csrgen.py .\examples\registers.xlsx --module apb_csr -o .\generated\apb_csr.sv
 ```
 
 指定 sheet、地址位宽、模块名和输出路径：
@@ -22,26 +22,32 @@ python csrgen.py .\examples\registers.xlsx -o .\generated\apb_csr.sv
 python csrgen.py .\input.xlsx --sheet sheet1 --aw 20 --module device_csr -o .\generated\device_csr.sv
 ```
 
-默认 `--sheet sheet1`、`--aw 16`，模块名为 `apb_csr`；输出到当前工作目录的 `apb_csr.sv`。
+默认 `--sheet sheet1`、`--aw 16`。模块名和输出文件名取输入文件的主名：输入 `apb_csr_common.xlsx`，生成模块 `apb_csr_common`，输出到当前工作目录的 `apb_csr_common.sv`。
 
 模块名前缀和文件名前缀分别设置，互不影响：
 
 ```powershell
-python csrgen.py input.xlsx --module-prefix device --file-prefix rtl
+python csrgen.py apb_csr_common.xlsx --module-prefix AAA --file-prefix rtl
 ```
 
-上例输出 `rtl_apb_csr.sv`，文件内模块名为 `device_apb_csr`。
+上例输出 `rtl_apb_csr_common.sv`，文件内模块名为 `AAA_apb_csr_common`。
 
 | 参数 | 模块名 | 文件名 |
 | --- | --- | --- |
-| 不指定前缀 | `apb_csr` | `apb_csr.sv` |
-| `--module-prefix device` | `device_apb_csr` | `apb_csr.sv` |
-| `--file-prefix rtl` | `apb_csr` | `rtl_apb_csr.sv` |
-| 两者都指定 | `device_apb_csr` | `rtl_apb_csr.sv` |
+| 不指定名称或前缀 | `apb_csr_common` | `apb_csr_common.sv` |
+| `--module-prefix AAA` | `AAA_apb_csr_common` | `apb_csr_common.sv` |
+| `--module ccc` | `ccc` | `apb_csr_common.sv` |
+| `--module ccc --module-prefix AAA` | `AAA_ccc` | `apb_csr_common.sv` |
+| `--file-prefix rtl` | `apb_csr_common` | `rtl_apb_csr_common.sv` |
+| `--module ccc --module-prefix AAA -o ../abc.sv` | `AAA_ccc` | `../abc.sv` |
 
-前缀与 `apb_csr` 之间自动加一个 `_`。模块名必须是合法 Verilog 标识符；文件名前缀不能包含路径分隔符或非法文件名字符。
-已有的 `--module/-m` 和 `--output/-o` 仍可指定完整名称；`--module` 与 `--module-prefix` 互斥，`--output` 与 `--file-prefix` 互斥。
-指定完整 `--module` 且未指定输出名或文件前缀时，默认文件名仍与该完整模块名一致。
+上表均以输入 `apb_csr_common.xlsx` 为例。`--module/-m` 指定模块基础名，`--module-prefix` 在基础名前加前缀及 `_`，两者可以组合，不影响默认文件名。`--output/-o` 单独指定文件名及完整或相对路径；相对路径以当前工作目录为基准，缺少的目录会自动创建。`--file-prefix` 只给输入主名生成的文件名加前缀，与 `--output` 互斥。
+
+```powershell
+python csrgen.py apb_csr_common.xlsx --module ccc --module-prefix AAA -o ../abc.sv
+```
+
+最终模块名必须是合法 Verilog 标识符。输入主名含空格、连字符、以数字开头或是关键字且不能构成合法最终模块名时，请用 `--module` 覆盖；工具不自动改写名称。文件名前缀不能包含路径分隔符或非法文件名字符。
 
 `--aw` 设置生成 RTL 的默认参数值，并检查表中的地址是否能用该位宽表示。支持 2～32 bit。
 实例化 RTL 时仍可覆盖 `AW`，但须能容纳表中的所有地址。地址宽度和表格地址在 Python 生成阶段检查；RTL 不包含 `initial` 参数检查段或 `synthesis translate_off/on` 指令。
@@ -57,7 +63,7 @@ python csrgen.py --template .\examples\registers.xlsx
 
 ```powershell
 python -m pip install -e .
-csrgen input.xlsx --sheet sheet1 --aw 16 -o apb_csr.sv
+csrgen apb_csr_common.xlsx --sheet sheet1 --aw 16 -o apb_csr_common.sv
 ```
 
 ## Excel 格式
@@ -78,7 +84,7 @@ csrgen input.xlsx --sheet sheet1 --aw 16 -o apb_csr.sv
 无 header 的文件使用 `--header-rows 0`，有两行标题/header 时使用 `--header-rows 2`。列位置可重复指定 `--column FIELD=COLUMN`，FIELD 为 `offset`、`signal`、`reset`、`bit`、`access` 或 `description`，COLUMN 为 Excel 列字母或从 1 开始的数字。例如数据位于 A:E 且没有 header：
 
 ```powershell
-csrgen input.xlsx --header-rows 0 --column offset=A --column signal=B --column reset=C --column bit=D --column access=E --column description=none
+csrgen apb_csr_common.xlsx --header-rows 0 --column offset=A --column signal=B --column reset=C --column bit=D --column access=E --column description=none
 ```
 
 必需字段不能缺列，多个字段不能映射到同一列；缺少 header 时需要显式指定 0，不自动根据内容猜测。内置读入目前仍仅支持 XLSX，CSV 适配器及编码配置接口预留在文件读入层。
@@ -162,7 +168,7 @@ assign csr_read  = psel && !penable && !pwrite && csr_addr_hit;
 生成时可选用 Verilator 审查代码、Verible 格式化代码：
 
 ```powershell
-csrgen input.xlsx --lint --format -o apb_csr.sv
+csrgen apb_csr_common.xlsx --lint --format -o apb_csr_common.sv
 ```
 
 两个选项默认关闭。启用时需要对应工具在 PATH 中，也可用 `--lint-tool`、`--format-tool` 指定可执行文件的路径。同时启用时，会在格式化前后分别审查；任何工具失败会报错，退出码为 2，不覆盖已有输出。格式化只改变代码排版，寄存器行为仍由下面的仿真检查。
@@ -193,7 +199,7 @@ verilator --binary --timing --top-module tb_apb_csr --Mdir build/rtl_sim -Wno-TI
 .\build\rtl_sim\Vtb_apb_csr.exe
 ```
 
-当前验证结果：92 项 Python 测试通过，其中包含默认输出逐字兼容、无 header、列映射、自定义读入适配器、工具失败保护及真实审查/格式化流程。未安装外部 RTL 工具时，相关集成测试会跳过；普通生成无需这些工具。RTL 在 `AW=3/16/24/32` 的语法检查通过；行为仿真输出 `PASS`。仿真还验证读数据只在时钟沿变化、SETUP 采样、ACCESS 保持、未命中读地址保持当前值及外部 RO 变化不会影响已采样读响应。
+当前验证结果：108 项 Python 测试通过，其中包含显式模块名下的输出兼容、输入主名推导、模块名与前缀组合、独立文件名/相对路径、无 header、列映射、自定义读入适配器、工具失败保护及真实审查/格式化流程。未安装外部 RTL 工具时，相关集成测试会跳过；普通生成无需这些工具。RTL 在 `AW=3/16/24/32` 的语法检查通过；行为仿真输出 `PASS`。仿真还验证读数据只在时钟沿变化、SETUP 采样、ACCESS 保持、未命中读地址保持当前值及外部 RO 变化不会影响已采样读响应。
 
 `rwsc` 专项仿真覆盖单 bit、多 bit、完整 32 bit 字段、写 0、自动清零、复位值、连续写入及清零时的读采样：
 

@@ -1,8 +1,8 @@
 # csrgen 设计文档
 
-文档版本：0.1.15；日期：2026-10-13。
+文档版本：0.1.17；日期：2026-10-15。
 
-本文描述当前实现的数据结构、模块边界、处理规则及扩展方式。0.1.15 在 0.1.14 的分层实现上补充设计文档，生成接口和 RTL 行为保持一致。模块导航见 [分层架构](ARCHITECTURE.md)，版本演进见 [Release Notes](../RELEASE_NOTES.md)。
+本文描述当前实现的数据结构、模块边界、处理规则及扩展方式。0.1.16 增加按输入文件主名命名、基础模块名与前缀组合、独立输出路径控制；0.1.17 重新构建发布包，接口及寄存器和 APB 行为与 0.1.16 一致。模块导航见 [分层架构](ARCHITECTURE.md)，版本演进见 [Release Notes](../RELEASE_NOTES.md)。
 
 ## 1. 目标与范围
 
@@ -37,6 +37,7 @@ CSV 尚未作为内置格式开放；文本编码、分隔符等由后续文件�
 | `diagnostics.py` | 各阶段共享异常及警告 | `TableError`、`CodeToolError`、两类 Warning |
 | `pipeline.py` | 配置及完整处理顺序 | `GenerationOptions`、`run_pipeline()` |
 | `cli.py` | 参数、模板、文件名、告警和输出文件 | `main()`、`write_template()` |
+| `naming.py` | 模块基础名、前缀和独立输出路径 | `resolve_module_name()`、`resolve_output_path()` |
 | `generator.py` | 保留旧导入路径 | 重导出 `read_xlsx()`、`generate_rtl()` 等 |
 
 文件读入层不解释访问属性，布局层不把单元格转换为寄存器值，RTL 层不打开表格文件。模型和诊断类型是共享接口，外部工具层不参与地址继承或 reserved 处理。
@@ -67,7 +68,8 @@ CSV 尚未作为内置格式开放；文本编码、分隔符等由后续文件�
 | --- | --- | --- |
 | `read` | `ReadOptions()` | sheet 和适配器编码配置 |
 | `layout` | `TableLayout()` | header 与列位置 |
-| `module` | `apb_csr` | RTL 模块名 |
+| `module` | None | 模块基础名；未指定时使用输入文件主名 |
+| `module_prefix` | None | 在基础名前加 `<prefix>_` |
 | `aw` | 16 | 生成 RTL 的 AW 默认值及地址范围校验 |
 | `lint` | False | 开启 Verilator 审查 |
 | `format` | False | 开启 Verible 格式化 |
@@ -156,7 +158,16 @@ reserved 的 reset/access 强制为 0/ro。表格不一致、缺失或无法解�
 
 APB 端口为 pclk、presetn、psel、penable、pwrite、paddr、pwdata、prdata、pready、pslverr。presetn 为异步低有效复位，数据端口固定 32 bit，paddr 为 `[AW-1:0]`。
 
-默认模块/文件为 `apb_csr`/`apb_csr.sv`。`--module-prefix` 与 `--file-prefix` 独立；完整名称通过 `--module`、`--output` 指定。
+设输入路径的主名为 stem，例如 `apb_csr_common.xlsx` 的 stem 为 `apb_csr_common`。命名规则由 naming.py 统一处理：
+
+- 基础模块名：显式 `--module`，否则为 stem。
+- 最终模块名：存在 `--module-prefix` 时为 `<prefix>_<基础名>`，否则为基础名。
+- 输出文件：显式 `--output/-o`，否则为当前目录下的 `<stem>.sv`；使用 `--file-prefix` 时为 `<file_prefix>_<stem>.sv`。
+- 模块基础名和模块前缀都不影响默认输出文件名。`--module` 与 `--module-prefix` 可以组合；`--output` 与 `--file-prefix` 互斥。
+- 相对输出路径相对于当前工作目录，CLI 自动创建所需父目录。输出解析后与输入相同则报错，防止覆盖输入。
+- 最终模块名仍须通过 Verilog 标识符校验；不自动替换非法字符。推导名不合法时提示使用 `--module` 覆盖。
+
+例如 `csrgen apb_csr_common.xlsx --module ccc --module-prefix AAA -o ../abc.sv` 生成模块 `AAA_ccc`，文件写入 `../abc.sv`。
 
 地址 0x1C 对应 `OFFSET_0x1c` 和 `csr_reg_data_0x1c`。每个地址的读值信号集中声明，末尾附 offset 注释；拼接按 bit 31 到 bit 0，每行一个字段并标注 bit/reset/access。所有信号为 logic，可写字段和 prdata 由 always_ff 直接驱动，不引入额外的 *_q 连接。
 
@@ -221,13 +232,14 @@ lint 检查不能代替行为仿真，也不自动证明时钟域同步、时序
 
 新增总线后端应消费 Register/Field，复用内容校验。新增访问属性则需要同步解析允许值、名称冲突规则、端口生成、状态更新和行为测试。
 
-兼容入口 `from csrgen import read_xlsx, generate_rtl` 与 `from csrgen.generator import ...` 保留。`read_xlsx(..., layout=...)` 扩展为可选关键字配置；命令行仍用 `--aw`，生成 RTL 用 AW。
+兼容入口 `from csrgen import read_xlsx, generate_rtl` 与 `from csrgen.generator import ...` 保留。没有输入路径上下文的 `generate_rtl(registers)` 仍默认使用 apb_csr；`run_pipeline()` 和 CLI 则按输入文件主名推导。需要维持旧模块名时显式指定 `module="apb_csr"` 或 `--module apb_csr`；需要维持旧的自定义文件名时显式指定 `-o`。`read_xlsx(..., layout=...)` 扩展为可选关键字配置；命令行仍用 `--aw`，生成 RTL 用 AW。
 
 ## 10. 验证与发布
 
-当前测试包括原有 70 项行为/解析/CLI 回归与 22 项分层流程测试，共 92 项。外部工具未安装时，相关集成测试会跳过；普通读表与生成测试仍执行。
+当前共有 108 项测试，覆盖行为/解析/CLI 回归、分层流程和命名组合。外部工具未安装时，相关集成测试会跳过；普通读表与生成测试仍执行。
 
-- 默认生成结果与 examples/apb_csr.sv 逐字比较。
+- 指定 apb_csr 模块名时，生成结果与 examples/apb_csr.sv 逐字比较；默认推导仅改变模块名。
+- 验证输入主名、基础模块名、模块前缀、文件名前缀、相对输出路径相互独立，并检查审查工具使用最终模块名。
 - 检查无 header、多行 header、列重排、远端列、无效映射和实际源行号。
 - 验证自定义 CSV 适配器可消费指定编码并复用模型解析；不将其视为内置 CSV 支持。
 - 验证缺少工具、语法错误和错误格式化输出会报错，并保留已有输出。

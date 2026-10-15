@@ -17,7 +17,7 @@ from csrgen.reader import RawRow, RawTable, read_table, read_xlsx_table
 
 
 def workbook_path(tmp_path, rows):
-    path = tmp_path / "input.xlsx"
+    path = tmp_path / "layout_regs.xlsx"
     workbook = Workbook()
     workbook.active.title = "sheet1"
     for row in rows:
@@ -31,7 +31,8 @@ def test_default_output_matches_existing_example():
     root = Path(__file__).resolve().parents[1]
     source = root / "examples/registers.xlsx"
     expected = (root / "examples/apb_csr.sv").read_text(encoding="utf-8")
-    assert run_pipeline(source).rtl == expected
+    assert run_pipeline(source, GenerationOptions(module="apb_csr")).rtl == expected
+    assert run_pipeline(source).rtl == expected.replace("module apb_csr #(", "module registers #(", 1)
     assert generate_rtl(read_xlsx(source)) == expected
 
 
@@ -51,7 +52,7 @@ def test_no_header_and_reordered_columns_across_stages(tmp_path, capsys):
     for name, column in columns.items():
         arguments.extend(["--column", f"{name}={chr(64 + column)}"])
     assert main(arguments) == 0
-    assert output.read_text() == generate_rtl(registers)
+    assert output.read_text() == generate_rtl(registers, module=source.stem)
     assert "Generated" in capsys.readouterr().out
 
 
@@ -85,7 +86,7 @@ def test_invalid_layout_rejected(changes, message):
     ["--column", "offset=B", "--column", "offset=A"],
 ])
 def test_invalid_cli_layout_preserves_existing_output(tmp_path, options, capsys):
-    source = tmp_path / "table.xlsx"
+    source = tmp_path / "csr_table.xlsx"
     write_template(source)
     output = tmp_path / "out.sv"
     output.write_text("existing RTL")
@@ -99,15 +100,15 @@ def test_column_letters_and_disabled_description(tmp_path):
     assert column_number("27") == 27
     with pytest.raises(TableError):
         column_number("A1")
-    source = tmp_path / "table.xlsx"
+    source = tmp_path / "csr_table.xlsx"
     write_template(source)
     output = tmp_path / "out.sv"
     assert main([str(source), "--column", "description=none", "-o", str(output)]) == 0
-    assert output.read_text() == generate_rtl(read_xlsx(source))
+    assert output.read_text() == generate_rtl(read_xlsx(source), module=source.stem)
 
 
 def test_injected_csv_adapter_uses_same_parser_and_encoding(tmp_path):
-    source = tmp_path / "table.csv"
+    source = tmp_path / "csr_table.csv"
     source.write_text("0x10,data,FF,7:0,rw\n", encoding="utf-16")
 
     def csv_reader(path, options):
@@ -129,7 +130,7 @@ def test_injected_csv_adapter_uses_same_parser_and_encoding(tmp_path):
 
 @pytest.mark.parametrize("flag,tool_flag", [("--lint", "--lint-tool"), ("--format", "--format-tool")])
 def test_missing_quality_tool_preserves_existing_output(tmp_path, flag, tool_flag, capsys):
-    source = tmp_path / "table.xlsx"
+    source = tmp_path / "csr_table.xlsx"
     write_template(source)
     output = tmp_path / "out.sv"
     output.write_text("existing RTL")
@@ -153,19 +154,19 @@ def test_formatter_rejects_invalid_rtl():
 @pytest.mark.skipif(not (shutil.which("verilator") and shutil.which("verible-verilog-format")),
                    reason="Verilator and Verible are required")
 def test_real_review_and_format_pipeline(tmp_path):
-    source = tmp_path / "table.xlsx"
+    source = tmp_path / "csr_table.xlsx"
     write_template(source)
     result = run_pipeline(source, GenerationOptions(lint=True, format=True))
     assert len(result.reviews) == 2
-    assert "module apb_csr" in result.rtl
-    assert result.rtl != generate_rtl(result.registers)
+    assert f"module {source.stem}" in result.rtl
+    assert result.rtl != generate_rtl(result.registers, module=source.stem)
 
 
 @pytest.mark.skipif(not shutil.which("verilator"), reason="Verilator is not installed")
 def test_post_format_review_rejects_broken_formatter_output(tmp_path, monkeypatch):
     from csrgen import pipeline
 
-    source = tmp_path / "table.xlsx"
+    source = tmp_path / "csr_table.xlsx"
     write_template(source)
     monkeypatch.setattr(pipeline, "format_rtl", lambda *_: "module apb_csr; invalid code")
     with pytest.raises(CodeToolError, match="failed"):

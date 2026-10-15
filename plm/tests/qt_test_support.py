@@ -9,6 +9,8 @@ from unittest.mock import patch
 from PyQt5 import QtCore, QtGui, QtTest
 from plm.frontend.qt.services.tasks import TaskRunner
 from plm.frontend.qt.widgets.common import ContentIconStyle
+from plm.frontend.qt.styles.tokens import get_active_theme, set_active_theme
+from plm.frontend.qt.widgets.common import clear_icon_cache
 
 
 def isolate_host_formatter(owner, app):
@@ -51,6 +53,7 @@ def preserve_application_state(owner, app):
     palette = QtGui.QPalette(app.palette())
     stylesheet = app.styleSheet()
     exception_hook = sys.excepthook
+    theme = get_active_theme()
     clipboard = app.clipboard()
     clipboard_data = clipboard.mimeData()
     saved_clipboard = {
@@ -71,6 +74,8 @@ def preserve_application_state(owner, app):
         app.setPalette(palette)
 
     def restore():
+        set_active_theme(theme)
+        clear_icon_cache()
         app.setStyleSheet("")
         app.setStyle(ContentIconStyle(style_name) if has_content_icons else style_name)
         app.setFont(font)

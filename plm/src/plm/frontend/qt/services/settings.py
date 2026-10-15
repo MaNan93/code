@@ -10,6 +10,7 @@ from PyQt5 import QtCore
 
 from plm.frontend.qt.models import ProjectState
 from plm.frontend.qt.models.preferences import DEFAULT_EDITOR
+from plm.frontend.qt.styles.tokens import normalize_theme
 
 
 class SettingsStore:
@@ -118,6 +119,7 @@ class SettingsStore:
 
     def preferences(self):
         return {
+            "theme": self.theme(),
             "editor_path": self._settings.value(
                 "tools/editor_path", DEFAULT_EDITOR, type=str
             ),
@@ -155,3 +157,10 @@ class SettingsStore:
         return self._settings.value(
             "tools/editor_path", DEFAULT_EDITOR, type=str
         )
+
+    def theme(self):
+        return normalize_theme(self._settings.value("appearance/theme", "light", type=str))
+
+    def save_theme(self, theme):
+        self._settings.setValue("appearance/theme", normalize_theme(theme))
+        self._settings.sync()

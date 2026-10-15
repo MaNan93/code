@@ -1,8 +1,10 @@
 """Generated-file drawer construction and public signals."""
 
 from collections import OrderedDict
+from plm.frontend.qt.styles.tokens import get_theme_color
 from plm.frontend.qt.styles.tokens import ARTIFACTS_TOOLBAR_HEIGHT
 from PyQt5 import QtCore, QtGui, QtWidgets
+from plm.frontend.qt.widgets.common import set_label_icon
 from plm.frontend.qt.models.artifacts import ArtifactSelection
 from plm.frontend.qt.models.preferences import DEFAULT_EDITOR
 from plm.frontend.qt.services.tasks import TaskRunner
@@ -12,7 +14,7 @@ from plm.frontend.qt.widgets.common import (
     load_lucide_icon, make_icon_button,
 )
 from plm.frontend.qt.styles.tokens import (
-    BORDER_ARTIFACTS, CONTROL_HEIGHT, ICON_BUTTON_SIZE, TEXT_ARTIFACTS_MUTED,
+    CONTROL_HEIGHT, ICON_BUTTON_SIZE,
 )
 from .artifact_chrome import ArtifactContent, ArtifactFilePopup, ArtifactPathButton
 from .artifact_preview import ArtifactPreview
@@ -47,7 +49,7 @@ class ArtifactFileTree(QtWidgets.QTreeWidget):
     def _update_folder_icon(self, item, expanded):
         if item.data(0, QtCore.Qt.UserRole) is None:
             name = "folder-open" if expanded else "folder"
-            item.setIcon(0, load_lucide_icon(name, TEXT_ARTIFACTS_MUTED))
+            item.setIcon(0, load_lucide_icon(name, 'text_artifacts_muted'))
 
     def sizeHint(self):
         size = super().sizeHint()
@@ -71,7 +73,7 @@ class ArtifactFileTree(QtWidgets.QTreeWidget):
     def drawBranches(self, painter, rect, index):
         super().drawBranches(painter, rect, index)
         painter.save()
-        painter.setPen(QtGui.QPen(QtGui.QColor(BORDER_ARTIFACTS), 1))
+        painter.setPen(QtGui.QPen(QtGui.QColor(get_theme_color("border_artifacts")), 1))
         ancestor = index.parent()
         x = rect.right() - self.indentation() // 2 - self.indentation()
         while ancestor.isValid() and x >= rect.left():
@@ -89,6 +91,17 @@ class ArtifactsPanel(
     refreshRequested = QtCore.pyqtSignal()
     widthRequested = QtCore.pyqtSignal(int)
     RESIZE_EDGE_WIDTH = 6
+
+    def refresh_theme(self):
+        from .artifact_files import _STATUS_COLORS
+        for path, item in self._tree_items.items():
+            try:
+                relative = path.relative_to(self.workspace_root).as_posix() if self.workspace_root else path.name
+            except ValueError:
+                relative = path.name
+            role = _STATUS_COLORS.get(self._file_statuses.get(relative))
+            if role:
+                item.setForeground(0, QtGui.QBrush(QtGui.QColor(get_theme_color(role))))
 
     def __init__(self, parent=None, editor_path_provider=None):
         super().__init__(parent)
@@ -154,13 +167,13 @@ class ArtifactsPanel(
             ("close_button", "x", "关闭 Artifacts"),
         ):
             button = make_icon_button(icon, tooltip, "ArtifactsToolButton", ICON_BUTTON_SIZE, ICON_SIZE)
-            button.setIcon(load_lucide_icon(icon, TEXT_ARTIFACTS_MUTED))
+            button.setIcon(load_lucide_icon(icon, 'text_artifacts_muted'))
             setattr(self, name, button)
             self.toolbar_buttons.append(button)
         self.diff_button = make_icon_button(
             "git-compare", "显示与上一次预览的差异", "ArtifactsToolButton", ICON_BUTTON_SIZE, ICON_SIZE
         )
-        self.diff_button.setIcon(load_lucide_icon("git-compare", TEXT_ARTIFACTS_MUTED))
+        self.diff_button.setIcon(load_lucide_icon("git-compare", 'text_artifacts_muted'))
         self.toolbar_buttons.append(self.diff_button)
         for button in (self.search_button, self.diff_button, self.copy_path_button,
                        self.open_editor_button, self.refresh_button, self.more_button,
@@ -215,9 +228,7 @@ class ArtifactsPanel(
         empty_icon.setAlignment(QtCore.Qt.AlignCenter)
         empty_size = ICON_SIZE
         empty_icon.setFixedSize(ICON_SIZE, ICON_SIZE)
-        empty_icon.setPixmap(
-            load_lucide_icon("file-x", TEXT_ARTIFACTS_MUTED, empty_size).pixmap(empty_size, empty_size)
-        )
+        set_label_icon(empty_icon, "file-x", "text_artifacts_muted", empty_size)
         empty_layout.addWidget(empty_icon, 0, QtCore.Qt.AlignHCenter)
         self.empty_text = QtWidgets.QLabel("暂无生成文件")
         self.empty_text.setObjectName("ArtifactEmptyText")
@@ -255,7 +266,7 @@ class ArtifactsPanel(
             ("显示/隐藏差异", "git-compare", self.diff_button),
         ):
             action = self.more_menu.addAction(
-                load_lucide_icon(icon, TEXT_ARTIFACTS_MUTED), label, button.click
+                load_lucide_icon(icon, 'text_artifacts_muted'), label, button.click
             )
             action.setCheckable(button.isCheckable())
             self._overflow_actions.append((action, button))

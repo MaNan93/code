@@ -1,6 +1,6 @@
 from PyQt5 import QtCore, QtGui, QtWidgets
 from plm.frontend.qt.widgets.common import ICON_SIZE, load_lucide_icon
-from plm.frontend.qt.styles.tokens import HEADER_HEIGHT, SPACING_LG, SPACING_SM, SPACING_XL, TEXT_MAIN
+from plm.frontend.qt.styles.tokens import HEADER_HEIGHT, SPACING_LG, SPACING_SM, SPACING_XL
 
 
 class SecondaryMenuButton(QtWidgets.QPushButton):
@@ -50,7 +50,7 @@ class SecondaryPage(QtWidgets.QFrame):
         header_layout.setSpacing(SPACING_SM)
         self.back_btn = QtWidgets.QPushButton("设置" if page == "settings" else "文档")
         self.back_btn.setObjectName("SecondaryBackButton")
-        self.back_btn.setIcon(load_lucide_icon("arrow-left", TEXT_MAIN))
+        self.back_btn.setIcon(load_lucide_icon("arrow-left", 'text_main'))
         self.back_btn.setIconSize(QtCore.QSize(ICON_SIZE, ICON_SIZE))
         self.back_btn.setToolTip("返回")
         self.back_btn.setCursor(QtCore.Qt.PointingHandCursor)

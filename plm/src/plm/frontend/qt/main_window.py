@@ -4,11 +4,12 @@ from PyQt5 import QtCore, QtGui, QtWidgets
 
 from plm.frontend.qt.controllers import AppController
 from plm.frontend.qt.exceptions import install_exception_handler
-from plm.frontend.qt.styles import APP_QSS
+from plm.frontend.qt.services.themes import apply_application_theme
+from plm.frontend.qt.styles.tokens import SPACING_MD
+from plm.frontend.qt.widgets.content_splitter import ContentSplitter
+from plm.frontend.qt.widgets.toast import ToastNotification
+from plm.frontend.qt.styles.tokens import get_theme_color
 from plm.frontend.qt.styles.tokens import (
-    BG_SIDEBAR,
-    BG_SUBTLE,
-    BG_SURFACE,
     FONT_SIZE_BODY,
     FONT_UI_PRIMARY,
     ICON_SIZE,
@@ -18,8 +19,6 @@ from plm.frontend.qt.styles.tokens import (
     TITLEBAR_HEIGHT,
     TITLEBAR_BUTTON_WIDTH,
     RADIUS_WINDOW,
-    PRIMARY,
-    TEXT_SUB,
 )
 from plm.frontend.qt.views.config_page import ConfigPage
 from plm.frontend.qt.views.log_panel import LogPanel
@@ -98,7 +97,7 @@ class WindowShell(QtWidgets.QWidget):
     def paintEvent(self, event):
         maximized = self.property("maximized") in (True, "true")
         inactive = self.property("windowActive") in (False, "false")
-        color = BG_SUBTLE if inactive else BG_SIDEBAR
+        color = get_theme_color("bg_subtle") if inactive else get_theme_color("bg_sidebar")
         painter = QtGui.QPainter(self)
         painter.setRenderHint(QtGui.QPainter.Antialiasing)
         rect = QtCore.QRectF(self.rect())
@@ -131,7 +130,7 @@ class WindowTitleBar(QtWidgets.QFrame):
         self.logo_label = QtWidgets.QLabel()
         self.logo_label.setObjectName("WindowBrandLogo")
         self.logo_label.setPixmap(
-            load_lucide_icon("layout-dashboard", PRIMARY, ICON_SIZE).pixmap(ICON_SIZE, ICON_SIZE)
+            load_lucide_icon("layout-dashboard", 'primary', ICON_SIZE).pixmap(ICON_SIZE, ICON_SIZE)
         )
         self.logo_label.setFixedSize(ICON_SIZE, ICON_SIZE)
         self.logo_label.setAttribute(QtCore.Qt.WA_TransparentForMouseEvents)
@@ -151,8 +150,9 @@ class WindowTitleBar(QtWidgets.QFrame):
         self.actions_layout = QtWidgets.QHBoxLayout()
         self.actions_layout.setContentsMargins(0, 0, 0, 0)
         self.actions_layout.setSpacing(SPACING_SM)
-        layout.addLayout(self.actions_layout)
         layout.addStretch(1)
+        layout.addLayout(self.actions_layout)
+        layout.addSpacing(SPACING_MD)
 
         self.minimize_btn = WindowControlButton("minimize", "最小化", self)
         self.maximize_btn = WindowControlButton("maximize", "最大化", self)
@@ -165,13 +165,16 @@ class WindowTitleBar(QtWidgets.QFrame):
         window.windowTitleChanged.connect(self.title_label.setText)
 
     def add_panel_action(self, button):
-        if self.actions_layout.count() == 0:
-            self.actions_layout.addSpacing(SPACING_SM)
         self.actions_layout.addWidget(button, 0, QtCore.Qt.AlignVCenter)
+
+    def refresh_theme(self):
+        self.logo_label.setPixmap(load_lucide_icon(
+            "layout-dashboard", 'primary', ICON_SIZE
+        ).pixmap(ICON_SIZE, ICON_SIZE))
 
     def update_sidebar_state(self, collapsed):
         self.collapse_btn.setIcon(load_lucide_icon(
-            "panel-right" if collapsed else "panel-left", TEXT_SUB,
+            "panel-right" if collapsed else "panel-left", 'text_sub',
         ))
         self.collapse_btn.setToolTip("展开侧边栏" if collapsed else "收起侧边栏")
 
@@ -257,7 +260,7 @@ class WindowControlButton(QtWidgets.QPushButton):
             self._refresh_icon()
 
     def _refresh_icon(self, hovered=False):
-        color = BG_SURFACE if self._role == "close" and hovered else TEXT_SUB
+        color = "text_on_primary" if self._role == "close" and hovered else "text_sub"
         self.setIcon(load_lucide_icon(self._icon_name, color, self._icon_size))
 
     def enterEvent(self, event):
@@ -348,18 +351,15 @@ class MainWindow(QtWidgets.QMainWindow):
         font.setStyleStrategy(QtGui.QFont.PreferAntialias)
         font.setHintingPreference(QtGui.QFont.PreferFullHinting)
         app.setFont(font)
-        palette = app.palette()
-        palette.setColor(QtGui.QPalette.Window, QtGui.QColor(BG_SURFACE))
-        app.setPalette(palette)
         if not isinstance(app.style(), ContentIconStyle):
             app.setStyle(ContentIconStyle(app.style().objectName()))
-        app.setStyleSheet(APP_QSS)
+        apply_application_theme(self.controller.settings.theme())
         install_button_sizing(app)
         install_tooltips(app)
         self.setWindowTitle("plmConsultant")
         self.resize(1280, 800)
         self.setMinimumSize(960, 640)
-        self.setWindowIcon(load_lucide_icon("layout-dashboard", PRIMARY))
+        self.setWindowIcon(load_lucide_icon("layout-dashboard", 'primary'))
         self._log_sizes = [700, 200]
         self._activation_connected = False
 
@@ -386,10 +386,9 @@ class MainWindow(QtWidgets.QMainWindow):
         body_layout.setSpacing(0)
         body_layout.addWidget(self.nav_panel)
 
-        self.content_splitter = QtWidgets.QSplitter(QtCore.Qt.Vertical)
+        self.content_splitter = ContentSplitter()
         self.content_splitter.setObjectName("ContentSplitter")
         self.content_splitter.setContentsMargins(0, 0, 0, 0)
-        self.content_splitter.setHandleWidth(4)
         self.content_splitter.setChildrenCollapsible(True)
         self.config_page = ConfigPage(
             editor_path_provider=self.controller.settings.editor_path
@@ -425,6 +424,7 @@ class MainWindow(QtWidgets.QMainWindow):
         body_layout.addWidget(self.view_stack, 1)
         shell_layout.addWidget(self.body_container, 1)
         self.setCentralWidget(self.window_backdrop)
+        self.toast = ToastNotification(self)
         self._create_resize_handles()
 
         QtCore.QTimer.singleShot(0, self._apply_initial_sizes)
@@ -448,6 +448,30 @@ class MainWindow(QtWidgets.QMainWindow):
             if scroll is not None:
                 self._enable_background_focus(scroll)
                 self._enable_background_focus(scroll.widget())
+
+    def apply_theme(self, theme):
+        from PyQt5 import sip
+        from plm.frontend.qt.styles.tokens import get_active_theme
+        scrolls = [(area, area.horizontalScrollBar().value(), area.verticalScrollBar().value())
+                   for area in self.findChildren(QtWidgets.QAbstractScrollArea)]
+        apply_application_theme(theme)
+        self.setWindowIcon(load_lucide_icon("layout-dashboard", 'primary'))
+        self.controller.settings.save_theme(get_active_theme())
+        self.toast.reposition()
+        def restore_scrolls():
+            for area, horizontal, vertical in scrolls:
+                if not sip.isdeleted(area):
+                    area.horizontalScrollBar().setValue(horizontal)
+                    area.verticalScrollBar().setValue(vertical)
+        restore_scrolls()
+        timer = QtCore.QTimer(self)
+        timer.setSingleShot(True)
+        timer.timeout.connect(restore_scrolls)
+        timer.timeout.connect(timer.deleteLater)
+        timer.start(0)
+
+    def show_toast(self, text, level="success"):
+        self.toast.show_message(text, level)
 
     def _create_resize_handles(self):
         horizontal = QtCore.Qt.SizeHorCursor
@@ -645,6 +669,8 @@ class MainWindow(QtWidgets.QMainWindow):
         self._enable_background_focus(widget)
         widget.closeRequested.connect(self._close_secondary_page)
         widget.preferencesSaved.connect(self.controller.save_preferences)
+        if page == "settings":
+            widget.themeChanged.connect(self.apply_theme)
         self.view_stack.addWidget(widget)
         self.view_stack.setCurrentWidget(widget)
         self._update_resize_handles()

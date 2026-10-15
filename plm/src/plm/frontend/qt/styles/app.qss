@@ -6,6 +6,14 @@ QWidget {
     font-weight: $font_weight_normal;
 }
 QWidget:disabled { color: $text_muted; }
+QFrame#ToastNotification {
+    background-color: $success_bg;
+    border: 1px solid $success_text;
+    border-radius: $radius_control;
+}
+QFrame#ToastNotification QLabel { color: $success_text; }
+QFrame#ToastNotification[level="info"] { background-color: $info_bg; border-color: $info_text; }
+QFrame#ToastNotification[level="info"] QLabel { color: $info_text; }
 QLabel { background: transparent; }
 QMainWindow { background-color: transparent; }
 QWidget#WindowBackdrop {
@@ -57,7 +65,7 @@ QPushButton#WindowControlButton[role="maximize"]:hover {
 }
 QPushButton#WindowControlButton[role="close"]:hover {
     background-color: $danger;
-    color: $bg_surface;
+    color: $text_on_primary;
 }
 QPushButton#WindowControlButton[role="close"] {
     border-top-right-radius: $radius_card;
@@ -88,7 +96,7 @@ QPushButton#PrimaryBtn, QPushButton#SettingsPrimaryButton,
 QPushButton#ConfigGenerateButton {
     background-color: $primary;
     border: none;
-    color: $bg_surface;
+    color: $text_on_primary;
 }
 /* The ID rule above outranks QPushButton:disabled; without this a disabled
    Generate button (no project, or generating) still looks clickable. */
@@ -222,7 +230,7 @@ QTabWidget#ConfigTabs QTabBar::tab {
 }
 QTabWidget#ConfigTabs QTabBar::tab:selected {
     background-color: $primary_soft;
-    color: $primary;
+    color: $text_primary;
     font-weight: $font_weight_medium;
 }
 QTabWidget#ConfigTabs QTabBar::tab:first { padding-left: 16px; }
@@ -259,7 +267,7 @@ QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal { width: 0; }
 
 QSplitter::handle { background-color: transparent; }
 QSplitter::handle:vertical { height: 1px; }
-QSplitter#ContentSplitter::handle:vertical { height: 6px; }
+QSplitter#ContentSplitter::handle:vertical { height: $splitter_handle_size; background: transparent; margin: 0; }
 
 QFrame#NavPanel {
     background-color: transparent;
@@ -610,7 +618,7 @@ QPushButton#SecondaryMenuButton {
 QPushButton#SecondaryMenuButton:hover { background-color: $bg_subtle; color: $text_main; }
 QPushButton#SecondaryMenuButton[selected="true"] {
     background-color: $primary_soft;
-    color: $primary;
+    color: $text_primary;
     font-weight: $font_weight_medium;
 }
 QTextBrowser#DocumentationBrowser {
@@ -696,7 +704,7 @@ QPushButton#ProjectMoreBtn[menuOpen="true"] {
 }
 QFrame#ButtonGroup > QPushButton[selected="true"] {
     background-color: $primary_soft;
-    color: $primary;
+    color: $text_primary;
     border-bottom: none;
 }
 QToolTip {

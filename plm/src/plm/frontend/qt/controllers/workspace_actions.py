@@ -136,6 +136,7 @@ class WorkspaceActions:
             self.config_page.mark_saved(payload)
             self.validate_current()
             self.log_panel.append_log(f"已保存配置：{self.current_name}")
+            self.window.show_toast("✓ 配置已保存", "success")
             if continuation and not self.config_page.dirty:
                 continuation()
 
@@ -279,6 +280,10 @@ class WorkspaceActions:
             self.log_panel.append_log(
                 f"{'生成完成' if result.generated else '输出已是最新'}：{len(files)} 个文件"
             )
+            if result.generated:
+                self.window.show_toast("✓ RTL 与测试用例生成成功", "success")
+            else:
+                self.window.show_toast("输出已是最新，无需重新生成", "info")
 
         self.tasks.submit(
             generate, finished, failed,

@@ -4,11 +4,12 @@ from html import escape
 
 from PyQt5 import QtCore, QtGui, QtWidgets
 
+from plm.frontend.qt.styles.tokens import get_theme_color
 from plm.frontend.qt.styles.tokens import (
-    ACCENT_ARTIFACTS, ARTIFACTS_BORDER_WIDTH, ICON_TEXT_GAP, MENU_PADDING, MENU_SHADOW_MARGIN,
-    RADIUS_CARD, TEXT_ARTIFACTS, TEXT_ARTIFACTS_MUTED,
+    ARTIFACTS_BORDER_WIDTH, ICON_TEXT_GAP, MENU_PADDING, MENU_SHADOW_MARGIN,
+    RADIUS_CARD,
 )
-from plm.frontend.qt.widgets.common import ICON_SIZE, load_lucide_icon, paint_popup_surface
+from plm.frontend.qt.widgets.common import ICON_SIZE, load_lucide_icon, paint_popup_surface, set_label_icon
 
 
 class ArtifactContent(QtWidgets.QWidget):
@@ -74,13 +75,16 @@ class ArtifactPathLabel(QtWidgets.QLabel):
             )
         self.display_path = directory + filename
         self.setText(
-            f'<span style="color:{ACCENT_ARTIFACTS}">{escape(directory)}</span>'
-            f'<b style="color:{TEXT_ARTIFACTS};font-weight:500">{escape(filename)}</b>'
+            f'<span style="color:{get_theme_color("accent_artifacts")}">{escape(directory)}</span>'
+            f'<b style="color:{get_theme_color("text_artifacts")};font-weight:500">{escape(filename)}</b>'
             if self._filename else ""
         )
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
+        self._update_text()
+
+    def refresh_theme(self):
         self._update_text()
 
 class ArtifactPathButton(QtWidgets.QPushButton):
@@ -94,14 +98,14 @@ class ArtifactPathButton(QtWidgets.QPushButton):
         self.setSizePolicy(QtWidgets.QSizePolicy.Ignored, QtWidgets.QSizePolicy.Fixed)
         self.setCursor(QtCore.Qt.PointingHandCursor)
         self.setToolTip("")
-        self.setIcon(load_lucide_icon("chevron-down", TEXT_ARTIFACTS_MUTED))
+        self.setIcon(load_lucide_icon("chevron-down", 'text_artifacts_muted'))
         self.setIconSize(QtCore.QSize(ICON_SIZE, ICON_SIZE))
         layout = QtWidgets.QHBoxLayout(self)
         layout.setContentsMargins(6, 0, 6, 0)
         layout.setSpacing(ICON_TEXT_GAP)
         self.arrow = QtWidgets.QLabel()
         self.arrow.setFixedSize(ICON_SIZE, ICON_SIZE)
-        self.arrow.setPixmap(self.icon().pixmap(ICON_SIZE, ICON_SIZE))
+        set_label_icon(self.arrow, "chevron-down", "text_artifacts_muted")
         self.arrow.setAttribute(QtCore.Qt.WA_TransparentForMouseEvents)
         self.path_label = ArtifactPathLabel()
         layout.addWidget(self.arrow)

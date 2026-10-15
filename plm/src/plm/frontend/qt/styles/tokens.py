@@ -78,6 +78,18 @@ TEXT_HEADER = N600
 TEXT_MUTED = N450
 TOOLTIP_BG = N800
 TOOLTIP_TEXT = N0
+TEXT_ON_PRIMARY = N0
+TEXT_PRIMARY = PRIMARY
+
+SYNTAX_COMMENT = "#57606A"
+SYNTAX_KEYWORD = "#CF222E"
+SYNTAX_PORT = "#953800"
+SYNTAX_NUMBER = "#0550AE"
+SYNTAX_STRING = "#0A3069"
+SYNTAX_DIRECTIVE = SYNTAX_KEYWORD
+TEXT_ON_LIGHT_SWATCH = "#000000"
+TEXT_ON_DARK_SWATCH = N0
+LANE_GRID_PALETTE = ("#6366F1", "#0EA5E9", "#8B5CF6", "#F59E0B", "#14B8A6", "#EC4899")
 
 NAV_ITEM_GAP = 2
 
@@ -144,6 +156,12 @@ SPACING_SM = 8
 SPACING_MD = 12
 SPACING_LG = 16
 SPACING_XL = 24
+SPLITTER_HANDLE_SIZE = 6
+SPLITTER_HIGHLIGHT_SIZE = 2
+TOAST_BOTTOM_MARGIN = 32
+TOAST_FADE_IN = 150
+TOAST_HOLD = 1800
+TOAST_FADE_OUT = 200
 
 FORM_FIELD_MAX_WIDTH = 360
 FORM_ACTION_WIDTH = 120
@@ -228,3 +246,81 @@ QSS_TOKENS = {
     "spacing_md": f"{SPACING_MD}px",
     "spacing_lg": f"{SPACING_LG}px",
 }
+
+# Constants above remain the light-theme compatibility API. Painters resolve
+# roles at paint time; QSS receives a fresh snapshot of the selected theme.
+LIGHT_COLORS = {
+    name.lower(): value for name, value in list(globals().items())
+    if name.startswith(("BG_", "BORDER", "TEXT_", "PRIMARY", "TOOLTIP_",
+                        "DIFF_", "SYNTAX_", "ACCENT_")) and isinstance(value, str)
+}
+for _semantic in SEMANTIC_COLORS:
+    for _suffix in ("", "_bg", "_text"):
+        _role = _semantic + _suffix
+        LIGHT_COLORS[_role] = globals()[_role.upper()]
+
+DARK_COLORS = {
+    "bg_main": "#0D1117", "bg_surface": "#161B22",
+    "bg_sidebar": "#090D13", "bg_sidebar_hover": "#1C2128",
+    "bg_card": "#161B22", "bg_subtle": "#21262D",
+    "bg_alternate": "#12171F", "bg_hover": "#262C36",
+    "bg_switch_hover": "#262C36", "bg_focus": "#262C36",
+    "primary": "#4F46E5", "primary_hover": "#4338CA",
+    "primary_soft": "#1E2238", "primary_pressed": "#30365C",
+    "border": "#30363D", "border_panel": "#30363D",
+    "border_hover": "#6E7681", "border_focus": "#818CF8",
+    "text_main": "#F0F6FC", "text_sub": "#94A3B8",
+    "text_header": "#C9D1D9", "text_muted": "#94A3B8",
+    "text_on_primary": "#FFFFFF", "text_primary": "#A5B4FC",
+    "text_on_light_swatch": "#000000", "text_on_dark_swatch": "#FFFFFF",
+    "tooltip_bg": "#21262D", "tooltip_text": "#F0F6FC",
+    "bg_artifacts": "#0D1117", "bg_artifacts_header": "#161B22",
+    "border_artifacts": "#30363D", "text_artifacts": "#F0F6FC",
+    "text_artifacts_muted": "#94A3B8", "accent_artifacts": "#79C0FF",
+    "diff_added_bg": "#12261E", "diff_removed_bg": "#301C23",
+    "diff_added_gutter": "#17392A", "diff_removed_gutter": "#48242C",
+    "diff_hunk_bg": "#172B42",
+    "syntax_comment": "#94A3B8", "syntax_keyword": "#FF7B72",
+    "syntax_port": "#FFA657", "syntax_number": "#79C0FF",
+    "syntax_string": "#A5D6FF", "syntax_directive": "#FF7B72",
+    "info_bg": "#1E2238", "info": "#A5B4FC", "info_text": "#A5B4FC",
+    "success_bg": "#12261E", "success": "#3FB950", "success_text": "#7EE787",
+    "warning_bg": "#302611", "warning": "#D29922", "warning_text": "#E3B341",
+    "danger_bg": "#301C23", "danger": "#F85149", "danger_text": "#FF7B72",
+}
+if LIGHT_COLORS.keys() != DARK_COLORS.keys():
+    raise ValueError("Light and dark themes must define the same color roles")
+QSS_TOKENS.update(LIGHT_COLORS)
+
+_active_theme = "light"
+
+
+def normalize_theme(theme):
+    return theme if theme in ("light", "dark") else "light"
+
+
+def set_active_theme(theme):
+    global _active_theme
+    _active_theme = normalize_theme(theme)
+
+
+def get_active_theme():
+    return _active_theme
+
+
+def get_theme_colors(theme=None):
+    name = get_active_theme() if theme is None else normalize_theme(theme)
+    return dict(DARK_COLORS if name == "dark" else LIGHT_COLORS)
+
+
+def get_theme_color(role):
+    return (DARK_COLORS if _active_theme == "dark" else LIGHT_COLORS)[role.lower()]
+
+
+def get_qss_tokens(theme="light"):
+    from .icon_assets import themed_icon_path
+    colors = get_theme_colors(theme)
+    return {**QSS_TOKENS, **colors,
+            "splitter_handle_size": f"{SPLITTER_HANDLE_SIZE}px",
+            "chevron_right_icon": themed_icon_path(ICON_DIR / "chevron-right.svg", colors["text_sub"]),
+            "chevron_down_icon": themed_icon_path(ICON_DIR / "tree-chevron-down.svg", colors["text_sub"])}

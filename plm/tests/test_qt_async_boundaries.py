@@ -178,7 +178,7 @@ class AsyncBoundaryTests(unittest.TestCase):
         page_bottom = page.mapTo(window, page.rect().bottomRight()).y() + 1
         log_top = window.log_panel.mapTo(window, QtCore.QPoint()).y()
         self.assertEqual(log_top - page_bottom, window.content_splitter.handleWidth())
-        self.assertEqual(window.content_splitter.handleWidth(), 4)
+        self.assertEqual(window.content_splitter.handleWidth(), 6)
         for panel in (page, window.log_panel):
             right = panel.mapTo(window, panel.rect().bottomRight()).x() + 1
             self.assertEqual(window.width() - right, window.SHADOW_MARGIN + 4)

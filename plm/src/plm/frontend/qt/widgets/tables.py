@@ -9,7 +9,8 @@ from PyQt5 import QtCore, QtGui, QtWidgets, sip
 
 from plm.frontend.qt.widgets.common import StyledComboBox, StyledMenu
 from plm.frontend.qt.widgets.option_switch import OptionSwitch
-from plm.frontend.qt.styles.tokens import BORDER, CONTROL_HEIGHT, CONTROL_PADDING_X, LINE_HEIGHT, DANGER, PRIMARY, TEXT_MAIN
+from plm.frontend.qt.styles.tokens import get_theme_color
+from plm.frontend.qt.styles.tokens import CONTROL_HEIGHT, CONTROL_PADDING_X, LINE_HEIGHT
 
 
 
@@ -165,7 +166,7 @@ class RowDragTable(QtWidgets.QTableWidget):
         super().paintEvent(event)
         if self.showGrid():
             painter = QtGui.QPainter(self.viewport())
-            painter.setPen(QtGui.QPen(QtGui.QColor(BORDER), 1))
+            painter.setPen(QtGui.QPen(QtGui.QColor(get_theme_color("border")), 1))
             painter.drawLine(0, 0, 0, self.viewport().height() - 1)
             painter.end()
         if self._drop_before_row < 0:
@@ -177,7 +178,7 @@ class RowDragTable(QtWidgets.QTableWidget):
             rect = self.visualRect(self.model().index(self._drop_before_row, 0))
             y = rect.top()
         painter = QtGui.QPainter(self.viewport())
-        painter.setPen(QtGui.QPen(QtGui.QColor(PRIMARY), 2))
+        painter.setPen(QtGui.QPen(QtGui.QColor(get_theme_color("primary")), 2))
         painter.drawLine(0, y, self.viewport().width(), y)
 
 
@@ -208,7 +209,7 @@ class _PaddedItemDelegate(QtWidgets.QStyledItemDelegate):
         selected = bool(option.state & QtWidgets.QStyle.State_Selected)
         painter.save()
         # Native HighlightedText is white even when QSS uses a pale selection.
-        painter.setPen(QtGui.QColor(TEXT_MAIN) if selected
+        painter.setPen(QtGui.QColor(get_theme_color("text_main")) if selected
                        else styled.palette.color(QtGui.QPalette.Text))
         text = option.fontMetrics.elidedText(text, styled.textElideMode, max(0, text_rect.width()))
         painter.drawText(text_rect, styled.displayAlignment | QtCore.Qt.AlignVCenter, text)
@@ -227,6 +228,9 @@ class _PaddedItemDelegate(QtWidgets.QStyledItemDelegate):
 
 class EditableTable(QtWidgets.QWidget):
     changed = QtCore.pyqtSignal()
+
+    def refresh_theme(self):
+        self.set_cell_errors(getattr(self, "_theme_errors", {}))
 
     # columns: [{"key", "heading"?, "options"?: [...], "switch"?: bool}].
     # Options use a combo or a compact switch instead of a free-text cell.
@@ -397,6 +401,7 @@ class EditableTable(QtWidgets.QWidget):
     def set_cell_errors(self, errors):
         """Highlight invalid cells; errors maps (row, column-key) to text."""
         errors = errors or {}
+        self._theme_errors = dict(errors)
         previous = self.table.blockSignals(True)
         try:
             for row in range(self.table.rowCount()):
@@ -421,10 +426,9 @@ class EditableTable(QtWidgets.QWidget):
                             continue
                         item.setToolTip(message)
                         if message:
-                            error_bg = QtGui.QColor(DANGER)
-                            error_bg.setAlpha(20)
+                            error_bg = QtGui.QColor(get_theme_color("danger_bg"))
                             item.setBackground(error_bg)
-                            item.setForeground(QtGui.QColor(DANGER))
+                            item.setForeground(QtGui.QColor(get_theme_color("danger_text")))
                         else:
                             item.setData(QtCore.Qt.BackgroundRole, None)
                             item.setData(QtCore.Qt.ForegroundRole, None)

@@ -8,10 +8,8 @@ from plm.frontend.qt.widgets.common import (
 )
 from plm.frontend.qt.widgets.project_list import ProjectList
 from plm.frontend.qt.styles.tokens import (
-    PRIMARY,
     SPACING_MD,
     SPACING_SM,
-    TEXT_SUB,
     NAV_EXPANDED_WIDTH,
     NAV_COLLAPSED_WIDTH,
     PANEL_ANIMATION_DURATION,
@@ -277,7 +275,7 @@ class NavPanel(QtWidgets.QFrame):
         for button, value in ((self.docs_btn, "docs"), (self.settings_btn, "settings")):
             selected = name == value
             button.setProperty("selected", selected)
-            color = PRIMARY if selected else TEXT_SUB
+            color = "text_primary" if selected else "text_sub"
             icon_name = "file-text" if value == "docs" else "settings"
             button.setIcon(
                 load_lucide_icon(icon_name, color, align_visible_left=True)

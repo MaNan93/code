@@ -9,13 +9,13 @@ from pathlib import Path
 from PyQt5 import QtCore, QtGui, QtSvg, QtWidgets
 
 from plm.core.paths import PLM_ROOT
+from plm.frontend.qt.styles.tokens import get_theme_color
 from plm.frontend.qt.styles.tokens import (
-    BG_MAIN, BG_SUBTLE, BORDER_PANEL, CONTROL_HEIGHT, CONTROL_PADDING_X, DANGER,
-    ICON_BUTTON_SIZE, ICON_GLYPH_SIZE, ICON_SIZE, ICON_TEXT_GAP,
+    CONTROL_HEIGHT, CONTROL_PADDING_X, ICON_BUTTON_SIZE, ICON_GLYPH_SIZE, ICON_SIZE, ICON_TEXT_GAP,
     LINE_HEIGHT, MENU_GAP, MENU_ICON_TEXT_GAP, MENU_ITEM_PADDING_X, MENU_PADDING, MENU_RADIUS,
     MENU_SHADOW_LAYER_ALPHA, MENU_SHADOW_MARGIN, MENU_SHADOW_OFFSET, MENU_SHADOW_SPREAD,
     MENU_MIN_WIDTH,
-    RADIUS_CARD, SHADOW_SM, TEXT_MAIN, TEXT_MUTED, TEXT_SUB,
+    RADIUS_CARD, SHADOW_SM,
 )
 
 LUCIDE_ICON_DIR = Path(__file__).resolve().parents[1] / "assets" / "icons"
@@ -58,7 +58,7 @@ class ButtonSizingController(QtCore.QObject):
             # Native framed dialogs must have an opaque client surface even
             # when their owner is the translucent, frameless main window.
             painter = QtGui.QPainter(watched)
-            painter.fillRect(event.rect(), QtGui.QColor(BG_MAIN))
+            painter.fillRect(event.rect(), QtGui.QColor(get_theme_color("bg_main")))
             painter.end()
         if (kind == QtCore.QEvent.Paint
                 and isinstance(watched, QtWidgets.QPushButton)
@@ -161,11 +161,11 @@ def draw_icon_text_label(style, option, painter, widget):
     x = rect.left() if left_aligned else rect.left() + max(0, (rect.width() - total) // 2)
     enabled = bool(option.state & QtWidgets.QStyle.State_Enabled)
     if option.state & QtWidgets.QStyle.State_HasFocus and not option.state & QtWidgets.QStyle.State_Sunken:
-        option.palette.setColor(QtGui.QPalette.ButtonText, QtGui.QColor(TEXT_MAIN))
+        focus_color = option.palette.color(QtGui.QPalette.ButtonText)
         focused_icon = option.icon.pixmap(ICON_SIZE, ICON_SIZE)
         tint = QtGui.QPainter(focused_icon)
         tint.setCompositionMode(QtGui.QPainter.CompositionMode_SourceIn)
-        tint.fillRect(focused_icon.rect(), QtGui.QColor(TEXT_MAIN))
+        tint.fillRect(focused_icon.rect(), focus_color)
         tint.end()
         option.icon = QtGui.QIcon(focused_icon)
     mode = QtGui.QIcon.Normal if enabled else QtGui.QIcon.Disabled
@@ -252,7 +252,7 @@ def paint_popup_surface(painter, rect, radius=MENU_RADIUS):
         painter.fillPath(path, QtGui.QColor(0, 0, 0, MENU_SHADOW_LAYER_ALPHA))
     path = QtGui.QPainterPath()
     path.addRoundedRect(surface, radius, radius)
-    painter.fillPath(path, QtGui.QColor("white"))
+    painter.fillPath(path, QtGui.QColor(get_theme_color("bg_surface")))
 
 
 class RoundedCanvasFrame(QtWidgets.QFrame):
@@ -269,15 +269,38 @@ class RoundedCanvasFrame(QtWidgets.QFrame):
             QtCore.QRectF(self.rect()).adjusted(inset, inset, -inset, -inset),
             self.CORNER_RADII,
         )
-        painter.fillPath(path, QtGui.QColor(BG_MAIN))
+        painter.fillPath(path, QtGui.QColor(get_theme_color("bg_main")))
         if self.BORDER_WIDTH:
-            painter.setPen(QtGui.QPen(QtGui.QColor(BORDER_PANEL), self.BORDER_WIDTH))
+            painter.setPen(QtGui.QPen(QtGui.QColor(get_theme_color("border_panel")), self.BORDER_WIDTH))
             painter.drawPath(path)
         painter.end()
 
 
+_icon_descriptors = {}
+
+
+def clear_icon_cache():
+    load_lucide_icon.cache_clear()
+    _icon_descriptors.clear()
+
+
+def icon_descriptor(icon):
+    return _icon_descriptors.get(icon.cacheKey())
+
+
+def set_label_icon(label, name, role="text_sub", size=ICON_SIZE):
+    label.setProperty("lucideName", name)
+    label.setProperty("lucideRole", role)
+    label.setProperty("lucideSize", size)
+    label.setPixmap(load_lucide_icon(name, role, size).pixmap(size, size))
+
+
 @lru_cache(maxsize=256)
-def load_lucide_icon(name, color=TEXT_SUB, size=ICON_SIZE, align_visible_left=False):
+def load_lucide_icon(name, color=None, size=ICON_SIZE, align_visible_left=False):
+    from plm.frontend.qt.styles.tokens import get_theme_colors
+    colors = get_theme_colors()
+    role = "text_sub" if color is None else (color if color in colors else None)
+    color = colors[role] if role else color
     path = LUCIDE_ICON_DIR / f"{name}.svg"
     source = QtGui.QPixmap(size, size)
     source.fill(QtCore.Qt.transparent)
@@ -299,11 +322,13 @@ def load_lucide_icon(name, color=TEXT_SUB, size=ICON_SIZE, align_visible_left=Fa
     painter.end()
     # Keep the compatibility argument, but all glyphs now stay centered in
     # their fixed slot instead of aligning their different path bounds.
-    return QtGui.QIcon(colored)
+    icon = QtGui.QIcon(colored)
+    _icon_descriptors[icon.cacheKey()] = (name, role, color, size, align_visible_left)
+    return icon
 
 
 def make_icon_button(icon_name, tooltip, object_name="IconButton", button_size=28,
-                     icon_size=ICON_SIZE, color=TEXT_SUB):
+                     icon_size=ICON_SIZE, color=None):
     button = QtWidgets.QPushButton()
     button.setObjectName(object_name)
     button.setIcon(load_lucide_icon(icon_name, color, icon_size))
@@ -420,7 +445,7 @@ class StyledMenu(QtWidgets.QMenu):
         action = event.action()
         if (event.type() == QtCore.QEvent.ActionAdded and action.icon().isNull()
                 and ("删除" in action.text() or action.text().lower().startswith("delete"))):
-            action.setIcon(load_lucide_icon("trash-2", DANGER, ICON_SIZE))
+            action.setIcon(load_lucide_icon("trash-2", "danger", ICON_SIZE))
 
     def sizeHint(self):
         result = super().sizeHint()
@@ -453,7 +478,7 @@ class StyledMenu(QtWidgets.QMenu):
             selected = action is self.activeAction() and action.isEnabled()
             if selected:
                 painter.setPen(QtCore.Qt.NoPen)
-                painter.setBrush(QtGui.QColor(BG_SUBTLE))
+                painter.setBrush(QtGui.QColor(get_theme_color("bg_subtle")))
                 painter.drawRoundedRect(QtCore.QRectF(rect), rect.height() / 2, rect.height() / 2)
             text_rect = rect.adjusted(MENU_ITEM_PADDING_X, 0, -MENU_ITEM_PADDING_X, 0)
             # Reserve the same 20 px icon slot even for rows without an icon.
@@ -463,14 +488,14 @@ class StyledMenu(QtWidgets.QMenu):
                 action.icon().paint(painter, icon_rect, QtCore.Qt.AlignCenter,
                                     QtGui.QIcon.Normal if action.isEnabled() else QtGui.QIcon.Disabled)
             elif action.isChecked():
-                painter.setPen(QtGui.QColor(TEXT_MAIN))
+                painter.setPen(QtGui.QColor(get_theme_color("text_main")))
                 painter.drawText(icon_rect, QtCore.Qt.AlignCenter, "✓")
             text_rect.setLeft(icon_rect.right() + 1 + MENU_ICON_TEXT_GAP)
             option = QtWidgets.QStyleOptionMenuItem()
             self.initStyleOption(option, action)
             label, _, shortcut = option.text.partition("\t")
             dangerous = "删除" in action.text() or action.text().lower().startswith("delete")
-            color = (DANGER if dangerous else TEXT_MAIN) if action.isEnabled() else TEXT_MUTED
+            color = (get_theme_color("danger_text") if dangerous else get_theme_color("text_main")) if action.isEnabled() else get_theme_color("text_muted")
             painter.setPen(QtGui.QColor(color))
             painter.setFont(option.font)
             if action.menu():

@@ -3,8 +3,9 @@
 from pathlib import Path
 
 from PyQt5 import QtCore, QtGui, QtWidgets
+from plm.frontend.qt.widgets.common import set_label_icon
 
-from plm.frontend.qt.styles.tokens import CONTROL_HEIGHT, CONTROL_PADDING_X, DANGER, ICON_SIZE, ICON_TEXT_GAP, NAV_ICON_INSET, NAV_ITEM_GAP, TEXT_SUB
+from plm.frontend.qt.styles.tokens import CONTROL_HEIGHT, CONTROL_PADDING_X, ICON_SIZE, ICON_TEXT_GAP, NAV_ICON_INSET, NAV_ITEM_GAP
 from plm.frontend.qt.widgets.common import (
     PROJECT_ROOT,
     StyledMenu,
@@ -79,11 +80,7 @@ class ProjectItemWidget(QtWidgets.QWidget):
         self.folder_icon.setObjectName("ProjectFolderIcon")
         self.folder_icon.setFixedSize(ICON_SIZE, ICON_SIZE)
         self.folder_icon.setAlignment(QtCore.Qt.AlignCenter)
-        self.folder_icon.setPixmap(
-            load_lucide_icon(
-                "folder", TEXT_SUB, ICON_SIZE, align_visible_left=True
-            ).pixmap(ICON_SIZE, ICON_SIZE)
-        )
+        set_label_icon(self.folder_icon, "folder")
         self.folder_icon.setAttribute(QtCore.Qt.WA_TransparentForMouseEvents)
         self.project_name_label = ElidedNameLabel(self.project_name)
         self.project_name_label.setObjectName("ProjectName")
@@ -200,26 +197,26 @@ class ProjectItemWidget(QtWidgets.QWidget):
         menu.aboutToShow.connect(lambda: self._set_menu_open(True))
         menu.aboutToHide.connect(lambda: self._set_menu_open(False))
         pin_action = menu.addAction(
-            load_lucide_icon("pin", TEXT_SUB, ICON_SIZE), "置顶"
+            load_lucide_icon("pin", 'text_sub', ICON_SIZE), "置顶"
         )
         rename_action = menu.addAction(
-            load_lucide_icon("pencil", TEXT_SUB, ICON_SIZE), "重命名"
+            load_lucide_icon("pencil", 'text_sub', ICON_SIZE), "重命名"
         )
         menu.addSeparator()
         open_action = menu.addAction(
-            load_lucide_icon("folder-open", TEXT_SUB, ICON_SIZE),
+            load_lucide_icon("folder-open", 'text_sub', ICON_SIZE),
             "打开所在目录",
         )
         reload_action = menu.addAction(
-            load_lucide_icon("refresh-cw", TEXT_SUB, ICON_SIZE), "重新载入",
+            load_lucide_icon("refresh-cw", 'text_sub', ICON_SIZE), "重新载入",
         )
         reload_action.setToolTip("重新加载配置文件，并将所有生成文件标记为过期")
         menu.addSeparator()
         archive_action = menu.addAction(
-            load_lucide_icon("archive", TEXT_SUB, ICON_SIZE), "归档"
+            load_lucide_icon("archive", 'text_sub', ICON_SIZE), "归档"
         )
         delete_action = menu.addAction(
-            load_lucide_icon("trash-2", DANGER, ICON_SIZE), "删除"
+            load_lucide_icon("trash-2", 'danger', ICON_SIZE), "删除"
         )
 
         pin_action.triggered.connect(lambda: self.pinRequested.emit(self))

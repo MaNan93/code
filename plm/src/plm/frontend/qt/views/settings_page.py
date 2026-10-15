@@ -78,8 +78,17 @@ class _FormatterTable(QtWidgets.QTableWidget):
 
 
 class SettingsPage(SecondaryPage):
+    themeChanged = QtCore.pyqtSignal(str)
+
+    def refresh_theme(self):
+        from plm.frontend.qt.styles.tokens import get_active_theme
+        previous = self.theme_combo.blockSignals(True)
+        self.theme_combo.setCurrentIndex(self.theme_combo.findData(get_active_theme()))
+        self.theme_combo.blockSignals(previous)
+
     def __init__(self, parent=None, preferences=None):
         self.initial_preferences = {
+            "theme": "light",
             "editor_path": DEFAULT_EDITOR,
             "verible_path": "",
             "verible_flags": None,
@@ -140,7 +149,16 @@ class SettingsPage(SecondaryPage):
         editor_layout.addWidget(self.editor_path_edit, 1, QtCore.Qt.AlignVCenter)
         editor_layout.addWidget(browse_btn, 0, QtCore.Qt.AlignVCenter)
 
+        self.theme_combo = StyledComboBox()
+        self.theme_combo.setObjectName("SettingsTheme")
+        self.theme_combo.addItem("浅色", "light")
+        self.theme_combo.addItem("深色", "dark")
+        self.theme_combo.setCurrentIndex(max(0, self.theme_combo.findData(preferences["theme"])))
+        self.theme_combo.currentIndexChanged.connect(
+            lambda _index: self.themeChanged.emit(self.theme_combo.currentData())
+        )
         self.setting_rows = {
+            "theme": self._setting_row("界面主题", self.theme_combo),
             "editor": self._setting_row("默认编辑器", editor_control),
         }
         rows_layout = QtWidgets.QVBoxLayout()
@@ -173,7 +191,7 @@ class SettingsPage(SecondaryPage):
         return content
 
     def _show_section(self, index):
-        visible_rows = ({"editor"}, set())[index]
+        visible_rows = ({"theme", "editor"}, set())[index]
         for name, row in self.setting_rows.items():
             row.setVisible(name in visible_rows)
         is_formatter = index == 1

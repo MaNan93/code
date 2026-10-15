@@ -2,13 +2,14 @@
 
 from PyQt5 import QtCore, QtGui, QtWidgets
 
+from plm.frontend.qt.styles.tokens import get_theme_color
 from plm.frontend.qt.styles.tokens import (
-    FONT_FAMILY, RADIUS_CARD, FONT_SIZE_BODY, TOOLTIP_BG, TOOLTIP_TEXT,
+    FONT_FAMILY, RADIUS_CARD, FONT_SIZE_BODY,
 )
 
 
 class RoundedToolTip(QtWidgets.QWidget):
-    BACKGROUND = TOOLTIP_BG
+    BACKGROUND = get_theme_color("tooltip_bg")
     RADIUS = RADIUS_CARD
     MAX_TEXT_WIDTH = 360
 
@@ -25,12 +26,15 @@ class RoundedToolTip(QtWidgets.QWidget):
         self.label.setTextFormat(QtCore.Qt.PlainText)
         self.label.setWordWrap(True)
         self.label.setMaximumWidth(self.MAX_TEXT_WIDTH)
+        self.refresh_theme()
+        layout.addWidget(self.label)
+
+    def refresh_theme(self):
         self.label.setStyleSheet(
-            f'background: transparent; border: none; color: {TOOLTIP_TEXT}; '
+            f'background: transparent; border: none; color: {get_theme_color("tooltip_text")}; '
             f'font-family: {FONT_FAMILY}; '
             f'font-size: {FONT_SIZE_BODY}px; padding: 0;'
         )
-        layout.addWidget(self.label)
 
     def show_text(self, text, position, owner):
         self.label.setText(text)
@@ -52,7 +56,7 @@ class RoundedToolTip(QtWidgets.QWidget):
         painter.setRenderHint(QtGui.QPainter.Antialiasing)
         path = QtGui.QPainterPath()
         path.addRoundedRect(QtCore.QRectF(self.rect()), self.RADIUS, self.RADIUS)
-        painter.fillPath(path, QtGui.QColor(self.BACKGROUND))
+        painter.fillPath(path, QtGui.QColor(get_theme_color("tooltip_bg")))
 
 
 class ToolTipController(QtCore.QObject):

@@ -2,14 +2,14 @@
 
 from pathlib import Path
 from PyQt5 import QtCore, QtGui, QtWidgets
-from plm.frontend.qt.styles.tokens import PRIMARY, SUCCESS, TEXT_MUTED, TEXT_ARTIFACTS_MUTED
+from plm.frontend.qt.styles.tokens import get_theme_color
 from plm.frontend.qt.widgets.common import load_lucide_icon
 
 
 _STATUS_COLORS = {
-    "New": SUCCESS,
-    "Modified": PRIMARY,
-    "Unchanged": TEXT_MUTED,
+    "New": "success_text",
+    "Modified": "text_primary",
+    "Unchanged": "text_muted",
 }
 
 
@@ -159,7 +159,7 @@ class ArtifactFiles:
                     )
                 else:
                     icon = "folder"
-                item.setIcon(0, load_lucide_icon(icon, TEXT_ARTIFACTS_MUTED))
+                item.setIcon(0, load_lucide_icon(icon, 'text_artifacts_muted'))
                 nodes[key] = item
                 if is_file:
                     self._tree_items[path] = item
@@ -167,7 +167,7 @@ class ArtifactFiles:
                     item.setToolTip(0, str(relative))
                     status = self._file_statuses.get(relative.as_posix(), "")
                     if status in _STATUS_COLORS:
-                        item.setForeground(0, QtGui.QBrush(QtGui.QColor(_STATUS_COLORS[status])))
+                        item.setForeground(0, QtGui.QBrush(QtGui.QColor(get_theme_color(_STATUS_COLORS[status]))))
                     if self.current_path == path:
                         selected_item = item
                 parent = item

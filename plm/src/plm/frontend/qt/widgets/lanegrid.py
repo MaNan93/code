@@ -12,22 +12,14 @@ from PyQt5 import QtCore, QtGui, QtWidgets
 
 from plm.frontend.qt.widgets.common import StyledMenu, apply_drop_shadow
 from plm.frontend.qt.widgets.tables import RowDragTable
+from plm.frontend.qt.styles.tokens import LANE_GRID_PALETTE as LANE_GRID_PALETTE, get_active_theme
+from plm.frontend.qt.styles.tokens import get_theme_color
 from plm.frontend.qt.styles.tokens import (
-    BG_MAIN, BG_SUBTLE, BG_SURFACE, BORDER, BORDER_HOVER, CONTROL_HEIGHT, DANGER, FONT_SIZE_BODY,
-    PRIMARY_HOVER, PRIMARY_SOFT,
+    CONTROL_HEIGHT, FONT_SIZE_BODY,
     RADIUS_CHIP, SHADOW_SM, SPACING_MD,
-    TEXT_MAIN, TEXT_MUTED,
 )
 
-LANE_GRID_PALETTE = [
-    "#6366F1",
-    "#0EA5E9",
-    "#8B5CF6",
-    "#F59E0B",
-    "#14B8A6",
-    "#EC4899",
-]
-LANE_GRID_UNASSIGNED_BG = BG_SUBTLE
+LANE_GRID_UNASSIGNED_BG = get_theme_color("bg_subtle")
 
 # Keep the mode column compact and let the active lane columns consume the
 # remaining viewport width evenly. This avoids the large dead area that used
@@ -49,10 +41,21 @@ PREVIEW_OPACITY = 0.78
 @lru_cache(maxsize=64)
 def _contrast_text_color(hex_color):
     color = QtGui.QColor(hex_color)
-    # Preserve perceived luminance; HSL lightness gives different contrast
-    # decisions for saturated controller colors.
-    luminance = 0.299 * color.red() + 0.587 * color.green() + 0.114 * color.blue()
-    return TEXT_MAIN if luminance > 140 else BG_SURFACE
+    channels = (color.redF(), color.greenF(), color.blueF())
+    linear = [value / 12.92 if value <= .04045 else ((value + .055) / 1.055) ** 2.4
+              for value in channels]
+    luminance = sum(value * weight for value, weight in zip(linear, (.2126, .7152, .0722)))
+    # Black/white always provide at least AA contrast on a solid swatch.
+    use_dark = (luminance + .05) / .05 >= 1.05 / (luminance + .05)
+    return get_theme_color("text_on_light_swatch" if use_dark else "text_on_dark_swatch")
+
+
+def _marker_text_color(color, opacity):
+    foreground = QtGui.QColor(color)
+    background = QtGui.QColor(get_theme_color("bg_surface"))
+    blended = QtGui.QColor(*(round(front * opacity + back * (1 - opacity))
+                            for front, back in zip(foreground.getRgb()[:3], background.getRgb()[:3])))
+    return _contrast_text_color(blended.name())
 
 
 @lru_cache(maxsize=64)
@@ -71,13 +74,13 @@ def _make_pen_cursor(color):
     svg = (
         '<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32">'
         '<path d="M15.2 20.2L25.8 9.6c1.8-1.8 1.8-4.6 0-6.4s-4.6-1.8-6.4 0L8.8 13.8z" '
-        f'fill="{BG_MAIN}" stroke="{TEXT_MAIN}" stroke-width="1.5" stroke-linejoin="round"/>'
-        f'<path d="M11.4 12.1l8.5 8.5-3.2 3.2-8.5-8.5z" fill="{TEXT_MUTED}" '
-        f'stroke="{TEXT_MAIN}" stroke-width="1.3" stroke-linejoin="round"/>'
+        f'fill="{get_theme_color("bg_main")}" stroke="{get_theme_color("text_main")}" stroke-width="1.5" stroke-linejoin="round"/>'
+        f'<path d="M11.4 12.1l8.5 8.5-3.2 3.2-8.5-8.5z" fill="{get_theme_color("text_muted")}" '
+        f'stroke="{get_theme_color("text_main")}" stroke-width="1.3" stroke-linejoin="round"/>'
         f'<path d="M8.5 15.2c-2.7 2.5-3.4 5.2-3.7 8.2-.2 1.9-1 3.7-2.5 5.4 '
-        f'4.3-.1 7.8-1.4 10.2-4.9z" fill="{color}" stroke="{TEXT_MAIN}" stroke-width="1.5" '
+        f'4.3-.1 7.8-1.4 10.2-4.9z" fill="{color}" stroke="{get_theme_color("text_main")}" stroke-width="1.5" '
         'stroke-linejoin="round"/>'
-        f'<path d="M4.2 27.3c1.8-.2 3.2-.7 4.3-1.5" fill="none" stroke="{BG_SURFACE}" '
+        f'<path d="M4.2 27.3c1.8-.2 3.2-.7 4.3-1.5" fill="none" stroke="{get_theme_color("bg_surface")}" '
         'stroke-opacity=".8" stroke-width="1.2" stroke-linecap="round"/>'
         '</svg>'
     )
@@ -111,7 +114,7 @@ class _LaneCellDelegate(QtWidgets.QStyledItemDelegate):
             text_rect = option.rect.adjusted(12, 0, -12, 0)
             selected = bool(option.state & QtWidgets.QStyle.State_Selected)
             painter.save()
-            painter.setPen(QtGui.QColor(TEXT_MAIN) if selected
+            painter.setPen(QtGui.QColor(get_theme_color("text_main")) if selected
                            else styled.palette.color(QtGui.QPalette.Text))
             painter.drawText(
                 text_rect,
@@ -119,7 +122,7 @@ class _LaneCellDelegate(QtWidgets.QStyledItemDelegate):
                 option.fontMetrics.elidedText(text, styled.textElideMode, text_rect.width()),
             )
             if (r, c) in grid._cell_errors:
-                painter.setPen(QtGui.QPen(QtGui.QColor(DANGER), 2))
+                painter.setPen(QtGui.QPen(QtGui.QColor(get_theme_color("danger")), 2))
                 painter.drawRect(option.rect.adjusted(1, 1, -2, -2))
             painter.restore()
             return
@@ -148,9 +151,9 @@ class _LaneCellDelegate(QtWidgets.QStyledItemDelegate):
         if paint_color:
             painter.fillRect(rect, QtGui.QColor(grid._bg_color))
         else:
-            painter.fillRect(rect, QtGui.QColor(LANE_GRID_UNASSIGNED_BG))
+            painter.fillRect(rect, QtGui.QColor(get_theme_color("bg_subtle")))
         if option.state & QtWidgets.QStyle.State_Selected:
-            painter.fillRect(rect, QtGui.QColor(PRIMARY_SOFT))
+            painter.fillRect(rect, QtGui.QColor(get_theme_color("primary_soft")))
 
         # Adjacent cells assigned to the same controller join into one
         # continuous marker band. Only the two outer ends retain rounded caps.
@@ -169,23 +172,25 @@ class _LaneCellDelegate(QtWidgets.QStyledItemDelegate):
 
         # Draw text
         if paint_color:
-            text_color = QtGui.QColor(_darken_color(paint_color, 0.82))
+            text_color = QtGui.QColor(_marker_text_color(paint_color, PAINT_OPACITY) if get_active_theme() == "dark"
+                                     else _darken_color(paint_color, 0.82))
             painter.setPen(text_color)
             font = painter.font()
             font.setBold(True)
             painter.setFont(font)
         elif is_hover and active_color:
-            text_color = QtGui.QColor(_darken_color(active_color, 0.84))
+            text_color = QtGui.QColor(_marker_text_color(active_color, PREVIEW_OPACITY) if get_active_theme() == "dark"
+                                     else _darken_color(active_color, 0.84))
             painter.setPen(text_color)
             font = painter.font()
             font.setBold(True)
             painter.setFont(font)
         else:
-            painter.setPen(QtGui.QColor(TEXT_MAIN))
+            painter.setPen(QtGui.QColor(get_theme_color("text_main")))
 
         painter.drawText(rect, QtCore.Qt.AlignCenter, port)
         if (r, c) in grid._cell_errors:
-            painter.setPen(QtGui.QPen(QtGui.QColor(DANGER), 2))
+            painter.setPen(QtGui.QPen(QtGui.QColor(get_theme_color("danger")), 2))
             painter.drawRect(rect.adjusted(1, 1, -2, -2))
 
         painter.restore()
@@ -303,6 +308,13 @@ class _FlowLayout(QtWidgets.QLayout):
 class LaneGrid(QtWidgets.QWidget):
     changed = QtCore.pyqtSignal()
 
+    def refresh_theme(self):
+        self._bg_color = get_theme_color("bg_surface")
+        _make_pen_cursor.cache_clear()
+        self._render_palette()
+        self._apply_paint_cursor()
+        self.table.viewport().update()
+
     def __init__(self, parent=None):
         super().__init__(parent)
         self.lane_count = 0
@@ -318,7 +330,7 @@ class LaneGrid(QtWidgets.QWidget):
         self._paint_originals = {}
         self._hover_cell = None  # (row, lane) under the cursor, for pen preview
         self._pen_cursor = None  # cached QCursor for the active controller
-        self._bg_color = BG_SURFACE  # card background, set from theme
+        self._bg_color = get_theme_color("bg_surface")  # card background, set from theme
         self._cell_errors = {}
 
         layout = QtWidgets.QVBoxLayout(self)
@@ -445,7 +457,7 @@ class LaneGrid(QtWidgets.QWidget):
                 else f"Use {c.get('ctrl_name') or cid} as the brush"
             )
             text_color = _contrast_text_color(color)
-            border_color = PRIMARY_HOVER if is_active else BORDER
+            border_color = get_theme_color("primary_hover") if is_active else get_theme_color("border")
             outline = f"border: 1px solid {border_color};" if is_active else "border: none;"
             btn.setStyleSheet(
                 f"QPushButton#lgSwatch {{"
@@ -458,7 +470,7 @@ class LaneGrid(QtWidgets.QWidget):
                 f"  {outline}"
                 f"}}"
                 f"QPushButton#lgSwatch:hover {{"
-                f"  border-color: {BORDER_HOVER};"
+                f"  border-color: {get_theme_color('border_hover')};"
                 f"}}"
             )
             btn.setCursor(QtCore.Qt.PointingHandCursor)

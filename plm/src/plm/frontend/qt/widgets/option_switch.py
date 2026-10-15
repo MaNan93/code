@@ -2,8 +2,9 @@
 
 from PyQt5 import QtCore, QtGui, QtWidgets
 
+from plm.frontend.qt.styles.tokens import get_theme_color
 from plm.frontend.qt.styles.tokens import (
-    BG_SWITCH_HOVER, CONTROL_HEIGHT, DANGER, ICON_SIZE, PRIMARY, TEXT_MAIN, TEXT_MUTED,
+    CONTROL_HEIGHT, ICON_SIZE,
 )
 from plm.frontend.qt.widgets.common import load_lucide_icon
 
@@ -22,7 +23,7 @@ class OptionSwitch(QtWidgets.QAbstractButton):
         self._keyboard_focus = False
         self._hover_progress = 0.0
         self._hover_animation = None
-        self._icon = load_lucide_icon("arrow-right-left", color=TEXT_MUTED)
+        self._icon = load_lucide_icon("arrow-right-left", color='text_muted')
         self.setFocusPolicy(QtCore.Qt.StrongFocus)
         self.setCursor(QtCore.Qt.PointingHandCursor)
         self.setFixedHeight(CONTROL_HEIGHT)
@@ -34,6 +35,10 @@ class OptionSwitch(QtWidgets.QAbstractButton):
     def sizeHint(self):
         width = max((self.fontMetrics().horizontalAdvance(text) for text in self._options), default=0)
         return QtCore.QSize(width + ICON_SIZE + 8 + 2 * self.HORIZONTAL_PADDING, CONTROL_HEIGHT)
+
+    def refresh_theme(self):
+        self._icon = load_lucide_icon("arrow-right-left", color='text_muted')
+        self.update()
 
     def setOptions(self, options):
         options = list(options)
@@ -126,9 +131,9 @@ class OptionSwitch(QtWidgets.QAbstractButton):
         rect = QtCore.QRectF(self.rect()).adjusted(.5, 4.5, -.5, -4.5)
         invalid = bool(self.property("validationError"))
         focused = self.hasFocus() and self._keyboard_focus
-        painter.setPen(QtGui.QPen(QtGui.QColor(DANGER if invalid else PRIMARY), 1)
+        painter.setPen(QtGui.QPen(QtGui.QColor(get_theme_color("danger") if invalid else get_theme_color("primary")), 1)
                        if invalid or focused else QtCore.Qt.NoPen)
-        background = QtGui.QColor(BG_SWITCH_HOVER)
+        background = QtGui.QColor(get_theme_color("bg_switch_hover"))
         background.setAlphaF(1.0 if self.isDown() or focused else self._hover_progress)
         painter.setBrush(background)
         painter.drawRoundedRect(rect, rect.height() / 2, rect.height() / 2)
@@ -138,5 +143,5 @@ class OptionSwitch(QtWidgets.QAbstractButton):
         text_rect = self.rect().adjusted(self.HORIZONTAL_PADDING, 0,
                                         -(ICON_SIZE + 8 + self.HORIZONTAL_PADDING), 0)
         label = self.fontMetrics().elidedText(self.text(), QtCore.Qt.ElideRight, max(0, text_rect.width()))
-        painter.setPen(QtGui.QColor(DANGER if invalid else TEXT_MAIN))
+        painter.setPen(QtGui.QColor(get_theme_color("danger_text") if invalid else get_theme_color("text_main")))
         painter.drawText(text_rect, QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter, label)

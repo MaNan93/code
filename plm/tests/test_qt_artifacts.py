@@ -166,10 +166,12 @@ class ArtifactPreviewTests(unittest.TestCase):
         self.assertIsNone(tree.graphicsEffect())
         item = tree.currentItem()
         file_icon = load_lucide_icon("file-code-corner", TEXT_ARTIFACTS_MUTED)
-        self.assertEqual(item.icon(0).cacheKey(), file_icon.cacheKey())
+        self.assertEqual(item.icon(0).pixmap(ICON_SIZE, ICON_SIZE).toImage(),
+                         file_icon.pixmap(ICON_SIZE, ICON_SIZE).toImage())
         tree.collapseAll()
         tree.expandAll()
-        self.assertEqual(item.icon(0).cacheKey(), file_icon.cacheKey())
+        self.assertEqual(item.icon(0).pixmap(ICON_SIZE, ICON_SIZE).toImage(),
+                         file_icon.pixmap(ICON_SIZE, ICON_SIZE).toImage())
         rect = tree.visualItemRect(item)
         self.assertEqual(rect.height(), CONTROL_HEIGHT)
         image = tree.viewport().grab().toImage()

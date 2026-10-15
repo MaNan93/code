@@ -4,19 +4,17 @@ import re
 
 from PyQt5 import QtCore, QtGui, QtWidgets
 from plm.frontend.qt.widgets.common import StyledMenu
+from plm.frontend.qt.styles.tokens import get_theme_color
 from plm.frontend.qt.styles.tokens import (
-    BG_ARTIFACTS, FONT_CODE_PRIMARY, FONT_SIZE_BODY, TEXT_ARTIFACTS_MUTED,
-    BG_ARTIFACTS_HEADER, DIFF_ADDED_BG, DIFF_REMOVED_BG,
-    DIFF_ADDED_GUTTER, DIFF_REMOVED_GUTTER, DIFF_HUNK_BG,
+    FONT_CODE_PRIMARY, FONT_SIZE_BODY,
 )
 
 
-SYNTAX_COMMENT = "#57606A"
-SYNTAX_KEYWORD = "#CF222E"
-SYNTAX_PORT = "#953800"
-SYNTAX_NUMBER = "#0550AE"
-SYNTAX_STRING = "#0A3069"
-SYNTAX_DIRECTIVE = "#CF222E"
+from plm.frontend.qt.styles.tokens import (
+    SYNTAX_COMMENT as SYNTAX_COMMENT, SYNTAX_KEYWORD as SYNTAX_KEYWORD,
+    SYNTAX_PORT as SYNTAX_PORT, SYNTAX_NUMBER as SYNTAX_NUMBER,
+    SYNTAX_STRING as SYNTAX_STRING, SYNTAX_DIRECTIVE as SYNTAX_DIRECTIVE,
+)
 LINE_NUMBER_PADDING = 12
 
 
@@ -46,17 +44,21 @@ class VerilogHighlighter(QtGui.QSyntaxHighlighter):
         super().__init__(document)
         self.enabled = True
         self.formats = {}
+        self.refresh_theme()
+
+    def refresh_theme(self):
         for name, color in (
-            ("comment", SYNTAX_COMMENT),
-            ("keyword", SYNTAX_KEYWORD),
-            ("port", SYNTAX_PORT),
-            ("string", SYNTAX_STRING),
-            ("number", SYNTAX_NUMBER),
-            ("directive", SYNTAX_DIRECTIVE),
+            ("comment", get_theme_color("syntax_comment")),
+            ("keyword", get_theme_color("syntax_keyword")),
+            ("port", get_theme_color("syntax_port")),
+            ("string", get_theme_color("syntax_string")),
+            ("number", get_theme_color("syntax_number")),
+            ("directive", get_theme_color("syntax_directive")),
         ):
             fmt = QtGui.QTextCharFormat()
             fmt.setForeground(QtGui.QColor(color))
             self.formats[name] = fmt
+        self.rehighlight()
 
     def set_enabled(self, enabled):
         if self.enabled == enabled:
@@ -160,6 +162,12 @@ class CodePreview(QtWidgets.QPlainTextEdit):
         self.textChanged.connect(self._update_diff_rows)
         self.update_line_number_width()
 
+    def refresh_theme(self):
+        self.highlighter.refresh_theme()
+        self._update_diff_rows()
+        self.viewport().update()
+        self.line_numbers.update()
+
     def set_diff_mode(self, enabled):
         self._diff_mode = bool(enabled)
         self._update_diff_rows()
@@ -198,8 +206,8 @@ class CodePreview(QtWidgets.QPlainTextEdit):
             (number for old, new, _kind in self._diff_rows
              for number in (old, new) if number is not None), default=1,
         )))
-        colors = {"added": DIFF_ADDED_BG, "removed": DIFF_REMOVED_BG,
-                  "hunk": DIFF_HUNK_BG, "header": BG_ARTIFACTS_HEADER}
+        colors = {"added": get_theme_color("diff_added_bg"), "removed": get_theme_color("diff_removed_bg"),
+                  "hunk": get_theme_color("diff_hunk_bg"), "header": get_theme_color("bg_artifacts_header")}
         selections = []
         block = self.document().begin()
         for _old, _new, kind in self._diff_rows:
@@ -209,7 +217,7 @@ class CodePreview(QtWidgets.QPlainTextEdit):
                 selection.format.setBackground(QtGui.QColor(colors[kind]))
                 selection.format.setProperty(QtGui.QTextFormat.FullWidthSelection, True)
                 if kind == "hunk":
-                    selection.format.setForeground(QtGui.QColor("#0969DA"))
+                    selection.format.setForeground(QtGui.QColor(get_theme_color("accent_artifacts")))
                 selections.append(selection)
             block = block.next()
         self.setExtraSelections(selections)
@@ -275,9 +283,9 @@ class CodePreview(QtWidgets.QPlainTextEdit):
 
     def paint_line_numbers(self, event):
         painter = QtGui.QPainter(self.line_numbers)
-        painter.fillRect(event.rect(), QtGui.QColor(BG_ARTIFACTS))
+        painter.fillRect(event.rect(), QtGui.QColor(get_theme_color("bg_artifacts")))
         painter.setFont(self.font())
-        painter.setPen(QtGui.QColor(TEXT_ARTIFACTS_MUTED))
+        painter.setPen(QtGui.QColor(get_theme_color("text_artifacts_muted")))
         block = self.firstVisibleBlock()
         number = block.blockNumber()
         top = int(self.blockBoundingGeometry(block).translated(self.contentOffset()).top())
@@ -287,8 +295,8 @@ class CodePreview(QtWidgets.QPlainTextEdit):
                 if self._diff_mode:
                     old, new, kind = (self._diff_rows[number] if number < len(self._diff_rows)
                                       else (None, None, "context"))
-                    colors = {"added": DIFF_ADDED_GUTTER, "removed": DIFF_REMOVED_GUTTER,
-                              "hunk": DIFF_HUNK_BG, "header": BG_ARTIFACTS_HEADER}
+                    colors = {"added": get_theme_color("diff_added_gutter"), "removed": get_theme_color("diff_removed_gutter"),
+                              "hunk": get_theme_color("diff_hunk_bg"), "header": get_theme_color("bg_artifacts_header")}
                     if kind in colors:
                         painter.fillRect(0, top, self.line_numbers.width(), height,
                                          QtGui.QColor(colors[kind]))

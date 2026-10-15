@@ -4,10 +4,11 @@ from plm.frontend.qt.widgets.common import (
 )
 from plm.frontend.qt.widgets.config_editor import CsvTableEditor, GenerationEditor
 from plm.frontend.qt.views.artifacts_panel import ArtifactsPanel
+from plm.frontend.qt.styles.tokens import get_theme_color
 from plm.frontend.qt.styles.tokens import (
     CONTROL_HEIGHT, HEADER_HEIGHT, SPACING_LG, SPACING_MD,
     ARTIFACTS_DEFAULT_WIDTH, ARTIFACTS_MIN_WIDTH,
-    PANEL_ANIMATION_DURATION, TEXT_MAIN,
+    PANEL_ANIMATION_DURATION,
 )
 
 
@@ -194,7 +195,7 @@ class DrawerShadow(QtWidgets.QWidget):
     def paintEvent(self, _event):
         painter = QtGui.QPainter(self)
         gradient = QtGui.QLinearGradient(0, 0, self.width(), 0)
-        edge = QtGui.QColor(TEXT_MAIN)
+        edge = QtGui.QColor(get_theme_color("text_main"))
         edge.setAlpha(0)
         gradient.setColorAt(0.0, edge)
         edge.setAlpha(38)

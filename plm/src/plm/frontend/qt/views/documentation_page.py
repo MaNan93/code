@@ -3,9 +3,9 @@ import re
 import unicodedata
 from PyQt5 import QtCore, QtGui, QtWidgets, sip
 from plm.frontend.qt.services.tasks import TaskRunner
+from plm.frontend.qt.styles.tokens import get_theme_color
 from plm.frontend.qt.styles.tokens import (
-    BG_SUBTLE, FONT_CODE_PRIMARY, FONT_WEIGHT_MEDIUM, TEXT_MAIN, TEXT_MUTED,
-    FONT_SIZE_BODY,
+    FONT_CODE_PRIMARY, FONT_WEIGHT_MEDIUM, FONT_SIZE_BODY,
 )
 from .secondary_page import SecondaryPage
 DOCS_DIR = Path(__file__).resolve().parents[3] / "docs"
@@ -28,6 +28,11 @@ class DocumentationPage(SecondaryPage):
         self.doc_browser.setOpenExternalLinks(True)
         self.doc_browser.setSearchPaths([str(DOCS_DIR)])
         self.doc_browser.setVerticalScrollBarPolicy(QtCore.Qt.ScrollBarAsNeeded)
+        self._apply_document_css()
+        layout.addWidget(self.doc_browser, 1)
+        return content
+
+    def _apply_document_css(self):
         doc_css = """
         h1 {{ color: {text_main}; font-size: {heading_size}px; font-weight: 600; margin: 16px 0 8px 0; }}
         h2, h3 {{ color: {text_main}; font-size: {subheading_size}px; font-weight: 600; margin: 12px 0 6px 0; }}
@@ -36,15 +41,43 @@ class DocumentationPage(SecondaryPage):
         th {{ background-color: {bg_subtle}; color: {text_main}; font-size: {body_size}px; font-weight: {header_weight}; padding: 8px 16px; }}
         td {{ color: {text_main}; font-size: {body_size}px; font-weight: 400; padding: 8px 16px; }}
         """.format(
-            text_main=TEXT_MAIN, bg_subtle=BG_SUBTLE,
+            text_main=get_theme_color("text_main"), bg_subtle=get_theme_color("bg_subtle"),
             heading_size=FONT_SIZE_BODY,
             subheading_size=FONT_SIZE_BODY,
             body_size=FONT_SIZE_BODY,
             header_weight=FONT_WEIGHT_MEDIUM,
         )
         self.doc_browser.document().setDefaultStyleSheet(doc_css)
-        layout.addWidget(self.doc_browser, 1)
-        return content
+
+    def refresh_theme(self):
+        self._apply_document_css()
+        if hasattr(self, "_markdown"):
+            self._render_document(self._markdown)
+
+    def _render_document(self, markdown, reset_scroll=False):
+        self._markdown = markdown
+        previous = self.doc_browser.document()
+        cursor = self.doc_browser.textCursor()
+        position, anchor = cursor.position(), cursor.anchor()
+        horizontal = self.doc_browser.horizontalScrollBar().value()
+        vertical = self.doc_browser.verticalScrollBar().value()
+        document = QtGui.QTextDocument(self.doc_browser)
+        document.setDefaultFont(previous.defaultFont())
+        document.setDefaultStyleSheet(previous.defaultStyleSheet())
+        document.setUndoRedoEnabled(previous.isUndoRedoEnabled())
+        document.setMarkdown(markdown)
+        self._format_document(document)
+        self.doc_browser.setDocument(document)
+        if not reset_scroll:
+            cursor = QtGui.QTextCursor(document)
+            limit = document.characterCount() - 1
+            cursor.setPosition(min(anchor, limit))
+            cursor.setPosition(min(position, limit), QtGui.QTextCursor.KeepAnchor)
+            self.doc_browser.setTextCursor(cursor)
+        if not sip.isdeleted(previous):
+            previous.deleteLater()
+        self.doc_browser.horizontalScrollBar().setValue(0 if reset_scroll else horizontal)
+        self.doc_browser.verticalScrollBar().setValue(0 if reset_scroll else vertical)
 
     def _show_section(self, index):
         docs = (
@@ -117,17 +150,7 @@ class DocumentationPage(SecondaryPage):
             if revision == self._document_revision:
                 # Format before attaching: each edit otherwise lays out the
                 # visible browser again, including Markdown table insertion.
-                previous = self.doc_browser.document()
-                document = QtGui.QTextDocument(self.doc_browser)
-                document.setDefaultFont(previous.defaultFont())
-                document.setDefaultStyleSheet(previous.defaultStyleSheet())
-                document.setUndoRedoEnabled(previous.isUndoRedoEnabled())
-                document.setMarkdown(markdown)
-                self._format_document(document)
-                self.doc_browser.setDocument(document)
-                if not sip.isdeleted(previous):
-                    previous.deleteLater()
-                self.doc_browser.verticalScrollBar().setValue(0)
+                self._render_document(markdown, reset_scroll=True)
 
         def failed(error):
             if revision == self._document_revision:
@@ -173,7 +196,7 @@ class DocumentationPage(SecondaryPage):
             if heading_level:
                 cursor.select(QtGui.QTextCursor.BlockUnderCursor)
                 heading_format = QtGui.QTextCharFormat()
-                heading_format.setForeground(QtGui.QColor(TEXT_MAIN))
+                heading_format.setForeground(QtGui.QColor(get_theme_color("text_main")))
                 heading_format.setFontFamily(self.doc_browser.font().family())
                 heading_format.clearProperty(QtGui.QTextFormat.FontSizeAdjustment)
                 heading_format.setProperty(
@@ -197,7 +220,7 @@ class DocumentationPage(SecondaryPage):
             if block.text().strip().startswith("操作："):
                 cursor.select(QtGui.QTextCursor.BlockUnderCursor)
                 note_format = QtGui.QTextCharFormat()
-                note_format.setForeground(QtGui.QColor(TEXT_MUTED))
+                note_format.setForeground(QtGui.QColor(get_theme_color("text_muted")))
                 note_format.setProperty(
                     QtGui.QTextFormat.FontPixelSize, FONT_SIZE_BODY
                 )
@@ -218,7 +241,7 @@ class DocumentationPage(SecondaryPage):
                 for column in range(table.columns()):
                     cell = table.cellAt(0, column)
                     cell_format = cell.format()
-                    cell_format.setBackground(QtGui.QColor(BG_SUBTLE))
+                    cell_format.setBackground(QtGui.QColor(get_theme_color("bg_subtle")))
                     cell.setFormat(cell_format)
                     cell_cursor = cell.firstCursorPosition()
                     cell_cursor.setPosition(
@@ -226,7 +249,7 @@ class DocumentationPage(SecondaryPage):
                         QtGui.QTextCursor.KeepAnchor,
                     )
                     header_format = QtGui.QTextCharFormat()
-                    header_format.setForeground(QtGui.QColor(TEXT_MAIN))
+                    header_format.setForeground(QtGui.QColor(get_theme_color("text_main")))
                     header_format.setProperty(
                         QtGui.QTextFormat.FontPixelSize, FONT_SIZE_BODY
                     )
@@ -245,7 +268,7 @@ class DocumentationPage(SecondaryPage):
                 fence = QtGui.QTextFormat.BlockCodeFence
                 first = not block.previous().blockFormat().property(fence)
                 last = not block.next().blockFormat().property(fence)
-                block_format.setBackground(QtGui.QColor(BG_SUBTLE))
+                block_format.setBackground(QtGui.QColor(get_theme_color("bg_subtle")))
                 block_format.setLeftMargin(12)
                 block_format.setRightMargin(12)
                 # Margins only around the whole fence: per-line margins show

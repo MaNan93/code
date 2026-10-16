@@ -359,6 +359,12 @@ class GenerationEditor(QtWidgets.QWidget):
                         label.fontMetrics().horizontalAdvance(label.text())) for label in labels)
         for label in labels:
             label.setFixedWidth(width)
+        # Each card caches its form column width independently. Clear both
+        # caches after changing the shared labels, before the next resize can
+        # reuse a column computed from the original 120px minimum.
+        for card in (self.architecture_card, self.naming_card):
+            card.layout().invalidate()
+            card.layout().activate()
 
     def changeEvent(self, event):
         super().changeEvent(event)

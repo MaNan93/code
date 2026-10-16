@@ -178,8 +178,9 @@ class RedesignTests(unittest.TestCase):
         # right when its fixed-width fields left spare horizontal space.
         self.app.setStyle(CenteredFormStyle("Fusion"))
         editor = GenerationEditor()
-        # Native label hints may include margins not present in glyph metrics.
-        editor.architecture_card.layout().labelForField(editor.bus_type).setMargin(4)
+        # Exceed the initial 120px label column even with narrow Latin fallback
+        # fonts, reproducing the stale naming-card column on every platform.
+        editor.architecture_card.layout().labelForField(editor.bus_type).setMargin(20)
         editor.show()
         controls = (editor.arch, editor.pclk_mode, editor.bus_type, *editor._prefix_edits.values())
         for width in (520, 760):

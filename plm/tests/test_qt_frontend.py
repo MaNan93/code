@@ -1352,8 +1352,8 @@ class QtFrontendLayoutTests(unittest.TestCase):
         self.assertGreater(overlay.back_btn.width(), 32)
         self.assertEqual(overlay.back_btn.iconSize(), QtCore.QSize(ICON_SIZE, ICON_SIZE))
         panel = overlay.findChild(QtWidgets.QWidget, "SecondaryPagePanel")
-        self.assertEqual(panel.width(), min(SETTINGS_MAX_WIDTH, overlay.width() - 48))
-        self.assertEqual(panel.mapTo(overlay, QtCore.QPoint()).y(), 64)
+        self.assertEqual(panel.width(), min(SETTINGS_MAX_WIDTH, overlay.width() - 56))
+        self.assertEqual(panel.mapTo(overlay, QtCore.QPoint()).y(), 29)
         self.assertEqual(
             panel.mapTo(overlay, panel.rect().center()).x(),
             overlay.rect().center().x(),

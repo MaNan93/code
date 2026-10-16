@@ -104,9 +104,13 @@ class ConfigHeader(QtWidgets.QFrame):
         layout.addSpacing(8)
         self.title_label = DoubleClickLabel("未命名配置")
         self.title_label.setObjectName("ConfigSessionTitle")
+        # Reserve the caret's trailing space before entering the editor so
+        # selecting the full title never scrolls its first glyph out of view.
+        self.title_label.setContentsMargins(3, 0, 11, 0)
+        self.title_label.setFixedHeight(CONTROL_HEIGHT)
         self.title_label.setToolTip("双击重命名")
         self.title_label.doubleClicked.connect(self.enter_edit_mode)
-        layout.addWidget(self.title_label)
+        layout.addWidget(self.title_label, 0, QtCore.Qt.AlignVCenter)
         self.title_edit = EscapeLineEdit()
         self.title_edit.setObjectName("ConfigSessionEditor")
         self.title_edit.hide()
@@ -147,7 +151,10 @@ class ConfigHeader(QtWidgets.QFrame):
     def enter_edit_mode(self):
         self._original_title = self.title_label.text()
         self._editing_title = True
+        self.title_edit.ensurePolished()
+        self.title_edit.setFont(self.title_label.font())
         self.title_edit.setText(self._original_title)
+        self.title_edit.setFixedWidth(self.title_label.width())
         self.title_label.hide()
         self.title_edit.show()
         self.title_edit.selectAll()

@@ -351,7 +351,13 @@ QPushButton#ProjectButton[selected="true"], QPushButton#NavFooterButton[selected
 }
 QLabel#ProjectName { color: $text_main; font-size: $font_size_body; }
 QLabel#ProjectName[selected="true"] { color: $text_main; font-weight: $font_weight_medium; }
-QLineEdit#ProjectNameEditor { padding: 0 4px; }
+QLineEdit#ProjectNameEditor {
+    padding: 0;
+    margin: 0;
+    border: 1px solid $primary;
+    border-radius: $radius_control;
+    font-size: $font_size_body;
+}
 QPushButton#NavCollapseButton {
     min-width: $icon_button_size; max-width: $icon_button_size;
     background: transparent; border: none; border-radius: $radius_control; padding: 0;
@@ -376,7 +382,12 @@ QLabel#ConfigSessionTitle {
     font-weight: $font_weight_semibold;
 }
 QLineEdit#ConfigSessionEditor {
-    padding: 0 8px;
+    padding: 0;
+    margin: 0;
+    border: 1px solid $primary;
+    border-radius: $radius_control;
+    font-size: $font_size_title;
+    font-weight: $font_weight_semibold;
 }
 QPushButton#HeaderButton, QPushButton#ArtifactsToolButton,
 QPushButton#LogClearButton, QPushButton#LogCloseBtn,
@@ -660,10 +671,9 @@ QLabel#GenerationStatus[state="invalid"] {
    same way the config and output panels do. */
 QFrame#SecondaryPage { background-color: transparent; }
 QWidget#SecondaryPageArea {
-    background-color: $bg_main;
-    border: 1px solid $border_panel;
-    border-radius: $radius_card;
-    margin: 0 $spacing_xs $spacing_xs $spacing_xs;
+    background: transparent;
+    border: none;
+    margin: 0;
 }
 QFrame#SecondaryPageHeader {
     background: transparent;
@@ -674,7 +684,8 @@ QLabel#SecondaryPageTitle {
     font-size: $font_size_body;
     font-weight: $font_weight_semibold;
 }
-QWidget#SecondaryPagePanel, QWidget#SecondaryContent, QWidget#SecondaryTabs { background: transparent; }
+QWidget#SecondaryPageBody, QWidget#SecondaryPagePanel,
+QWidget#SecondaryContent, QWidget#SecondaryTabs { background: transparent; }
 QFrame#SecondaryTabDivider { background: transparent; border: none; }
 QPushButton#SecondaryMenuButton {
     background: transparent;
@@ -783,6 +794,15 @@ QToolTip {
     border-radius: $radius_card;
     padding: 6px 10px;
     font-size: $font_size_body;
+}
+
+/* Delegate editors keep the painted cell's text position. */
+QWidget#ConfigCsvEditor QTableWidget QLineEdit {
+    background-color: $bg_surface;
+    border: 1px solid $primary;
+    border-radius: 0;
+    padding: 0;
+    margin: 0;
 }
 
 /* Embedded formatter values share the table row's continuous background. */

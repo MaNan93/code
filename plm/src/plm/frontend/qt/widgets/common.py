@@ -24,6 +24,18 @@ APP_ICON_PATH = Path(__file__).resolve().parents[1] / "assets" / "app_icon.svg"
 PROJECT_ROOT = PLM_ROOT
 
 
+def align_cell_text_editor(editor, option, padding):
+    """Match a delegate's painted text inset, including Qt's native 2 px inset."""
+    editor.setProperty("cellTextEditor", True)
+    editor.setFixedHeight(option.rect.height())
+    editor.ensurePolished()
+    frame = QtWidgets.QStyleOptionFrame()
+    editor.initStyleOption(frame)
+    contents = editor.style().subElementRect(QtWidgets.QStyle.SE_LineEditContents, frame, editor)
+    inset = contents.left() + editor.textMargins().left() + 2
+    editor.setGeometry(option.rect.adjusted(padding - inset, 0, -padding + inset, 0))
+
+
 def button_height(widget):
     """Shared total height; independent of native font metrics and Qt scaling."""
     return {"ProjectMoreBtn": 28, "ArtifactsToolButton": ICON_BUTTON_SIZE}.get(widget.objectName(), CONTROL_HEIGHT)
@@ -86,6 +98,8 @@ class ButtonSizingController(QtCore.QObject):
                     label_width = watched.fontMetrics().horizontalAdvance(watched.text())
                     watched.setMinimumWidth(label_width + ICON_SIZE + ICON_TEXT_GAP + 2 * CONTROL_PADDING_X)
             elif isinstance(watched, (QtWidgets.QLineEdit, QtWidgets.QComboBox, QtWidgets.QSpinBox)):
+                if watched.property("cellTextEditor"):
+                    return super().eventFilter(watched, event)
                 height = CONTROL_HEIGHT - 4 if watched.property("formatterRow") is not None else CONTROL_HEIGHT
                 if watched.minimumHeight() != height or watched.maximumHeight() != height:
                     watched.setFixedHeight(height)

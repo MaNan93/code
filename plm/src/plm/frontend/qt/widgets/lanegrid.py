@@ -10,13 +10,13 @@ from functools import lru_cache
 
 from PyQt5 import QtCore, QtGui, QtWidgets
 
-from plm.frontend.qt.widgets.common import StyledMenu, apply_drop_shadow
+from plm.frontend.qt.widgets.common import StyledMenu, align_cell_text_editor, apply_drop_shadow, load_lucide_icon
 from plm.frontend.qt.widgets.tables import RowDragTable
 from plm.frontend.qt.widgets.controller_swatch import ControllerSwatch
 from plm.frontend.qt.styles.tokens import LANE_GRID_PALETTE as LANE_GRID_PALETTE
 from plm.frontend.qt.styles.tokens import get_theme_color
 from plm.frontend.qt.styles.tokens import (
-    CONTROL_HEIGHT, FONT_SIZE_BODY, FONT_WEIGHT_MEDIUM,
+    CONTROL_HEIGHT, FONT_SIZE_BODY, FONT_WEIGHT_MEDIUM, ICON_SIZE,
     PALETTE_ROW_SPACING, RADIUS_CHIP, SHADOW_SM, SPACING_MD, SPACING_SM,
 )
 
@@ -210,7 +210,7 @@ class _LaneCellDelegate(QtWidgets.QStyledItemDelegate):
 
     def updateEditorGeometry(self, editor, option, index):
         if index.column() == 0:
-            editor.setGeometry(option.rect.adjusted(12, 1, -12, -1))
+            align_cell_text_editor(editor, option, 12)
         else:
             super().updateEditorGeometry(editor, option, index)
     @staticmethod
@@ -759,14 +759,7 @@ class LaneGrid(QtWidgets.QWidget):
         logical = header.logicalIndexAt(pos)
         if logical < 0:
             return
-        menu = StyledMenu(self)
-        insert_action = menu.addAction("Insert mode row below")
-        delete_action = menu.addAction("Delete this mode row")
-        chosen = menu.exec_(header.mapToGlobal(pos))
-        if chosen == insert_action:
-            self._insert_row_below(logical)
-        elif chosen == delete_action:
-            self._delete_row(logical)
+        self._on_row_context_menu(logical, header.mapToGlobal(pos))
 
     def _on_row_context_menu(self, row, global_pos):
         if row < 0:
@@ -777,13 +770,13 @@ class LaneGrid(QtWidgets.QWidget):
             self.table.selectRow(row)
         menu = StyledMenu(self.table)
         if row >= 0:
-            insert_above = menu.addAction("Insert row above")
-            insert_below = menu.addAction("Insert row below")
+            insert_above = menu.addAction(load_lucide_icon("arrow-up", "text_sub", ICON_SIZE), "在上方插入行")
+            insert_below = menu.addAction(load_lucide_icon("arrow-down", "text_sub", ICON_SIZE), "在下方插入行")
             menu.addSeparator()
-            delete_current = menu.addAction("Delete current row")
+            delete_current = menu.addAction(load_lucide_icon("trash-2", "danger", ICON_SIZE), "删除当前行")
         else:
             insert_above = None
-            insert_below = menu.addAction("Insert row")
+            insert_below = menu.addAction(load_lucide_icon("arrow-down", "text_sub", ICON_SIZE), "插入行")
             delete_current = None
         chosen = menu.exec_(global_pos)
         if insert_above is not None and chosen == insert_above:

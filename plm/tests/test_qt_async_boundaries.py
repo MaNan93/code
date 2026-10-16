@@ -168,7 +168,7 @@ class AsyncBoundaryTests(unittest.TestCase):
         window.hide_log()
         wait_for_idle(self.app)
         page = window.config_page
-        bar = window.collapsed_log_bar
+        bar = page
         bottom = bar.mapTo(window, bar.rect().bottomRight()).y() + 1
         self.assertEqual(window.height() - bottom, window.SHADOW_MARGIN + 4)
         margins = window.content_splitter.contentsMargins()

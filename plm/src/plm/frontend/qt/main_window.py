@@ -445,6 +445,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.collapsed_log_clear.clicked.connect(self.log_panel.clear)
         collapsed_layout.addWidget(self.collapsed_log_clear)
         main_layout.addWidget(self.collapsed_log_bar)
+        self.collapsed_log_bar.hide()
         self.log_panel.hide()
         self._log_expanded = False
         self._log_animation = QtCore.QVariantAnimation(self)
@@ -739,7 +740,10 @@ class MainWindow(QtWidgets.QMainWindow):
             self._log_sizes = self.content_splitter.sizes()
         else:
             self.log_panel.hide()
-            self.collapsed_log_bar.show()
+            self.collapsed_log_bar.hide()
+            # Hiding a splitter child queues its relayout. Reclaim the handle
+            # in the finishing frame instead of leaving a 6 px bottom gap.
+            self.content_splitter.refresh()
 
     def toggle_log(self):
         if self._log_expanded:

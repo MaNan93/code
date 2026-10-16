@@ -1,6 +1,6 @@
 from PyQt5 import QtCore, QtGui, QtWidgets
-from plm.frontend.qt.widgets.common import ICON_SIZE, load_lucide_icon
-from plm.frontend.qt.styles.tokens import DOCS_MAX_WIDTH, HEADER_HEIGHT, SPACING_LG, SPACING_SM, SPACING_XL
+from plm.frontend.qt.widgets.common import ICON_SIZE, RoundedCanvasFrame, load_lucide_icon
+from plm.frontend.qt.styles.tokens import DOCS_MAX_WIDTH, HEADER_HEIGHT, SPACING_SM, SPACING_XL, SPACING_XS
 
 
 class SecondaryMenuButton(QtWidgets.QPushButton):
@@ -39,14 +39,21 @@ class SecondaryPage(QtWidgets.QFrame):
         self.setFocusPolicy(QtCore.Qt.ClickFocus)
 
         root = QtWidgets.QVBoxLayout(self)
-        root.setContentsMargins(0, 0, 0, 0)
+        root.setContentsMargins(*([SPACING_XS] * 4))
         root.setSpacing(0)
+
+        self.page_area = RoundedCanvasFrame()
+        self.page_area.setObjectName("SecondaryPageArea")
+        area_layout = QtWidgets.QVBoxLayout(self.page_area)
+        area_layout.setContentsMargins(1, 1, 1, self.page_area.CORNER_RADII[2])
+        area_layout.setSpacing(0)
+        root.addWidget(self.page_area, 1)
 
         header = QtWidgets.QFrame()
         header.setObjectName("SecondaryPageHeader")
         header.setFixedHeight(HEADER_HEIGHT)
         header_layout = QtWidgets.QHBoxLayout(header)
-        header_layout.setContentsMargins(SPACING_LG, 0, SPACING_LG, 0)
+        header_layout.setContentsMargins(0, 0, 0, 0)
         header_layout.setSpacing(SPACING_SM)
         self.back_btn = QtWidgets.QPushButton("设置" if page == "settings" else "文档")
         self.back_btn.setObjectName("SecondaryBackButton")
@@ -58,14 +65,11 @@ class SecondaryPage(QtWidgets.QFrame):
         header_layout.addWidget(self.back_btn)
         self.title_label = self.back_btn
         header_layout.addStretch(1)
-        root.addWidget(header)
 
         page_area = QtWidgets.QWidget()
-        page_area.setObjectName("SecondaryPageArea")
-        # A panel on the chrome, like the config and output panels.
-        page_area.setAttribute(QtCore.Qt.WA_StyledBackground, True)
+        page_area.setObjectName("SecondaryPageBody")
         page_area_layout = QtWidgets.QHBoxLayout(page_area)
-        page_area_layout.setContentsMargins(SPACING_XL, SPACING_XL, SPACING_XL, SPACING_XL)
+        page_area_layout.setContentsMargins(SPACING_XL - 1, SPACING_XL, SPACING_XL - 1, SPACING_XS)
         page_area_layout.setSpacing(0)
         page_area_layout.addStretch(0)
 
@@ -81,6 +85,7 @@ class SecondaryPage(QtWidgets.QFrame):
         panel_layout = QtWidgets.QVBoxLayout(self.page_panel)
         panel_layout.setContentsMargins(0, 0, 0, 0)
         panel_layout.setSpacing(0)
+        panel_layout.addWidget(header)
         self.content = self._build_content()
         panel_layout.addWidget(self._build_menu(page))
         divider = QtWidgets.QFrame()
@@ -94,7 +99,7 @@ class SecondaryPage(QtWidgets.QFrame):
         panel_layout.addWidget(self.content, 1)
         page_area_layout.addWidget(self.page_panel, 1)
         page_area_layout.addStretch(0)
-        root.addWidget(page_area, 1)
+        area_layout.addWidget(page_area, 1)
         self._select_section(0)
 
     def _build_menu(self, page):

@@ -103,8 +103,8 @@ class RedesignTests(unittest.TestCase):
     def test_log_starts_collapsed_and_remembers_its_expanded_height(self):
         window = self.window
         self.assertFalse(window.log_panel.isVisible())
-        self.assertTrue(window.collapsed_log.isVisible())
-        window.collapsed_log.click()
+        self.assertTrue(window.collapsed_log_bar.isHidden())
+        window.log_toggle_button.click()
         wait_for_idle(self.app)
         window.content_splitter.setSizes([400, 180])
         height = window.content_splitter.sizes()[1]
@@ -125,15 +125,15 @@ class RedesignTests(unittest.TestCase):
         self.assertTrue(self.window.log_panel.isVisible())
         self.assertIn("test generation failure", self.window.log_panel.output.toPlainText())
 
-    def test_collapsed_log_clear_resets_summary_without_opening_panel(self):
+    def test_log_clear_resets_summary_without_opening_panel(self):
         window = self.window
         window.log_panel.append_log("old output")
         window.log_panel.set_status("生成完成：18 个文件")
         self.assertIn("18", window.collapsed_log.text())
-        window.collapsed_log_clear.click()
+        window.log_panel.clear()
         self.assertEqual(window.log_panel.output.toPlainText(), "")
         self.assertIn("就绪", window.collapsed_log.text())
-        self.assertTrue(window.collapsed_log.isVisible())
+        self.assertTrue(window.collapsed_log_bar.isHidden())
         self.assertFalse(window.log_panel.isVisible())
         window.show_log()
         wait_for_idle(self.app)
@@ -225,7 +225,7 @@ class RedesignTests(unittest.TestCase):
         window.resize(960, 640)
         wait_for_idle(self.app)
         self.assertFalse(window.log_panel.isVisible())
-        self.assertTrue(window.collapsed_log.isVisible())
+        self.assertTrue(window.collapsed_log_bar.isHidden())
         window.show_log()
         wait_for_idle(self.app)
         self.assertAlmostEqual(window.content_splitter.sizes()[1], height, delta=2)

@@ -84,6 +84,8 @@ class ProjectItemWidget(QtWidgets.QWidget):
         self.folder_icon.setAttribute(QtCore.Qt.WA_TransparentForMouseEvents)
         self.project_name_label = ElidedNameLabel(self.project_name)
         self.project_name_label.setObjectName("ProjectName")
+        self.project_name_label.setContentsMargins(3, 0, 3, 0)
+        self.project_name_label.setFixedHeight(CONTROL_HEIGHT)
         self.project_name_label.setSizePolicy(
             QtWidgets.QSizePolicy.Ignored, QtWidgets.QSizePolicy.Preferred
         )
@@ -99,7 +101,7 @@ class ProjectItemWidget(QtWidgets.QWidget):
         self.project_name_edit.returnPressed.connect(self._finish_rename)
         header_layout.addWidget(self.folder_icon)
         header_layout.addSpacing(ICON_TEXT_GAP)
-        header_layout.addWidget(self.project_name_label, 1)
+        header_layout.addWidget(self.project_name_label, 1, QtCore.Qt.AlignVCenter)
         header_layout.addWidget(self.project_name_edit, 1, QtCore.Qt.AlignVCenter)
         self.more_btn = make_icon_button(
             "more-horizontal", "更多操作", "ProjectMoreBtn", 28, ICON_SIZE
@@ -149,6 +151,7 @@ class ProjectItemWidget(QtWidgets.QWidget):
     def begin_rename(self):
         self._renaming = True
         self.project_name_edit.setText(self.project_path.name)
+        self.project_name_edit.setFont(self.project_name_label.font())
         self.project_name_label.hide()
         self.more_btn.show()
         self.project_name_edit.show()

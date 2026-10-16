@@ -7,7 +7,7 @@ Controller IDs remain editable and retain their values after reordering.
 
 from PyQt5 import QtCore, QtGui, QtWidgets, sip
 
-from plm.frontend.qt.widgets.common import StyledComboBox, StyledMenu, load_lucide_icon
+from plm.frontend.qt.widgets.common import StyledComboBox, StyledMenu, align_cell_text_editor, load_lucide_icon
 from plm.frontend.qt.widgets.option_switch import OptionSwitch
 from plm.frontend.qt.styles.tokens import get_theme_color
 from plm.frontend.qt.styles.tokens import CONTROL_HEIGHT, CONTROL_PADDING_X, ICON_SIZE, LINE_HEIGHT
@@ -218,6 +218,9 @@ class _PaddedItemDelegate(QtWidgets.QStyledItemDelegate):
     def updateEditorGeometry(self, editor, option, index):
         # Row rebuilds can delete cell widgets before a queued relayout runs.
         if editor is None or sip.isdeleted(editor):
+            return
+        if isinstance(editor, QtWidgets.QLineEdit):
+            align_cell_text_editor(editor, option, self.HORIZONTAL_PADDING)
             return
         padding = self.widget_padding(editor)
         rect = option.rect.adjusted(padding, 0, -padding, 0)

@@ -213,7 +213,7 @@ class QtControlLogicTests(unittest.TestCase):
         before = grid.table.rowCount()
         with patch(
             "plm.frontend.qt.widgets.lanegrid.StyledMenu",
-            self._menu_class_selecting("Insert row below"),
+            self._menu_class_selecting("在下方插入行"),
         ):
             grid._on_row_context_menu(0, QtCore.QPoint())
         self.assertEqual(grid.table.rowCount(), before + 1)
@@ -221,7 +221,7 @@ class QtControlLogicTests(unittest.TestCase):
 
         with patch(
             "plm.frontend.qt.widgets.lanegrid.StyledMenu",
-            self._menu_class_selecting("Delete current row"),
+            self._menu_class_selecting("删除当前行"),
         ):
             grid._on_row_context_menu(1, QtCore.QPoint())
         self.assertEqual(grid.table.rowCount(), before)

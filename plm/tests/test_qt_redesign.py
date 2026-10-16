@@ -180,17 +180,22 @@ class RedesignTests(unittest.TestCase):
             wait_for_idle(self.app)
             positions = [control.mapTo(editor, QtCore.QPoint()).x() for control in controls]
             with self.subTest(width=width, positions=positions):
-                self.assertEqual(len(set(positions)), 1)
+                details = [(card.geometry().getRect(), card.layout().getContentsMargins(),
+                            [(card.layout().itemAt(row, QtWidgets.QFormLayout.LabelRole).widget().geometry().getRect())
+                             for row in range(card.layout().rowCount())])
+                           for card in (editor.architecture_card, editor.naming_card)]
+                self.assertEqual(len(set(positions)), 1, f"card/label geometry: {details}")
 
     def test_log_animation_has_intermediate_frames_and_can_reverse_twice(self):
         window = self.window
         window.show_log()
-        QtTest.QTest.qWait(70)
+        window._log_animation.setCurrentTime(70)
+        self.app.processEvents()
         self.assertEqual(window._log_animation.state(), QtCore.QAbstractAnimation.Running)
         self.assertGreater(window.content_splitter.sizes()[1], 0)
         self.assertLess(window.content_splitter.sizes()[1], 200)
         window.toggle_log()
-        QtTest.QTest.qWait(35)
+        window._log_animation.setCurrentTime(35)
         window.toggle_log()
         wait_for_idle(self.app)
         self.assertTrue(window.log_panel.isVisible())

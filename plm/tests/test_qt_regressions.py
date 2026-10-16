@@ -11,7 +11,7 @@ from unittest.mock import patch
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from qt_test_support import (
-    dispose_new_widgets, isolate_host_formatter, preserve_application_state, wait_for_idle,
+    dispose_new_widgets, isolate_host_formatter, preserve_application_state, wait_for_idle, wait_for_signal,
 )
 from PyQt5 import QtCore, QtGui, QtTest, QtWidgets, sip
 from plm.core.workspace import scaffold_default_content
@@ -306,11 +306,13 @@ print("event loop survived")
 
     def test_single_click_paints_only_after_release_and_double_click_window(self):
         grid = self.lane_grid()
+        changed = QtTest.QSignalSpy(grid.changed)
         point = grid.table.visualItemRect(grid.table.item(0, 1)).center()
         QtTest.QTest.mousePress(grid.table.viewport(), QtCore.Qt.LeftButton, pos=point)
         self.assertEqual(grid.get_rows()[0]["lane0"], "0-1")
         QtTest.QTest.mouseRelease(grid.table.viewport(), QtCore.Qt.LeftButton, pos=point)
-        QtTest.QTest.qWait(QtWidgets.QApplication.doubleClickInterval() + 30)
+        self.assertEqual(grid.get_rows()[0]["lane0"], "0-1")
+        wait_for_signal(changed)
         self.assertEqual(grid.get_rows()[0]["lane0"], "0-0")
 
     def test_drag_threshold_prevents_accidental_paint_and_drags_paint_a_range(self):

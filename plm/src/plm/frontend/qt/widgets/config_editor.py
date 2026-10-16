@@ -244,6 +244,7 @@ class GenerationEditor(QtWidgets.QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(SPACING_MD)
         self.architecture_card = QtWidgets.QGroupBox("硬件与架构")
+        self.architecture_card.setAttribute(QtCore.Qt.WA_LayoutUsesWidgetRect)
         self.architecture_card.setObjectName("FormCard")
         architecture = QtWidgets.QFormLayout(self.architecture_card)
         architecture.setFormAlignment(QtCore.Qt.AlignLeft | QtCore.Qt.AlignTop)
@@ -277,6 +278,7 @@ class GenerationEditor(QtWidgets.QWidget):
         for row in range(architecture.rowCount()):
             architecture.itemAt(row, QtWidgets.QFormLayout.LabelRole).widget().setMinimumWidth(120)
         self.naming_card = QtWidgets.QGroupBox("模块与命名")
+        self.naming_card.setAttribute(QtCore.Qt.WA_LayoutUsesWidgetRect)
         self.naming_card.setObjectName("FormCard")
         naming = QtWidgets.QFormLayout(self.naming_card)
         naming.setFormAlignment(QtCore.Qt.AlignLeft | QtCore.Qt.AlignTop)

@@ -49,6 +49,15 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y libgl1 libegl1 fonts-noto-cjk fonts-roboto fonts-dejavu-core
       - run: uv sync --extra qt --locked
       - run: uv run python -m compileall -q src run.py tests
+      - name: Check layout and animation event boundaries
+        env:
+          PYTHONPATH: tests
+        run: >-
+          uv run python -m unittest -v
+          test_qt_redesign.RedesignTests.test_generation_cards_align_under_a_host_style_that_centers_forms
+          test_qt_redesign.RedesignTests.test_log_animation_has_intermediate_frames_and_can_reverse_twice
+          test_qt_regressions.QtRegressionTests.test_single_click_paints_only_after_release_and_double_click_window
+          test_qt_toast.ToastTests.test_toast_replacement_resets_timer_and_does_not_take_focus
       - run: uv run python -m unittest discover -s tests -v
       - name: Check both themes at four display scales
         if: matrix.python == '3.12'

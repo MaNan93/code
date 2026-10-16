@@ -171,12 +171,16 @@ class RedesignTests(unittest.TestCase):
         # right when its fixed-width fields left spare horizontal space.
         self.app.setStyle(CenteredFormStyle("Fusion"))
         editor = GenerationEditor()
+        # Native label hints may include margins not present in glyph metrics.
+        editor.architecture_card.layout().labelForField(editor.bus_type).setMargin(4)
         editor.show()
         controls = (editor.arch, editor.pclk_mode, editor.bus_type, *editor._prefix_edits.values())
         for width in (520, 760):
             editor.resize(width, 600)
             wait_for_idle(self.app)
-            self.assertEqual(len({control.mapTo(editor, QtCore.QPoint()).x() for control in controls}), 1)
+            positions = [control.mapTo(editor, QtCore.QPoint()).x() for control in controls]
+            with self.subTest(width=width, positions=positions):
+                self.assertEqual(len(set(positions)), 1)
 
     def test_log_animation_has_intermediate_frames_and_can_reverse_twice(self):
         window = self.window

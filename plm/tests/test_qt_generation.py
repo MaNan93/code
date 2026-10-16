@@ -378,7 +378,8 @@ class GenerationIntegrationTests(unittest.TestCase):
             window.resize(width, height)
             wait_for_idle(self.app)
             with self.subTest(size=(width, height)):
-                self.assertEqual(len({control.mapTo(editor, QtCore.QPoint()).x() for control in controls}), 1)
+                positions = [control.mapTo(editor, QtCore.QPoint()).x() for control in controls]
+                self.assertEqual(len(set(positions)), 1, f"field starts: {positions}")
                 for control in controls:
                     self.assertGreater(control.width(), 0)
                     self.assertLessEqual(control.width(), 360)

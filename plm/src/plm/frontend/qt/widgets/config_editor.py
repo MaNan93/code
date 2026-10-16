@@ -265,8 +265,10 @@ class GenerationEditor(QtWidgets.QWidget):
         self.bus_type.setCurrentText("bus")
         self.bus_type.setToolTip("flat：一维向量；bus：二维 lane 数组。")
         for control in (self.arch, self.pclk_mode, self.bus_type):
+            control.setAttribute(QtCore.Qt.WA_LayoutUsesWidgetRect)
             control.setMaximumWidth(FORM_FIELD_MAX_WIDTH)
         self.dpr = QtWidgets.QCheckBox("启用 DPR")
+        self.dpr.setAttribute(QtCore.Qt.WA_LayoutUsesWidgetRect)
         self.dpr.setToolTip("启用后选择信号经同步器（sync）；不启用为组合直通（comb）。")
         architecture.addRow("PHY 架构", self.arch)
         architecture.addRow("PCLK 模式", self.pclk_mode)
@@ -290,6 +292,7 @@ class GenerationEditor(QtWidgets.QWidget):
             ("macro_prefix", "宏名前缀", "宏名称前缀", "SOC_"),
         ):
             edit = QtWidgets.QLineEdit()
+            edit.setAttribute(QtCore.Qt.WA_LayoutUsesWidgetRect)
             edit.setObjectName(name)
             edit.setAccessibleName(name)
             edit.setMaximumWidth(FORM_FIELD_MAX_WIDTH)
@@ -334,9 +337,17 @@ class GenerationEditor(QtWidgets.QWidget):
             form = card.layout()
             labels.extend(form.itemAt(row, QtWidgets.QFormLayout.LabelRole).widget()
                           for row in range(form.rowCount()))
-        width = max(label.fontMetrics().horizontalAdvance(label.text()) for label in labels)
         for label in labels:
-            label.setMinimumWidth(width)
+            label.setAttribute(QtCore.Qt.WA_LayoutUsesWidgetRect)
+            label.setMinimumWidth(0)
+            label.setMaximumWidth(QtWidgets.QWIDGETSIZE_MAX)
+            label.ensurePolished()
+        # Native styles and CJK fallbacks can add space beyond glyph advance.
+        # Share the complete size hint, then fix both label columns to it.
+        width = max(max(label.sizeHint().width(), label.minimumSizeHint().width(),
+                        label.fontMetrics().horizontalAdvance(label.text())) for label in labels)
+        for label in labels:
+            label.setFixedWidth(width)
 
     def changeEvent(self, event):
         super().changeEvent(event)

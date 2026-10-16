@@ -344,7 +344,7 @@ class LiveThemeTests(unittest.TestCase):
     def test_splitter_hover_changes_pixels_without_changing_geometry(self):
         window = self.window
         window.show_log()
-        self.app.processEvents()
+        wait_for_idle(self.app)
         handle = window.content_splitter.handle(1)
         self.assertEqual(handle.height(), SPLITTER_HANDLE_SIZE)
         before = handle.geometry()

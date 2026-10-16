@@ -13,7 +13,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PyQt5 import QtCore, QtTest, QtWidgets, sip
 from qt_test_support import (
-    dispose_new_widgets, isolate_host_formatter, preserve_application_state, wait_for_idle,
+    dispose_new_widgets, isolate_host_formatter, preserve_application_state, wait_for_idle, wait_for_signal,
 )
 from sample_data import sample_config
 from plm.frontend.qt.controllers import AppController
@@ -51,9 +51,11 @@ class ToastTests(unittest.TestCase):
         editor.show()
         editor.setFocus()
         focus = self.app.focusWidget()
+        appeared = QtTest.QSignalSpy(toast.animation.finished)
         self.window.show_toast("first", "success")
-        QtTest.QTest.qWait(180)
+        wait_for_signal(appeared)
         self.assertTrue(toast.timer.isActive())
+        replaced = QtTest.QSignalSpy(toast.animation.finished)
         self.window.show_toast("replacement", "info")
         self.assertFalse(toast.timer.isActive())
         self.assertEqual(toast.label.text(), "replacement")
@@ -61,10 +63,11 @@ class ToastTests(unittest.TestCase):
         self.assertIs(self.app.focusWidget(), focus)
         self.assertTrue(toast.testAttribute(QtCore.Qt.WA_TransparentForMouseEvents))
         self.assertEqual(len(self.window.findChildren(ToastNotification)), 1)
-        QtTest.QTest.qWait(180)
+        wait_for_signal(replaced)
         self.assertGreater(toast.timer.remainingTime(), 1600)
+        disappeared = QtTest.QSignalSpy(toast.animation.finished)
         toast._fade_out()
-        QtTest.QTest.qWait(240)
+        wait_for_signal(disappeared)
         self.assertFalse(toast.isVisible())
         self.assertFalse(toast.timer.isActive())
 

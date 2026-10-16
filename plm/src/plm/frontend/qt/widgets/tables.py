@@ -7,10 +7,10 @@ Controller IDs remain editable and retain their values after reordering.
 
 from PyQt5 import QtCore, QtGui, QtWidgets, sip
 
-from plm.frontend.qt.widgets.common import StyledComboBox, StyledMenu
+from plm.frontend.qt.widgets.common import StyledComboBox, StyledMenu, load_lucide_icon
 from plm.frontend.qt.widgets.option_switch import OptionSwitch
 from plm.frontend.qt.styles.tokens import get_theme_color
-from plm.frontend.qt.styles.tokens import CONTROL_HEIGHT, CONTROL_PADDING_X, LINE_HEIGHT
+from plm.frontend.qt.styles.tokens import CONTROL_HEIGHT, CONTROL_PADDING_X, ICON_SIZE, LINE_HEIGHT
 
 
 
@@ -282,7 +282,7 @@ class EditableTable(QtWidgets.QWidget):
         self.table.itemChanged.connect(self._on_item_changed)
         toolbar = QtWidgets.QHBoxLayout()
         toolbar.setSpacing(8)
-        self.add_button = QtWidgets.QPushButton("＋ 添加行")
+        self.add_button = QtWidgets.QPushButton("添加行")
         self.duplicate_button = QtWidgets.QPushButton("复制行")
         self.delete_button = QtWidgets.QPushButton("删除行")
         for button in (self.add_button, self.duplicate_button, self.delete_button):
@@ -624,13 +624,13 @@ class EditableTable(QtWidgets.QWidget):
             self.table.selectRow(row)
         menu = StyledMenu(self.table)
         if row >= 0:
-            insert_above = menu.addAction("在上方插入行")
-            insert_below = menu.addAction("在下方插入行")
+            insert_above = menu.addAction(load_lucide_icon("arrow-up", "text_sub", ICON_SIZE), "在上方插入行")
+            insert_below = menu.addAction(load_lucide_icon("arrow-down", "text_sub", ICON_SIZE), "在下方插入行")
             menu.addSeparator()
-            delete_current = menu.addAction("删除当前行")
+            delete_current = menu.addAction(load_lucide_icon("trash-2", "danger", ICON_SIZE), "删除当前行")
         else:
             insert_above = None
-            insert_below = menu.addAction("插入行")
+            insert_below = menu.addAction(load_lucide_icon("arrow-down", "text_sub", ICON_SIZE), "插入行")
             delete_current = None
         chosen = menu.exec_(global_pos)
         if insert_above is not None and chosen == insert_above:

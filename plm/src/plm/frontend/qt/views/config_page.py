@@ -1,6 +1,7 @@
 from PyQt5 import QtCore, QtGui, QtWidgets
 from plm.frontend.qt.widgets.common import (
     RoundedCanvasFrame,
+    StatusBadge,
     set_label_icon,
 )
 from plm.frontend.qt.widgets.config_editor import CsvTableEditor, GenerationEditor
@@ -115,18 +116,14 @@ class ConfigHeader(QtWidgets.QFrame):
         self.title_edit.escapePressed.connect(self.cancel_title)
         layout.addWidget(self.title_edit, 0, QtCore.Qt.AlignVCenter)
         layout.addSpacing(SPACING_MD)
-        self.status_badge = QtWidgets.QLabel()
-        self.status_badge.setObjectName("ConfigProjectStatus")
-        self.status_badge.setProperty("dirty", False)
-        self.status_badge.setFixedSize(8, 8)
-        self.status_badge.setToolTip("有未保存的修改")
-        self.status_badge.setAccessibleName("有未保存的修改")
-        self.status_badge.hide()
-        layout.addWidget(self.status_badge, 0, QtCore.Qt.AlignVCenter)
-        self.save_state = QtWidgets.QLabel("已保存")
+        self.save_state = StatusBadge("已保存")
         self.save_state.setObjectName("ConfigSaveState")
-        layout.addSpacing(6)
-        layout.addWidget(self.save_state)
+        self.save_state.setProperty("dirty", False)
+        self.save_state.setToolTip("已保存")
+        self.save_state.setAccessibleName("已保存")
+        self.save_state.hide()
+        self.status_badge = self.save_state
+        layout.addWidget(self.save_state, 0, QtCore.Qt.AlignVCenter)
         self.path_label = ProjectPathLabel()
         self.path_label.setObjectName("ProjectPath")
         self.path_label.setSizePolicy(QtWidgets.QSizePolicy.Ignored, QtWidgets.QSizePolicy.Preferred)
@@ -141,8 +138,9 @@ class ConfigHeader(QtWidgets.QFrame):
 
     def set_dirty(self, dirty):
         self.status_badge.setProperty("dirty", bool(dirty))
-        self.status_badge.setVisible(bool(dirty))
         self.save_state.setText("未保存" if dirty else "已保存")
+        self.save_state.setToolTip(self.save_state.text())
+        self.save_state.setAccessibleName(self.save_state.text())
         self.status_badge.style().unpolish(self.status_badge)
         self.status_badge.style().polish(self.status_badge)
 
@@ -356,20 +354,11 @@ class ConfigPage(RoundedCanvasFrame):
 
     def _raise_artifacts(self, *_args):
         if self.artifacts_panel.isVisible():
-            self.artifacts_shadow.raise_()
             self.artifacts_panel.raise_()
 
     def _sync_artifacts_shadow(self):
-        panel = self.artifacts_panel.geometry()
-        # Nothing to cast onto once the drawer covers the whole panel.
-        visible = self.artifacts_panel.isVisible() and panel.width() > 0 and panel.left() > 0
-        if visible:
-            inset = self.CORNER_RADII[0]
-            self.artifacts_shadow.setGeometry(
-                panel.left() - DrawerShadow.WIDTH, inset,
-                DrawerShadow.WIDTH, max(0, panel.height() - 2 * inset),
-            )
-        self.artifacts_shadow.setVisible(visible)
+        # The drawer's own border is the only divider, including animation.
+        self.artifacts_shadow.hide()
 
     def set_editable(self, editable):
         """Lock the four editors while no project is open.

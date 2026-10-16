@@ -18,7 +18,8 @@ from plm.frontend.qt.widgets.lanegrid import LaneGrid
 from plm.frontend.qt.widgets.common import StatusBadge, StyledComboBox
 from plm.frontend.qt.widgets.tables import EditableTable
 from plm.frontend.qt.styles.tokens import (
-    FORM_ACTION_WIDTH, FORM_FIELD_MAX_WIDTH, FORM_MAX_WIDTH, SPACING_MD, SPACING_XL,
+    CONTROL_HEIGHT, FORM_ACTION_WIDTH, FORM_FIELD_MAX_WIDTH, FORM_LABEL_WIDTH, FORM_MAX_WIDTH,
+    SPACING_LG, SPACING_MD, SPACING_XL,
 )
 
 
@@ -62,13 +63,16 @@ class CsvTableEditor(QtWidgets.QWidget):
 
         if mapping:
             controls = QtWidgets.QHBoxLayout()
-            controls.addWidget(QtWidgets.QLabel("Num of Lanes"))
+            controls.setAlignment(QtCore.Qt.AlignTop)
+            lane_label = QtWidgets.QLabel("Num of Lanes")
+            lane_label.setFixedHeight(CONTROL_HEIGHT)
+            controls.addWidget(lane_label, 0, QtCore.Qt.AlignTop)
             self.lane_count = LaneCountCombo()
             self.lane_count.setObjectName("LaneCount")
             self.lane_count.addItems([f"x{value}" for value in LANE_COUNTS])
             self.lane_count.setCurrentText(f"x{max(1, len(columns) - 1)}")
             self.lane_count.currentTextChanged.connect(self._change_lane_count)
-            controls.addWidget(self.lane_count)
+            controls.addWidget(self.lane_count, 0, QtCore.Qt.AlignTop)
             controls.addStretch(1)
             layout.addLayout(controls)
 
@@ -76,7 +80,7 @@ class CsvTableEditor(QtWidgets.QWidget):
             self.editor.layout().removeWidget(self.editor.palette_bar)
             controls.takeAt(2)
             controls.addSpacing(SPACING_MD)
-            controls.addWidget(self.editor.palette_bar, 1)
+            controls.addWidget(self.editor.palette_bar, 1, QtCore.Qt.AlignTop)
             self.table = self.editor.table
             self.editor.set_columns(self.lane_count.value())
             self.editor.changed.connect(self.changed.emit)
@@ -248,8 +252,9 @@ class GenerationEditor(QtWidgets.QWidget):
         self.architecture_card.setObjectName("FormCard")
         architecture = QtWidgets.QFormLayout(self.architecture_card)
         architecture.setFormAlignment(QtCore.Qt.AlignLeft | QtCore.Qt.AlignTop)
+        architecture.setLabelAlignment(QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter)
         architecture.setSpacing(SPACING_MD)
-        architecture.setContentsMargins(16, 24, 16, 16)
+        architecture.setContentsMargins(SPACING_LG, SPACING_XL, SPACING_LG, SPACING_LG)
         architecture.setFieldGrowthPolicy(QtWidgets.QFormLayout.AllNonFixedFieldsGrow)
         architecture.setRowWrapPolicy(QtWidgets.QFormLayout.WrapLongRows)
         layout.addWidget(self.architecture_card)
@@ -276,14 +281,15 @@ class GenerationEditor(QtWidgets.QWidget):
         architecture.addRow("Connection 总线类型", self.bus_type)
         architecture.addRow("DPR", self.dpr)
         for row in range(architecture.rowCount()):
-            architecture.itemAt(row, QtWidgets.QFormLayout.LabelRole).widget().setMinimumWidth(120)
+            architecture.itemAt(row, QtWidgets.QFormLayout.LabelRole).widget().setMinimumWidth(FORM_LABEL_WIDTH)
         self.naming_card = QtWidgets.QGroupBox("模块与命名")
         self.naming_card.setAttribute(QtCore.Qt.WA_LayoutUsesWidgetRect)
         self.naming_card.setObjectName("FormCard")
         naming = QtWidgets.QFormLayout(self.naming_card)
         naming.setFormAlignment(QtCore.Qt.AlignLeft | QtCore.Qt.AlignTop)
+        naming.setLabelAlignment(QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter)
         naming.setSpacing(SPACING_MD)
-        naming.setContentsMargins(16, 24, 16, 16)
+        naming.setContentsMargins(SPACING_LG, SPACING_XL, SPACING_LG, SPACING_LG)
         naming.setFieldGrowthPolicy(QtWidgets.QFormLayout.AllNonFixedFieldsGrow)
         naming.setRowWrapPolicy(QtWidgets.QFormLayout.WrapLongRows)
         layout.addWidget(self.naming_card)
@@ -304,7 +310,7 @@ class GenerationEditor(QtWidgets.QWidget):
             self._prefix_edits[name] = edit
             setattr(self, name, edit)
             naming.addRow(label, edit)
-            naming.labelForField(edit).setMinimumWidth(120)
+            naming.labelForField(edit).setMinimumWidth(FORM_LABEL_WIDTH)
         self.generate_btn = QtWidgets.QPushButton("生成 RTL / TB")
         self.generate_btn.setObjectName("ConfigGenerateButton")
         self.generate_btn.setFixedWidth(FORM_ACTION_WIDTH)
@@ -355,13 +361,15 @@ class GenerationEditor(QtWidgets.QWidget):
             label.setMaximumWidth(QtWidgets.QWIDGETSIZE_MAX)
         # Native styles and CJK fallbacks can add space beyond glyph advance.
         # Share the complete size hint, then fix both label columns to it.
-        width = max(max(label.sizeHint().width(), label.minimumSizeHint().width(),
-                        label.fontMetrics().horizontalAdvance(label.text())) for label in labels)
+        width = max(FORM_LABEL_WIDTH, max(
+            max(label.sizeHint().width(), label.minimumSizeHint().width(),
+                label.fontMetrics().horizontalAdvance(label.text())) for label in labels
+        ))
         for label in labels:
             label.setFixedWidth(width)
         # Each card caches its form column width independently. Clear both
         # caches after changing the shared labels, before the next resize can
-        # reuse a column computed from the original 120px minimum.
+        # reuse a column computed before the shared width was applied.
         for card in (self.architecture_card, self.naming_card):
             card.layout().invalidate()
             card.layout().activate()

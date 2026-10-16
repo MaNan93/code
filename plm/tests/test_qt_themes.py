@@ -325,20 +325,22 @@ class LiveThemeTests(unittest.TestCase):
             self.app.processEvents()
             title = window.title_bar
             artifact = window.artifacts_toggle_button
+            theme = window.theme_toggle_button
             minimum = title.minimize_btn
-            gap = minimum.mapTo(title, QtCore.QPoint()).x() - (artifact.mapTo(title, QtCore.QPoint()).x() + artifact.width())
+            gap = minimum.mapTo(title, QtCore.QPoint()).x() - (theme.mapTo(title, QtCore.QPoint()).x() + theme.width())
             self.assertEqual(gap, SPACING_MD)
             self.assertEqual(title.close_btn.geometry().right(), title.width() - 1)
-            positions = [b.mapTo(title, QtCore.QPoint()) for b in (window.log_toggle_button, artifact)]
+            buttons = (window.log_toggle_button, artifact, theme)
+            positions = [b.mapTo(title, QtCore.QPoint()) for b in buttons]
             window.nav_panel.toggle_collapse()
             artifact.click()
             QtTest.QTest.qWait(250)
-            for button, position in zip((window.log_toggle_button, artifact), positions):
+            for button, position in zip(buttons, positions):
                 self.assertEqual(button.mapTo(title, QtCore.QPoint()), position)
         for change_state in (window.showMaximized, window.showNormal):
             change_state()
             self.app.processEvents()
-            self.assertEqual(window.title_bar.minimize_btn.x() - window.artifacts_toggle_button.geometry().right() - 1,
+            self.assertEqual(window.title_bar.minimize_btn.x() - window.theme_toggle_button.geometry().right() - 1,
                              SPACING_MD)
 
     def test_splitter_hover_changes_pixels_without_changing_geometry(self):

@@ -17,7 +17,7 @@ from plm.frontend.qt.controllers import AppController
 from plm.frontend.qt.services import ProjectService, SettingsStore
 from plm.frontend.qt.styles.tokens import (
     BG_ARTIFACTS, BG_ARTIFACTS_HEADER, BG_FOCUS, BG_SUBTLE, BORDER, BORDER_HOVER, CONTROL_HEIGHT, FONT_CODE_PRIMARY, FONT_MONO, FONT_SCALE, FONT_SIZE_BODY,
-    CONTROL_PADDING_X, ICON_GLYPH_SIZE, NAV_COLLAPSED_WIDTH, NAV_ICON_INSET, NAV_ITEM_GAP, SPACING_MD, PRIMARY_SOFT, PRIMARY_PRESSED, TEXT_MAIN, TOOLTIP_BG,
+    CONTROL_PADDING_X, ICON_GLYPH_SIZE, NAV_COLLAPSED_WIDTH, NAV_ICON_INSET, NAV_ITEM_GAP, SPACING_MD, PRIMARY_SOFT, PRIMARY_PRESSED, TEXT_MAIN, TOOLTIP_BG, SETTINGS_MAX_WIDTH,
 )
 from plm.frontend.qt.models import ProjectInfo
 from plm.frontend.qt.main_window import MainWindow
@@ -1140,13 +1140,14 @@ class QtFrontendLayoutTests(unittest.TestCase):
         self.assertGreater(table.height(), original_height)
         self.assertTrue(page.dirty)
         self.assertTrue(page.header.status_badge.isVisible())
-        self.assertEqual(page.header.status_badge.text(), "")
-        self.assertEqual(page.header.status_badge.size(), QtCore.QSize(8, 8))
+        self.assertEqual(page.header.status_badge.text(), "未保存")
+        self.assertIs(page.header.status_badge, page.header.save_state)
         page.undo()
         wait_for_idle(self.app)
         self.assertEqual(table.rowCount(), original_count)
         self.assertFalse(page.dirty)
-        self.assertTrue(page.header.status_badge.isHidden())
+        self.assertTrue(page.header.status_badge.isVisible())
+        self.assertEqual(page.header.status_badge.text(), "已保存")
         editor.set_rows([
             {"ctrl_id": index, "ctrl_name": f"Ctrl{index}", "max_width": 4}
             for index in range(15)
@@ -1351,7 +1352,7 @@ class QtFrontendLayoutTests(unittest.TestCase):
         self.assertGreater(overlay.back_btn.width(), 32)
         self.assertEqual(overlay.back_btn.iconSize(), QtCore.QSize(ICON_SIZE, ICON_SIZE))
         panel = overlay.findChild(QtWidgets.QWidget, "SecondaryPagePanel")
-        self.assertEqual(panel.width(), min(640, overlay.width() - 48))
+        self.assertEqual(panel.width(), min(SETTINGS_MAX_WIDTH, overlay.width() - 48))
         self.assertEqual(panel.mapTo(overlay, QtCore.QPoint()).y(), 64)
         self.assertEqual(
             panel.mapTo(overlay, panel.rect().center()).x(),
@@ -1470,6 +1471,11 @@ class QtFrontendLayoutTests(unittest.TestCase):
         icon_names = (
             "layout-dashboard",
             "arrow-left",
+            "arrow-up",
+            "arrow-down",
+            "sun",
+            "moon",
+            "check",
             "panel-left",
             "x",
             "panel-bottom",
@@ -1502,7 +1508,7 @@ class QtFrontendLayoutTests(unittest.TestCase):
             "chevron-right",
             "tree-chevron-down",
         )
-        self.assertEqual(len(icon_names), 33)
+        self.assertEqual(len(icon_names), 38)
         self.assertEqual(
             {path.stem for path in LUCIDE_ICON_DIR.glob("*.svg")},
             set(icon_names),

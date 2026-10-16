@@ -11,11 +11,12 @@ from PyQt5 import QtCore, QtGui, QtSvg, QtWidgets
 from plm.core.paths import PLM_ROOT
 from plm.frontend.qt.styles.tokens import get_theme_color
 from plm.frontend.qt.styles.tokens import (
-    CONTROL_HEIGHT, CONTROL_PADDING_X, ICON_BUTTON_SIZE, ICON_GLYPH_SIZE, ICON_SIZE, ICON_TEXT_GAP, LOG_COLLAPSED_HEIGHT,
+    CONTROL_HEIGHT, CONTROL_PADDING_X, ICON_BUTTON_SIZE, ICON_GLYPH_SIZE, ICON_SIZE, ICON_TEXT_GAP,
     LINE_HEIGHT, MENU_GAP, MENU_ICON_TEXT_GAP, MENU_ITEM_PADDING_X, MENU_PADDING, MENU_RADIUS,
     MENU_SHADOW_LAYER_ALPHA, MENU_SHADOW_MARGIN, MENU_SHADOW_OFFSET, MENU_SHADOW_SPREAD,
     MENU_MIN_WIDTH,
     RADIUS_CARD, SHADOW_SM,
+    STATUS_DOT_INSET, STATUS_DOT_RADIUS, STATUS_TEXT_INSET,
 )
 
 LUCIDE_ICON_DIR = Path(__file__).resolve().parents[1] / "assets" / "icons"
@@ -25,8 +26,7 @@ PROJECT_ROOT = PLM_ROOT
 
 def button_height(widget):
     """Shared total height; independent of native font metrics and Qt scaling."""
-    return {"ProjectMoreBtn": 28, "ArtifactsToolButton": ICON_BUTTON_SIZE,
-            "LogCollapsedButton": LOG_COLLAPSED_HEIGHT}.get(widget.objectName(), CONTROL_HEIGHT)
+    return {"ProjectMoreBtn": 28, "ArtifactsToolButton": ICON_BUTTON_SIZE}.get(widget.objectName(), CONTROL_HEIGHT)
 
 
 class FixedHeightItemDelegate(QtWidgets.QStyledItemDelegate):
@@ -73,6 +73,11 @@ class ButtonSizingController(QtCore.QObject):
         self._applying = True
         try:
             if isinstance(watched, QtWidgets.QAbstractButton):
+                # QLineEdit positions its clear action using the native button
+                # size. Forcing the global height moves its icon off center.
+                if (isinstance(watched, QtWidgets.QToolButton)
+                        and isinstance(watched.parentWidget(), QtWidgets.QLineEdit)):
+                    return False
                 watched.setFixedHeight(button_height(watched))
                 if (isinstance(watched, QtWidgets.QPushButton) and watched.text()
                         and not watched.icon().isNull()
@@ -346,7 +351,7 @@ class StatusBadge(QtWidgets.QLabel):
 
     def __init__(self, text="", parent=None):
         super().__init__(text, parent)
-        self.setContentsMargins(10, 0, 0, 0)
+        self.setContentsMargins(STATUS_TEXT_INSET, 0, 0, 0)
 
     def paintEvent(self, event):
         super().paintEvent(event)
@@ -356,7 +361,8 @@ class StatusBadge(QtWidgets.QLabel):
         painter.setRenderHint(QtGui.QPainter.Antialiasing, True)
         painter.setPen(QtCore.Qt.NoPen)
         painter.setBrush(self.palette().color(QtGui.QPalette.WindowText))
-        painter.drawEllipse(QtCore.QPointF(8.0, self.height() / 2.0), 2.5, 2.5)
+        painter.drawEllipse(QtCore.QPointF(STATUS_DOT_INSET, self.height() / 2.0),
+                            STATUS_DOT_RADIUS, STATUS_DOT_RADIUS)
         painter.end()
 
 

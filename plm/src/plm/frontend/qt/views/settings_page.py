@@ -80,6 +80,12 @@ class _FormatterTable(QtWidgets.QTableWidget):
 class SettingsPage(SecondaryPage):
     themeChanged = QtCore.pyqtSignal(str)
 
+    def _build_menu(self, page):
+        menu = super()._build_menu(page)
+        for button in self.menu_buttons:
+            button.setProperty("underlineTab", True)
+        return menu
+
     def refresh_theme(self):
         from plm.frontend.qt.styles.tokens import get_active_theme
         previous = self.theme_combo.blockSignals(True)
@@ -210,7 +216,7 @@ class SettingsPage(SecondaryPage):
         return content
 
     def _show_section(self, index):
-        self.page_panel.setMaximumWidth(SETTINGS_MAX_WIDTH if index == 0 else FORMATTER_MAX_WIDTH)
+        self.page_panel.setMaximumWidth(SETTINGS_MAX_WIDTH)
         self.general_card.setVisible(index == 0)
         visible_rows = ({"theme", "editor"}, set())[index]
         for name, row in self.setting_rows.items():
@@ -224,7 +230,7 @@ class SettingsPage(SecondaryPage):
             QtWidgets.QSizePolicy.Minimum, QtWidgets.QSizePolicy.Fixed,
         )
         self.content_top_spacing.changeSize(
-            0, 12 if is_formatter else 24,
+            0, SPACING_LG,
             QtWidgets.QSizePolicy.Minimum, QtWidgets.QSizePolicy.Fixed,
         )
         self.page_panel.layout().invalidate()

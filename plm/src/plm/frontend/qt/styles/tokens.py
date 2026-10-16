@@ -75,6 +75,7 @@ BORDER = N100
 # Outline of the top-level panels (config, output, settings, docs).
 BORDER_PANEL = N200
 BORDER_HOVER = N300
+BORDER_CHECKBOX = N400
 BORDER_FOCUS = P500
 TEXT_MAIN = N800
 TEXT_SUB = N500
@@ -144,6 +145,8 @@ def scale_content_size(size):
 
 
 FONT_SIZE_BODY = 13
+FONT_SIZE_TITLE = 14
+FONT_SIZE_SMALL = 12
 FONT_SIZE_DOC_TITLE = 18
 FONT_SIZE_DOC_SECTION = 15
 FONT_SIZE_DOC_SUBSECTION = 14
@@ -171,12 +174,24 @@ TOAST_HOLD = 1800
 TOAST_FADE_OUT = 200
 
 FORM_FIELD_MAX_WIDTH = 360
+FORM_LABEL_WIDTH = 140
 FORM_MAX_WIDTH = 760
-SETTINGS_MAX_WIDTH = 640
+SETTINGS_MAX_WIDTH = 760
 DOCS_MAX_WIDTH = 800
 LOG_COLLAPSED_HEIGHT = 34
 FORM_ACTION_WIDTH = 120
-FORMATTER_MAX_WIDTH = 760
+FORMATTER_MAX_WIDTH = SETTINGS_MAX_WIDTH
+TAB_PADDING_X = SPACING_LG
+TAB_INDICATOR_HEIGHT = 2
+LANE_SWATCH_MAX_WIDTH = 200
+STATUS_DOT_INSET = SPACING_SM
+STATUS_DOT_RADIUS = 2.5
+STATUS_TEXT_INSET = 10
+STATUS_PADDING_Y = 3
+PALETTE_ROW_SPACING = 6
+CHECKBOX_INDICATOR_SIZE = ICON_SIZE
+CHECKBOX_BORDER_WIDTH = 1
+CHECKBOX_INDICATOR_CONTENT_SIZE = CHECKBOX_INDICATOR_SIZE - 2 * CHECKBOX_BORDER_WIDTH
 
 # Keep nav icons centered on the collapsed rail in both states.
 NAV_ICON_INSET = (NAV_COLLAPSED_WIDTH - ICON_SIZE) // 2 - SPACING_MD
@@ -243,6 +258,13 @@ QSS_TOKENS = {
     "font_family": FONT_FAMILY,
     "font_mono": FONT_MONO,
     "font_size_body": f"{FONT_SIZE_BODY}px",
+    "font_size_title": f"{FONT_SIZE_TITLE}px",
+    "font_size_small": f"{FONT_SIZE_SMALL}px",
+    "tab_padding_x": f"{TAB_PADDING_X}px",
+    "tab_indicator_height": f"{TAB_INDICATOR_HEIGHT}px",
+    "status_padding_y": f"{STATUS_PADDING_Y}px",
+    "checkbox_indicator_content_size": f"{CHECKBOX_INDICATOR_CONTENT_SIZE}px",
+    "checkbox_border_width": f"{CHECKBOX_BORDER_WIDTH}px",
     "chevron_right_icon": (ICON_DIR / "chevron-right.svg").as_posix(),
     "chevron_down_icon": (ICON_DIR / "tree-chevron-down.svg").as_posix(),
     "radius_chip": f"{RADIUS_CHIP}px",
@@ -281,6 +303,7 @@ DARK_COLORS = {
     "primary_soft": "#1E2238", "primary_pressed": "#30365C",
     "border": "#30363D", "border_panel": "#30363D",
     "border_hover": "#6E7681", "border_focus": "#818CF8",
+    "border_checkbox": "#8B949E",
     "text_main": "#F0F6FC", "text_sub": "#B0BDD0",
     "text_header": "#D5DEEB", "text_muted": "#B0BDD0",
     "text_on_primary": "#FFFFFF", "text_primary": "#A5B4FC",
@@ -337,4 +360,6 @@ def get_qss_tokens(theme="light"):
     return {**QSS_TOKENS, **colors,
             "splitter_handle_size": f"{SPLITTER_HANDLE_SIZE}px",
             "chevron_right_icon": themed_icon_path(ICON_DIR / "chevron-right.svg", colors["text_sub"]),
-            "chevron_down_icon": themed_icon_path(ICON_DIR / "tree-chevron-down.svg", colors["text_sub"])}
+            "chevron_down_icon": themed_icon_path(ICON_DIR / "tree-chevron-down.svg", colors["text_sub"]),
+            "checkmark_icon": themed_icon_path(ICON_DIR / "check.svg", colors["text_on_primary"]),
+            "checkmark_disabled_icon": themed_icon_path(ICON_DIR / "check.svg", colors["text_muted"])}

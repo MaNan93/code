@@ -12,11 +12,12 @@ from PyQt5 import QtCore, QtGui, QtWidgets
 
 from plm.frontend.qt.widgets.common import StyledMenu, apply_drop_shadow
 from plm.frontend.qt.widgets.tables import RowDragTable
+from plm.frontend.qt.widgets.controller_swatch import ControllerSwatch
 from plm.frontend.qt.styles.tokens import LANE_GRID_PALETTE as LANE_GRID_PALETTE
 from plm.frontend.qt.styles.tokens import get_theme_color
 from plm.frontend.qt.styles.tokens import (
-    CONTROL_HEIGHT, FONT_SIZE_BODY,
-    RADIUS_CHIP, SHADOW_SM, SPACING_MD,
+    CONTROL_HEIGHT, FONT_SIZE_BODY, FONT_WEIGHT_MEDIUM,
+    PALETTE_ROW_SPACING, RADIUS_CHIP, SHADOW_SM, SPACING_MD, SPACING_SM,
 )
 
 LANE_GRID_UNASSIGNED_BG = get_theme_color("bg_subtle")
@@ -281,7 +282,7 @@ class _FlowLayout(QtWidgets.QLayout):
     def minimumSize(self):
         size = QtCore.QSize()
         for item in self._items:
-            size = size.expandedTo(item.minimumSize().expandedTo(item.sizeHint()))
+            size = size.expandedTo(item.minimumSize())
         margin = self.contentsMargins()
         size += QtCore.QSize(margin.left() + margin.right(), margin.top() + margin.bottom())
         return size
@@ -291,18 +292,20 @@ class _FlowLayout(QtWidgets.QLayout):
         y = rect.y()
         line_height = 0
         for item in self._items:
+            item_size = item.sizeHint()
+            item_size.setWidth(min(item_size.width(), max(item.minimumSize().width(), rect.width())))
             space_x = self._h_spacing
             space_y = self._v_spacing
-            next_x = x + item.sizeHint().width() + space_x
+            next_x = x + item_size.width() + space_x
             if next_x - space_x > rect.right() and line_height > 0:
                 x = rect.x()
                 y += line_height + space_y
-                next_x = x + item.sizeHint().width() + space_x
+                next_x = x + item_size.width() + space_x
                 line_height = 0
             if not test_only:
-                item.setGeometry(QtCore.QRect(QtCore.QPoint(x, y), item.sizeHint()))
+                item.setGeometry(QtCore.QRect(QtCore.QPoint(x, y), item_size))
             x = next_x
-            line_height = max(line_height, item.sizeHint().height())
+            line_height = max(line_height, item_size.height())
         return y + line_height - rect.y()
 
 
@@ -346,7 +349,7 @@ class LaneGrid(QtWidgets.QWidget):
         palette_outer.setSpacing(int(6 * _ui_scale()))
         # Use a flow layout so swatches wrap to multiple rows instead of
         # overflowing the lane mapping page at narrow widths.
-        self._palette_flow = _FlowLayout(h_spacing=0, v_spacing=0)
+        self._palette_flow = _FlowLayout(h_spacing=SPACING_SM, v_spacing=PALETTE_ROW_SPACING)
         palette_outer.addLayout(self._palette_flow)
         layout.addWidget(self.palette_bar)
 
@@ -449,13 +452,13 @@ class LaneGrid(QtWidgets.QWidget):
             cid = c["ctrl_id"]
             color = self.color_by_id[cid]
             is_active = (cid == self.active_ctrl_id)
-            btn = QtWidgets.QPushButton(c.get("ctrl_name") or cid)
+            btn = ControllerSwatch(cid, c.get("ctrl_name") or cid)
             btn.setObjectName("lgSwatch")
             btn.setCheckable(True)
             btn.setChecked(is_active)
             btn.setToolTip(
-                f"Active brush: {c.get('ctrl_name') or cid}" if is_active
-                else f"Use {c.get('ctrl_name') or cid} as the brush"
+                f"Active brush: {btn.text()}" if is_active
+                else f"Use {btn.text()} as the brush"
             )
             text_color = _contrast_text_color(color)
             border_color = get_theme_color("primary_hover") if is_active else get_theme_color("border")
@@ -465,7 +468,7 @@ class LaneGrid(QtWidgets.QWidget):
                 f"  background-color: {color};"
                 f"  color: {text_color};"
                 f"  font-size: {FONT_SIZE_BODY}px;"
-                f"  font-weight: 500;"
+                f"  font-weight: {FONT_WEIGHT_MEDIUM};"
                 f"  border-radius: {RADIUS_CHIP}px;"
                 f"  padding: 0 {int(SPACING_MD * scale)}px;"
                 f"  {outline}"

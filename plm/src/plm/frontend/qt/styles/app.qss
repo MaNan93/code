@@ -129,6 +129,48 @@ QLineEdit, QComboBox, QSpinBox {
 }
 QLineEdit:hover, QComboBox:hover, QSpinBox:hover { border-color: $border_hover; }
 QLineEdit:focus, QComboBox:focus, QSpinBox:focus { border: 1px solid $border_focus; }
+QLineEdit QToolButton, QLineEdit QToolButton:hover {
+    background: transparent;
+    border: none;
+    margin: 0;
+    padding: 0;
+}
+QCheckBox {
+    spacing: $spacing_sm;
+    color: $text_main;
+    font-size: $font_size_body;
+    background: transparent;
+}
+QCheckBox::indicator {
+    width: $checkbox_indicator_content_size;
+    height: $checkbox_indicator_content_size;
+    border: $checkbox_border_width solid $border_checkbox;
+    border-radius: $radius_chip;
+    background-color: $bg_subtle;
+}
+QCheckBox::indicator:hover {
+    border-color: $border_focus;
+    background-color: $bg_hover;
+}
+QCheckBox::indicator:checked {
+    background-color: $primary;
+    border-color: $primary;
+    image: url("$checkmark_icon");
+}
+QCheckBox::indicator:checked:hover {
+    background-color: $primary_hover;
+    border-color: $primary_hover;
+}
+QCheckBox:disabled { color: $text_muted; }
+QCheckBox::indicator:disabled {
+    border-color: $border;
+    background-color: $bg_main;
+}
+QCheckBox::indicator:checked:disabled {
+    border-color: $border;
+    background-color: $bg_subtle;
+    image: url("$checkmark_disabled_icon");
+}
 QComboBox::drop-down { border: none; width: 32px; }
 QComboBox::down-arrow {
     image: url("$chevron_down_icon");
@@ -220,28 +262,6 @@ QTabWidget#ConfigTabs QTabBar {
     border: none;
     padding: 0;
     margin: 0;
-}
-QTabWidget#ConfigTabs QTabBar::tab {
-    background: transparent;
-    color: $text_sub;
-    padding: 0 16px;
-    margin-right: 0;
-    border: none;
-    border-bottom: 2px solid transparent;
-    border-radius: 0;
-    font-size: $font_size_body;
-    font-weight: $font_weight_medium;
-}
-QTabWidget#ConfigTabs QTabBar::tab:selected {
-    background-color: transparent;
-    border-bottom: 2px solid $primary;
-    color: $text_primary;
-    font-weight: $font_weight_semibold;
-}
-QTabWidget#ConfigTabs QTabBar::tab:first { padding-left: 16px; }
-QTabWidget#ConfigTabs QTabBar::tab:hover:!selected {
-    color: $text_main;
-    background-color: $bg_subtle;
 }
 
 QScrollBar:vertical {
@@ -352,7 +372,7 @@ QFrame#ConfigHeader {
 }
 QLabel#ConfigSessionTitle {
     color: $text_main;
-    font-size: $font_size_body;
+    font-size: $font_size_title;
     font-weight: $font_weight_semibold;
 }
 QLineEdit#ConfigSessionEditor {
@@ -409,31 +429,28 @@ QWidget#ConfigCsvEditor QHeaderView::section {
     border-right: 1px solid $border;
 }
 QWidget#ConfigCsvEditor QTableWidget::item { border-bottom: 1px solid $border; }
-QLabel#ConfigProjectStatus {
-    background: transparent;
+QLabel#ConfigSaveState {
+    background-color: $success_bg;
+    color: $success_text;
     border: none;
-    border-radius: 4px;
-    padding: 0;
+    border-radius: $radius_chip;
+    padding: $status_padding_y $spacing_sm;
+    font-size: $font_size_small;
 }
-QLabel#ConfigProjectStatus[dirty="true"] {
-    background-color: $warning_text;
+QLabel#ConfigSaveState[dirty="true"] {
+    background-color: $warning_bg;
+    color: $warning_text;
 }
-
-QLabel#ConfigSessionTitle { font-size: 15px; font-weight: 600; }
-QLabel#ConfigSaveState, QLabel#ProjectPath, QLabel#SettingsDescription, QLabel#TableFilterCount {
+QLabel#ProjectPath, QLabel#SettingsDescription, QLabel#TableFilterCount {
     color: $text_muted;
-    font-size: 12px;
+    font-size: $font_size_small;
     background: transparent;
 }
-QPushButton#LogCollapsedButton {
-    text-align: left;
+QFrame#LogCollapsedBar {
     background-color: $bg_subtle;
-    color: $text_sub;
     border: 1px solid $border;
-    border-radius: 6px;
-    padding: 0 12px;
+    border-radius: $radius_control;
 }
-QPushButton#LogCollapsedButton:hover { background-color: $bg_hover; }
 QPushButton#TableActionButton { padding: 0 10px; }
 QGroupBox#FormCard {
     background-color: $bg_surface;
@@ -844,4 +861,61 @@ QPushButton#ArtifactsToolButton:checked:pressed,
 QPushButton#ArtifactPathButton:checked:pressed,
 QFrame#ButtonGroup > QPushButton[selected="true"]:pressed {
     background-color: $primary_pressed;
+}
+
+/* Settings and configuration share the same underline navigation tokens. */
+QTabWidget#ConfigTabs QTabBar::tab,
+QPushButton#SecondaryMenuButton[underlineTab="true"] {
+    background: transparent;
+    color: $text_sub;
+    padding: 0 $tab_padding_x;
+    margin: 0;
+    border: none;
+    border-bottom: $tab_indicator_height solid transparent;
+    border-radius: 0;
+    font-size: $font_size_body;
+    font-weight: $font_weight_medium;
+}
+QTabWidget#ConfigTabs QTabBar::tab:hover:!selected,
+QPushButton#SecondaryMenuButton[underlineTab="true"]:hover,
+QPushButton#SecondaryMenuButton[underlineTab="true"]:focus:!pressed {
+    background-color: $bg_subtle;
+    color: $text_main;
+    border-bottom: $tab_indicator_height solid transparent;
+}
+QTabWidget#ConfigTabs QTabBar::tab:selected,
+QPushButton#SecondaryMenuButton[underlineTab="true"][selected="true"],
+QPushButton#SecondaryMenuButton[underlineTab="true"][selected="true"]:hover,
+QPushButton#SecondaryMenuButton[underlineTab="true"][selected="true"]:focus,
+QPushButton#SecondaryMenuButton[underlineTab="true"][selected="true"]:pressed {
+    background-color: transparent;
+    color: $text_primary;
+    border-bottom: $tab_indicator_height solid $primary;
+    font-weight: $font_weight_semibold;
+}
+
+QFrame#LogCollapsedBar QPushButton#LogCollapsedButton,
+QFrame#LogCollapsedBar QPushButton#LogCollapsedButton:hover,
+QFrame#LogCollapsedBar QPushButton#LogCollapsedButton:focus,
+QFrame#LogCollapsedBar QPushButton#LogCollapsedButton:pressed {
+    text-align: left;
+    background: transparent;
+    color: $text_sub;
+    border: none;
+    border-radius: 0;
+    padding: 0 $control_padding_x;
+}
+QFrame#LogCollapsedBar QPushButton#LogCollapsedButton:hover,
+QFrame#LogCollapsedBar QPushButton#LogCollapsedButton:focus {
+    color: $text_main;
+}
+QFrame#LogCollapsedBar QPushButton#LogClearButton {
+    background: transparent;
+    border: none;
+    border-radius: $radius_control;
+}
+QFrame#LogCollapsedBar QPushButton#LogClearButton:hover,
+QFrame#LogCollapsedBar QPushButton#LogClearButton:focus {
+    background-color: $bg_hover;
+    color: $text_main;
 }

@@ -8,8 +8,9 @@ from plm.frontend.qt.services.themes import apply_application_theme
 from plm.frontend.qt.styles.tokens import SPACING_MD
 from plm.frontend.qt.widgets.content_splitter import ContentSplitter
 from plm.frontend.qt.widgets.toast import ToastNotification
-from plm.frontend.qt.styles.tokens import get_theme_color
+from plm.frontend.qt.styles.tokens import get_active_theme, get_theme_color
 from plm.frontend.qt.styles.tokens import (
+    CONTROL_HEIGHT,
     FONT_SIZE_BODY,
     FONT_UI_PRIMARY,
     ICON_SIZE,
@@ -399,10 +400,16 @@ class MainWindow(QtWidgets.QMainWindow):
             "panel-bottom", "显示/隐藏输出面板", "HeaderButton", ICON_BUTTON_SIZE, ICON_SIZE
         )
         self.artifacts_toggle_button = make_icon_button(
-            "file-text", "显示/隐藏 Artifacts", "HeaderButton", ICON_BUTTON_SIZE, ICON_SIZE
+            "panel-right", "显示/隐藏 Artifacts", "HeaderButton", ICON_BUTTON_SIZE, ICON_SIZE
         )
+        self.theme_toggle_button = make_icon_button(
+            "moon", "切换到深色模式", "HeaderButton", ICON_BUTTON_SIZE, ICON_SIZE
+        )
+        self.theme_toggle_button.clicked.connect(self._toggle_theme_shortcut)
         self.title_bar.add_panel_action(self.log_toggle_button)
         self.title_bar.add_panel_action(self.artifacts_toggle_button)
+        self.title_bar.add_panel_action(self.theme_toggle_button)
+        self._update_theme_toggle_icon()
         self.log_toggle_button.clicked.connect(self.toggle_log)
         self.artifacts_toggle_button.clicked.connect(self.config_page.toggle_artifacts)
         self.log_panel = LogPanel()
@@ -421,15 +428,17 @@ class MainWindow(QtWidgets.QMainWindow):
         self.collapsed_log.setObjectName("LogCollapsedButton")
         self.collapsed_log.setIcon(load_lucide_icon("panel-bottom", "text_sub"))
         self.collapsed_log.setIconSize(QtCore.QSize(ICON_SIZE, ICON_SIZE))
-        self.collapsed_log.setFixedHeight(LOG_COLLAPSED_HEIGHT)
+        self.collapsed_log.setFixedHeight(CONTROL_HEIGHT)
         self.collapsed_log.setToolTip("展开输出日志；生成时会自动展开。")
         self.collapsed_log.clicked.connect(self.show_log)
         self.log_panel.statusChanged.connect(self.update_log_summary)
-        self.collapsed_log_bar = QtWidgets.QWidget()
+        self.collapsed_log_bar = QtWidgets.QFrame()
+        self.collapsed_log_bar.setObjectName("LogCollapsedBar")
+        self.collapsed_log_bar.setAttribute(QtCore.Qt.WA_StyledBackground, True)
         self.collapsed_log_bar.setFixedHeight(LOG_COLLAPSED_HEIGHT)
         collapsed_layout = QtWidgets.QHBoxLayout(self.collapsed_log_bar)
-        collapsed_layout.setContentsMargins(0, 0, 0, 0)
-        collapsed_layout.setSpacing(4)
+        collapsed_layout.setContentsMargins(0, 0, SPACING_XS, 0)
+        collapsed_layout.setSpacing(0)
         collapsed_layout.addWidget(self.collapsed_log, 1)
         self.collapsed_log_clear = make_icon_button(
             "trash-2", "清空日志", "LogClearButton", ICON_BUTTON_SIZE, ICON_SIZE)
@@ -479,14 +488,23 @@ class MainWindow(QtWidgets.QMainWindow):
                 self._enable_background_focus(scroll)
                 self._enable_background_focus(scroll.widget())
 
+    def _toggle_theme_shortcut(self):
+        self.apply_theme("dark" if get_active_theme() == "light" else "light")
+
+    def _update_theme_toggle_icon(self):
+        dark = get_active_theme() == "dark"
+        self.theme_toggle_button.setIcon(load_lucide_icon("sun" if dark else "moon", "text_sub", ICON_SIZE))
+        self.theme_toggle_button.setToolTip("切换到浅色模式" if dark else "切换到深色模式")
+        self.theme_toggle_button.setAccessibleName(self.theme_toggle_button.toolTip())
+
     def apply_theme(self, theme):
         from PyQt5 import sip
-        from plm.frontend.qt.styles.tokens import get_active_theme
         scrolls = [(area, area.horizontalScrollBar().value(), area.verticalScrollBar().value())
                    for area in self.findChildren(QtWidgets.QAbstractScrollArea)]
         apply_application_theme(theme)
         self.setWindowIcon(load_lucide_icon("layout-dashboard", 'primary'))
         self.controller.settings.save_theme(get_active_theme())
+        self._update_theme_toggle_icon()
         self.toast.reposition()
         def restore_scrolls():
             for area, horizontal, vertical in scrolls:
@@ -557,6 +575,7 @@ class MainWindow(QtWidgets.QMainWindow):
         app = QtWidgets.QApplication.instance()
         if app is not None:
             app.applicationStateChanged.connect(self._application_state_changed)
+            app.installEventFilter(self)
             self._activation_connected = True
 
     def _disconnect_application_state(self):
@@ -565,7 +584,23 @@ class MainWindow(QtWidgets.QMainWindow):
         app = QtWidgets.QApplication.instance()
         if app is not None:
             app.applicationStateChanged.disconnect(self._application_state_changed)
+            app.removeEventFilter(self)
         self._activation_connected = False
+
+    def eventFilter(self, watched, event):
+        if (event.type() == QtCore.QEvent.MouseButtonPress
+                and isinstance(watched, QtWidgets.QWidget)
+                and watched.window() is self):
+            editor = QtWidgets.QApplication.focusWidget()
+            # Clicking a label or blank area does not normally move Qt focus.
+            # End the edit before delivering that click, while keeping clicks
+            # inside composite controls and their popup menus intact.
+            if editor is not None:
+                if isinstance(editor.parentWidget(), (QtWidgets.QAbstractSpinBox, QtWidgets.QComboBox)):
+                    editor = editor.parentWidget()
+                if watched is not editor and not editor.isAncestorOf(watched):
+                    self._finish_focused_edit()
+        return super().eventFilter(watched, event)
 
     @staticmethod
     def _enable_background_focus(container):

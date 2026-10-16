@@ -21,7 +21,7 @@ from plm.core.workspace import scaffold_default_content
 from plm.frontend.qt.controllers import AppController
 from plm.frontend.qt.main_window import MainWindow
 from plm.frontend.qt.services import ProjectService, SettingsStore, WorkspaceService
-from plm.frontend.qt.styles.tokens import CONTROL_HEIGHT
+from plm.frontend.qt.styles.tokens import CONTROL_HEIGHT, FORM_LABEL_WIDTH
 from plm.frontend.qt.views.settings_page import SettingsPage
 
 
@@ -50,6 +50,29 @@ class GenerationIntegrationTests(unittest.TestCase):
         wait_for_idle(self.app)
         self.addCleanup(lambda: (window.config_page.mark_saved(), window.close()))
         return controller, window
+
+    def test_generation_cards_share_field_origin_in_both_themes_and_window_sizes(self):
+        _controller, window = self.window()
+        page = window.config_page
+        page.tabs.setCurrentIndex(3)
+        editor = page.generation_editor
+        fields = (editor.arch, editor.pclk_mode, editor.bus_type, editor.dpr,
+                  *editor._prefix_edits.values())
+        for theme in ("light", "dark"):
+            window.apply_theme(theme)
+            for width, height in ((960, 640), (1280, 800), (1600, 900)):
+                with self.subTest(theme=theme, width=width):
+                    window.resize(width, height)
+                    wait_for_idle(self.app)
+                    origins = [field.mapTo(editor, QtCore.QPoint()).x() for field in fields]
+                    self.assertEqual(len(set(origins)), 1, origins)
+                    for card in (editor.architecture_card, editor.naming_card):
+                        form = card.layout()
+                        for row in range(form.rowCount()):
+                            label = form.itemAt(row, QtWidgets.QFormLayout.LabelRole).widget()
+                            self.assertGreaterEqual(label.width(), FORM_LABEL_WIDTH)
+                    self.assertEqual(editor.arch.currentText(), "original_pipe")
+                    self.assertIn(editor.bus_type.currentText(), ("flat", "bus"))
 
     def test_formatter_flags_none_empty_and_custom_round_trip(self):
         for flags in (None, {}, {"column_limit": "88", "indentation_spaces": "0"}):

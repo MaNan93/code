@@ -49,6 +49,129 @@ class QtRegressionTests(unittest.TestCase):
             wait_for_idle(self.app)
         self.window.show()
         wait_for_idle(self.app)
+
+    def test_table_edit_finishes_on_background_click(self):
+        page = self.window.config_page
+        for tab, wrapper, column in (
+            (0, page.controllers_editor, 1),
+            (1, page.mapping_editor, 0),
+            (2, page.signals_editor, 0),
+        ):
+            with self.subTest(tab=tab):
+                page.tabs.setCurrentIndex(tab)
+                table = wrapper.table
+                item = table.item(0, column)
+                table.setCurrentItem(item)
+                table.editItem(item)
+                wait_for_idle(self.app)
+                editor = self.app.focusWidget()
+                self.assertIsInstance(editor, QtWidgets.QLineEdit)
+                editor.selectAll()
+                QtTest.QTest.keyClicks(editor, "focus_committed")
+                QtTest.QTest.mouseClick(page.header.path_label, QtCore.Qt.LeftButton)
+                wait_for_idle(self.app)
+                self.assertEqual(item.text(), "focus_committed")
+                self.assertNotEqual(table.state(), QtWidgets.QAbstractItemView.EditingState)
+                self.assertTrue(sip.isdeleted(editor) or not editor.isVisible())
+
+    def test_project_rename_finishes_on_background_click(self):
+        header = self.window.config_page.header
+        for location in ("header", "sidebar"):
+            for changed in (False, True):
+                with self.subTest(location=location, changed=changed):
+                    old_name = self.controller.current_name
+                    new_name = old_name + "_renamed" if changed else old_name
+                    if location == "header":
+                        header.enter_edit_mode()
+                        editor = header.title_edit
+                    else:
+                        row = next(row for row in self.window.nav_panel.project_list.project_widgets
+                                   if row.project_name == old_name)
+                        row.begin_rename()
+                        editor = row.project_name_edit
+                    wait_for_idle(self.app)
+                    self.assertTrue(editor.hasFocus())
+                    editor.setText(new_name)
+                    QtTest.QTest.mouseClick(header.path_label, QtCore.Qt.LeftButton)
+                    wait_for_idle(self.app)
+                    self.assertTrue(sip.isdeleted(editor) or not editor.isVisible())
+                    self.assertEqual(self.controller.current_name, new_name)
+                    self.assertEqual(header.title_label.text(), new_name)
+                    self.assertTrue((self.root / "test" / new_name / "config").is_dir())
+
+    def test_clicking_inside_editor_or_context_menu_keeps_editing(self):
+        header = self.window.config_page.header
+        table = self.window.config_page.controllers_editor.table
+        row = self.window.nav_panel.project_list.project_widgets[0]
+        for location in ("table", "header", "sidebar"):
+            with self.subTest(location=location):
+                if location == "table":
+                    item = table.item(0, 1)
+                    table.setCurrentItem(item)
+                    table.editItem(item)
+                    editor = self.app.focusWidget()
+                elif location == "header":
+                    header.enter_edit_mode()
+                    editor = header.title_edit
+                else:
+                    row.begin_rename()
+                    editor = row.project_name_edit
+                wait_for_idle(self.app)
+                original = editor.text()
+                QtTest.QTest.mouseClick(editor, QtCore.Qt.LeftButton)
+                self.assertTrue(editor.isVisible())
+                self.assertTrue(editor.hasFocus())
+                menu = editor.createStandardContextMenu()
+                self.addCleanup(menu.deleteLater)
+                menu.popup(editor.mapToGlobal(editor.rect().center()))
+                wait_for_idle(self.app)
+                self.assertTrue(editor.isVisible())
+                QtTest.QTest.keyClick(menu, QtCore.Qt.Key_Escape)
+                wait_for_idle(self.app)
+                self.assertTrue(editor.isVisible())
+                editor.setText("cancelled_draft")
+                QtTest.QTest.keyClick(editor, QtCore.Qt.Key_Escape)
+                wait_for_idle(self.app)
+                self.assertTrue(sip.isdeleted(editor) or not editor.isVisible())
+                if location == "table":
+                    self.assertEqual(item.text(), original)
+                elif location == "header":
+                    self.assertEqual(header.title_label.text(), original)
+                else:
+                    self.assertEqual(row.project_name_label.text(), original)
+
+    def test_edits_finish_when_another_window_takes_focus(self):
+        page = self.window.config_page
+        other_window = QtWidgets.QWidget()
+        other_window.show()
+        self.addCleanup(other_window.close)
+        self.addCleanup(other_window.deleteLater)
+        for location in ("table", "header", "sidebar"):
+            with self.subTest(location=location):
+                self.window.activateWindow()
+                wait_for_idle(self.app)
+                if location == "table":
+                    table = page.controllers_editor.table
+                    item = table.item(0, 1)
+                    table.setCurrentItem(item)
+                    table.editItem(item)
+                    editor = self.app.focusWidget()
+                    editor.setText("deactivated_edit")
+                elif location == "header":
+                    page.header.enter_edit_mode()
+                    editor = page.header.title_edit
+                else:
+                    row = self.window.nav_panel.project_list.project_widgets[0]
+                    row.begin_rename()
+                    editor = row.project_name_edit
+                wait_for_idle(self.app)
+                self.assertTrue(editor.hasFocus())
+                other_window.activateWindow()
+                wait_for_idle(self.app)
+                self.assertTrue(sip.isdeleted(editor) or not editor.isVisible())
+                if location == "table":
+                    self.assertEqual(item.text(), "deactivated_edit")
+
     def test_invalid_draft_is_saved_and_still_reported_inline(self):
         page = self.window.config_page
         page.controllers_editor.table.item(0, 0).setText("invalid-id")

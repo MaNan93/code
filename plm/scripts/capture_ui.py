@@ -66,7 +66,7 @@ def tree_texts(tree):
 
 
 with tempfile.TemporaryDirectory(prefix="plm-ui-") as td:
-    root=Path(td)
+    root=Path(td).resolve()
     project=root/"demo-project"
     scaffold_default_content(project)
     # Use a real multi-controller/multi-mode fixture instead of nearly empty defaults.

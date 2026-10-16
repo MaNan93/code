@@ -336,14 +336,23 @@ class GenerationEditor(QtWidgets.QWidget):
     def _align_form_labels(self):
         labels = []
         for card in (self.architecture_card, self.naming_card):
+            card.ensurePolished()
+            card.setAttribute(QtCore.Qt.WA_LayoutUsesWidgetRect)
             form = card.layout()
             labels.extend(form.itemAt(row, QtWidgets.QFormLayout.LabelRole).widget()
                           for row in range(form.rowCount()))
+            for row in range(form.rowCount()):
+                field = form.itemAt(row, QtWidgets.QFormLayout.FieldRole).widget()
+                # Native polishing installs item margins; apply the widget
+                # rectangle policy afterwards so combo/line-edit bounds agree.
+                field.ensurePolished()
+                field.setAttribute(QtCore.Qt.WA_LayoutUsesWidgetRect)
+                field.updateGeometry()
         for label in labels:
+            label.ensurePolished()
             label.setAttribute(QtCore.Qt.WA_LayoutUsesWidgetRect)
             label.setMinimumWidth(0)
             label.setMaximumWidth(QtWidgets.QWIDGETSIZE_MAX)
-            label.ensurePolished()
         # Native styles and CJK fallbacks can add space beyond glyph advance.
         # Share the complete size hint, then fix both label columns to it.
         width = max(max(label.sizeHint().width(), label.minimumSizeHint().width(),

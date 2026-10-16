@@ -160,8 +160,15 @@ class RedesignTests(unittest.TestCase):
             self.assertEqual(picture.pixelColor(round(5 * ratio), round(button.height() / 2 * ratio)).name(),
                              get_theme_color("bg_subtle").lower())
 
-    def test_generation_cards_align_under_a_host_style_that_centers_forms(self):
+    @patch("sys.excepthook")
+    def test_generation_cards_align_under_a_host_style_that_centers_forms(self, callback_errors):
         class CenteredFormStyle(QtWidgets.QProxyStyle):
+            def polish(self, target):
+                result = super().polish(target)
+                if isinstance(target, (QtWidgets.QLineEdit, QtWidgets.QComboBox)):
+                    target.setAttribute(QtCore.Qt.WA_LayoutUsesWidgetRect, False)
+                return result
+
             def styleHint(self, hint, option=None, widget=None, returnData=None):
                 if hint == QtWidgets.QStyle.SH_FormLayoutFormAlignment:
                     return int(QtCore.Qt.AlignHCenter | QtCore.Qt.AlignTop)
@@ -182,9 +189,14 @@ class RedesignTests(unittest.TestCase):
             with self.subTest(width=width, positions=positions):
                 details = [(card.geometry().getRect(), card.layout().getContentsMargins(),
                             [(card.layout().itemAt(row, QtWidgets.QFormLayout.LabelRole).widget().geometry().getRect())
+                             for row in range(card.layout().rowCount())],
+                            [(card.layout().itemAt(row, QtWidgets.QFormLayout.FieldRole).geometry().getRect(),
+                              card.layout().itemAt(row, QtWidgets.QFormLayout.FieldRole).widget().geometry().getRect(),
+                              card.layout().itemAt(row, QtWidgets.QFormLayout.FieldRole).widget().testAttribute(QtCore.Qt.WA_LayoutUsesWidgetRect))
                              for row in range(card.layout().rowCount())])
                            for card in (editor.architecture_card, editor.naming_card)]
                 self.assertEqual(len(set(positions)), 1, f"card/label geometry: {details}")
+        callback_errors.assert_not_called()
 
     def test_log_animation_has_intermediate_frames_and_can_reverse_twice(self):
         window = self.window

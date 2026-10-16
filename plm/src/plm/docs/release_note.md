@@ -22,7 +22,14 @@
 - 修复远端 RTL 仿真 CI 的 `sample_data` 导入失败，并补跑独立 PERST 路由仿真。
   回归矩阵增加 macOS / Python 3.12，三平台输出四档缩放报告与截图，截图任务上传完整图库。
 
-验证：Windows 全量 391 项，389 通过、2 项可选仿真跳过；WSL Linux 开启
+最终验证：源码 `91f0c51` 的远端回归 8 个任务全部通过，另有完整截图任务通过。
+Windows / Linux 的 Python 3.9、3.12 和 macOS 的 Python 3.12 五组全量各
+393 项，391 通过、2 项可选仿真跳过；独立 RTL 任务实际执行 DPR/PERST 仿真通过。
+三平台四档缩放各 176 个页面状态、合计 528 个状态通过，Windows / Linux wheel
+构建及包检查通过。最终 43 张截图及索引位于 `docs/screenshot/`，尺寸与清单一致。
+回归链接及逐项完成表见 `docs/UI_REDESIGN_CHECKLIST.md`。
+
+本轮先前本地验证：Windows 全量 391 项，389 通过、2 项可选仿真跳过；WSL Linux 开启
 Verilator 后全量 391 项全部通过。随后补充表格间距回归，两平台文档专项各 3 项通过，
 两平台工作区交互专项各 13 项通过。Windows 与 WSL Linux
 四档缩放各 176 个页面状态通过，Linux 无 Verible 环境的完整 43 张截图生成通过。

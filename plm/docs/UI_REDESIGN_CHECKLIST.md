@@ -59,6 +59,13 @@ Qt 不支持的浏览器 CSS 属性不用于实现；文档装饰由 QPainter �
 
 ## 验证记录
 
+- 最终源码 `91f0c51` 的[远端回归](https://github.com/MaNan93/code/actions/runs/38833920083)
+  8 个任务全部成功：Windows / Linux 的 Python 3.9、3.12，以及 macOS 的 Python 3.12，
+  每组均为 393 项、391 通过、2 项可选仿真跳过；独立 RTL 仿真任务补跑真实 DPR/PERST 仿真。
+  Windows / Linux wheel 构建与包内容检查通过。
+- 同一源码的三平台 100% / 125% / 150% / 200% 缩放各验证 176 个页面状态，
+  合计 528 个状态全部通过；[截图任务](https://github.com/MaNan93/code/actions/runs/38833920077)
+  通过，图库 43 张。最终本地 PNG 尺寸与清单逐项核对通过，PLM 工作区已提交。
 - Windows 全量 391 项：389 通过，2 项可选仿真跳过；WSL Linux 开启真实 Verilator
   后全量 391 项全部通过，没有跳过。代码块后紧接表格的间距回归随后另行补充。
 - Windows 与 Linux 文档装饰专项各 3 项、工作区交互专项各 13 项通过，覆盖两种主题的真实像素、

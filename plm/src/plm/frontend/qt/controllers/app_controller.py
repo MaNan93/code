@@ -112,7 +112,6 @@ class AppController(WorkspaceActions, ProjectNavigation, ProjectActions):
         }
         self.generation_state = state
         text = labels[state]
-        self.window.update_log_summary(text)
         self.config_page.generation_editor.set_output_state(state, text, detail)
         self.config_page.artifacts_panel.set_output_state(state, text, detail)
 

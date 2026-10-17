@@ -113,7 +113,6 @@ class ArtifactsPanel(
         self._file_status = "尚无生成文件"
         self.status_text = "尚无生成文件"
         self._file_error = ""
-        self._output_state = "no_project"
         self._output_text = ""
         self._output_detail = ""
         self._file_statuses = {}

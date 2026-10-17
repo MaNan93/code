@@ -103,7 +103,7 @@ class RedesignTests(unittest.TestCase):
     def test_log_starts_collapsed_and_remembers_its_expanded_height(self):
         window = self.window
         self.assertFalse(window.log_panel.isVisible())
-        self.assertTrue(window.collapsed_log_bar.isHidden())
+        self.assertTrue(window.log_toggle_button.isVisible())
         window.log_toggle_button.click()
         wait_for_idle(self.app)
         window.content_splitter.setSizes([400, 180])
@@ -129,15 +129,15 @@ class RedesignTests(unittest.TestCase):
         window = self.window
         window.log_panel.append_log("old output")
         window.log_panel.set_status("生成完成：18 个文件")
-        self.assertIn("18", window.collapsed_log.text())
-        window.log_panel.clear()
+        self.assertIn("18", window.log_panel.status_label.text())
+        window.log_panel.clear_btn.click()
         self.assertEqual(window.log_panel.output.toPlainText(), "")
-        self.assertIn("就绪", window.collapsed_log.text())
-        self.assertTrue(window.collapsed_log_bar.isHidden())
+        self.assertEqual(window.log_panel.status_label.text(), "")
+        self.assertTrue(window.log_panel.status_bar.isHidden())
         self.assertFalse(window.log_panel.isVisible())
         window.show_log()
         wait_for_idle(self.app)
-        self.assertFalse(window.collapsed_log_clear.isVisible())
+        self.assertTrue(window.log_panel.clear_btn.isVisible())
 
     def test_primary_pressed_and_disabled_hover_use_readable_colors(self):
         window = self.window
@@ -212,7 +212,6 @@ class RedesignTests(unittest.TestCase):
         window.toggle_log()
         wait_for_idle(self.app)
         self.assertTrue(window.log_panel.isVisible())
-        self.assertFalse(window.collapsed_log.isVisible())
         self.assertAlmostEqual(window.content_splitter.sizes()[1], 200, delta=2)
 
     def test_log_collapse_finishes_after_resize_and_retains_its_height(self):
@@ -225,7 +224,6 @@ class RedesignTests(unittest.TestCase):
         window.resize(960, 640)
         wait_for_idle(self.app)
         self.assertFalse(window.log_panel.isVisible())
-        self.assertTrue(window.collapsed_log_bar.isHidden())
         window.show_log()
         wait_for_idle(self.app)
         self.assertAlmostEqual(window.content_splitter.sizes()[1], height, delta=2)

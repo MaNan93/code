@@ -126,21 +126,6 @@ def install_button_sizing(app):
     return app._button_sizing
 
 
-def make_button_group(buttons, parent=None):
-    """Seamless horizontal buttons with corners only at the outer edges."""
-    group = QtWidgets.QFrame(parent)
-    group.setObjectName("ButtonGroup")
-    group.setFixedHeight(CONTROL_HEIGHT)
-    layout = QtWidgets.QHBoxLayout(group)
-    layout.setContentsMargins(0, 0, 0, 0)
-    layout.setSpacing(0)
-    for index, button in enumerate(buttons):
-        button.setProperty("groupFirst", index == 0)
-        button.setProperty("groupLast", index == len(buttons) - 1)
-        layout.addWidget(button)
-    return group
-
-
 class ContentIconStyle(QtWidgets.QProxyStyle):
     """Use uniform native icon slots and the shared icon/text spacing."""
 
@@ -179,7 +164,7 @@ def draw_icon_text_label(style, option, painter, widget):
     rect = QtCore.QRect(option.rect)
     text_width = option.fontMetrics.horizontalAdvance(option.text)
     total = ICON_SIZE + (ICON_TEXT_GAP + text_width if option.text else 0)
-    left_aligned = widget is not None and widget.objectName() in ("NavActionButton", "NavFooterButton", "LogCollapsedButton")
+    left_aligned = widget is not None and widget.objectName() in ("NavActionButton", "NavFooterButton")
     x = rect.left() if left_aligned else rect.left() + max(0, (rect.width() - total) // 2)
     enabled = bool(option.state & QtWidgets.QStyle.State_Enabled)
     if option.state & QtWidgets.QStyle.State_HasFocus and not option.state & QtWidgets.QStyle.State_Sunken:

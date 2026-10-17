@@ -20,8 +20,6 @@ from plm.frontend.qt.styles.tokens import (
     PALETTE_ROW_SPACING, RADIUS_CHIP, SHADOW_SM, SPACING_MD, SPACING_SM,
 )
 
-LANE_GRID_UNASSIGNED_BG = get_theme_color("bg_subtle")
-
 # Keep the mode column compact and let the active lane columns consume the
 # remaining viewport width evenly. This avoids the large dead area that used
 # to appear in x2/x4/x8 configurations. Larger lane counts scroll when
@@ -57,20 +55,6 @@ def _marker_background_color(color, opacity, background=None):
     blended = QtGui.QColor(*(round(front * opacity + back * (1 - opacity))
                             for front, back in zip(foreground.getRgb()[:3], background.getRgb()[:3])))
     return blended.name()
-
-
-def _marker_text_color(color, opacity):
-    return _contrast_text_color(_marker_background_color(color, opacity))
-
-
-@lru_cache(maxsize=64)
-def _darken_color(hex_color, factor=0.82):
-    """Blend a color toward the existing dark text tone."""
-    color = QtGui.QColor(hex_color)
-    target = 0x1a
-    channels = [int(channel * factor + target * (1 - factor))
-                for channel in (color.red(), color.green(), color.blue())]
-    return QtGui.QColor(*channels).name()
 
 
 @lru_cache(maxsize=32)
@@ -333,7 +317,6 @@ class LaneGrid(QtWidgets.QWidget):
         self._drag_current = None
         self._paint_originals = {}
         self._hover_cell = None  # (row, lane) under the cursor, for pen preview
-        self._pen_cursor = None  # cached QCursor for the active controller
         self._bg_color = get_theme_color("bg_surface")  # card background, set from theme
         self._cell_errors = {}
 
@@ -504,11 +487,9 @@ class LaneGrid(QtWidgets.QWidget):
             color = self.color_by_id[self.active_ctrl_id]
             cursor = _make_pen_cursor(color)
             if cursor is not None:
-                self._pen_cursor = cursor
                 self.table.viewport().setCursor(cursor)
                 return
         # Fallback: crosshair cursor
-        self._pen_cursor = None
         self.table.viewport().setCursor(QtCore.Qt.CrossCursor)
 
     # ------------------------------------------------------------ grid construction

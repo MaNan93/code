@@ -179,7 +179,6 @@ class ArtifactPreview:
         self._select_tree_path()
 
     def set_output_state(self, state, text, detail=""):
-        self._output_state = state
         self._output_text = text
         self._output_detail = detail
         self._update_status()

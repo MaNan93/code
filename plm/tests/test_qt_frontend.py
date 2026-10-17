@@ -225,7 +225,7 @@ class QtFrontendLayoutTests(unittest.TestCase):
             rect = table.visualRect(table.model().index(1, column))
             self.assertEqual(image.pixelColor(rect.right() - 4, point.y()).name(), BG_SUBTLE.lower())
 
-    def test_settings_button_groups_have_no_internal_gap(self):
+    def test_settings_tabs_share_the_navigation_container_and_control_height(self):
         self.window.nav_panel.settings_btn.click()
         wait_for_idle(self.app)
         page = self.window.view_stack.currentWidget()
@@ -237,13 +237,6 @@ class QtFrontendLayoutTests(unittest.TestCase):
             section.click()
             wait_for_idle(self.app)
             self.assertEqual(section.height(), CONTROL_HEIGHT)
-            for group in page.findChildren(QtWidgets.QFrame, "ButtonGroup"):
-                if not group.isVisible():
-                    continue
-                self.assertEqual(group.height(), CONTROL_HEIGHT)
-                buttons = [group.layout().itemAt(i).widget() for i in range(group.layout().count())]
-                for left, right in zip(buttons, buttons[1:]):
-                    self.assertEqual(left.geometry().right() + 1, right.geometry().left())
 
     def test_tooltip_has_transparent_rounded_corners_and_preserves_focus(self):
         button = self.window.nav_panel.save_btn

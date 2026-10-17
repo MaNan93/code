@@ -457,11 +457,6 @@ QLabel#ProjectPath, QLabel#SettingsDescription, QLabel#TableFilterCount {
     font-size: $font_size_small;
     background: transparent;
 }
-QFrame#LogCollapsedBar {
-    background-color: $bg_subtle;
-    border: 1px solid $border;
-    border-radius: $radius_control;
-}
 QPushButton#TableActionButton { padding: 0 10px; }
 QGroupBox#FormCard {
     background-color: $bg_surface;
@@ -731,30 +726,6 @@ QLabel#NewProjectDialogSubtitle {
     font-size: $font_size_body;
 }
 QDialogButtonBox { background: transparent; }
-/* Joined command buttons share borders and touch without gaps.
-   Navigation tabs use SecondaryMenuButton instead of a ButtonGroup. */
-QFrame#ButtonGroup { background: transparent; border: none; border-radius: 0; }
-QFrame#ButtonGroup > QPushButton {
-    background-color: $bg_subtle;
-    padding: $control_padding_y $control_padding_x;
-    margin: 0;
-    border: none;
-    border-right: none;
-    border-radius: 0;
-}
-QFrame#ButtonGroup > QPushButton[groupFirst="true"] {
-    border-top-left-radius: $radius_hover;
-    border-bottom-left-radius: $radius_hover;
-}
-QFrame#ButtonGroup > QPushButton[groupLast="true"] {
-    border-top-right-radius: $radius_hover;
-    border-bottom-right-radius: $radius_hover;
-}
-QFrame#ButtonGroup > QPushButton:hover {
-    background-color: $bg_subtle;
-    border-color: $border_hover;
-}
-QFrame#ButtonGroup > QPushButton:pressed { background-color: $border; }
 QPushButton#NavActionButton:hover, QPushButton#NavFooterButton:hover,
 QPushButton#ProjectButton:hover {
     background-color: $bg_sidebar_hover;
@@ -781,11 +752,6 @@ QPushButton#ProjectMoreBtn:hover {
 QPushButton#ProjectMoreBtn:focus, QPushButton#ProjectMoreBtn:pressed,
 QPushButton#ProjectMoreBtn[menuOpen="true"] {
     background-color: $border_hover;
-}
-QFrame#ButtonGroup > QPushButton[selected="true"] {
-    background-color: $primary_soft;
-    color: $text_primary;
-    border-bottom: none;
 }
 QToolTip {
     background-color: $tooltip_bg;
@@ -846,8 +812,7 @@ QPushButton#LogClearButton:focus:!pressed,
 QPushButton#LogCloseBtn:focus:!pressed,
 QPushButton#SecondaryBackButton:focus:!pressed,
 QPushButton#SecondaryMenuButton:focus:!pressed,
-QPushButton#WindowControlButton:focus:!pressed,
-QFrame#ButtonGroup > QPushButton:focus:!pressed {
+QPushButton#WindowControlButton:focus:!pressed {
     background-color: $bg_focus;
     color: $text_main;
     border: none;
@@ -868,18 +833,14 @@ QPushButton#ArtifactsToolButton:checked:hover,
 QPushButton#ArtifactsToolButton:checked:focus:!pressed,
 QPushButton#ArtifactPathButton:checked,
 QPushButton#ArtifactPathButton:checked:hover,
-QPushButton#ArtifactPathButton:checked:focus:!pressed,
-QFrame#ButtonGroup > QPushButton[selected="true"]:hover,
-QFrame#ButtonGroup > QPushButton[selected="true"]:focus:!pressed,
-QFrame#ButtonGroup > QPushButton[selected="true"] {
+QPushButton#ArtifactPathButton:checked:focus:!pressed {
     background-color: $primary_soft;
 }
 QPushButton#ProjectButton[selected="true"]:pressed,
 QPushButton#NavFooterButton[selected="true"]:pressed,
 QPushButton#SecondaryMenuButton[selected="true"]:pressed,
 QPushButton#ArtifactsToolButton:checked:pressed,
-QPushButton#ArtifactPathButton:checked:pressed,
-QFrame#ButtonGroup > QPushButton[selected="true"]:pressed {
+QPushButton#ArtifactPathButton:checked:pressed {
     background-color: $primary_pressed;
 }
 
@@ -912,30 +873,4 @@ QPushButton#SecondaryMenuButton[underlineTab="true"][selected="true"]:pressed {
     color: $text_primary;
     border-bottom: $tab_indicator_height solid $primary;
     font-weight: $font_weight_semibold;
-}
-
-QFrame#LogCollapsedBar QPushButton#LogCollapsedButton,
-QFrame#LogCollapsedBar QPushButton#LogCollapsedButton:hover,
-QFrame#LogCollapsedBar QPushButton#LogCollapsedButton:focus,
-QFrame#LogCollapsedBar QPushButton#LogCollapsedButton:pressed {
-    text-align: left;
-    background: transparent;
-    color: $text_sub;
-    border: none;
-    border-radius: 0;
-    padding: 0 $control_padding_x;
-}
-QFrame#LogCollapsedBar QPushButton#LogCollapsedButton:hover,
-QFrame#LogCollapsedBar QPushButton#LogCollapsedButton:focus {
-    color: $text_main;
-}
-QFrame#LogCollapsedBar QPushButton#LogClearButton {
-    background: transparent;
-    border: none;
-    border-radius: $radius_control;
-}
-QFrame#LogCollapsedBar QPushButton#LogClearButton:hover,
-QFrame#LogCollapsedBar QPushButton#LogClearButton:focus {
-    background-color: $bg_hover;
-    color: $text_main;
 }

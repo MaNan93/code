@@ -10,7 +10,6 @@ from plm.frontend.qt.widgets.content_splitter import ContentSplitter
 from plm.frontend.qt.widgets.toast import ToastNotification
 from plm.frontend.qt.styles.tokens import get_active_theme, get_theme_color
 from plm.frontend.qt.styles.tokens import (
-    CONTROL_HEIGHT,
     FONT_SIZE_BODY,
     FONT_UI_PRIMARY,
     ICON_SIZE,
@@ -20,7 +19,6 @@ from plm.frontend.qt.styles.tokens import (
     TITLEBAR_HEIGHT,
     TITLEBAR_BUTTON_WIDTH,
     RADIUS_WINDOW,
-    LOG_COLLAPSED_HEIGHT,
     PANEL_ANIMATION_DURATION,
 )
 from plm.frontend.qt.views.config_page import ConfigPage
@@ -424,28 +422,6 @@ class MainWindow(QtWidgets.QMainWindow):
         main_layout.setContentsMargins(*([SPACING_XS] * 4))
         main_layout.setSpacing(0)
         main_layout.addWidget(self.content_splitter, 1)
-        self.collapsed_log = QtWidgets.QPushButton("输出日志  ·  就绪")
-        self.collapsed_log.setObjectName("LogCollapsedButton")
-        self.collapsed_log.setIcon(load_lucide_icon("panel-bottom", "text_sub"))
-        self.collapsed_log.setIconSize(QtCore.QSize(ICON_SIZE, ICON_SIZE))
-        self.collapsed_log.setFixedHeight(CONTROL_HEIGHT)
-        self.collapsed_log.setToolTip("展开输出日志；生成时会自动展开。")
-        self.collapsed_log.clicked.connect(self.show_log)
-        self.log_panel.statusChanged.connect(self.update_log_summary)
-        self.collapsed_log_bar = QtWidgets.QFrame()
-        self.collapsed_log_bar.setObjectName("LogCollapsedBar")
-        self.collapsed_log_bar.setAttribute(QtCore.Qt.WA_StyledBackground, True)
-        self.collapsed_log_bar.setFixedHeight(LOG_COLLAPSED_HEIGHT)
-        collapsed_layout = QtWidgets.QHBoxLayout(self.collapsed_log_bar)
-        collapsed_layout.setContentsMargins(0, 0, SPACING_XS, 0)
-        collapsed_layout.setSpacing(0)
-        collapsed_layout.addWidget(self.collapsed_log, 1)
-        self.collapsed_log_clear = make_icon_button(
-            "trash-2", "清空日志", "LogClearButton", ICON_BUTTON_SIZE, ICON_SIZE)
-        self.collapsed_log_clear.clicked.connect(self.log_panel.clear)
-        collapsed_layout.addWidget(self.collapsed_log_clear)
-        main_layout.addWidget(self.collapsed_log_bar)
-        self.collapsed_log_bar.hide()
         self.log_panel.hide()
         self._log_expanded = False
         self._log_animation = QtCore.QVariantAnimation(self)
@@ -702,10 +678,6 @@ class MainWindow(QtWidgets.QMainWindow):
         if not self.log_panel.isHidden():
             self.content_splitter.setSizes(self._log_sizes)
 
-    def update_log_summary(self, text):
-        self.collapsed_log.setText("输出日志  ·  " + (text or "就绪"))
-        self.collapsed_log.setToolTip(text or "展开输出日志")
-
     def show_log(self):
         if self._log_expanded:
             return
@@ -713,7 +685,6 @@ class MainWindow(QtWidgets.QMainWindow):
         start = 0 if self.log_panel.isHidden() else self.content_splitter.sizes()[1]
         self._log_expanded = True
         total = sum(self.content_splitter.sizes())
-        self.collapsed_log_bar.hide()
         self.log_panel.show()
         self.content_splitter.setStretchFactor(1, 0)
         bottom = min(max(140, self._log_sizes[1]), max(140, total // 2))
@@ -740,7 +711,6 @@ class MainWindow(QtWidgets.QMainWindow):
             self._log_sizes = self.content_splitter.sizes()
         else:
             self.log_panel.hide()
-            self.collapsed_log_bar.hide()
             # Hiding a splitter child queues its relayout. Reclaim the handle
             # in the finishing frame instead of leaving a 6 px bottom gap.
             self.content_splitter.refresh()

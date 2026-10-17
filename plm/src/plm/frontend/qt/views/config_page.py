@@ -6,7 +6,6 @@ from plm.frontend.qt.widgets.common import (
 )
 from plm.frontend.qt.widgets.config_editor import CsvTableEditor, GenerationEditor
 from plm.frontend.qt.views.artifacts_panel import ArtifactsPanel
-from plm.frontend.qt.styles.tokens import get_theme_color
 from plm.frontend.qt.styles.tokens import (
     CONTROL_HEIGHT, HEADER_HEIGHT, SPACING_LG, SPACING_MD,
     ARTIFACTS_DEFAULT_WIDTH, ARTIFACTS_MIN_WIDTH,
@@ -211,31 +210,6 @@ class ErrorSummary(QtWidgets.QLabel):
         super().mouseReleaseEvent(event)
 
 
-class DrawerShadow(QtWidgets.QWidget):
-    """Soft edge cast by the artifacts drawer onto the config panel it covers.
-
-    Both are white; without it only a hairline separates the two.
-    """
-
-    WIDTH = 18
-
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.setAttribute(QtCore.Qt.WA_TransparentForMouseEvents, True)
-        self.setAttribute(QtCore.Qt.WA_NoSystemBackground, True)
-        self.hide()
-
-    def paintEvent(self, _event):
-        painter = QtGui.QPainter(self)
-        gradient = QtGui.QLinearGradient(0, 0, self.width(), 0)
-        edge = QtGui.QColor(get_theme_color("text_main"))
-        edge.setAlpha(0)
-        gradient.setColorAt(0.0, edge)
-        edge.setAlpha(38)
-        gradient.setColorAt(1.0, edge)
-        painter.fillRect(self.rect(), gradient)
-
-
 class ConfigTabPage(QtWidgets.QWidget):
     def __init__(self, editor, fill_editor=False, parent=None):
         super().__init__(parent)
@@ -354,18 +328,12 @@ class ConfigPage(RoundedCanvasFrame):
             self._finish_artifacts_animation
         )
         self.tabs.currentChanged.connect(self._raise_artifacts)
-        self.artifacts_shadow = DrawerShadow(self)
-        self.artifacts_panel.installEventFilter(self)
         self.artifacts_panel.hide()
         self.installEventFilter(self)
 
     def _raise_artifacts(self, *_args):
         if self.artifacts_panel.isVisible():
             self.artifacts_panel.raise_()
-
-    def _sync_artifacts_shadow(self):
-        # The drawer's own border is the only divider, including animation.
-        self.artifacts_shadow.hide()
 
     def set_editable(self, editable):
         """Lock the four editors while no project is open.
@@ -523,10 +491,6 @@ class ConfigPage(RoundedCanvasFrame):
     def eventFilter(self, watched, event):
         if event.type() == QtCore.QEvent.Resize and watched is self:
             self.reposition_artifacts()
-        elif watched is self.artifacts_panel and event.type() in (
-            QtCore.QEvent.Move, QtCore.QEvent.Resize, QtCore.QEvent.Show, QtCore.QEvent.Hide,
-        ):
-            self._sync_artifacts_shadow()
         return super().eventFilter(watched, event)
 
     def toggle_artifacts(self):

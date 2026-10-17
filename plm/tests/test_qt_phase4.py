@@ -8,7 +8,7 @@ from unittest.mock import patch
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from PyQt5 import QtCore, QtGui, QtTest, QtWidgets
+from PyQt5 import QtCore, QtTest, QtWidgets
 from qt_test_support import (
     dispose_new_widgets, isolate_host_formatter, preserve_application_state, wait_for_idle,
 )
@@ -79,24 +79,19 @@ class Phase4Tests(unittest.TestCase):
         self.assertEqual(get_active_theme(), "dark")
         self.assertEqual(self.window.view_stack.count(), pages)
 
-    def test_hidden_log_strip_leaves_header_toggle_and_clear_action_working(self):
+    def test_header_log_toggle_and_clear_action_work(self):
         window = self.window
         for theme in ("light", "dark"):
             window.apply_theme(theme)
             window.hide_log()
             wait_for_idle(self.app)
-            bar = window.collapsed_log_bar
-            self.assertIsInstance(bar, QtWidgets.QFrame)
-            self.assertEqual(bar.objectName(), "LogCollapsedBar")
-            self.assertTrue(bar.isHidden())
-            self.assertIs(window.collapsed_log.parentWidget(), bar)
-            self.assertIs(window.collapsed_log_clear.parentWidget(), bar)
             window.log_panel.append_log("old log content")
             window.log_panel.set_status("生成完成：18 个文件")
-            window.log_panel.clear()
+            window.log_panel.clear_btn.click()
             wait_for_idle(self.app)
             self.assertEqual(window.log_panel.output.toPlainText(), "")
-            self.assertIn("就绪", window.collapsed_log.text())
+            self.assertEqual(window.log_panel.status_label.text(), "")
+            self.assertTrue(window.log_panel.status_bar.isHidden())
             self.assertFalse(window.log_panel.isVisible())
             QtTest.QTest.mouseClick(window.log_toggle_button, QtCore.Qt.LeftButton)
             wait_for_idle(self.app)
@@ -169,10 +164,8 @@ class Phase4Tests(unittest.TestCase):
             page.toggle_artifacts()
             page._artifacts_animation.setCurrentTime(page._artifacts_animation.duration() // 2)
             self.app.processEvents()
-            self.assertTrue(page.artifacts_shadow.isHidden())
             wait_for_idle(self.app)
             self.assertTrue(page.artifacts_panel.isVisible())
-            self.assertTrue(page.artifacts_shadow.isHidden())
             ratio = page.devicePixelRatioF()
             after = page.grab().toImage()
             y = round((page.height() - 100) * ratio)
@@ -183,11 +176,11 @@ class Phase4Tests(unittest.TestCase):
             page.toggle_artifacts_maximized()
             self.window.resize(1100, 760)
             wait_for_idle(self.app)
-            self.assertTrue(page.artifacts_shadow.isHidden())
+            self.assertTrue(page.artifacts_panel.isVisible())
             page.toggle_artifacts_maximized()
             page.hide_artifacts()
             wait_for_idle(self.app)
-            self.assertTrue(page.artifacts_shadow.isHidden())
+            self.assertFalse(page.artifacts_panel.isVisible())
 
     def test_search_clear_buttons_are_centered_and_clear_the_actual_filter(self):
         page = self.window.config_page

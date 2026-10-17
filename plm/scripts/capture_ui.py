@@ -36,11 +36,6 @@ def shot(widget,name):
     print(f"Captured: {name}", flush=True)
 
 
-def screen_shot(name):
-    app.processEvents()
-    app.primaryScreen().grabWindow(0).save(str(OUT/f"{name}.png"))
-
-
 def assert_formatter_preview(page):
     preview = page.formatter_preview
     if find_verible(page.verible_path_edit.text().strip() or None):

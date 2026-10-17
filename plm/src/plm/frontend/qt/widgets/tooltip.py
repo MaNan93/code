@@ -9,7 +9,6 @@ from plm.frontend.qt.styles.tokens import (
 
 
 class RoundedToolTip(QtWidgets.QWidget):
-    BACKGROUND = get_theme_color("tooltip_bg")
     RADIUS = RADIUS_CARD
     MAX_TEXT_WIDTH = 360
 

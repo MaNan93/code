@@ -74,7 +74,6 @@ class Phase5Tests(unittest.TestCase):
         window = self.window
         for theme in ("light", "dark"):
             window.apply_theme(theme)
-            self.assertTrue(window.collapsed_log_bar.isHidden())
             self.assertFalse(window.log_panel.isVisible())
             bottom = window.config_page.mapTo(window.main_container, window.config_page.rect().bottomRight())
             self.assertEqual(window.main_container.height() - bottom.y() - 1, 4)
@@ -86,11 +85,10 @@ class Phase5Tests(unittest.TestCase):
             expected = window.content_splitter.sizes()[1]
             QtTest.QTest.mouseClick(window.log_toggle_button, QtCore.Qt.LeftButton)
             window._log_animation.setCurrentTime(50)
-            self.assertTrue(window.collapsed_log_bar.isHidden())
+            self.assertTrue(window.log_panel.isVisible())
             window.resize(1100, 760)
             wait_for_idle(self.app)
             self.assertFalse(window.log_panel.isVisible())
-            self.assertTrue(window.collapsed_log_bar.isHidden())
             bottom = window.config_page.mapTo(window.main_container, window.config_page.rect().bottomRight())
             self.assertEqual(window.main_container.height() - bottom.y() - 1, 4)
             window.show_log()

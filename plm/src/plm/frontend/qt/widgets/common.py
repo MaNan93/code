@@ -26,6 +26,8 @@ PROJECT_ROOT = PLM_ROOT
 
 def align_cell_text_editor(editor, option, padding):
     """Match a delegate's painted text inset, including Qt's native 2 px inset."""
+    if hasattr(option, "displayAlignment") and option.displayAlignment:
+        editor.setAlignment(QtCore.Qt.Alignment(option.displayAlignment))
     editor.setProperty("cellTextEditor", True)
     editor.setFixedHeight(option.rect.height())
     editor.ensurePolished()

@@ -1,11 +1,9 @@
-"""Lightweight table switches showing a value and a Lucide swap glyph."""
+"""Lightweight table switches with a fading hover/focus indicator."""
 
 from PyQt5 import QtCore, QtGui, QtWidgets
 
 from plm.frontend.qt.styles.tokens import get_theme_color
-from plm.frontend.qt.styles.tokens import (
-    CONTROL_HEIGHT, ICON_SIZE,
-)
+from plm.frontend.qt.styles.tokens import CONTROL_HEIGHT
 from plm.frontend.qt.widgets.common import load_lucide_icon
 
 
@@ -14,6 +12,8 @@ class OptionSwitch(QtWidgets.QAbstractButton):
 
     currentTextChanged = QtCore.pyqtSignal(str)
     HORIZONTAL_PADDING = 10
+    INDICATOR_SIZE = 12
+    INDICATOR_GAP = 8
     HOVER_DURATION = 150
 
     def __init__(self, options, parent=None):
@@ -23,7 +23,7 @@ class OptionSwitch(QtWidgets.QAbstractButton):
         self._keyboard_focus = False
         self._hover_progress = 0.0
         self._hover_animation = None
-        self._icon = load_lucide_icon("arrow-right-left", color='text_muted')
+        self._icon = load_lucide_icon("chevron-down", color="text_sub", size=self.INDICATOR_SIZE)
         self.setFocusPolicy(QtCore.Qt.StrongFocus)
         self.setCursor(QtCore.Qt.PointingHandCursor)
         self.setFixedHeight(CONTROL_HEIGHT)
@@ -34,10 +34,11 @@ class OptionSwitch(QtWidgets.QAbstractButton):
 
     def sizeHint(self):
         width = max((self.fontMetrics().horizontalAdvance(text) for text in self._options), default=0)
-        return QtCore.QSize(width + ICON_SIZE + 8 + 2 * self.HORIZONTAL_PADDING, CONTROL_HEIGHT)
+        return QtCore.QSize(width + self.INDICATOR_SIZE + self.INDICATOR_GAP
+                           + 2 * self.HORIZONTAL_PADDING, CONTROL_HEIGHT)
 
     def refresh_theme(self):
-        self._icon = load_lucide_icon("arrow-right-left", color='text_muted')
+        self._icon = load_lucide_icon("chevron-down", color="text_sub", size=self.INDICATOR_SIZE)
         self.update()
 
     def setOptions(self, options):
@@ -137,11 +138,18 @@ class OptionSwitch(QtWidgets.QAbstractButton):
         background.setAlphaF(1.0 if self.isDown() or focused else self._hover_progress)
         painter.setBrush(background)
         painter.drawRoundedRect(rect, rect.height() / 2, rect.height() / 2)
-        icon_rect = QtCore.QRect(self.width() - ICON_SIZE - self.HORIZONTAL_PADDING,
-                                (self.height() - ICON_SIZE) // 2, ICON_SIZE, ICON_SIZE)
-        self._icon.paint(painter, icon_rect)
+        icon_opacity = 1.0 if focused else self._hover_progress
+        if icon_opacity > 0.01:
+            icon_rect = QtCore.QRect(self.width() - self.INDICATOR_SIZE - self.HORIZONTAL_PADDING,
+                                    (self.height() - self.INDICATOR_SIZE) // 2,
+                                    self.INDICATOR_SIZE, self.INDICATOR_SIZE)
+            painter.save()
+            painter.setOpacity(painter.opacity() * icon_opacity)
+            self._icon.paint(painter, icon_rect)
+            painter.restore()
+        # Keep the same text bounds throughout the animation to avoid shifting.
         text_rect = self.rect().adjusted(self.HORIZONTAL_PADDING, 0,
-                                        -(ICON_SIZE + 8 + self.HORIZONTAL_PADDING), 0)
+                                        -(self.INDICATOR_SIZE + self.INDICATOR_GAP + self.HORIZONTAL_PADDING), 0)
         label = self.fontMetrics().elidedText(self.text(), QtCore.Qt.ElideRight, max(0, text_rect.width()))
         painter.setPen(QtGui.QColor(get_theme_color("danger_text") if invalid else get_theme_color("text_main")))
         painter.drawText(text_rect, QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter, label)

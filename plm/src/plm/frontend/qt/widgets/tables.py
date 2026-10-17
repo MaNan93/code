@@ -187,6 +187,14 @@ class _PaddedItemDelegate(QtWidgets.QStyledItemDelegate):
 
     HORIZONTAL_PADDING = CONTROL_PADDING_X
 
+    def createEditor(self, parent, option, index):
+        editor = super().createEditor(parent, option, index)
+        if isinstance(editor, QtWidgets.QLineEdit):
+            alignment = index.data(QtCore.Qt.TextAlignmentRole)
+            if alignment:
+                editor.setAlignment(QtCore.Qt.Alignment(alignment))
+        return editor
+
     @classmethod
     def widget_padding(cls, widget):
         if isinstance(widget, OptionSwitch):
@@ -220,7 +228,9 @@ class _PaddedItemDelegate(QtWidgets.QStyledItemDelegate):
         if editor is None or sip.isdeleted(editor):
             return
         if isinstance(editor, QtWidgets.QLineEdit):
-            align_cell_text_editor(editor, option, self.HORIZONTAL_PADDING)
+            styled = QtWidgets.QStyleOptionViewItem(option)
+            self.initStyleOption(styled, index)
+            align_cell_text_editor(editor, styled, self.HORIZONTAL_PADDING)
             return
         padding = self.widget_padding(editor)
         rect = option.rect.adjusted(padding, 0, -padding, 0)

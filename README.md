@@ -28,3 +28,24 @@ foreach ($project in $projects) {
 各独立项目在自己的目录中提交和推送；修改其他工具及资料时，在 `code` 中提交。
 `pciegen` 的源码运行依赖同级的 `ramgen`、`vutils`，保留上述平级布局。
 其余工具、原有示例及共享 Verible 程序见 [misc 说明](misc/README.md)。
+
+## 统一运行
+
+进入对应项目仓库后，统一使用 `uv run <工具名> ...`。各仓库的 `.python-version`
+选择 Python 3.12，`uv.lock` 锁定依赖；可先执行 `uv sync --locked` 准备环境。
+
+| 仓库 | 查看运行方式 |
+| --- | --- |
+| `cellgen/` | `uv run cellgen --help` |
+| `csrgen/` | `uv run csrgen --help` |
+| `ef/` | `uv run ef --help` |
+| `fizz/` | `uv run fizz --help` |
+| `pciegen/` | `uv run pciegen --help` |
+| `plm/` | `uv run plm --help` |
+| `ralf2xlsx/` | `uv run ralf2xlsx --help` |
+| `ramgen/` | `uv run ramgen --help` |
+| `vutils/` | `uv run vutils --help` |
+
+Qt 界面分别通过 `uv run fizz` 和 `uv run plm-gui` 启动，无需额外的 uv 安装参数。
+pciegen 通过 `uv run pciegen --project <工程目录>` 指定实际 PCIe 输入工程，
+其余参数以各工具 `--help` 为准。PLM wheel 安装的 Qt 依赖仍为可选项。

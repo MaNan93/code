@@ -50,3 +50,20 @@ Thumbs.db
 /output/
 *.tmp
 .aider*
+
+# Standalone repositories are cloned beside misc, not tracked by code.
+/cellgen/
+/csrgen/
+/ef/
+/fizz/
+/pciegen/
+/plm/
+/ralf2xlsx/
+/ramgen/
+/vutils/
+
+# Local Git backups and assistant state stay on this machine.
+.git.bak-*/
+.workbuddy/
+.workbuddy-ai/
+.ruff_cache/

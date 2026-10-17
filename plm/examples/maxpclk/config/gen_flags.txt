@@ -1,6 +1,0 @@
-# Written by the PLM Qt front end; the CLI does not read this file.
-# arch      = original_pipe | serdes
-# pclk-mode = pclk_as_phy_output | pclk_as_phy_input
-# dpr       = true | false (selects are sync with dpr, comb without)
-arch = serdes
-pclk-mode = pclk_as_phy_input

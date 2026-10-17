@@ -7,7 +7,8 @@
   是普通子目录，不再各自建立 Git 仓库。
 - `dwc_bfm_gpt/`、`pcie_native_bfm/`、`postsim_analyzer/`、`fec/`、`ffe/`、
   `gen_excel/`、`vtags-3.11/`、散落脚本、`examples/` 和 `src/` 保留原有内容。
-- `verible/` 保存共享工具。`vutils` 支持从此处自动发现语法解析程序；其他工具
+- [`verible/`](verible/README.md) 保存官方 Windows 共享工具，当前版本为
+  `v0.0-4296-g0f262651`。`vutils` 支持从此处自动发现语法解析程序；其他工具
   如需通过 PATH 调用 Verible，可在当前 PowerShell 会话中执行：
 
   ```powershell

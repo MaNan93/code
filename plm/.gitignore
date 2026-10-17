@@ -2,6 +2,14 @@ __pycache__/
 *.pyc
 .DS_Store
 *.egg-info/
+.venv/
+.ruff_cache/
+.pytest_cache/
+.workbuddy/
+*.log
 build/
 dist/
 work/
+ui-screenshots/
+/test/*/rtl/
+/test/*/tb/

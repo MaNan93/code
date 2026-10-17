@@ -238,12 +238,12 @@ plm/
 │     │  ├─ lane_mapping.csv
 │     │  ├─ pipe_signals.csv
 │     │  └─ gen_flags.txt     Qt 前端记住的生成参数，CLI 不读（见 2.4 节）
-│     ├─ rtl/               `plm generate` 的 RTL 输出
+│     ├─ rtl/               `plm generate` 的 RTL 输出（生成后出现，不纳入版本管理）
 │     │  ├─ src/             生成出来的模块
 │     │  ├─ common/           从 plm.core.common 复制过来的公共模块
 │     │  ├─ flist.f           文件列表（供 verilator/vcs 用 -f 引用）
 │     │  └─ manifest.json     配置/参数 hash 和 RTL 文件 hash
-│     └─ tb/                 `plm generate` 的 testbench 输出
+│     └─ tb/                 `plm generate` 的 testbench 输出（生成后出现，不纳入版本管理）
 │        ├─ tb_pipe_lane_mapper.sv
 │        ├─ makefile          从 plm.core 的 tb_makefile.mk 复制来的（VCS 仿真用）
 │        └─ manifest.json     与 RTL 相同的 generation_key 和 TB 文件 hash

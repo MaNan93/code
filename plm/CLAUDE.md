@@ -1,23 +1,15 @@
 # Python environment
 
-This project uses **uv** to manage its Python environment. Do not use a bare `python` command to run or install anything in this repo — use `uv run` instead.
-
-- Virtual environment: `.venv` (created with `uv venv --python 3.12`)
-- Dependencies: declared in [pyproject.toml](pyproject.toml), optional group `qt` (PyQt5)
-- VSCode/editor interpreter path is pinned in `.vscode/settings.json`
-
-Examples:
+Use **uv** with this project's `.venv` and the locked dependencies:
 
 ```bash
-uv run python run.py
+uv sync --extra qt --locked
+uv run python run.py -gui
 uv run python -m unittest discover -s tests -v
-uv run plm --gui
 ```
 
-To install or sync dependencies:
-
-```bash
-uv pip install -e ".[qt]"
-```
-
-`uv run` always resolves to this project's `.venv`, regardless of what `python` points to globally or in whatever terminal/agent is invoking it.
+Run Python commands through `uv run`. Dependencies and the optional `qt` group
+are declared in [pyproject.toml](pyproject.toml). Directory responsibilities,
+build commands and current documentation are indexed in [README.md](README.md)
+and [docs/README.md](docs/README.md). Keep version history according to
+[AGENTS.md](AGENTS.md).

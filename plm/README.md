@@ -27,10 +27,18 @@ For development, use `uv sync --extra qt` and
 `uv run python -m unittest discover -s tests -v`. Tests use their own fixtures
 and temporary workspaces; editable example projects under `test/` are separate.
 
-Measure native Qt rendering with
-`uv run python scripts/profile_ui.py --output ui-profile.json --iterations 60`.
-Measurements, optimizations and UI changes are documented in
-[the style and performance report](docs/ui_style_performance_2026-10-09.md).
+Current documentation and the directory layout are indexed in
+[docs/README.md](docs/README.md). The latest Qt screenshots are in
+[docs/screenshot/index.html](docs/screenshot/index.html).
+
+Editable examples under `test/` retain their input `config/` only. Generate
+their ignored `rtl/` and `tb/` outputs with `make`, or for example
+`uv run plm generate --config dpr --dpr`. Automatic tests continue to use the
+independent, reviewed inputs and golden hashes under `tests/fixtures/`.
+
+Rendering and theme performance can be measured with `scripts/profile_ui.py`
+and `scripts/profile_themes.py`. Write temporary reports to `build/`; build
+outputs, logs and caches are ignored and can be regenerated.
 
 Build the wheel and source distribution with `uv build`. Validate release
 contents, console commands, generation and the Qt editor in an independent

@@ -101,7 +101,7 @@ def check_sdist_contents(sdist, root):
             raise AssertionError("Source distribution must have one top-level directory")
         actual = {member.name.split("/", 1)[1] for member in members}
         unwanted = {name for name in actual if name.split("/", 1)[0] in {
-            "test", "build", "dist", ".venv", ".git", ".workbuddy"
+            "examples", "test", "build", "dist", ".venv", ".git", ".workbuddy"
         } or "__pycache__" in Path(name).parts or name.endswith((".pyc", ".pyo", ".log"))}
         if expected - actual or unwanted:
             raise AssertionError(

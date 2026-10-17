@@ -106,6 +106,21 @@ class CliEntryPointTests(unittest.TestCase):
                 with self.assertRaisesRegex(SystemExit, "not found"):
                     paths.resolve_set(str(Path(temporary) / "typo"))
 
+    def test_named_examples_and_explicit_paths_resolve_to_the_same_workspace(self):
+        from plm.core import paths
+
+        with tempfile.TemporaryDirectory() as temporary:
+            examples = Path(temporary).resolve() / "examples"
+            config = examples / "demo" / "config"
+            config.mkdir(parents=True)
+            for name in paths.CSV_NAMES:
+                (config / name).write_text("", encoding="utf-8")
+            with mock.patch.object(paths, "CONFIGS_ROOT", examples):
+                self.assertEqual(paths.list_configs(), ["demo"])
+                for argument in ("demo", str(config.parent), str(config)):
+                    with self.subTest(argument=argument):
+                        self.assertEqual(paths.resolve_set(argument), (config, config.parent / "rtl"))
+
     def test_gui_long_flag_launches_qt(self):
         with mock.patch.object(cli, "cmd_gui", return_value=17) as launch:
             self.assertEqual(cli.main(["--gui", "-style", "Fusion"]), 17)

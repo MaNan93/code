@@ -102,7 +102,8 @@ class PackagingTests(unittest.TestCase):
                 release.check_sdist_contents(self.sdist(omissions=(name,)), self.root)
 
     def test_sdist_rejects_editable_workspaces_and_build_outputs(self):
-        for name in ("test/demo/config/controllers.csv", "build/old.py", "dist/old.whl"):
+        for name in ("examples/demo/config/controllers.csv", "test/demo/config/controllers.csv",
+                     "build/old.py", "dist/old.whl"):
             with self.subTest(name=name), self.assertRaisesRegex(AssertionError, "unwanted="):
                 release.check_sdist_contents(self.sdist(additions=(name,)), self.root)
 

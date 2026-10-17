@@ -88,7 +88,7 @@ class LiveThemeTests(unittest.TestCase):
         self.addCleanup(temporary.cleanup)
         self.addCleanup(dispose_new_widgets, self.app, set(self.app.topLevelWidgets()))
         self.root = Path(temporary.name).resolve()
-        shutil.copytree(sample_config("bifurcate"), self.root / "test/demo/config")
+        shutil.copytree(sample_config("bifurcate"), self.root / "examples/demo/config")
         self.ini = self.root / "settings.ini"
         self.store = SettingsStore(QtCore.QSettings(str(self.ini), QtCore.QSettings.IniFormat))
         self.controller = AppController(ProjectService(self.root), self.store, WorkspaceService())

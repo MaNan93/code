@@ -25,13 +25,13 @@ the Artifacts viewer uses a GitHub-inspired light palette with Lucide file icons
 
 For development, use `uv sync --extra qt` and
 `uv run python -m unittest discover -s tests -v`. Tests use their own fixtures
-and temporary workspaces; editable example projects under `test/` are separate.
+and temporary workspaces; editable example projects under `examples/` are separate.
 
 Current documentation and the directory layout are indexed in
 [docs/README.md](docs/README.md). The latest Qt screenshots are in
 [docs/screenshot/index.html](docs/screenshot/index.html).
 
-Editable examples under `test/` retain their input `config/` only. Generate
+Editable examples under `examples/` retain their input `config/` only. Generate
 their ignored `rtl/` and `tb/` outputs with `make`, or for example
 `uv run plm generate --config dpr --dpr`. Automatic tests continue to use the
 independent, reviewed inputs and golden hashes under `tests/fixtures/`.

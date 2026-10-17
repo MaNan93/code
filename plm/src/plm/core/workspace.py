@@ -342,7 +342,7 @@ def write_mapping_csv(path, lane_count, rows):
 def load_default_signals():
     """Copy an existing bundled sample workspace's pipe_signals.csv as a
     ready-made starting point for a brand-new, still-empty workspace --
-    this project's own bundled sample workspaces (test/bifurcate, etc.)
+    this project's own bundled sample workspaces (examples/bifurcate, etc.)
     always exist regardless of which workspace is currently open, so
     they're a reliable template source."""
     packaged = BUILTIN_CFG / "pipe_signals.csv"

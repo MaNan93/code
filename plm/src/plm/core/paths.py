@@ -14,7 +14,7 @@ _SOURCE_ROOT = SCRIPT_DIR.parent.parent.parent
 # package directory. Code must never infer that site-packages/../.. is a
 # project checkout.
 PLM_ROOT = _SOURCE_ROOT if (_SOURCE_ROOT / "pyproject.toml").is_file() else PACKAGE_ROOT
-CONFIGS_ROOT = PLM_ROOT / "test"  # .../plm/test
+CONFIGS_ROOT = PLM_ROOT / "examples"  # .../plm/examples
 BUILTIN_CFG = SCRIPT_DIR / "config"  # built-in default CSVs (if shipped alongside the package)
 DOCS_DIR = PACKAGE_ROOT / "docs"
 COMMON_DIR = (
@@ -70,7 +70,7 @@ def mode_width(n):
 
 
 def list_configs():
-    """List every subdirectory of test/ that looks like a config set, for
+    """List every subdirectory of examples/ that looks like a config set, for
     use in error messages."""
     if not CONFIGS_ROOT.is_dir():
         return []
@@ -85,18 +85,18 @@ def resolve_set(arg):
     as out_rtl.parent / "tb"); CSVs are looked up in <set>/config/
     first, then <set>/ itself.
 
-    The --config value is first tried as a set name under test/:
-      --config demo               -> test/demo/config/, output to test/demo/rtl/
-      --config config_multi_modes -> test/config_multi_modes/config/
+    The --config value is first tried as a set name under examples/:
+      --config demo               -> examples/demo/config/, output to examples/demo/rtl/
+      --config config_multi_modes -> examples/config_multi_modes/config/
     If not found there, it's tried as a path given directly (absolute or
-    relative, so directories outside test/ also work):
+    relative, so directories outside examples/ also work):
       --config ../other/my_set    -> my_set/config/ (or my_set/ itself)
       --config config-1/config    -> same as above; passing the config
                                       subdirectory is attributed to its
                                       parent set
     With no --config, there's no default guess -- with multiple configs
     coexisting, guessing wrong is more trouble than just erroring out, so
-    it lists the available set names under test/ instead.
+    it lists the available set names under examples/ instead.
     """
     if arg is None:
         avail = list_configs()

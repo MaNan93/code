@@ -60,7 +60,7 @@ def worker(scale, screenshots, font_dir):
     with tempfile.TemporaryDirectory(prefix="plm-ui-scale-") as directory:
         root = Path(directory)
         fixture = Path(__file__).resolve().parents[1] / "tests/fixtures/samples/dpr/config"
-        shutil.copytree(fixture, root / "test/demo/config")
+        shutil.copytree(fixture, root / "examples/demo/config")
         controller = AppController(ProjectService(root), SettingsStore(
             QtCore.QSettings(str(root / "settings.ini"), QtCore.QSettings.IniFormat)))
         with patch("plm.frontend.qt.main_window.AppController", return_value=controller):

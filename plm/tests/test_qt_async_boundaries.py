@@ -34,8 +34,8 @@ class AsyncBoundaryTests(unittest.TestCase):
         self.addCleanup(self.temp.cleanup)
         self.addCleanup(dispose_new_widgets, self.app, set(self.app.topLevelWidgets()))
         self.root = Path(self.temp.name).resolve()
-        scaffold_default_content(self.root / "test/demo")
-        scaffold_default_content(self.root / "test/other")
+        scaffold_default_content(self.root / "examples/demo")
+        scaffold_default_content(self.root / "examples/other")
         settings = SettingsStore(QtCore.QSettings(
             str(self.root / "settings.ini"), QtCore.QSettings.IniFormat
         ))
@@ -94,7 +94,7 @@ class AsyncBoundaryTests(unittest.TestCase):
                 self.controller.rename_project("demo", "unexpected")
                 self.assertFalse(self.controller._generation_running)
                 self.assertFalse(self.controller._project_operation_running)
-                self.assertTrue((self.root / "test/demo").exists())
+                self.assertTrue((self.root / "examples/demo").exists())
             finally:
                 release.set()
             wait_for_idle(self.app)

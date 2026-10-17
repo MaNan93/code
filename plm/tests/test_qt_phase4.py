@@ -37,7 +37,7 @@ class Phase4Tests(unittest.TestCase):
         self.addCleanup(self.temp.cleanup)
         self.addCleanup(dispose_new_widgets, self.app, set(self.app.topLevelWidgets()))
         self.root = Path(self.temp.name).resolve()
-        scaffold_default_content(self.root / "test/demo")
+        scaffold_default_content(self.root / "examples/demo")
         self.settings_path = str(self.root / "settings.ini")
         self.store = SettingsStore(QtCore.QSettings(self.settings_path, QtCore.QSettings.IniFormat))
         self.controller = AppController(ProjectService(self.root), self.store)

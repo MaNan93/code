@@ -20,6 +20,8 @@ class ProjectService:
 
     def __init__(self, project_root):
         self.project_root = Path(project_root).resolve()
+        # examples/ is canonical; keep discovering existing legacy workspaces.
+        self._search_roots = tuple(self.project_root / name for name in ("examples", "test", "configs"))
         self.external_dirs = set()
 
     def register(self, path):
@@ -60,10 +62,7 @@ class ProjectService:
         discovered = []
         seen = set()
         candidates = list(self.external_dirs)
-        for search_root in (
-            self.project_root / "test",
-            self.project_root / "configs",
-        ):
+        for search_root in self._search_roots:
             if not search_root.is_dir():
                 continue
             candidates.extend(p.parent for p in search_root.rglob("controllers.csv"))
@@ -115,7 +114,7 @@ class ProjectService:
 
     def _project_dir(self, project):
         config_dir = project.config_dir.resolve()
-        roots = (self.project_root / "test", self.project_root / "configs")
+        roots = self._search_roots
         if config_dir not in self.external_dirs and not any(
             config_dir.is_relative_to(root.resolve()) for root in roots
         ):

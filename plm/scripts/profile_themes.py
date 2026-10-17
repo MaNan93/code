@@ -79,7 +79,7 @@ def run(iterations, screenshots=None):
     with tempfile.TemporaryDirectory(prefix="plm-theme-profile-") as directory:
         root = Path(directory)
         fixture = Path(__file__).resolve().parents[1] / "tests/fixtures/samples/dpr/config"
-        shutil.copytree(fixture, root / "test/demo/config")
+        shutil.copytree(fixture, root / "examples/demo/config")
         store = SettingsStore(QtCore.QSettings(str(root / "settings.ini"), QtCore.QSettings.IniFormat))
         controller = AppController(ProjectService(root), store)
         with patch("plm.frontend.qt.main_window.AppController", return_value=controller):

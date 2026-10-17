@@ -8,4 +8,5 @@ prune .workbuddy
 prune build
 prune dist
 prune test
+prune examples
 global-exclude __pycache__ *.py[cod] *.log

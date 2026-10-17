@@ -8,5 +8,5 @@
   弹窗及 960 × 640 窄窗口。
 
 截图使用 Windows Qt / Fusion 和独立的临时演示项目，实际生成 RTL/TB，等待
-后台任务和动画完成；不修改 `test/` 或 `tests/fixtures/`。
+后台任务和动画完成；不修改 `examples/` 或 `tests/fixtures/`。
 重新生成的方法见 [文档索引](../README.md)。本目录是唯一维护的界面图库。

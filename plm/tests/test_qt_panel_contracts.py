@@ -39,7 +39,7 @@ class PanelContractTests(unittest.TestCase):
         self.addCleanup(self.temp.cleanup)
         self.addCleanup(dispose_new_widgets, self.app, set(self.app.topLevelWidgets()))
         self.root = Path(self.temp.name).resolve()
-        shutil.copytree(sample_config("bifurcate"), self.root / "test/demo/config")
+        shutil.copytree(sample_config("bifurcate"), self.root / "examples/demo/config")
         store = SettingsStore(QtCore.QSettings(
             str(self.root / "settings.ini"), QtCore.QSettings.IniFormat,
         ))

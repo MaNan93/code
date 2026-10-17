@@ -39,7 +39,7 @@ class QtRegressionTests(unittest.TestCase):
         self.addCleanup(dispose_new_widgets, self.app, set(self.app.topLevelWidgets()))
         self.root = Path(self.temp.name)
         for name in ("demo", "other"):
-            scaffold_default_content(self.root / "test" / name)
+            scaffold_default_content(self.root / "examples" / name)
         settings = SettingsStore(QtCore.QSettings(
             str(self.root / "settings.ini"), QtCore.QSettings.IniFormat
         ))
@@ -97,7 +97,7 @@ class QtRegressionTests(unittest.TestCase):
                     self.assertTrue(sip.isdeleted(editor) or not editor.isVisible())
                     self.assertEqual(self.controller.current_name, new_name)
                     self.assertEqual(header.title_label.text(), new_name)
-                    self.assertTrue((self.root / "test" / new_name / "config").is_dir())
+                    self.assertTrue((self.root / "examples" / new_name / "config").is_dir())
 
     def test_clicking_inside_editor_or_context_menu_keeps_editing(self):
         header = self.window.config_page.header

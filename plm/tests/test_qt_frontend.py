@@ -61,7 +61,7 @@ class QtFrontendLayoutTests(unittest.TestCase):
         self.addCleanup(dispose_new_widgets, self.app, set(self.app.topLevelWidgets()))
         self.root = Path(self.temp.name)
         for config in SAMPLES_DIR.glob("*/config"):
-            shutil.copytree(config, self.root / "test" / config.parent.name / "config")
+            shutil.copytree(config, self.root / "examples" / config.parent.name / "config")
         self.store = SettingsStore(QtCore.QSettings(
             str(self.root / "settings.ini"), QtCore.QSettings.IniFormat
         ))

@@ -36,7 +36,7 @@ class QtWorkflowTests(unittest.TestCase):
         for name in ("demo", "other"):
             shutil.copytree(
                 sample_config("bifurcate"),
-                self.root / "test" / name / "config",
+                self.root / "examples" / name / "config",
             )
         qsettings = QtCore.QSettings(str(self.root / "settings.ini"), QtCore.QSettings.IniFormat)
         self.store = SettingsStore(qsettings)
@@ -57,8 +57,8 @@ class QtWorkflowTests(unittest.TestCase):
         self.assertEqual(nav.current_project_name, "demo")
 
         renamed_dir = self.projects.rename("demo", "renamed")
-        self.assertEqual(renamed_dir, self.root / "test/renamed/config")
-        self.assertFalse((self.root / "test/demo").exists())
+        self.assertEqual(renamed_dir, self.root / "examples/renamed/config")
+        self.assertFalse((self.root / "examples/demo").exists())
         with self.assertRaises(FileExistsError):
             self.projects.rename("renamed", "other")
         with self.assertRaises(ValueError):
@@ -77,9 +77,9 @@ class QtWorkflowTests(unittest.TestCase):
 
         payload = self.workspaces.load(self.projects._find("renamed"))
         self.workspaces.save(self.projects._find("renamed"), payload)
-        self.assertTrue((self.root / "test/renamed/.plm-workspace").is_file())
+        self.assertTrue((self.root / "examples/renamed/.plm-workspace").is_file())
         self.projects.delete("renamed")
-        self.assertFalse((self.root / "test/renamed").exists())
+        self.assertFalse((self.root / "examples/renamed").exists())
         nav.close()
         refreshed.close()
 
@@ -102,7 +102,7 @@ class QtWorkflowTests(unittest.TestCase):
         window.nav_panel.save_btn.click()
         wait_for_idle(self.app)
         self.assertFalse(page.dirty)
-        csv_text = (self.root / "test/demo/config/controllers.csv").read_text()
+        csv_text = (self.root / "examples/demo/config/controllers.csv").read_text()
         self.assertIn("DemoCtrl", csv_text)
 
         page.controllers_editor.table.item(0, 0).setText("invalid-id")
@@ -113,17 +113,17 @@ class QtWorkflowTests(unittest.TestCase):
         warning.assert_not_called()
         # An invalid draft is still saved; only generation requires validity.
         self.assertFalse(page.dirty)
-        self.assertIn("invalid-id", (self.root / "test/demo/config/controllers.csv").read_text())
+        self.assertIn("invalid-id", (self.root / "examples/demo/config/controllers.csv").read_text())
         self.assertTrue(page.validation_issues)
         page.controllers_editor.table.item(0, 0).setText("0")
 
         page.generation_editor.generate_btn.click()
         wait_for_idle(self.app)
-        self.assertTrue((self.root / "test/demo/rtl/src/pipe_lane_mapper.sv").is_file())
-        self.assertTrue((self.root / "test/demo/tb/tb_pipe_lane_mapper.sv").is_file())
+        self.assertTrue((self.root / "examples/demo/rtl/src/pipe_lane_mapper.sv").is_file())
+        self.assertTrue((self.root / "examples/demo/tb/tb_pipe_lane_mapper.sv").is_file())
         panel = page.artifacts_panel
         files = list(panel.selection.files)
-        generated = self.root / "test/demo/rtl/src/pipe_lane_mapper.sv"
+        generated = self.root / "examples/demo/rtl/src/pipe_lane_mapper.sv"
         panel.select_file(files[files.index(generated)])
         wait_for_idle(self.app)
         self.assertEqual(panel.preview.toPlainText(), generated.read_text())
@@ -167,7 +167,7 @@ class QtWorkflowTests(unittest.TestCase):
         self.assertEqual(nav.current_project_name, "renamed")
         self.assertEqual(self.store.recent_project(), "renamed")
         self.assertEqual(window.config_page.header.title_label.text(), "renamed")
-        self.assertTrue((self.root / "test/renamed/config/controllers.csv").is_file())
+        self.assertTrue((self.root / "examples/renamed/config/controllers.csv").is_file())
 
         controller.save_current()
         wait_for_idle(self.app)
@@ -176,7 +176,7 @@ class QtWorkflowTests(unittest.TestCase):
             wait_for_idle(self.app)
         self.assertEqual(nav.project_list.count(), 0)
         self.assertEqual(window.config_page.header.title_label.text(), "无项目")
-        self.assertFalse((self.root / "test/renamed").exists())
+        self.assertFalse((self.root / "examples/renamed").exists())
 
     def test_switching_projects_preserves_or_discards_unsaved_edits(self):
         controller = AppController(self.projects, self.store, self.workspaces)
@@ -202,7 +202,7 @@ class QtWorkflowTests(unittest.TestCase):
             wait_for_idle(self.app)
         self.assertEqual(controller.current_name, "other")
         self.assertEqual(window.config_page.header.title_label.text(), "other")
-        self.assertIn(original, (self.root / "test/demo/config/controllers.csv").read_text())
+        self.assertIn(original, (self.root / "examples/demo/config/controllers.csv").read_text())
 
     def test_archiving_current_project_selects_remaining_and_empty_restart(self):
         controller = AppController(self.projects, self.store, self.workspaces)
@@ -267,7 +267,7 @@ class QtWorkflowTests(unittest.TestCase):
             wait_for_idle(self.app)
         self.addCleanup(window.close)
         external = self.root / "outside/demo"
-        shutil.copytree(self.root / "test/demo/config", external / "config")
+        shutil.copytree(self.root / "examples/demo/config", external / "config")
         window.config_page.controllers_editor.table.item(0, 1).setText("unsaved")
         with patch.object(QtWidgets.QFileDialog, "getExistingDirectory", return_value=str(external)), \
                 patch.object(QtWidgets.QMessageBox, "question", return_value=QtWidgets.QMessageBox.Cancel):
@@ -315,7 +315,7 @@ class QtWorkflowTests(unittest.TestCase):
         with patch("plm.frontend.qt.controllers.project_navigation.NewProjectDialog") as dialog, \
                 patch.object(QtWidgets.QMessageBox, "warning") as warning:
             dialog.return_value.exec_.return_value = QtWidgets.QDialog.Accepted
-            dialog.return_value.values.return_value = ("demo", str(self.root / "test"))
+            dialog.return_value.values.return_value = ("demo", str(self.root / "examples"))
             controller.new_project()
             wait_for_idle(self.app)
         warning.assert_not_called()
@@ -873,7 +873,7 @@ class QtWorkflowTests(unittest.TestCase):
             controller.generate_current()
             wait_for_idle(self.app)
         self.assertEqual(controller.generation_state, "failed")
-        self.assertFalse((self.root / "test/demo/rtl").exists())
+        self.assertFalse((self.root / "examples/demo/rtl").exists())
         self.assertEqual(page.tabs.currentIndex(), 1)
         self.assertEqual(page.mapping_editor.table.currentColumn(), 1)
         page.undo()

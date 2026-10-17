@@ -1,4 +1,4 @@
-"""Read-only regression inputs, separate from users' editable test/ workspaces."""
+"""Read-only regression inputs, separate from users' editable examples/ workspaces."""
 
 from pathlib import Path
 

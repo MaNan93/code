@@ -37,7 +37,7 @@ class GenerationIntegrationTests(unittest.TestCase):
         self.addCleanup(self.temp.cleanup)
         self.addCleanup(dispose_new_widgets, self.app, set(self.app.topLevelWidgets()))
         self.root = Path(self.temp.name).resolve()
-        scaffold_default_content(self.root / "test/demo")
+        scaffold_default_content(self.root / "examples/demo")
         self.store = SettingsStore(QtCore.QSettings(str(self.root / "settings.ini"), QtCore.QSettings.IniFormat))
         self.service = WorkspaceService()
 
@@ -358,7 +358,7 @@ class GenerationIntegrationTests(unittest.TestCase):
         self.assertIn("Ctrl10", table.item(1, 2).toolTip())
 
     def test_sidebar_follows_a_switch_that_saved_first(self):
-        scaffold_default_content(self.root / "test/other")
+        scaffold_default_content(self.root / "examples/other")
         controller, window = self.window()
         page, nav = window.config_page, window.nav_panel
         first = controller.current_name
@@ -374,7 +374,7 @@ class GenerationIntegrationTests(unittest.TestCase):
         self.assertEqual(nav.current_project_name, other)
 
     def test_failed_header_rename_restores_the_title(self):
-        scaffold_default_content(self.root / "test/other")
+        scaffold_default_content(self.root / "examples/other")
         controller, window = self.window()
         header = window.config_page.header
         first = controller.current_name
@@ -385,7 +385,7 @@ class GenerationIntegrationTests(unittest.TestCase):
         wait_for_idle(self.app)
         self.assertEqual(controller.current_name, first)
         self.assertEqual(header.title_label.text(), first)
-        self.assertTrue((self.root / "test" / first).is_dir())
+        self.assertTrue((self.root / "examples" / first).is_dir())
 
     def test_generate_bar_stays_visible_below_the_scrolled_form(self):
         controller, window = self.window()
@@ -470,7 +470,7 @@ class GenerationIntegrationTests(unittest.TestCase):
         self.assertIn("generated", report)
 
     def test_generation_status_strip_does_not_outlive_its_project(self):
-        scaffold_default_content(self.root / "test/other")
+        scaffold_default_content(self.root / "examples/other")
         controller, window = self.window()
         strip = window.log_panel.status_label
         controller.generate_current()
@@ -485,7 +485,7 @@ class GenerationIntegrationTests(unittest.TestCase):
 
     def test_long_project_name_is_elided_with_the_full_name_on_hover(self):
         long_name = "a_rather_long_project_name_for_the_sidebar_to_elide"
-        scaffold_default_content(self.root / "test" / long_name)
+        scaffold_default_content(self.root / "examples" / long_name)
         controller, window = self.window()
         row = next(w for w in window.nav_panel.project_list.project_widgets if w.project_name == long_name)
         row.project_name_label.repaint()

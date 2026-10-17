@@ -37,7 +37,7 @@ class Phase3VisualTests(unittest.TestCase):
         self.addCleanup(self.temp.cleanup)
         self.addCleanup(dispose_new_widgets, self.app, set(self.app.topLevelWidgets()))
         self.root = Path(self.temp.name).resolve()
-        scaffold_default_content(self.root / "test/demo")
+        scaffold_default_content(self.root / "examples/demo")
         store = SettingsStore(QtCore.QSettings(str(self.root / "settings.ini"), QtCore.QSettings.IniFormat))
         controller = AppController(ProjectService(self.root), store)
         with patch("plm.frontend.qt.main_window.AppController", return_value=controller):

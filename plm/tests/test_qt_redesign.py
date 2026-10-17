@@ -36,7 +36,7 @@ class RedesignTests(unittest.TestCase):
         self.addCleanup(temporary.cleanup)
         self.addCleanup(dispose_new_widgets, self.app, set(self.app.topLevelWidgets()))
         self.root = Path(temporary.name)
-        shutil.copytree(sample_config("dpr"), self.root / "test/demo/config")
+        shutil.copytree(sample_config("dpr"), self.root / "examples/demo/config")
         self.controller = AppController(ProjectService(self.root), SettingsStore(
             QtCore.QSettings(str(self.root / "settings.ini"), QtCore.QSettings.IniFormat)))
         with patch("plm.frontend.qt.main_window.AppController", return_value=self.controller):

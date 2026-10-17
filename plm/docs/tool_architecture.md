@@ -126,5 +126,6 @@ CI 覆盖 Linux/Windows 的 Python 3.9/3.12，以及 macOS 的 Python 3.12 回�
 
 工具从平铺脚本迁移为可安装包，CLI 采用标准库 argparse，避免增加 CLI 专用依赖。
 源码入口命名为 `run.py`，避免 `plm.py` 遮蔽同名包，也方便 Windows 启动。
-样例目录由 `configs/` 改为 `test/`，子目录去掉 `test_` 前缀；代码中的 config
-术语保留。Web 前端和旧 Tkinter 前端已经移除，Qt 是唯一 GUI。
+可编辑示例统一位于 `examples/<示例>/config/`，自动测试与基线位于 `tests/`。
+Qt 兼容发现已有的旧 `test/`、`configs/` 工作区；按名称调用 CLI 时从 `examples/`
+解析，显式目录参数继续支持任意工作区。Web 前端和旧 Tkinter 前端已移除，Qt 是唯一 GUI。

@@ -101,7 +101,7 @@ CLI 的生成参数（`--arch` / `--pclk-mode` / `--dpr` / `--bus-type`）需要
 ### 0.5 工具替你保证了什么
 
 - **自动分组**。owner 序列完全相同的 lane 会被归成一组，一组共用一套 NOV。
-  `test/bifurcate` 16 条 lane 只分出 4 组、其中 3 组需要 NOV，不是 16 套。
+  `examples/bifurcate` 16 条 lane 只分出 4 组、其中 3 组需要 NOV，不是 16 套。
 - **只扰动真正变化的部分**。mode 切换时，owner 没变的组完全不受影响，时钟不停、数据不断。
 - **切换无重叠**（开 DPR 时）。每组一个 `pipe_lane_sel_sync`，保证任何时刻最多一个候选被使能。
   不开 DPR 时选择信号是 `mode` 的组合译码，没有这层保护，靠“只在复位期间切 mode”保证，见 0.6 节。
@@ -181,7 +181,7 @@ PCLK/RXCLK、复位和 M2P/P2M 数据通路；该 Group 上已经工作的 PCIe 
 还有四条不报错、但用之前要知道：
 
 - **不校验 PCIe 宽度合法性**。工具允许任意宽度，x3 / x5 / x6 都能生成；
-  真实 PCIe 只允许 2 的幂（x1/x2/x4/x8/x16/x32）。`test/finegrain` 这类配置是用来压生成器的，
+  真实 PCIe 只允许 2 的幂（x1/x2/x4/x8/x16/x32）。`examples/finegrain` 这类配置是用来压生成器的，
   不是真实拓扑。
 - **选择方式由 `--dpr` 决定，不是独立参数**。开 DPR 时选择信号经同步器（`sync`），不开时为
   组合直通（`comb`）。不开 DPR 时归属只随 `mode` 变化，因此**只能在受影响的 lane 处于复位时
@@ -231,7 +231,7 @@ plm/
 │     │  └─ release_note.md     版本记录与迁移方法
 │     └─ frontend/
 │        └─ qt/                 桌面前端（PyQt5，`pip install -e ".[qt]"`）
-├─ test/
+├─ examples/
 │  └─ <SET>/              一套配置集，SET 是自己起的名字（如 bifurcate）
 │     ├─ config/           输入：三个 CSV（见第 2 节）
 │     │  ├─ controllers.csv
@@ -250,7 +250,7 @@ plm/
 └─ Makefile                 批量生成所有配置集（对每套配置集各调用一次 `plm generate`）
 ```
 
-一个配置集（`test/<SET>/`）只由 `config/` 下的三个 CSV 定义；
+一个配置集（`examples/<SET>/`）只由 `config/` 下的三个 CSV 定义；
 `rtl/`、`tb/` 都是生成产物，重新生成前不需要手动清理。统一的 `generate`
 会在 staging 中重建生成内容，并在 RTL 与 testbench 都成功后一起更新两边。
 
@@ -417,7 +417,7 @@ plm generate --config <SET> [其它参数]
 
 ## 5. 用顶层 `Makefile` 批量生成
 
-顶层 `Makefile` 对 `test/` 下每个配置集执行一次 `plm generate`。
+顶层 `Makefile` 对 `examples/` 下每个配置集执行一次 `plm generate`。
 
 | 命令 | 作用 |
 |---|---|
@@ -437,7 +437,7 @@ plm generate --config <SET> [其它参数]
 每个配置集的 `tb/makefile`（VCS + Verdi 流程）：
 
 ```bash
-cd test/<SET>/tb
+cd examples/<SET>/tb
 make compile   # 到 ../rtl 下用 -f flist.f 编译，产物/日志回写到 tb/
 make run       # 跑仿真，日志写到 tb/sim.log
 make verdi     # 打开 Verdi，加载 RTL 源码树和波形（waves.fsdb）
@@ -451,7 +451,7 @@ make           # 等价于 compile + run
 `waves.fsdb`。
 
 如果本地没有 VCS，只想用 verilator 做功能仿真，可以在
-`test/<SET>/rtl` 目录下自行调用：
+`examples/<SET>/rtl` 目录下自行调用：
 
 ```bash
 verilator --binary -f flist.f ../tb/tb_pipe_lane_mapper.sv --top-module tb_pipe_lane_mapper

@@ -37,7 +37,7 @@ class QtControlLogicTests(unittest.TestCase):
         self.root = Path(self.temp.name).resolve()
         shutil.copytree(
             sample_config("bifurcate"),
-            self.root / "test/demo/config",
+            self.root / "examples/demo/config",
         )
         self.store = SettingsStore(
             QtCore.QSettings(str(self.root / "settings.ini"), QtCore.QSettings.IniFormat)
@@ -183,10 +183,10 @@ class QtControlLogicTests(unittest.TestCase):
         self.assertEqual(self.controller.current_name, "renamed")
         self.assertEqual(
             self.controller.current_project.config_dir,
-            self.root / "test/renamed/config",
+            self.root / "examples/renamed/config",
         )
-        self.assertTrue((self.root / "test/renamed/config/controllers.csv").is_file())
-        self.assertFalse((self.root / "test/demo").exists())
+        self.assertTrue((self.root / "examples/renamed/config/controllers.csv").is_file())
+        self.assertFalse((self.root / "examples/demo").exists())
 
     def test_table_context_menu_inserts_and_deletes_rows(self):
         page = self.window.config_page

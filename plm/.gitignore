@@ -11,5 +11,5 @@ build/
 dist/
 work/
 ui-screenshots/
-/test/*/rtl/
-/test/*/tb/
+/examples/*/rtl/
+/examples/*/tb/

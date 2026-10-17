@@ -11,27 +11,27 @@ from plm.frontend.qt.services import ProjectService, SettingsStore
 
 class ProjectServiceTests(unittest.TestCase):
     def test_discover_returns_project_info_with_explicit_csv_paths(self):
-        with tempfile.TemporaryDirectory() as temporary_directory:
-            root = Path(temporary_directory).resolve()
-            config_dir = root / "test" / "demo" / "config"
-            config_dir.mkdir(parents=True)
-            for filename in (
-                "controllers.csv",
-                "lane_mapping.csv",
-                "pipe_signals.csv",
-            ):
-                (config_dir / filename).write_text("", encoding="utf-8")
+        for folder in ("examples", "test", "configs"):
+            with self.subTest(folder=folder), tempfile.TemporaryDirectory() as temporary_directory:
+                self._check_discovered_project(Path(temporary_directory).resolve(), folder)
 
-            projects = ProjectService(root).discover()
+    def _check_discovered_project(self, root, folder):
+        config_dir = root / folder / "demo" / "config"
+        config_dir.mkdir(parents=True)
+        for filename in ("controllers.csv", "lane_mapping.csv", "pipe_signals.csv"):
+            (config_dir / filename).write_text("", encoding="utf-8")
 
-            self.assertEqual(len(projects), 1)
-            project = projects[0]
-            self.assertIsInstance(project, ProjectInfo)
-            self.assertEqual(project.name, "demo")
-            self.assertEqual(project.config_dir, config_dir.resolve())
-            self.assertEqual(project.controllers_csv, config_dir / "controllers.csv")
-            self.assertEqual(project.lane_mapping_csv, config_dir / "lane_mapping.csv")
-            self.assertEqual(project.pipe_signals_csv, config_dir / "pipe_signals.csv")
+        service = ProjectService(root)
+        projects = service.discover()
+        self.assertEqual(len(projects), 1)
+        project = projects[0]
+        self.assertIsInstance(project, ProjectInfo)
+        self.assertEqual(project.name, "demo")
+        self.assertEqual(project.config_dir, config_dir.resolve())
+        self.assertEqual(project.controllers_csv, config_dir / "controllers.csv")
+        self.assertEqual(project.lane_mapping_csv, config_dir / "lane_mapping.csv")
+        self.assertEqual(project.pipe_signals_csv, config_dir / "pipe_signals.csv")
+        self.assertEqual(service.rename("demo", "renamed"), root / folder / "renamed" / "config")
 
 
 class EditorCommandTests(unittest.TestCase):
@@ -58,10 +58,10 @@ class ProjectDiscoveryTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory).resolve()
-            scaffold_default_content(root / "test/good")
-            loose = root / "test/loose"
+            scaffold_default_content(root / "examples/good")
+            loose = root / "examples/loose"
             loose.mkdir()
-            for path in (root / "test/good/config").glob("*.csv"):
+            for path in (root / "examples/good/config").glob("*.csv"):
                 (loose / path.name).write_bytes(path.read_bytes())
             self.assertEqual([p.name for p in ProjectService(root).discover()], ["good"])
 

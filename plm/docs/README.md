@@ -20,17 +20,17 @@
 
 ```text
 plm/
-├─ src/plm/             应用源码、包内资源与随包文档
-├─ tests/               自动回归及独立的 fixtures 测试基线
-├─ test/<示例>/config/   可编辑示例的输入配置
-├─ scripts/             截图、性能测量、缩放及安装包检查
+├─ src/plm/                 应用源码、包内资源与随包文档
+├─ tests/                   自动回归及独立的 fixtures 测试基线
+├─ examples/<示例>/config/   可编辑示例的输入配置
+├─ scripts/                 截图、性能测量、缩放及安装包检查
 └─ docs/
    ├─ images/           设计文档实际引用的硬件图
    └─ screenshot/       唯一的最新界面图库
 ```
 
 `.venv/` 是本地运行环境。`build/`、`dist/`、日志、缓存和示例的 `rtl/`、`tb/`
-均为可再生产物，不进入版本管理。`test/` 供人工使用，`tests/fixtures/` 是回归
+均为可再生产物，不进入版本管理。`examples/` 供人工使用，`tests/fixtures/` 是回归
 基线，两者不能混用或自动同步覆盖。
 
 ## 常用检查

@@ -113,7 +113,7 @@ class ProjectActions:
             self.log_panel.append_log(f"重命名后的项目无法读取：{config_dir}")
             return
         self.settings.remove_project_state(old_name)
-        self.settings.bind_projects(discovered)
+        self.settings.bind_projects(discovered, project_root=self.projects.project_root)
         state.name = renamed.name
         self.settings.save_project_state(state)
         self.settings.save_project_paths(self.projects.external_dirs)

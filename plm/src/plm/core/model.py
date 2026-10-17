@@ -86,7 +86,8 @@ def _literal_int(value):
     text = str(value).strip()
     if not _LITERAL_RE.fullmatch(text):
         raise ValueError(f"'{text}' is not an integer literal (e.g. 0, 1, 0x50)")
-    return int(text, 0)
+    base = 0 if text.lstrip("-").lower().startswith(("0x", "0b", "0o")) else 10
+    return int(text, base)
 
 
 def _strip_dict(row):
@@ -112,6 +113,15 @@ def _stripped(reader):
     """Wrap a DictReader, stripping each row as it's read."""
     for r in reader:
         yield _strip_dict(r)
+
+
+def _csv_reader(stream, path, error_type=ValueError):
+    """Normalize and validate headers for both core and editor readers."""
+    reader = csv.DictReader(stream)
+    reader.fieldnames = [name.strip() if name else name for name in (reader.fieldnames or [])]
+    if len(reader.fieldnames) != len(set(reader.fieldnames)):
+        raise error_type(f"{path}: header contains duplicate column names")
+    return reader
 
 
 # ---------------------------------------------------------------- data model
@@ -298,7 +308,7 @@ class Config:
         out = {}
         seen_names = {}
         with Config._open_csv(path, content) as f:
-            rows = enumerate(_stripped(csv.DictReader(f)), start=2)
+            rows = enumerate(_stripped(_csv_reader(f, path, SystemExit)), start=2)
             for i, r in rows:
                 if r.get(None):
                     raise SystemExit(f"{path} line {i}: row has more fields than the header")
@@ -342,7 +352,7 @@ class Config:
         out = []
         seen = set()
         with Config._open_csv(path, content) as f:
-            rows = enumerate(_stripped(csv.DictReader(f)), start=2)
+            rows = enumerate(_stripped(_csv_reader(f, path, SystemExit)), start=2)
             for i, r in rows:
                 if r.get(None):
                     raise SystemExit(f"{path} line {i}: row has more fields than the header")
@@ -398,8 +408,8 @@ class Config:
     @staticmethod
     def _load_map(path, content=None):
         with Config._open_csv(path, content) as f:
-            rd = csv.DictReader(f)
-            if rd.fieldnames is None:
+            rd = _csv_reader(f, path, SystemExit)
+            if not rd.fieldnames:
                 raise SystemExit(f"{path}: file is empty")
             # Strip the header: users sometimes accidentally add spaces to
             # column names.

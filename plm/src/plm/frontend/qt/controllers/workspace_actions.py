@@ -4,6 +4,7 @@ import hashlib
 from copy import copy
 from pathlib import Path
 from plm.core.validation import ValidationError, ValidationIssue
+from plm.core.locking import workspace_lock
 
 
 # Mirrors the artifact drawer's preview cap: a diff baseline only has to
@@ -55,7 +56,7 @@ class WorkspaceActions:
 
         def check(_progress):
             try:
-                plan = service.validate(payload)
+                plan = service.validate(payload, project=project, use_disk=use_disk)
                 issues = ()
             except ValidationError as error:
                 plan, issues = None, error.issues
@@ -109,15 +110,17 @@ class WorkspaceActions:
         project = self.current_project
         payload = self.config_page.content()
         saved = self._saved_signature
+        self.config_page.end_edit_group()
         service = self._worker_service()
         self._save_running = True
         self._validation_revision += 1
 
         def save(_progress):
-            if service.signature(project) != saved:
-                raise ValueError("配置文件已被外部修改，请通过“打开项目”重新打开。")
-            service.save(project, payload)
-            return service.signature(project)
+            with workspace_lock(project.config_dir.parent):
+                if service.signature(project) != saved:
+                    raise ValueError("配置文件已被外部修改，请通过“打开项目”重新打开。")
+                service.save(project, payload)
+                return service.signature(project)
 
         def failed(error):
             self._save_running = False
@@ -218,33 +221,34 @@ class WorkspaceActions:
         self.nav.setEnabled(False)
 
         def generate(progress):
-            if service.signature(project) != signature:
-                raise ValueError("配置文件已被外部修改，请通过“打开项目”重新打开。")
-            before, before_texts = self._artifact_snapshot(service.output_files(project), root)
-            progress(10, "正在生成")
-            saved = None
+            with workspace_lock(root):
+                if service.signature(project) != signature:
+                    raise ValueError("配置文件已被外部修改，请通过“打开项目”重新打开。")
+                before, before_texts = self._artifact_snapshot(service.output_files(project), root)
+                progress(10, "正在生成")
+                saved = None
 
-            def on_saved():
-                nonlocal saved
-                saved = service.signature(project)
+                def on_saved():
+                    nonlocal saved
+                    saved = service.signature(project)
 
-            try:
-                result, files, report = service.generate(
-                    project, payload, progress=lambda phase: progress(50, str(phase)),
-                    on_saved=on_saved,
-                    **({"force": True} if force else {}),
-                )
-                after, _ = self._artifact_snapshot(files, root, texts=False)
-                progress(100, "生成完成")
-                statuses, baselines = self._artifact_statuses(before, after, before_texts)
-                return (
-                    result, files, report, statuses, baselines,
-                    service.signature(project),
-                )
-            except Exception as error:
-                if saved is not None:
-                    raise SavedGenerationError(error, saved) from error
-                raise
+                try:
+                    result, files, report = service.generate(
+                        project, payload, progress=lambda phase: progress(50, str(phase)),
+                        on_saved=on_saved,
+                        **({"force": True} if force else {}),
+                    )
+                    after, _ = self._artifact_snapshot(files, root, texts=False)
+                    progress(100, "生成完成")
+                    statuses, baselines = self._artifact_statuses(before, after, before_texts)
+                    return (
+                        result, files, report, statuses, baselines,
+                        service.signature(project),
+                    )
+                except Exception as error:
+                    if saved is not None:
+                        raise SavedGenerationError(error, saved) from error
+                    raise
 
         def unlock():
             self._generation_running = False

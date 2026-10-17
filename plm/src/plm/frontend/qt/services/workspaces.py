@@ -6,9 +6,10 @@ from pathlib import Path
 
 from plm.core.exporter import MANIFEST_NAME, output_set_matches_plan, read_manifests
 from plm.core.gen_flags import GenerationOptions
+from plm.core.locking import workspace_lock
 from plm.core.service import generate
 from plm.core.validation import load_generation_plan, load_generation_plan_from_payload
-from plm.core.workspace import save_workspace_content, workspace_content
+from plm.core.workspace import config_snapshot_from_payload, save_workspace_content, workspace_content
 
 
 class WorkspaceService:
@@ -65,7 +66,13 @@ class WorkspaceService:
             raise ValueError("配置文件在加载期间被外部修改，请重新打开项目。")
         return payload, before
 
-    def validate(self, payload):
+    def validate(self, payload, *, project=None, use_disk=False):
+        if use_disk and project is not None:
+            # A loaded page can also be replaced programmatically. Prefer the
+            # disk's original CSV bytes only when its rows match the editor.
+            disk_payload = self.load(project)
+            if config_snapshot_from_payload(payload) == config_snapshot_from_payload(disk_payload):
+                return load_generation_plan(project.config_dir, self._options(payload))
         return load_generation_plan_from_payload(payload, self._options(payload))
 
     def save(self, project, payload):
@@ -78,6 +85,11 @@ class WorkspaceService:
         save_workspace_content(self._root(project), payload)
 
     def generate(self, project, payload, progress=None, on_saved=None, *, force=False):
+        """Keep the save checkpoint and matched outputs in one exclusion scope."""
+        with workspace_lock(self._root(project)):
+            return self._generate(project, payload, progress, on_saved, force=force)
+
+    def _generate(self, project, payload, progress=None, on_saved=None, *, force=False):
         self.save(project, payload)
         if on_saved:
             on_saved()
@@ -95,7 +107,7 @@ class WorkspaceService:
     def output_state(self, project, payload, *, plan=None, use_disk=False):
         if not self.output_files(project):
             return "ready"
-        if use_disk:
+        if plan is None and use_disk:
             # Preserve the generation identity of untouched CSVs, including CLI outputs
             # generated from hand-aligned CSV text rather than editor serialization.
             plan = load_generation_plan(project.config_dir, self._options(payload))

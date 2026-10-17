@@ -129,6 +129,8 @@ def cmd_generate(argv):
         )
     except ValidationError as error:
         raise SystemExit(f"Generation validation failed:\n{error}") from error
+    except OSError as error:
+        raise SystemExit(f"Generation failed: {error}") from error
     if args.quiet:
         # Without --quiet the report printed after generation carries these.
         for warning in result.plan.warnings():

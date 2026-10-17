@@ -51,7 +51,8 @@ uv run python scripts/check_wheel.py dist/plm-3.0.5-py3-none-any.whl --sdist dis
 
 完整回归默认跳过两项可选 RTL 仿真；需要真实 Verilator 仿真时，先准备工具，
 设置 `PLM_RUN_RTL_SIM=1` 再运行回归。可通过 `PLM_VERILATOR` 指定可执行文件。
-最近一次源码迁移回归为 418 项：416 通过、2 项可选仿真跳过；详见版本日志。
+当前审查修复回归为 436 项：434 通过、2 项可选仿真跳过；另跑 4 组相关 RTL 仿真全部通过，
+详见版本日志。
 
 重新测量性能时，将结果写入可清理的 `build/`：
 

@@ -102,7 +102,8 @@ def check_sdist_contents(sdist, root):
         actual = {member.name.split("/", 1)[1] for member in members}
         unwanted = {name for name in actual if name.split("/", 1)[0] in {
             "examples", "test", "build", "dist", ".venv", ".git", ".workbuddy"
-        } or "__pycache__" in Path(name).parts or name.endswith((".pyc", ".pyo", ".log"))}
+        } or "__pycache__" in Path(name).parts or Path(name).name == ".plm-lock"
+            or name.endswith((".pyc", ".pyo", ".log"))}
         if expected - actual or unwanted:
             raise AssertionError(
                 f"Source distribution contents differ: missing={sorted(expected - actual)}, "

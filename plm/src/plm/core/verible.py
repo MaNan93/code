@@ -302,7 +302,7 @@ def format_sv(text, verible_path=None, verible_flags=None, *, cache=False, stric
             # corrupted RTL. Comparing token streams catches that (and any
             # other misbehavior) before it can reach disk.
             same_whitespace = "".join(formatted.split()) == "".join(text.split())
-            same_tokens = not (cache or strict) or _format_tokens(formatted) == _format_tokens(text)
+            same_tokens = _format_tokens(formatted) == _format_tokens(text)
             if same_whitespace and same_tokens:
                 # A replaced executable must not poison the old binary's
                 # cache entry with the new binary's output.

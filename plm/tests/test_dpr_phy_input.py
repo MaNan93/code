@@ -86,7 +86,9 @@ class DprClockTests(unittest.TestCase):
         (config_dir / "pipe_signals.csv").write_text(
             "signal_name,signal_type,direction,width,safe_state,tie_off\n"
             "mac_phy_txdata,perlane,mac2phy,8,0,0\n"
-            "phy_mac_rxdata,perlane,phy2mac,8,0,0\n",
+            "phy_mac_rxdata,perlane,phy2mac,8,0,lane0\n"
+            "custom_rx,perlane,phy2mac,8,0,lane0\n"
+            "custom_tx,perlane,mac2phy,8,0,0\n",
             encoding="utf-8",
         )
         config = Config(config_dir)
@@ -103,6 +105,7 @@ class DprClockTests(unittest.TestCase):
             ("pclk_as_phy_input", True),
             ("pclk_as_phy_input", False),
             ("pclk_as_phy_output", True),
+            ("pclk_as_phy_output", False),
         ):
             with self.subTest(mode=mode, dpr=dpr), tempfile.TemporaryDirectory() as td:
                 root = Path(td)

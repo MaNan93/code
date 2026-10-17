@@ -19,7 +19,7 @@ class OptionSwitch(QtWidgets.QAbstractButton):
     def __init__(self, options, parent=None):
         super().__init__(parent)
         self._options = list(options)
-        self._choices = tuple(options)
+        self._choices = tuple(self._options)
         self._keyboard_focus = False
         self._hover_progress = 0.0
         self._hover_animation = None

@@ -5,6 +5,7 @@ from pathlib import Path
 
 from plm.core.exporter import export_all, output_set_matches_plan, read_manifests
 from plm.core.validation import load_generation_plan
+from plm.core.locking import workspace_lock
 
 
 @dataclass(frozen=True)
@@ -15,6 +16,12 @@ class GenerationResult:
 
 
 def generate(config_dir, out_rtl, options, progress=None, *, force=False, log=None):
+    """Validate and produce one output set while excluding other writers."""
+    with workspace_lock(Path(out_rtl).parent):
+        return _generate(config_dir, out_rtl, options, progress, force=force, log=log)
+
+
+def _generate(config_dir, out_rtl, options, progress=None, *, force=False, log=None):
     """Validate and produce one current output set, skipping a true no-op."""
     notify = progress or (lambda _phase: None)
     notify("VALIDATING")

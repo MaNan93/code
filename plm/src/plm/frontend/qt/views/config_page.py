@@ -389,8 +389,13 @@ class ConfigPage(RoundedCanvasFrame):
         self.dirtyChanged.emit(self.dirty)
 
     def mark_saved(self, payload=None):
+        # A saved snapshot is an undo boundary, including asynchronous saves.
+        self._typing_key = None
         self._saved_content = self.content() if payload is None else payload
         self._update_dirty()
+
+    def end_edit_group(self):
+        self._typing_key = None
 
     def finish_editing(self):
         focus = QtWidgets.QApplication.focusWidget()

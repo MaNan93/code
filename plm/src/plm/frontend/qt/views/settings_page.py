@@ -1,4 +1,5 @@
 import sys
+from collections.abc import Mapping
 
 from PyQt5 import QtCore, QtGui, QtWidgets
 from plm.core.verible import (
@@ -10,7 +11,8 @@ from plm.frontend.qt.services.tasks import TaskRunner
 from plm.frontend.qt.styles.tokens import (
     CONTROL_HEIGHT, FORMATTER_MAX_WIDTH, SETTINGS_MAX_WIDTH, SPACING_LG, SPACING_MD,
 )
-from plm.frontend.qt.widgets.common import StyledComboBox
+from plm.frontend.qt.widgets.common import StyledComboBox, load_lucide_icon
+from plm.frontend.qt.styles.tokens import get_theme_color
 from .secondary_page import SecondaryPage
 
 
@@ -18,11 +20,63 @@ def _executable_filter():
     return "Executables (*.exe);;All files (*)" if sys.platform == "win32" else "All files (*)"
 
 
+class _LazyFormatterControls(Mapping):
+    """Only allocate widgets for parameter rows that the user edits."""
+
+    def __init__(self, page):
+        self.page = page
+        self.created = {}
+
+    def __iter__(self):
+        return iter(DEFAULT_VERIBLE_FLAGS)
+
+    def __len__(self):
+        return len(DEFAULT_VERIBLE_FLAGS)
+
+    def __getitem__(self, name):
+        if name not in DEFAULT_VERIBLE_FLAGS:
+            raise KeyError(name)
+        if name not in self.created:
+            self.page._ensure_formatter_controls()
+            self.created[name] = self.page._create_flag_control(name)
+        return self.created[name]
+
+
 class _FormatterControlDelegate(QtWidgets.QStyledItemDelegate):
+    def sizeHint(self, option, index):
+        size = super().sizeHint(option, index)
+        if index.column() == 1:
+            text_width = option.fontMetrics.horizontalAdvance(index.data() or "")
+            size.setWidth(max(size.width(), text_width + 24 + (28 if index.data(QtCore.Qt.UserRole) else 0)))
+        return size
+
     def paint(self, painter, option, index):
         option = QtWidgets.QStyleOptionViewItem(option)
         option.state &= ~QtWidgets.QStyle.State_MouseOver
-        super().paint(painter, option, index)
+        if index.column() != 1:
+            return super().paint(painter, option, index)
+        label = index.data() or ""
+        styled = QtWidgets.QStyleOptionViewItem(option)
+        self.initStyleOption(styled, index)
+        styled.text = ""
+        style = option.widget.style() if option.widget else QtWidgets.QApplication.style()
+        style.drawControl(QtWidgets.QStyle.CE_ItemViewItem, styled, painter, option.widget)
+        if isinstance(option.widget, QtWidgets.QAbstractItemView) and option.widget.indexWidget(index) is not None:
+            return  # A live editor owns its value; do not paint a second label underneath it.
+        painter.save()
+        rect = option.rect.adjusted(0, 2, 0, -2)
+        painter.setPen(QtCore.Qt.NoPen)
+        painter.setBrush(QtGui.QColor(get_theme_color("bg_subtle")))
+        painter.drawRoundedRect(QtCore.QRectF(rect), rect.height() / 2, rect.height() / 2)
+        text_rect = rect.adjusted(12, 0, -12, 0)
+        if index.data(QtCore.Qt.UserRole):
+            icon_rect = QtCore.QRect(rect.right() - 26, rect.center().y() - 6, 12, 12)
+            load_lucide_icon("chevron-down", "text_sub", 12).paint(painter, icon_rect)
+            text_rect.adjust(0, 0, -20, 0)
+        painter.setPen(QtGui.QColor(get_theme_color("text_main")))
+        painter.drawText(text_rect, QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter,
+                         option.fontMetrics.elidedText(label, QtCore.Qt.ElideRight, text_rect.width()))
+        painter.restore()
 
     def updateEditorGeometry(self, editor, option, index):
         super().updateEditorGeometry(editor, option, index)
@@ -76,6 +130,13 @@ class _FormatterTable(QtWidgets.QTableWidget):
         super().showEvent(event)
         self.scheduleRowHeight()
 
+    def keyPressEvent(self, event):
+        if event.key() in (QtCore.Qt.Key_F2, QtCore.Qt.Key_Space) and self.currentRow() >= 0:
+            self.cellActivated.emit(self.currentRow(), 1)
+            event.accept()
+            return
+        super().keyPressEvent(event)
+
 
 class SettingsPage(SecondaryPage):
     themeChanged = QtCore.pyqtSignal(str)
@@ -102,7 +163,8 @@ class SettingsPage(SecondaryPage):
         }
         self.flag_table = None
         self.formatter_preview = None
-        self._flag_controls = {}
+        self._flag_controls = _LazyFormatterControls(self)
+        self._flag_specs = {}
         self._formatter_groups = {
             **dict.fromkeys(VERIBLE_ALIGN_PARAMS, 0),
             **dict.fromkeys(VERIBLE_INDENT_PARAMS, 1),
@@ -371,78 +433,113 @@ class SettingsPage(SecondaryPage):
                 value_item = QtWidgets.QTableWidgetItem()
                 value_item.setFlags(value_item.flags() & ~QtCore.Qt.ItemIsEditable)
                 self.flag_table.setItem(row, 1, value_item)
-                default_value = DEFAULT_VERIBLE_FLAGS[name]
-                if choices:
-                    control = StyledComboBox()
-                    control.setFixedHeight(CONTROL_HEIGHT - 4)
-                    control.addItem(f"{default_value} (default)", default_value)
-                    for choice in choices:
-                        if choice != default_value:
-                            control.addItem(choice, choice)
-                    control.setToolTip(f"{description}\nPLM 默认值：{default_value}")
-                    control.currentIndexChanged.connect(self._flags_changed)
-                else:
-                    control = QtWidgets.QLineEdit()
-                    control.setFixedHeight(CONTROL_HEIGHT - 4)
-                    control.setToolTip(f"{description}\nPLM 默认值：{default_value}")
-                    if name in VERIBLE_INT_PARAMS:
-                        control.setValidator(QtGui.QIntValidator(0, 2147483647, control))
-                        control.setAlignment(QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter)
-                    control.textChanged.connect(self._flags_changed)
-                control.setProperty("formatterRow", row)
-                control.installEventFilter(self.flag_table)
-                value_cell = QtWidgets.QWidget()
-                value_cell.setObjectName("FormatterValueCell")
-                value_layout = QtWidgets.QHBoxLayout(value_cell)
-                value_layout.setContentsMargins(0, 2, 0, 2)
-                value_layout.addWidget(control)
-                self.flag_table.setCellWidget(row, 1, value_cell)
-                self._flag_controls[name] = control
+                self._flag_specs[name] = (row, choices, description)
+                value_item.setData(QtCore.Qt.UserRole, bool(choices))
+                value_item.setToolTip(f"{description}\nPLM 默认值：{DEFAULT_VERIBLE_FLAGS[name]}")
                 row += 1
+        self.flag_table.setEditTriggers(QtWidgets.QAbstractItemView.NoEditTriggers)
+        self.flag_table.cellClicked.connect(self._activate_formatter_cell)
+        self.flag_table.cellActivated.connect(lambda row, _column: self._activate_formatter_cell(row, 1))
         self.parameter_page.layout().addWidget(self.flag_table, 1)
-        self._fill_flags(self._original_flags)
+        self._fill_flags(self._flag_values)
         self.flag_table.applyRowHeight()
         formatter_header.setSectionResizeMode(1, QtWidgets.QHeaderView.ResizeToContents)
         self.flag_table.setUpdatesEnabled(True)
         self._apply_formatter_filter()
+
+    def _create_flag_control(self, name):
+        row, choices, description = self._flag_specs[name]
+        default_value = DEFAULT_VERIBLE_FLAGS[name]
+        if choices:
+            control = StyledComboBox()
+            control.setFixedHeight(CONTROL_HEIGHT - 4)
+            control.addItem(f"{default_value} (default)", default_value)
+            for choice in choices:
+                if choice != default_value:
+                    control.addItem(choice, choice)
+            control.setToolTip(f"{description}\nPLM 默认值：{default_value}")
+            control.currentIndexChanged.connect(lambda _value, key=name: self._flags_changed(key))
+        else:
+            control = QtWidgets.QLineEdit()
+            control.setFixedHeight(CONTROL_HEIGHT - 4)
+            control.setToolTip(f"{description}\nPLM 默认值：{default_value}")
+            if name in VERIBLE_INT_PARAMS:
+                control.setValidator(QtGui.QIntValidator(0, 2147483647, control))
+                control.setAlignment(QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter)
+            control.textChanged.connect(lambda _value, key=name: self._flags_changed(key))
+        control.setProperty("formatterRow", row)
+        self._set_flag_control(control, self._flag_values[name])
+        control.installEventFilter(self.flag_table)
+        value_cell = QtWidgets.QWidget()
+        value_cell.setObjectName("FormatterValueCell")
+        value_layout = QtWidgets.QHBoxLayout(value_cell)
+        value_layout.setContentsMargins(0, 2, 0, 2)
+        value_layout.addWidget(control)
+        self.flag_table.setCellWidget(row, 1, value_cell)
+        control.ensurePolished()
+        control.setMinimumWidth(control.sizeHint().width())
+        self.flag_table.resizeColumnToContents(1)
+        self.flag_table.doItemsLayout()
+        value_cell.layout().activate()
+        return control
+
+    def _activate_formatter_cell(self, row, column):
+        if column != 1:
+            return
+        name = tuple(self._flag_controls)[row]
+        control = self._flag_controls[name]
+        control.setFocus(QtCore.Qt.OtherFocusReason)
+        if isinstance(control, StyledComboBox):
+            control.showPopup()
+        else:
+            control.selectAll()
 
     def changeEvent(self, event):
         super().changeEvent(event)
         if event.type() in (QtCore.QEvent.FontChange, QtCore.QEvent.StyleChange) and self.flag_table is not None:
             self.flag_table.scheduleRowHeight()
 
-    def _flags_changed(self, *_):
-        self._flags_dirty = True
+    def _flags_changed(self, name):
+        control = self._flag_controls[name]
+        value = control.currentData() if isinstance(control, QtWidgets.QComboBox) else control.text().strip()
+        self._flag_values[name] = str(value)
+        self._update_flag_item(name)
         self._sync_formatter_preview()
+
+    @staticmethod
+    def _set_flag_control(control, value):
+        previous = control.blockSignals(True)
+        if isinstance(control, QtWidgets.QComboBox):
+            index = control.findData(value)
+            if index < 0:
+                control.addItem(value, value)
+                index = control.count() - 1
+            control.setCurrentIndex(index)
+        else:
+            control.setText(value)
+        control.blockSignals(previous)
+
+    def _update_flag_item(self, name):
+        if self.flag_table is None:
+            return
+        row, choices, _description = self._flag_specs[name]
+        value = self._flag_values[name]
+        label = f"{value} (default)" if choices and value == DEFAULT_VERIBLE_FLAGS[name] else value
+        self.flag_table.item(row, 1).setText(label)
 
     def _fill_flags(self, flags):
         values = dict(DEFAULT_VERIBLE_FLAGS)
         if flags:
-            values.update({key: str(value) for key, value in flags.items() if key in values})
-        self._original_flags = dict(values)
-        for name, control in self._flag_controls.items():
-            control.blockSignals(True)
-            value = values[name]
-            if isinstance(control, QtWidgets.QComboBox):
-                index = control.findData(value)
-                if index < 0:
-                    control.addItem(value, value)
-                    index = control.count() - 1
-                control.setCurrentIndex(index)
-            else:
-                control.setText(value)
-            control.blockSignals(False)
-        self._flags_dirty = False
+            values.update({key: str(value) for key, value in flags.items()})
+        self._flag_values = values
+        for name, control in self._flag_controls.created.items():
+            self._set_flag_control(control, values[name])
+        for name in self._flag_specs:
+            self._update_flag_item(name)
         self._sync_formatter_preview()
 
     def _formatter_flags(self):
-        if not self._flags_dirty:
-            return dict(self._original_flags)
-        flags = {}
-        for name, control in self._flag_controls.items():
-            value = control.currentData() if isinstance(control, QtWidgets.QComboBox) else control.text().strip()
-            flags[name] = str(value)
-        return flags
+        return dict(self._flag_values)
 
     def _browse_verible(self):
         path, _filter = QtWidgets.QFileDialog.getOpenFileName(
@@ -493,25 +590,16 @@ class SettingsPage(SecondaryPage):
         }
 
     def _save_settings(self):
-        if self.flag_table is None:
-            validator = QtGui.QIntValidator(0, 2147483647)
-            for name in VERIBLE_INT_PARAMS:
-                value = self._original_flags[name]
-                if value.strip() and validator.validate(value, 0)[0] != QtGui.QValidator.Acceptable:
-                    self._select_section(1)
-                    break
+        validator = QtGui.QIntValidator(0, 2147483647)
         for name in VERIBLE_INT_PARAMS:
-            control = self._flag_controls.get(name)
-            if control is None:
-                continue
-            if control.text().strip() and not control.hasAcceptableInput():
+            value = self._flag_values[name]
+            if value.strip() and validator.validate(value, 0)[0] != QtGui.QValidator.Acceptable:
                 self.settings_status.setText(f"{name} 必须是非负整数。")
-                formatter_index = next((i for i, button in enumerate(self.menu_buttons)
-                                        if button.text() == "工具"), 1)
-                self._select_section(formatter_index)
+                self._select_section(1)
                 self.formatter_mode.setCurrentIndex(0)
                 self.formatter_search.setText(name)
-                row = list(self._flag_controls).index(name)
+                control = self._flag_controls[name]
+                row = tuple(self._flag_controls).index(name)
                 self.flag_table.scrollToItem(self.flag_table.item(row, 0))
                 control.setFocus(QtCore.Qt.OtherFocusReason)
                 control.selectAll()

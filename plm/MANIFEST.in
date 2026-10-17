@@ -9,4 +9,4 @@ prune build
 prune dist
 prune test
 prune examples
-global-exclude __pycache__ *.py[cod] *.log
+global-exclude __pycache__ *.py[cod] *.log .plm-lock

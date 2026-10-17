@@ -274,6 +274,9 @@ def gen_tb(cfg, pclk_mode="pclk_as_phy_output", dpr=False):
     L.append("    function automatic mac2phy_lane_t make_m2p(input int cid, input int ctrl_lane);")
     L.append("        mac2phy_lane_t v;")
     L.append("        v = SAFE_M2P;")
+    for signal in cfg.signals:
+        if signal.is_m2p:
+            L.append(f"        v.{signal.name} = {signal.width}'((cid + 1) * 17 + ctrl_lane);")
     if "mac_phy_txdata" in sig_names:
         L.append("        v.mac_phy_txdata      = {4'(cid), 20'h0, 8'(ctrl_lane)};")
     if "mac_phy_txdatak" in sig_names:
@@ -294,6 +297,9 @@ def gen_tb(cfg, pclk_mode="pclk_as_phy_output", dpr=False):
     L.append("    function automatic phy2mac_lane_t make_p2m(input int lane);")
     L.append("        phy2mac_lane_t v;")
     L.append("        v = SAFE_P2M;")
+    for signal in cfg.signals:
+        if not signal.is_m2p:
+            L.append(f"        v.{signal.name} = {signal.width}'((lane + 1) * 37);")
     if "phy_mac_rxdata" in sig_names:
         L.append("        v.phy_mac_rxdata      = {8'hA5, 16'h0, 8'(lane)};")
     if "phy_mac_rxdatak" in sig_names:
@@ -782,27 +788,22 @@ def gen_tb(cfg, pclk_mode="pclk_as_phy_output", dpr=False):
     L.append("                    phy2mac_lane_t exp_tie;")
     L.append("                    int active_base;")
     L.append("                    exp_tie = SAFE_P2M;")
-    L.append("                    active_base = -1;")
-    L.append("                    for (int lane_idx = 0; lane_idx < NL; lane_idx++) begin")
-    L.append(
-        "                        if (owner_of(m, lane_idx) == c && active_base == -1) active_base = lane_idx;"
-    )
-    L.append("                    end")
+    L.append("                    active_base = 0;")
+    L.append("                    case (c)")
+    bases = cfg.ctrl_pclk_cands()
+    for controller in ctrls:
+        L.append(f"                        {controller.id}: active_base = {bases[controller.id][0]};")
+    L.append("                    endcase")
 
     # Dynamically assemble the expected value exp_tie (shares
     # Signal.tie_expr() with gen_data_p2m(), so the two tie_off checks
     # can't drift apart)
     p2m_signals = [s for s in cfg.signals if not s.is_m2p]
-    L.append("                    if (active_base != -1) begin")
     for s in p2m_signals:
         L.append(
             f"                        exp_tie.{s.name} = "
             f"{s.tie_expr('phy_phy2mac[active_base]')};"
         )
-    L.append("                    end else begin")
-    for s in p2m_signals:
-        L.append(f"                        exp_tie.{s.name} = {s.tie_expr(None)};")
-    L.append("                    end")
 
     L.append("                    err_before = err_count;")
     L.append("                    chk_p2m(got, exp_tie,")

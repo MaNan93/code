@@ -9,6 +9,7 @@ from sample_data import sample_config
 
 from plm.core import exporter
 from plm.core.gen_flags import GenerationOptions
+from plm.core.locking import LOCK_FILENAME
 from plm.core.model import Config
 from plm.core.plan import GenerationPlan, MANIFEST_SCHEMA_VERSION
 from plm.core.service import generate
@@ -381,7 +382,7 @@ class ExporterTests(unittest.TestCase):
             self.assertEqual([path.name for path in parent.iterdir()], ["workspace"])
             self.assertEqual(
                 sorted(path.name for path in root.iterdir()),
-                sorted([WORKSPACE_MARKER, "config", "rtl", "tb"]),
+                sorted([LOCK_FILENAME, WORKSPACE_MARKER, "config", "rtl", "tb"]),
             )
 
     @mock.patch("plm.core.verible.find_verible", return_value=None)

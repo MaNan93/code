@@ -645,7 +645,10 @@ class EditableTable(QtWidgets.QWidget):
             insert_above = None
             insert_below = menu.addAction(load_lucide_icon("arrow-down", "text_sub", ICON_SIZE), "插入行")
             delete_current = None
-        chosen = menu.exec_(global_pos)
+        try:
+            chosen = menu.exec_(global_pos)
+        finally:
+            menu.deleteLater()
         if insert_above is not None and chosen == insert_above:
             self.insert_row_above(row)
         elif chosen == insert_below:

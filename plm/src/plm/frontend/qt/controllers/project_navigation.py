@@ -14,7 +14,7 @@ class ProjectNavigation:
         if discovered is None:
             discovered = self._discovered_projects
         self._discovered_projects = discovered
-        self.settings.bind_projects(discovered)
+        self.settings.bind_projects(discovered, project_root=self.projects.project_root)
         projects = []
         for project in discovered:
             state = self.settings.get_project_state(project.name)
@@ -78,7 +78,7 @@ class ProjectNavigation:
         if project is None:
             self.log_panel.append_log(f"项目已不存在或无法读取：{config_dir}")
             return False
-        self.settings.bind_projects(discovered)
+        self.settings.bind_projects(discovered, project_root=self.projects.project_root)
         state = self.settings.get_project_state(project.name)
         state.is_archived = False
         state.is_cleared = False

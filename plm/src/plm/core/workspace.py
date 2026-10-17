@@ -10,8 +10,8 @@ into the plain rows shapes these functions take, and back.
 A workspace holds those three CSVs plus gen_flags.txt, which remembers the
 generation flags (arch, pclk-mode, dpr, bus-type) the front end last used for
 it. That file is read and written HERE ONLY, by and for the editor front end.
-The CLI never looks at it: the front end passes the flags it holds on the
-`plm generate ...` command line like any other caller, so there is exactly one
+The CLI never looks at it: the front end passes its flags to the shared
+generation service, so there is exactly one
 path by which a flag reaches the generator, and exactly one reader of the
 file.
 
@@ -30,13 +30,11 @@ import shutil
 import tempfile
 
 from plm.core.gen_flags import (
-    ARCH_VALUES,
-    BUS_TYPE_VALUES,
-    PCLK_MODE_VALUES,
     GenerationOptions,
     complete_arch_pclk,
 )
-from plm.core.model import _stripped
+from plm.core.model import _csv_reader, _stripped
+from plm.core.locking import workspace_lock
 from plm.core.paths import BUILTIN_CFG, CONFIGS_ROOT, WORKSPACE_MARKER, has_csvs, list_configs
 
 
@@ -82,10 +80,7 @@ def read_csv_rows(path, required_cols=None):
     if not path.is_file():
         return []
     with open(path, newline="", encoding="utf-8-sig") as f:
-        rd = csv.DictReader(f)
-        rd.fieldnames = [c.strip() if c else c for c in (rd.fieldnames or [])]
-        if len(rd.fieldnames) != len(set(rd.fieldnames)):
-            raise ValueError(f"{path}: header contains duplicate column names")
+        rd = _csv_reader(f, path)
         if required_cols and not set(required_cols) <= set(rd.fieldnames):
             missing = sorted(set(required_cols) - set(rd.fieldnames))
             raise ValueError(
@@ -105,11 +100,8 @@ def read_mapping_csv(path):
     if not path.is_file():
         return [], 4
     with open(path, newline="", encoding="utf-8-sig") as f:
-        rd = csv.DictReader(f)
-        fieldnames = [c.strip() if c else c for c in (rd.fieldnames or [])]
-        if len(fieldnames) != len(set(fieldnames)):
-            raise ValueError(f"{path}: header contains duplicate column names")
-        rd.fieldnames = fieldnames
+        rd = _csv_reader(f, path)
+        fieldnames = rd.fieldnames
         if "mode" not in fieldnames:
             raise ValueError(
                 f"{path}: header is missing 'mode' (found: {', '.join(fieldnames) or '(no header)'})"
@@ -147,7 +139,7 @@ GEN_FLAGS_FILENAME = "gen_flags.txt"
 def read_gen_flags(path):
     """Read a workspace's gen_flags.txt into the front ends' own shape.
 
-    An unset or unrecognized arch/pclk-mode comes back as None (not a
+    An unset arch/pclk-mode comes back as None (not a
     placeholder string -- each front end maps that to whatever its own "unset"
     widget value is), dpr is already a bool. bus-type defaults to bus for old
     workspaces; unknown explicit values survive for generation validation.
@@ -166,7 +158,13 @@ def read_gen_flags(path):
             flags[k.strip()] = v.strip()
     raw_pclk_mode = flags.get("pclk-mode", "")
     pclk_mode_val = _PCLK_MODE_MIGRATION.get(raw_pclk_mode, raw_pclk_mode)
-    arch_val, pclk_mode_val = complete_arch_pclk(flags.get("arch"), pclk_mode_val)
+    raw_arch = flags.get("arch")
+    raw_pclk = pclk_mode_val
+    arch_val, pclk_mode_val = complete_arch_pclk(raw_arch, raw_pclk)
+    # Preserve unknown explicit choices as drafts instead of silently
+    # changing the generated hardware architecture on the next save.
+    arch_val = raw_arch or arch_val
+    pclk_mode_val = raw_pclk or pclk_mode_val
     result = {
         "arch": arch_val,
         "pclk-mode": pclk_mode_val,
@@ -181,10 +179,9 @@ def read_gen_flags(path):
 def write_gen_flags(path, flags):
     """Write the front end's current choices back to gen_flags.txt.
 
-    Anything that isn't a real arch/pclk-mode value is dropped, so a
-    combo still showing its own "(default: ...)" placeholder can be passed
-    straight through. A set of choices that pins nothing at all removes the
-    file instead of leaving an empty one behind.
+    Unset choices are omitted. Unknown explicit architecture and bus values
+    survive a draft save so generation can still diagnose them. A set of
+    choices that pins nothing removes the file instead of leaving it empty.
     """
     GenerationOptions(**{name: flags.get(name, "") for name in (
         "module_prefix", "file_prefix", "macro_prefix",
@@ -200,12 +197,12 @@ def write_gen_flags(path, flags):
     header_lines = len(lines)
     arch = flags.get("arch")
     pclk = flags.get("pclk-mode")
-    if arch in ARCH_VALUES:
+    if arch:
         lines.append(f"arch = {arch}")
-    if pclk in PCLK_MODE_VALUES:
+    if pclk:
         lines.append(f"pclk-mode = {pclk}")
     bus_type = flags.get("bus-type")
-    if bus_type in BUS_TYPE_VALUES:
+    if bus_type:
         lines.append(f"bus-type = {bus_type}")
     if flags.get("dpr"):
         lines.append("dpr = true")
@@ -386,6 +383,12 @@ def workspace_content(ws_root):
 
 
 def save_workspace_content(ws_root, payload):
+    """Save a draft transactionally, retaining the backup if recovery fails."""
+    with workspace_lock(ws_root):
+        _save_workspace_content(ws_root, payload)
+
+
+def _save_workspace_content(ws_root, payload):
     ws_root = Path(ws_root)
     cfg_dir = ws_root / "config"
     ws_root.mkdir(parents=True, exist_ok=True)
@@ -416,13 +419,17 @@ def save_workspace_content(ws_root, payload):
             os.replace(staged_cfg, cfg_dir)
         except BaseException:
             if backup_cfg.exists() and not cfg_dir.exists():
-                os.replace(backup_cfg, cfg_dir)
+                try:
+                    os.replace(backup_cfg, cfg_dir)
+                except OSError as restore_error:
+                    raise OSError(f"无法恢复配置；旧配置已保留在 {backup_cfg}") from restore_error
             raise
         if backup_cfg.exists():
             shutil.rmtree(backup_cfg, ignore_errors=True)
         (ws_root / WORKSPACE_MARKER).write_text("PLM workspace\n", encoding="utf-8")
     finally:
-        shutil.rmtree(staging_root, ignore_errors=True)
+        if not backup_cfg.exists():
+            shutil.rmtree(staging_root, ignore_errors=True)
 
 
 def scaffold_default_content(ws_root):

@@ -17,6 +17,7 @@ import tempfile
 import uuid
 
 from plm.core.generator import rtl, tb
+from plm.core.locking import workspace_lock
 from plm.core.naming import GenerationNames
 from plm.core.plan import GenerationPlan, MANIFEST_SCHEMA_VERSION
 from plm.core.paths import COMMON_DIR, TB_MAKEFILE
@@ -294,6 +295,12 @@ def _stage_output_set(workspace):
 
 
 def _commit_output_set(staged, workspace):
+    """Exclude other writers for the complete swap and any rollback."""
+    with workspace_lock(workspace):
+        _commit_locked_output_set(staged, workspace)
+
+
+def _commit_locked_output_set(staged, workspace):
     """Install RTL and TB together, restoring both if either swap fails."""
     staged = Path(staged)
     workspace = Path(workspace)
@@ -434,6 +441,12 @@ def _export_tb_into(plan, out_rtl, *, display_tb=None, log=None):
     log(f"  generated {shown_tb / tb_file.name}")
 
 def export_all(plan, out_rtl, *, log=None):
+    """Generate and install a checked RTL/TB set under the workspace lock."""
+    with workspace_lock(Path(out_rtl).parent):
+        return _export_all(plan, out_rtl, log=log)
+
+
+def _export_all(plan, out_rtl, *, log=None):
     """Generate, self-check and atomically install one matched RTL/TB set.
 
     ``log`` receives each progress line (default: print). Callers running in

@@ -1,12 +1,14 @@
 """Persistent application preferences isolated from Qt widgets."""
 
 import json
+from pathlib import Path
 
 from datetime import datetime, timezone
 from typing import Dict
 from urllib.parse import quote, unquote
 
 from PyQt5 import QtCore
+from plm.core.paths import PLM_ROOT
 
 from plm.frontend.qt.models import ProjectState
 from plm.frontend.qt.models.preferences import DEFAULT_EDITOR
@@ -24,7 +26,9 @@ class SettingsStore:
         )
         self._project_paths = {}
 
-    def bind_projects(self, projects):
+    def bind_projects(self, projects, *, project_root=None):
+        projects = tuple(projects)
+        self._migrate_example_paths(projects, Path(project_root or PLM_ROOT).resolve())
         self._project_paths = {p.name: str(p.config_dir) for p in projects}
         for name, path in self._project_paths.items():
             old = "projects/state/" + quote(name, safe="")
@@ -34,6 +38,35 @@ class SettingsStore:
                     self._settings.setValue(new + "/" + key, self._settings.value(old + "/" + key))
                 self._settings.remove(old)
         self._settings.sync()
+
+    def _migrate_example_paths(self, projects, root):
+        migrations = {}
+        for project in projects:
+            path = project.config_dir.resolve()
+            try:
+                relative = path.relative_to(root / "examples")
+            except ValueError:
+                continue
+            if len(relative.parts) != 2 or relative.name != "config":
+                continue
+            previous = root / "test" / relative
+            if previous.exists():
+                continue  # Existing legacy and external projects remain distinct.
+            migrations[str(previous)] = str(path)
+        for previous, path in migrations.items():
+            old = "projects/state/" + quote(previous, safe="")
+            new = "projects/state/" + quote(path, safe="")
+            for key in ("is_archived", "is_cleared", "is_pinned", "last_opened"):
+                if self._settings.contains(old + "/" + key) and not self._settings.contains(new + "/" + key):
+                    self._settings.setValue(new + "/" + key, self._settings.value(old + "/" + key))
+            self._settings.remove(old)
+        recent = self.recent_path()
+        if recent in migrations:
+            self._settings.setValue("navigation/recent_path", migrations[recent])
+        paths = self.project_paths()
+        migrated = sorted({migrations.get(str(path), str(path)) for path in paths})
+        if set(migrated) != set(paths):
+            self._settings.setValue("projects/paths", migrated)
 
     def project_paths(self):
         return self._settings.value("projects/paths", [], type=list)

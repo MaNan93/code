@@ -93,10 +93,10 @@ class ProjectList(QtWidgets.QListWidget):
         row, item = self._item_for_widget(widget)
         if item is None or row == 0:
             return
-        self.removeItemWidget(item)
-        self.takeItem(row)
-        self.insertItem(0, item)
-        self.setItemWidget(item, widget)
+        # Moving model rows preserves index widgets and their ownership.
+        # removeItemWidget() schedules the old widget for deletion.
+        if not self.model().moveRows(QtCore.QModelIndex(), row, 1, QtCore.QModelIndex(), 0):
+            return
         self.project_widgets.remove(widget)
         self.project_widgets.insert(0, widget)
         self.select_project(self.selected_project_name, emit_signal=False)

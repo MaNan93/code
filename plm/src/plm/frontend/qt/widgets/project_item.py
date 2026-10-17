@@ -171,7 +171,10 @@ class ProjectItemWidget(QtWidgets.QWidget):
 
     def show_context_menu(self, pos):
         menu = self.build_more_menu()
-        menu.exec_(self.header.mapToGlobal(pos))
+        try:
+            menu.exec_(self.header.mapToGlobal(pos))
+        finally:
+            menu.deleteLater()
 
     def _set_menu_open(self, opened):
         self._menu_open = opened
@@ -191,9 +194,12 @@ class ProjectItemWidget(QtWidgets.QWidget):
 
     def show_more_menu(self):
         menu = self.build_more_menu()
-        menu.exec_(
-            self.more_btn.mapToGlobal(QtCore.QPoint(0, self.more_btn.height() + 4))
-        )
+        try:
+            menu.exec_(
+                self.more_btn.mapToGlobal(QtCore.QPoint(0, self.more_btn.height() + 4))
+            )
+        finally:
+            menu.deleteLater()
 
     def build_more_menu(self):
         menu = ProjectContextMenu(self)

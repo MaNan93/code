@@ -134,7 +134,7 @@ def _topology_issue(config, message):
     if mode_lane:
         mode, lane_number = map(int, mode_lane.groups())
         table = "mapping"
-        row = config.modes.index(mode) if mode in config.modes else 0
+        row = list(config.mapping).index(mode) if mode in config.mapping else 0
         column = lane_number + 1
     elif lane:
         table = "mapping"

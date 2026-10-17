@@ -379,7 +379,10 @@ class LaneGrid(QtWidgets.QWidget):
         self._render()
 
     def set_controllers(self, rows):
-        self.controllers = [r for r in (rows or []) if (r.get("ctrl_id") or "").strip() != ""]
+        controllers = [dict(r) for r in (rows or []) if (r.get("ctrl_id") or "").strip() != ""]
+        if controllers == self.controllers:
+            return
+        self.controllers = controllers
         self.color_by_id = {}
         for i, c in enumerate(self.controllers):
             self.color_by_id[c["ctrl_id"]] = LANE_GRID_PALETTE[i % len(LANE_GRID_PALETTE)]
@@ -759,7 +762,10 @@ class LaneGrid(QtWidgets.QWidget):
             insert_above = None
             insert_below = menu.addAction(load_lucide_icon("arrow-down", "text_sub", ICON_SIZE), "插入行")
             delete_current = None
-        chosen = menu.exec_(global_pos)
+        try:
+            chosen = menu.exec_(global_pos)
+        finally:
+            menu.deleteLater()
         if insert_above is not None and chosen == insert_above:
             self._insert_row_above(row)
         elif chosen == insert_below:

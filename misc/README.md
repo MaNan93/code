@@ -3,7 +3,8 @@
 本目录收纳九个独立项目以外的工具、示例和历史资料，由父仓库
 [`MaNan93/code`](https://github.com/MaNan93/code) 管理。
 
-- `getaxiinfo/`、`runall/`、`smics28_mem_gen/`、`verilog_extractor_project/`
+- `getaxiinfo/`、`runall/`、`smics28_mem_gen/`、
+  [`verible/verilog_extractor_project/`](verible/verilog_extractor_project/README.md)
   是普通子目录，不再各自建立 Git 仓库。
 - `dwc_bfm_gpt/`、`pcie_native_bfm/`、`postsim_analyzer/`、`fec/`、`ffe/`、
   `gen_excel/`、`vtags-3.11/`、散落脚本、`examples/` 和 `src/` 保留原有内容。

@@ -2,6 +2,10 @@
 
 A comprehensive Python tool for extracting and analyzing Verilog/SystemVerilog source code structure, including port definitions, module instantiations, signal definitions, and signal connection relationships.
 
+Workspace location: `misc/verible/verilog_extractor_project/`. This directory is
+managed by the parent `code` repository. Run the examples and test scripts from
+this directory.
+
 ## 📁 Project Structure
 
 ```

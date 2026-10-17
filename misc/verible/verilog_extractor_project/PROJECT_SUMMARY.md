@@ -6,7 +6,7 @@ All Verilog Extractor project files have been successfully consolidated into a s
 
 ### 📂 Project Folder Location
 ```
-c:\Users\man\Desktop\code\verilog_extractor_project\
+misc/verible/verilog_extractor_project/
 ```
 
 ### 📋 Files in Project Folder (14 files total)
@@ -36,13 +36,13 @@ c:\Users\man\Desktop\code\verilog_extractor_project\
 #### From Python
 ```python
 import sys
-sys.path.insert(0, r'c:\Users\man\Desktop\code\verilog_extractor_project')
+sys.path.insert(0, 'misc/verible/verilog_extractor_project')  # From the code workspace root
 from verilog_extractor import VerilogExtractor
 ```
 
 #### Run Tests
 ```bash
-cd c:\Users\man\Desktop\code\verilog_extractor_project
+cd misc/verible/verilog_extractor_project
 
 # Run all tests
 python test_comprehensive.py

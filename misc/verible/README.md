@@ -24,4 +24,5 @@
 vutils 回归 12 项、PCIe 回归 33 项、PLM 格式化及预览检查 18 项全部通过。
 另以真实新版本程序完成 PLM 严格格式化及结果重新解析。
 
-`1`、`2` 为原有的语法标记输出记录，不属于官方发布包。
+[`verilog_extractor_project/`](verilog_extractor_project/README.md) 为本工作区的
+Python Verilog 分析工具，由父仓库统一管理，不属于官方二进制发布包。

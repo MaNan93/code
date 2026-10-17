@@ -3,7 +3,8 @@
 PLM validates controller, lane mapping and PIPE signal CSVs, then generates a
 matched SystemVerilog RTL and testbench output set. The Qt editor is optional.
 
-Install the built wheel with `uv pip install dist/plm-3.0.5-py3-none-any.whl`,
+Build distributions with `uv build`, then install the wheel with
+`uv pip install dist/plm-3.0.5-py3-none-any.whl`,
 or include the editor with
 `uv pip install "dist/plm-3.0.5-py3-none-any.whl[qt]"`.
 Python 3.9 or newer is required.
@@ -23,9 +24,18 @@ Usage and editor documentation are included in the installed package.
 The Qt window opens at 1280 × 800. Configuration tables share light grid lines;
 the Artifacts viewer uses a GitHub-inspired light palette with Lucide file icons.
 
-For development, use `uv sync --extra qt` and
-`uv run python -m unittest discover -s tests -v`. Tests use their own fixtures
-and temporary workspaces; editable example projects under `examples/` are separate.
+From the `plm/` source directory:
+
+```sh
+uv sync --extra qt --locked
+uv run plm validate --config dpr
+uv run plm generate --config dpr --dpr
+uv run python run.py -gui
+```
+
+Run regression checks with `uv run python -m unittest discover -s tests -v`.
+Tests use their own fixtures and temporary workspaces; editable example projects
+under `examples/` are separate.
 
 Current documentation and the directory layout are indexed in
 [docs/README.md](docs/README.md). The latest Qt screenshots are in
@@ -35,6 +45,9 @@ Editable examples under `examples/` retain their input `config/` only. Generate
 their ignored `rtl/` and `tb/` outputs with `make`, or for example
 `uv run plm generate --config dpr --dpr`. Automatic tests continue to use the
 independent, reviewed inputs and golden hashes under `tests/fixtures/`.
+See [the examples guide](examples/README.md) for all four configurations and
+their generation options. After migrating from `test/`, update explicit paths
+such as `test/dpr` to `examples/dpr`; `--config dpr` continues to work.
 
 Rendering and theme performance can be measured with `scripts/profile_ui.py`
 and `scripts/profile_themes.py`. Write temporary reports to `build/`; build

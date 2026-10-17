@@ -31,6 +31,17 @@ The CLI accepts the same options explicitly and does not read `gen_flags.txt`:
 plm generate --config path/to/workspace --module-prefix soc --file-prefix rtl --macro-prefix SOC
 ```
 
+In a source checkout, prepend `uv run`. Named configurations resolve under
+`examples/`, so the editable DPR example can be generated with:
+
+```sh
+uv run plm generate --config dpr --dpr --module-prefix soc --file-prefix rtl --macro-prefix SOC
+```
+
+The CLI does not reuse the prefixes saved by Qt; pass all three explicitly when
+the command should reproduce the same naming. See the
+[examples guide](../examples/README.md) for sample-specific options.
+
 External ICG/clock-OR cell integration must define the prefixed macros, such as
 `SOC_PIPE_USE_ICG_CELL` and `SOC_PIPE_ICG_CELL`. The generated makefile already
 passes the prefixed `SOC_DUMP_FSDB` define for VCS.

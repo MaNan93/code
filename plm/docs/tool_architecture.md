@@ -34,8 +34,8 @@ PLM 使用 `pyproject.toml` 与 `src/` 包布局，提供 CLI 和唯一的 Qt �
 | `services/settings.py` | QSettings，最近项目、置顶、归档、编辑器与 Formatter 偏好 |
 | `services/workspaces.py` | 工作区加载、保存、核心校验、生成与输出新旧判断 |
 | `controllers/app_controller.py` | 项目选择、编辑保护、操作编排及列表刷新 |
-| `views/` | 配置、Settings、Documentation 页面 |
-| `widgets/` | 表格编辑器、日志、真实文件预览与基础控件 |
+| `views/` | 配置、Settings、Documentation、日志面板与 Artifacts 页面组件 |
+| `widgets/` | 表格编辑器、代码预览、选项切换与基础控件 |
 | `main_window.py`、`main.py` | 窗口装配和启动 |
 
 Qt 直接调用核心，不拼装 CLI 子进程。Controllers、Lane Mapping、Pipe Signals
@@ -83,6 +83,7 @@ Signals 两个枚举列使用 `OptionSwitch`，单个可键盘操作的按钮绘
 按钮点击循环切换选项，悬停才显示底色；刷新复用按钮并保留非法 CSV 值，复用同一数据与撤销入口。
 三张配置表使用统一字重，以及随主题变化的表头、网格和交替行底色。
 Signals 的文字列左对齐、数字列右对齐；信号名列采用更大的初始最小宽度并分配剩余空间。
+文本 delegate 在创建编辑器和更新其几何尺寸时同步单元格对齐，避免数字在编辑时跳到左侧。
 切换按钮的悬停背景为浅灰胶囊，10 px 水平/4 px 垂直内边距，150 ms 颜色过渡；
 动画首次交互时才创建，控件隐藏时停止，避免后台持续重绘。
 `CodePreview` 仅在行号宽度改变时重设 viewport margin，字体改变时重新计算。
@@ -101,6 +102,7 @@ CLI 不读取这个文件。Makefile 与核心样例测试各自显式指定样�
 
 包内 `src/plm/docs/` 是 GUI Documentation 的来源，更新操作说明应修改这里。
 Qt 使用说明见 [qt_frontend_guide.md](../src/plm/docs/qt_frontend_guide.md)。
+示例布局和每套配置所需参数见[示例指南](../examples/README.md)。
 
 ## 回归与发行检查
 

@@ -3,27 +3,26 @@
 本文档说明如何用统一的 `plm` 命令行工具，从配置文件生成 PIPE lane mapper
 的 RTL 和 testbench：项目布局、配置文件格式、命令行参数、常用工作流。
 
-**最快上手**：仓库根目录下有一个 `run.py` launcher 脚本，直接用它跑，
-不需要先 `pip install -e .`（它自己会把 `src/` 加进 `sys.path`）：
+**源码环境最快上手**：在包含 `pyproject.toml` 的 `plm/` 目录同步环境，
+再校验并生成自带的 DPR 示例：
 
 ```bash
-uv run python run.py generate --config <SET>
-uv run python run.py validate --config <SET>
-uv sync --extra qt
+uv sync --extra qt --locked
+uv run plm validate --config dpr
+uv run plm generate --config dpr --dpr
 uv run python run.py -gui     # Qt 桌面前端
 ```
 
-本文档下面用的 `plm generate ...`/`plm validate ...` 命令，等价于
-`python run.py generate ...`/`python run.py validate ...`；如果想装成真正的
-console-script（这样任何目录下都能直接敲 `plm ...`），在仓库根目录
-（`pyproject.toml` 所在目录）跑一次：
+`uv sync` 创建本项目的环境并安装 CLI 入口。源码环境使用 `uv run plm ...`，
+也可使用等价的 `uv run python run.py ...`；launcher 会将 `src/` 加入导入路径。
+本文后续的 `plm ...` 命令面向已安装环境；源码环境在命令前加 `uv run`。
+安装含 Qt 依赖的发行包后，也可直接运行 `plm -gui` 或 `plm-gui`。
 
-```bash
-uv sync --extra qt
-```
-
-这是一次性的（装成可编辑安装），装完之后 `plm` 包才能被 `python -m
-plm.cli.main` 或 `plm` console-script 找到。安装后也可以直接运行 `plm -gui` 或 `plm-gui`。
+可编辑示例位于 `examples/<SET>/config/`，自动回归输入位于 `tests/fixtures/`。
+`--config` 可接受示例名称、工作区根目录或其 `config/` 路径。例如
+`--config dpr`、`--config examples/dpr`、`--config examples/dpr/config` 均指向
+同一套输入。旧脚本中的 `test/<SET>` 路径需改为 `examples/<SET>`，按名称调用不变。
+安装包不附带仓库示例，安装包用户请传入自己的工作区路径。
 
 - `plm generate --config <SET>` —— 使用同一组参数生成 RTL 和 testbench
 - `plm validate --config <SET>` —— 只解析并校验配置，不生成文件
@@ -230,7 +229,7 @@ plm/
 │     │  ├─ qt_frontend_guide.md Qt 前端操作说明
 │     │  └─ release_note.md     版本记录与迁移方法
 │     └─ frontend/
-│        └─ qt/                 桌面前端（PyQt5，`pip install -e ".[qt]"`）
+│        └─ qt/                 桌面前端（PyQt5，`uv sync --extra qt --locked`）
 ├─ examples/
 │  └─ <SET>/              一套配置集，SET 是自己起的名字（如 bifurcate）
 │     ├─ config/           输入：三个 CSV（见第 2 节）
@@ -345,16 +344,17 @@ PHY 侧不管 `signal_type` 是什么，永远保持逐 lane 的独立值；cont
 保持 per-lane，不支持 `shared`。DPR 使用相同 bus-type 规则。该选项只改变
 connection 的外部端口表示，mapper 内部的 struct 端口、时钟/复位和 testbench 不变。
 
-### 2.4 生成参数不在配置文件里
+### 2.4 生成参数：CLI 选项与 Qt 工作区记忆
 
-`--arch` / `--pclk-mode` / `--dpr` / `--bus-type` 在 CLI 中**必须显式从命令行传入**；Qt 从界面构造 GenerationOptions。
-CLI 不读任何文件来拿它们。
+CLI 的架构、PCLK、DPR、Connection 总线类型与三个命名前缀来自命令行选项，
+省略时使用 CLI 默认值；不会从 `gen_flags.txt` 读取。Qt 从界面和该工作区保存的
+选择构造 `GenerationOptions`，直接调用共享核心。
 
 | 谁来生成 | 参数从哪来 |
 |---|---|
 | 手敲命令行 | 自己写在命令里 |
 | `make <SET>` | 顶层 `Makefile` 里的 `SETFLAGS_<SET>` 变量（见第 5 节） |
-| Qt 前端 | Generation 页上的架构、PCLK、Connection 总线类型和 DPR 控件，构造 GenerationOptions 后直接调用核心 |
+| Qt 前端 | Generation 页上的架构、PCLK、Connection 总线类型、DPR 和三个命名前缀 |
 
 配置目录下还有个 `gen_flags.txt`，但那是 **Qt 前端自己的记忆**：前端保存时写、
 打开 workspace 时读回来恢复上次的选择。CLI 不看它，`make` 也不看它，
@@ -366,7 +366,7 @@ CLI 不读任何文件来拿它们。
 ## 3. `plm generate`：生成匹配的 RTL 与 testbench
 
 ```bash
-python -m plm.cli.main generate --config <SET> [其它参数]
+uv run python -m plm.cli.main generate --config <SET> [其它参数]
 plm generate --config <SET> [其它参数]
 ```
 
@@ -430,6 +430,8 @@ plm generate --config <SET> [其它参数]
 
 `GENFLAGS` 追加到本次 make 涉及的每一个 `plm generate` 命令；
 `SETFLAGS_<SET>` 保存某套样例所需的非默认参数。
+当前 `dpr` 追加 `--dpr`，`maxpclk` 追加 `--arch serdes --pclk-mode pclk_as_phy_input`。
+Makefile 需要 GNU Make；未安装 Make 时可使用相同参数直接调用 CLI。
 
 ## 6. 仿真
 

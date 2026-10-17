@@ -7,12 +7,15 @@ Qt 前端编辑真实项目配置，并直接调用共享 PLM 核心生成 RTL �
 在仓库的 `plm/` 目录执行：
 
 ```bash
-uv sync --extra qt
+uv sync --extra qt --locked
 uv run python run.py -gui
 ```
 
 安装包含 Qt 依赖的发行包后，也可以使用 `plm-gui` 或 `plm -gui`。
 安装包不附带仓库中的示例项目；可从任意位置打开项目或新建项目。
+源码启动会发现 `examples/<示例>/config/` 中的四套示例，也兼容已有旧 `test/`、
+`configs/` 工作区。之前写死的仓库 `test/<示例>` 路径需改成 `examples/<示例>`。
+自动测试的 `tests/fixtures/` 独立维护，不作为日常编辑项目。
 
 主窗口默认尺寸为 1280 × 800，可拖拽调整；最小尺寸为 960 × 640。
 侧边栏展开宽度固定为 260px，折叠为 56px，不提供拖拽调整。
@@ -105,6 +108,12 @@ Generation 页提供以下参数：
 | `pclk-mode` | 只读显示，由 `arch` 自动决定：`original_pipe` → `pclk_as_phy_output`，`serdes` → `pclk_as_phy_input` |
 | `bus-type` | Connection 端口形式：`bus`（默认二维数组） / `flat`（一维向量）；控制器端口仍各自独立 |
 | `dpr` | 两种 PCLK 模式都支持；同时决定选择方式：启用为 `sync`，不启用为 `comb` |
+| `module_prefix` | 模块与 package 名前缀 |
+| `file_prefix` | 全部生成 `.sv` 文件名前缀 |
+| `macro_prefix` | 生成宏及对应仿真 define 的前缀 |
+
+三个前缀非空且末尾缺少 `_` 时自动补齐，留空保留原名称。修改前缀会使输出过期，
+重新生成时成套替换 RTL/TB，并清理旧文件名。
 
 启用 DPR 是一次可撤销的编辑。磁盘上已存在的非法参数组合会保留并提示校验错误，
 不会在加载时悄悄改写。PHY input 模式的 DPR 使用外部 `dpr_pclk` 输入和逐 lane
@@ -162,6 +171,8 @@ Generate 按钮和输出状态固定在 Generation 页左下角，不随表单�
 设置页有“通用”和“工具”两个分页。默认编辑器在“通用”中设置，
 可以带参数（如 `code -g`）；含空格的可执行文件路径直接填写即可。
 外部编辑器和 Verible 设置保存在本机，重启后恢复。
+标题栏的明暗主题按钮与“通用”页中的主题选择同步；主题切换不会保存其他未提交的
+设置草稿。工具页按对齐、缩进、其它和全部分类，可跨分类搜索参数。
 文档页分“使用入门”（本指南）、“配置文件”和“生成命令”三个分页，安装包中也可使用。
 完整版本历史与迁移方法统一记录在随包附带的 [release_note.md](release_note.md)。
 

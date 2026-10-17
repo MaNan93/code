@@ -10,6 +10,7 @@
 | CLI、CSV 格式与生成参数 | [工具使用说明](../src/plm/docs/tool_usage.md) |
 | Qt 项目管理、表格、生成和预览 | [Qt 使用指南](../src/plm/docs/qt_frontend_guide.md) |
 | 版本变更与迁移 | [版本日志](../src/plm/docs/release_note.md) |
+| 四套可编辑示例、CLI 参数与旧目录迁移 | [示例指南](../examples/README.md) |
 | Python 核心与 Qt 分层 | [工具架构](tool_architecture.md) |
 | RTL 原理、时钟与通道约束 | [设计要点](design_notes.md) |
 | 模块名、文件名、宏名前缀 | [命名前缀](generation_prefixes.md) |
@@ -33,6 +34,10 @@ plm/
 均为可再生产物，不进入版本管理。`examples/` 供人工使用，`tests/fixtures/` 是回归
 基线，两者不能混用或自动同步覆盖。
 
+旧脚本中的 `test/<示例>` 路径改为 `examples/<示例>`。按名称调用的
+`--config dpr` 和 `make dpr` 不变；Qt 继续兼容已有的旧 `test/`、`configs/`
+工作区。`examples/` 不随 wheel 或源码发行包分发。
+
 ## 常用检查
 
 ```powershell
@@ -41,7 +46,18 @@ uv run python run.py -gui
 uv run python -m unittest discover -s tests -v
 uv run python scripts/check_ui_scaling.py --output build/ui-scaling.json
 uv build
-uv run python scripts/check_wheel.py
+uv run python scripts/check_wheel.py dist/plm-3.0.5-py3-none-any.whl --sdist dist/plm-3.0.5.tar.gz
+```
+
+完整回归默认跳过两项可选 RTL 仿真；需要真实 Verilator 仿真时，先准备工具，
+设置 `PLM_RUN_RTL_SIM=1` 再运行回归。可通过 `PLM_VERILATOR` 指定可执行文件。
+最近一次源码迁移回归为 418 项：416 通过、2 项可选仿真跳过；详见版本日志。
+
+重新测量性能时，将结果写入可清理的 `build/`：
+
+```powershell
+uv run python scripts/profile_ui.py --output build/ui-profile.json --iterations 60
+uv run python scripts/profile_themes.py --output build/theme-profile.json --iterations 6
 ```
 
 更新正式截图时，在项目根目录设置输出目录后执行：

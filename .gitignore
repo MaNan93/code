@@ -67,3 +67,5 @@ Thumbs.db
 .workbuddy/
 .workbuddy-ai/
 .ruff_cache/
+
+.*

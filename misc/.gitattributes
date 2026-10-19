@@ -3,3 +3,5 @@
 /plm/test/**/*.f text eol=lf
 /plm/test/**/manifest.json text eol=lf
 /plm/test/**/makefile text eol=lf
+
+/library_documents_2026-09-24.zip filter=lfs diff=lfs merge=lfs -text

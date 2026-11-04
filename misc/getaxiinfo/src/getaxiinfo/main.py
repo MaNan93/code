@@ -72,7 +72,7 @@ def resolve_target_macro_name(name: str, target_set: Set[str]) -> Optional[str]:
     return None
 
 
-_VERILOG_LITERAL_RE = re.compile(r"(?<![\\w'])\\d*'[sS]?([dDhHbBoO])([0-9a-fA-F_xXzZ?_]+)")
+_VERILOG_LITERAL_RE = re.compile(r"(?<![\w'])\d*'[sS]?([dDhHbBoO])([0-9a-fA-F_xXzZ?_]+)")
 _MACRO_REF_RE = re.compile(r"`([A-Za-z_][A-Za-z0-9_]*)")
 _BINARY_OPS = {
     ast.Add: operator.add, ast.Sub: operator.sub, ast.Mult: operator.mul,

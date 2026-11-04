@@ -2,6 +2,8 @@
 """Extract selected SystemVerilog/Verilog `define macro values."""
 
 import argparse
+import ast
+import operator
 import re
 import sys
 from pathlib import Path
@@ -64,41 +66,80 @@ def resolve_target_macro_name(name: str, target_set: Set[str]) -> Optional[str]:
         return name
 
     for target in target_set:
-        if name.endswith(target):
+        if name.endswith("_" + target):
             return target
 
     return None
 
 
-def parse_numeric_value(raw_value: Optional[str]) -> Optional[int]:
-    """Parse a numeric value from common Verilog macro value forms."""
+_VERILOG_LITERAL_RE = re.compile(r"(?<![\\w'])\\d*'[sS]?([dDhHbBoO])([0-9a-fA-F_xXzZ?_]+)")
+_MACRO_REF_RE = re.compile(r"`([A-Za-z_][A-Za-z0-9_]*)")
+_BINARY_OPS = {
+    ast.Add: operator.add, ast.Sub: operator.sub, ast.Mult: operator.mul,
+    ast.FloorDiv: operator.floordiv, ast.Mod: operator.mod,
+    ast.LShift: operator.lshift, ast.RShift: operator.rshift,
+    ast.BitAnd: operator.and_, ast.BitOr: operator.or_, ast.BitXor: operator.xor,
+}
+_UNARY_OPS = {ast.UAdd: operator.pos, ast.USub: operator.neg, ast.Invert: operator.invert}
+
+
+def parse_numeric_value(
+    raw_value: Optional[str],
+    macros: Optional[Dict[str, str]] = None,
+    _stack: Optional[Set[str]] = None,
+) -> Optional[int]:
+    """Evaluate a constant integer expression without executing arbitrary Python code.
+
+    Supports macro references, Verilog integer literals and common arithmetic
+    operators. Undefined/cyclic macros and unsupported expressions return None.
+    """
     if raw_value is None:
         return None
-
     expr = raw_value.strip()
     if not expr:
         return None
 
-    # Remove simple wrappers.
-    while expr.startswith("(") and expr.endswith(")"):
-        expr = expr[1:-1].strip()
-
-    # Handle Verilog literal: <width>'[s]?[base]<digits>
-    verilog_lit = re.fullmatch(r"\d*'([sS])?([dDhHbBoO])([0-9a-fA-F_xXzZ?]+)", expr)
-    if verilog_lit:
-        base_ch = verilog_lit.group(2).lower()
-        digits = verilog_lit.group(3).replace("_", "")
-        # Unknown/high-impedance digits are not converted.
+    def _literal(match: re.Match[str]) -> str:
+        digits = match.group(2).replace("_", "")
         if re.search(r"[xXzZ?]", digits):
-            return None
-        base_map = {"d": 10, "h": 16, "b": 2, "o": 8}
-        return int(digits, base_map[base_ch])
+            raise ValueError("Unknown Verilog literal")
+        base = {"d": 10, "h": 16, "b": 2, "o": 8}[match.group(1).lower()]
+        return str(int(digits, base))
 
-    # Plain integer with optional underscore separators.
-    if re.fullmatch(r"[+-]?\d[\d_]*", expr):
-        return int(expr.replace("_", ""), 10)
+    try:
+        expr = _VERILOG_LITERAL_RE.sub(_literal, expr)
+        expr = _MACRO_REF_RE.sub(lambda m: m.group(1), expr)
+        # Verilog integer division truncates toward zero.
+        expr = re.sub(r"(?<!/)/(?!/)", "//", expr)
+        tree = ast.parse(expr, mode="eval")
+        active = set() if _stack is None else _stack
 
-    return None
+        def _eval(node: ast.AST) -> int:
+            if isinstance(node, ast.Constant) and type(node.value) is int:
+                return node.value
+            if isinstance(node, ast.Name):
+                if macros is None or node.id not in macros or node.id in active:
+                    raise ValueError("Undefined or recursive macro")
+                value = parse_numeric_value(macros[node.id], macros, active | {node.id})
+                if value is None:
+                    raise ValueError("Unresolved macro")
+                return value
+            if isinstance(node, ast.UnaryOp) and type(node.op) in _UNARY_OPS:
+                return _UNARY_OPS[type(node.op)](_eval(node.operand))
+            if isinstance(node, ast.BinOp) and type(node.op) in _BINARY_OPS:
+                left, right = _eval(node.left), _eval(node.right)
+                if type(node.op) in (ast.LShift, ast.RShift) and not (0 <= right <= 4096):
+                    raise ValueError("Invalid shift")
+                if type(node.op) is ast.FloorDiv:
+                    if right == 0:
+                        raise ValueError("Division by zero")
+                    return (abs(left) // abs(right)) * (-1 if (left < 0) != (right < 0) else 1)
+                return _BINARY_OPS[type(node.op)](left, right)
+            raise ValueError("Unsupported expression")
+
+        return _eval(tree.body)
+    except (SyntaxError, ValueError, TypeError, OverflowError, ZeroDivisionError, RecursionError):
+        return None
 
 
 def build_analysis(ordered: Dict[str, Optional[str]]) -> Dict[str, Any]:
@@ -120,8 +161,9 @@ def build_analysis(ordered: Dict[str, Optional[str]]) -> Dict[str, Any]:
         "addr_width": ordered.get("CC_MSTR_BUS_ADDR_WIDTH"),
         "data_width": ordered.get("CC_MSTR_BUS_DATA_WIDTH"),
         "bandwidth_Gbps": _bandwidth_gbps("AXI_MSTR_CLK_FREQ", "CC_MSTR_BUS_DATA_WIDTH"),
-        "write_outstanding": parse_numeric_value(ordered.get("WR_CH_P_REQ_QUEUE_DP")),
-        "read_outstanding": (mstr_read_os - 1) if mstr_read_os is not None else None,
+        "write_outstanding": None,  # Posted queue depth is not AXI write outstanding.
+        "posted_request_queue_depth": parse_numeric_value(ordered.get("WR_CH_P_REQ_QUEUE_DP")),
+        "read_outstanding": mstr_read_os,
     }
     axi_slv = {
         "clk_freq": ordered.get("AXI_SLV_CLK_FREQ"),
@@ -233,6 +275,8 @@ def print_analysis(analysis: Dict[str, Any]) -> None:
     for row in rows:
         print(_line(row))
 
+    print(f"AXI_MSTR posted request queue depth: {_fmt(axi_mstr[\'posted_request_queue_depth\'])}")
+
     gen = pcie["gen"]
     link_width = pcie["link_width"]
     per_lane = pcie["per_lane_gbps"]
@@ -321,8 +365,8 @@ def parse_defines(file_path: Path) -> Dict[str, Tuple[str, int, str]]:
             rest = rest[:-1].rstrip() + " " + lines[i + 1].strip()
             i += 1
 
-        # Skip function-like macros: `define FOO(x) ...
-        if rest.lstrip().startswith("("):
+        # Function-like macros have no whitespace before their opening parenthesis.
+        if rest.startswith("("):
             i += 1
             continue
 
@@ -349,8 +393,14 @@ def extract_target_macros(
     source_text: Dict[str, str] = {}
     target_set = set(TARGET_MACROS)
 
+    all_defines: Dict[str, str] = {}
+    file_defines = []
     for file_path in files:
         defines = parse_defines(file_path)
+        all_defines.update({name: item[0] for name, item in defines.items()})
+        file_defines.append((file_path, defines))
+
+    for file_path, defines in file_defines:
         for macro, (value, line_no, line_text) in defines.items():
             target_macro = resolve_target_macro_name(macro, target_set)
             if target_macro is None:
@@ -360,7 +410,8 @@ def extract_target_macros(
             if target_macro in values and macro != target_macro:
                 continue
 
-            values[target_macro] = value
+            numeric = parse_numeric_value(value, all_defines, {macro})
+            values[target_macro] = str(numeric) if numeric is not None else value
             sources[target_macro] = str(file_path)
             source_lines[target_macro] = line_no
             source_text[target_macro] = line_text

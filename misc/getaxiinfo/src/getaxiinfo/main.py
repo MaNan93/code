@@ -498,8 +498,7 @@ def _print_cli_output(
 ) -> int:
     """Print CLI logs and summary from extracted macro data."""
     missing = [m for m, v in ordered.items() if v is None]
-    all_found = len(missing) == 0
-    analysis = build_analysis(ordered) if all_found else None
+    analysis = build_analysis(ordered)
 
     for macro in TARGET_MACROS:
         value = ordered[macro]
@@ -516,11 +515,8 @@ def _print_cli_output(
         else:
             print(f"{macro} = {value}")
 
-    if all_found:
-        print_analysis(analysis)
-    else:
-        print("\n[INTERFACE_SUMMARY]")
-        print("Not all target macros were found; skip PCIe total rate calculation.")
+    print_analysis(analysis)
+    if missing:
         print("Missing macros: " + ", ".join(missing))
 
     return 0

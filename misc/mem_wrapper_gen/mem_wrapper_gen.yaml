@@ -1,0 +1,19 @@
+# mem_wrapper_gen.yaml
+# 只描述：wrapper / RF 各自的公共路径，以及每个 wrapper 用哪颗 RF 拼。
+# RF 值可用 16x369，或实际文件名（如 aaaaaa2p64x144m1b2_fast_func，可带 .v/.sv）。
+# DP/WD/PW 从标准文件名推导；端口名和方向从 RTL 读取。
+# RF 为上升沿同步读，下一拍出数；RSCOUT 显式悬空为 .RSCOUT()。
+# //E 位于原有合法端口列表末尾，// instantiate 位于模块内部；仅生成一次。
+
+wrapper_dir: rtl/wrappers
+rf_dir:      rtl/regfile
+rf_instance: u_starsky_pcie_ram     # 例化名，缺省就是这个
+
+wrappers:
+  starsky_ram_2p_2c_16wx369.sv:   16x369
+  starsky_ram_2p_1c_16wx369.sv:   16x369
+  starsky_ram_1p_16wx369.sv:      16x369
+  starsky_ram_2p_2c_160wx369.sv:  16x369
+  starsky_ram_2p_2c_16wx3690.sv:  16x369
+  starsky_ram_2p_1c_64wx738.sv:   16x369
+  starsky_ram_2p_2c_64wx400.sv:   32x200

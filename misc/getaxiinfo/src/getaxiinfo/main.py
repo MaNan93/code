@@ -99,7 +99,7 @@ def parse_numeric_value(
     if not expr:
         return None
 
-    def _literal(match: re.Match[str]) -> str:
+    def _literal(match) -> str:
         digits = match.group(2).replace("_", "")
         if re.search(r"[xXzZ?]", digits):
             raise ValueError("Unknown Verilog literal")
@@ -115,8 +115,8 @@ def parse_numeric_value(
         active = set() if _stack is None else _stack
 
         def _eval(node: ast.AST) -> int:
-            if isinstance(node, ast.Constant) and type(node.value) is int:
-                return node.value
+            if isinstance(node, ast.Num) and type(node.n) is int:
+                return node.n
             if isinstance(node, ast.Name):
                 if macros is None or node.id not in macros or node.id in active:
                     raise ValueError("Undefined or recursive macro")

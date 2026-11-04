@@ -1,0 +1,683 @@
+// ------------------------------------------------------------------------------
+// 
+// Copyright 2002 - 2024 Synopsys, INC.
+// 
+// This Synopsys IP and all associated documentation are proprietary to
+// Synopsys, Inc. and may only be used pursuant to the terms and conditions of a
+// written license agreement with Synopsys, Inc. All other use, reproduction,
+// modification, or distribution of the Synopsys IP or the associated
+// documentation is strictly prohibited.
+// Inclusivity & Diversity - Visit SolvNetPlus to read the "Synopsys Statement on
+//            Inclusivity and Diversity" (Refer to article 000036315 at
+//                        https://solvnetplus.synopsys.com)
+// 
+// Component Name   : DWC_pcie_ctl_cxl
+// Component Version: 6.14a-lca02
+// Release Type     : LCA
+// Build ID         : 69.19.33.11.PCIeParseConfig_1.PCIeSimulate_24.PCIeTbCommon_85.SNPSPHYSetup_21
+// ------------------------------------------------------------------------------
+
+// -------------------------------------------------------------------------
+// ---  RCS information:
+// ---    $DateTime: 2023/11/16 09:20:26 $
+// ---    $Revision: #13 $
+// ---    $Id: //dwh/pcie_iip/main/fairbanks/design/Plh/rplh_cxl_flit_finder.sv#13 $
+// -------------------------------------------------------------------------
+// --- Module Description: Receive MAC layer CXL Flit Finder
+// -------------------------------------------------------------------------
+
+`include "include/DWC_pcie_ctl_all_defs.svh"
+`include "Spif/pkg/spif_pkg.svh"
+
+module rplh_cxl_flit_finder
+    import spif_pkg::stream_id_e;
+    import spif_pkg::SID_RSVD;
+    import spif_pkg::SID_PCIE;
+    import spif_pkg::SID_ALMP;
+    import spif_pkg::SID_CXL_IO;
+    import spif_pkg::SID_CXL_CM;
+    import spif_pkg::SPIF_NBYTES;
+    import spif_pkg::SPIF_NWORDS;
+#(
+    parameter INST        = 0,                                         // The uniquifying parameter for each port logic instance.
+    parameter NW          = ((SPIF_NWORDS > 16) ? 16 : SPIF_NWORDS),   // Number of 32-bit dwords handled by the datapath each clock. This module supports 4, 8 and 16 
+    parameter DW          = ((SPIF_NBYTES > 64) ? 64 : SPIF_NBYTES)*8, // Width of datapath in bits.
+    parameter AW          = `CX_ANB_WD,                                // Width of the active number of bytes
+    parameter REGOUT_EN   = `CX_RPLH_CXL_FLIT_FINDER_REGOUT,           // Registered outputs 
+    parameter TP          = `TP                                        // Clock to Q delay (simulator insurance)
+)
+
+                               (
+// ---- inputs ---------------
+    input                   core_clk,
+    input                   core_rst_n,
+    input                   cxl_mode_enable,             // Link is negotiated in CXL mode
+    input                   cxl_mode_20,                 // CXL mode 2.0
+    input                   cxl_io_enable,               // Set to 1 indicates that CXL.io protocol was enabled during negotiation.
+    input                   cxl_mc_enable,               // Set to 1 indicates that CXL.MEM or CXL.CACHE protocol was/were enabled during negotiation.
+    input                   cxl_sh_bypass,               // SyncHeader_Bypass
+    input  [5:0]            smlh_link_mode,              // Current Link Mode
+    input  [4:0]            active_nw_gen34,
+    input                   search_for_tokens,           // Set to 1 indicates inbound traffic must be processed. Enabled for Data Blocks and SKP OS
+    input                   os_in_datastream,            // OS detected within data stream
+    input                   accept_eds_cycle,            // Enabled when the deskew block detects the last symbol of a Block
+    input  [1:0]            rcvd_idle,
+    input                   rxdata_dv,                   // Incoming Data is valid
+    input  [DW-1:0]         rxdata,                      // Incoming Data
+// ---- outputs ---------------
+    output stream_id_e      rplh_cxl_stream,             // Received flit Stream ID
+    output                  rplh_cxl_valid,              // Received data valid
+    output [DW-1:0]         rplh_cxl_data,               // Received data
+    output                  rplh_cxl_crc_valid,          // Received CRC valid
+    output [15:0]           rplh_cxl_crc_data,           // Received CRC
+    output                  rplh_cxl_corr_pid_err,       // Correctable Protocol ID error
+    output                  rplh_cxl_uncorr_pid_err,     // Uncorrectable Protocol ID error
+    output                  rplh_cxl_unexp_pid_err,      // Unexpected Protocol ID error
+    output                  rplh_cxl_eds_err,            // EDS Error
+    output                  rplh_cxl_rx_flush,           // Follows the behaviour of 'search_for_tokens'. Must be set to '0' when an uncorrectable protocol ID is detected in order to truncate ongoing packets (if any).
+    output                  rplh_cxl_rcvd_flit,          // Received flit not generated by Physical Layer
+    output [1:0]            rplh_cxl_rcvd_null           // Number of Continuous Received NULL flits. Encoded as {Num NULLs != 0, Num NULLs >= 4}
+);
+
+localparam CXL_PID_IO            = 8'b1111_1111; // CXL.io
+localparam CXL_PID_IO_EDS        = 8'b1101_0010; // CXL.io with implied EDS token
+localparam CXL_PID_CACHE_MEM     = 8'b0101_0101; // CXL.cache/CXL.mem
+localparam CXL_PID_CACHE_MEM_EDS = 8'b1000_0111; // CXL.cache/CXL.mem with implied EDS token
+localparam CXL_PID_NULL          = 8'b1001_1001; // NULL flit (generated by the Physical Layer)
+localparam CXL_PID_NULL_EDS      = 8'b0100_1011; // NULL flit with implied EDS token
+localparam CXL_PID_ALMP          = 8'b1100_1100; // CXL ARB/MUX Link Management Packets (ALMPs)
+localparam CXL_PID_ALMP_EDS      = 8'b0001_1110; // CXL ARB/MUX Link Management Packets (ALMPs) with implied EDS token
+
+localparam NW_LOG2 = $clog2(NW);
+
+// Datapath accumulation signals
+logic                   rxdata_acc_dv;    // Current accumulated datapath valid
+logic  [DW-1:0]         rxdata_acc;       // Current accumulated datapath (valid with rxdata_acc_dv)
+logic  [DW-1:0]         r_rxdata_acc;     // Previous accumulated datapath (registered rxdata_acc)
+logic  [DW-1:0]         t_rxdata_acc;     // Buffer used to accumulate datapath
+logic  [NW-1:0]         sft_acc;          // Current accumulated search_for_tokens
+logic  [NW-1:0]         r_sft_acc;        // Previous accumulated search_for_tokens (registered sft_acc)
+logic  [NW-1:0]         t_sft_acc;        // Buffer used to accumulate search_for_tokens
+
+// Datapath accumulation counters on 512-bit datapath granularity
+logic  [3:0]            rxdata_acc_cnt;   // Current number of accumulated DWs in 512-bit datapath
+logic  [3:0]            t_rxdata_acc_cnt; // Number of accumulated DWs in 512-bit datapath
+
+logic                   rxdata_eof_dv;    // Received the last DW in the CXL flit. Indicates End of Flit.
+logic                   rxflit_acc_dv;    // Current accumulated flit valid
+
+// PID Detection/Extraction signals
+logic                   pid_valid_acc;    // PID is valid in the accumulated datapath in the current cycle (rxdata_acc)
+logic  [4:0]            pid_pos;          // Indicates the position of the PID in the rxdata_acc vector (absolute value, assuming the full datapath available).
+                                          // 0-15: DW of rxdata_acc containing PID; NW: PID already processed in r_rxdata_acc[last]
+logic  [4:0]            pid_pos_nxt;      // Next PID Position 
+logic  [15:0]           raw_pid;          // Received PID 16 byest (Groups A and B)
+logic  [7:0]            raw_pid_a;        // Received PID MSB byte (Group A)
+logic  [7:0]            raw_pid_b;        // Received PID LSB byte (Group B)
+logic                   invalid_pid_a;    // Received PID MSB byte (Group A) is not valid
+logic                   invalid_pid_b;    // Received PID LSB byte (Group B) is not valid
+logic                   corr_pid_err,   r_corr_pid_err;
+logic                   uncorr_pid_err, r_uncorr_pid_err;
+logic                   unexp_pid_err,  r_unexp_pid_err;
+logic                   eds_err;          // EDS Error
+
+logic                   rx_pid_vld;       // PID Valid in the cycle, indicates start of flit cycle. It is not asserted when Uncorrectable PID error is detected.
+stream_id_e             rx_stream_id;     // Received Stream ID, valid in rx_pid_vld cycle
+
+// ----------------------------------------------------------------------------
+// Datapath accumulation logic for degraded link width. Accumulates datapath data.
+// ----------------------------------------------------------------------------
+// Datapath is accumulated when DW counter is 0 and rxdata_dv is asserted.
+// For x16 configuration, when 16 lanes are enabled, t_rxdata_acc_cnt is always 0,
+// when only 8 lanes are enabled, t_rxdata_acc_cnt increments by 8 with every valid
+// data: 0, 8 (valid), 0, 8 (valid), etc., if 4 lanes are enabled, t_rxdata_acc_cnt 
+// increments by 4 with every valid data: 0, 4, 8, 12 (valid), 0, 4, 8, 12 (valid), etc.
+assign rxdata_acc_dv = rxdata_dv && (rxdata_acc_cnt[NW_LOG2-1:0] == {NW_LOG2{1'b0}});
+
+always_comb begin
+    unique case (active_nw_gen34)
+        5'b10000 : rxdata_acc_cnt = '0;                   // 16 DWs
+        5'b01000 : rxdata_acc_cnt = t_rxdata_acc_cnt + 8; //  8 DWs
+        5'b00100 : rxdata_acc_cnt = t_rxdata_acc_cnt + 4; //  4 DWs
+        5'b00010 : rxdata_acc_cnt = t_rxdata_acc_cnt + 2; //  2 DWs
+        default  : rxdata_acc_cnt = t_rxdata_acc_cnt + 1; //  1 DW
+    endcase
+end
+
+// In degraded mode accumulate rxdata in t_rxdata_acc. In full link width mode propagate rxdata to rxdata_acc.
+// As accumulation counter is sized to 512-bit datapath, in accumulation logic use LSB bits that corresponds to the link data width.
+always_comb begin
+    unique case (t_rxdata_acc_cnt[NW_LOG2-1:0])
+        'd1     : begin rxdata_acc = {rxdata[0+:(NW- 1)*32], t_rxdata_acc[0+: 1*32]}; sft_acc = {{(NW- 1){search_for_tokens}}, t_sft_acc[0+:1 ]}; end
+        'd2     : begin rxdata_acc = {rxdata[0+:(NW- 2)*32], t_rxdata_acc[0+: 2*32]}; sft_acc = {{(NW- 2){search_for_tokens}}, t_sft_acc[0+:2 ]}; end
+        'd3     : begin rxdata_acc = {rxdata[0+:(NW- 3)*32], t_rxdata_acc[0+: 3*32]}; sft_acc = {{(NW- 3){search_for_tokens}}, t_sft_acc[0+:3 ]}; end
+        'd4     : begin rxdata_acc = {rxdata[0+:(NW- 4)*32], t_rxdata_acc[0+: 4*32]}; sft_acc = {{(NW- 4){search_for_tokens}}, t_sft_acc[0+:4 ]}; end
+        'd5     : begin rxdata_acc = {rxdata[0+:(NW- 5)*32], t_rxdata_acc[0+: 5*32]}; sft_acc = {{(NW- 5){search_for_tokens}}, t_sft_acc[0+:5 ]}; end
+        'd6     : begin rxdata_acc = {rxdata[0+:(NW- 6)*32], t_rxdata_acc[0+: 6*32]}; sft_acc = {{(NW- 6){search_for_tokens}}, t_sft_acc[0+:6 ]}; end
+        'd7     : begin rxdata_acc = {rxdata[0+:(NW- 7)*32], t_rxdata_acc[0+: 7*32]}; sft_acc = {{(NW- 7){search_for_tokens}}, t_sft_acc[0+:7 ]}; end
+        'd8     : begin rxdata_acc = {rxdata[0+:(NW- 8)*32], t_rxdata_acc[0+: 8*32]}; sft_acc = {{(NW- 8){search_for_tokens}}, t_sft_acc[0+:8 ]}; end
+        'd9     : begin rxdata_acc = {rxdata[0+:(NW- 9)*32], t_rxdata_acc[0+: 9*32]}; sft_acc = {{(NW- 9){search_for_tokens}}, t_sft_acc[0+:9 ]}; end
+        'd10    : begin rxdata_acc = {rxdata[0+:(NW-10)*32], t_rxdata_acc[0+:10*32]}; sft_acc = {{(NW-10){search_for_tokens}}, t_sft_acc[0+:10]}; end
+        'd11    : begin rxdata_acc = {rxdata[0+:(NW-11)*32], t_rxdata_acc[0+:11*32]}; sft_acc = {{(NW-11){search_for_tokens}}, t_sft_acc[0+:11]}; end
+        'd12    : begin rxdata_acc = {rxdata[0+:(NW-12)*32], t_rxdata_acc[0+:12*32]}; sft_acc = {{(NW-12){search_for_tokens}}, t_sft_acc[0+:12]}; end
+        'd13    : begin rxdata_acc = {rxdata[0+:(NW-13)*32], t_rxdata_acc[0+:13*32]}; sft_acc = {{(NW-13){search_for_tokens}}, t_sft_acc[0+:13]}; end
+        'd14    : begin rxdata_acc = {rxdata[0+:(NW-14)*32], t_rxdata_acc[0+:14*32]}; sft_acc = {{(NW-14){search_for_tokens}}, t_sft_acc[0+:14]}; end
+        'd15    : begin rxdata_acc = {rxdata[0+:(NW-15)*32], t_rxdata_acc[0+:15*32]}; sft_acc = {{(NW-15){search_for_tokens}}, t_sft_acc[0+:15]}; end
+        default : begin rxdata_acc = {rxdata[0+:(NW-0)*32]                         }; sft_acc = {{(NW- 0){search_for_tokens}}                  }; end
+    endcase
+end
+
+always_comb begin
+    // Increment PID position after accumulating 16 DWords, reset after 17 PID positions
+    if (rxdata_dv && (rxdata_acc_cnt == 4'd0))
+        pid_pos_nxt = pid_pos[4] ? '0 : (pid_pos + 1);
+    else
+        pid_pos_nxt = pid_pos;
+end
+
+// Datapath accumulation and flit demux logic are active only when search_for_tokens is enabled.
+// Although, in case of errors, search for token may drop when a partial datapath is already pipelined. 
+// In this case, the module keeps working until a full datapath is accumulated, processed and moved out.
+always @(posedge core_clk or negedge core_rst_n) begin
+    if (!core_rst_n) begin
+        t_rxdata_acc        <= #TP 0;
+        t_rxdata_acc_cnt    <= #TP 0;
+        t_sft_acc           <= #TP 0;
+    end else if ((!search_for_tokens && (t_rxdata_acc_cnt==0 || rxdata_acc_dv)) || os_in_datastream) begin
+        t_rxdata_acc        <= #TP 0;
+        t_rxdata_acc_cnt    <= #TP 0;
+        t_sft_acc           <= #TP (os_in_datastream)? t_sft_acc : 0;
+    end else if ((rxdata_dv && search_for_tokens) || !search_for_tokens) begin
+        // keep accumulating when !search_for_tokens until a full datapath is accumulated
+        t_rxdata_acc        <= #TP rxdata_acc;
+        t_rxdata_acc_cnt    <= #TP rxdata_acc_cnt;
+        t_sft_acc           <= #TP sft_acc;
+    end
+end
+
+always @(posedge core_clk or negedge core_rst_n) begin
+    if (!core_rst_n) begin
+        pid_pos              <= #TP '0;
+        r_rxdata_acc         <= #TP '0;
+        r_sft_acc            <= #TP '0;
+    end else if (!sft_acc[0] || os_in_datastream) begin
+        pid_pos              <= #TP '0;
+        r_rxdata_acc         <= #TP '0;
+        r_sft_acc            <= #TP '0;
+    end else if (rxdata_acc_dv) begin
+        pid_pos              <= #TP pid_pos_nxt;
+        r_rxdata_acc         <= #TP rxdata_acc;
+        r_sft_acc            <= #TP sft_acc;
+    end
+end
+// ----------------------------------------------------------------------------
+
+
+// ----------------------------------------------------------------------------
+// Flit extraction
+//
+// search_for_tokens cannot be disabled in the middle of a flit. 
+// When this happens it means phisical layer error -> discard the whole flit and go to recovery
+// ----------------------------------------------------------------------------
+logic                   rx_pid_vld_r, rx_pid_vld_nxt;     // PID Valid Flag for a duration of the flit. Set in PID valid cycle.
+logic  [NW_LOG2-1:0]    rx_pid_pos_r, rx_pid_pos_nxt;     // PID Position for a duration of the flit. Set in PID valid cycle.
+logic                   rx_eof_vld_r, rx_eof_vld_nxt;     // EOF flit marker set with any received DW in the datapath. Latched to be observed with rxdata_acc_dv
+stream_id_e             rx_stream_r, rx_stream_nxt;       // Flit Stream ID
+logic                   rx_valid_s;                       // Flit Data Valid
+logic  [DW-1:0]         rx_data_s;                        // Flit Data
+logic                   rx_crc_valid_s;                   // Flit CRC Valid
+logic  [15:0]           rx_crc_data_s;                    // Flit CRC
+logic                   rx_flit_s;                        // Received flit not generated by the Physical Layer (connects to LTSSM)
+logic                   rx_flush_r, rx_flush_s;           // Physical Layer instructs Link Layer to flush receive pipelines.
+logic                   rx_error_r;                       // Uncorrectable or Unexpected PID Error is detected
+logic                   rx_data_sft_s;                    // search_for_tokens for the accumulated datapath
+
+// CXL flit ends on the received DW
+assign rxdata_eof_dv  = rxdata_dv && (pid_pos > {1'b0, t_rxdata_acc_cnt}) && ((pid_pos <= {1'b0, rxdata_acc_cnt}) || !(|rxdata_acc_cnt));
+// CXL flit ends on the accumulated datapath
+assign rxflit_acc_dv  = rxdata_acc_dv && (rx_eof_vld_r || rxdata_eof_dv);
+
+// Flit valid is asserted at every data valid cycle after PID extraction
+assign rx_valid_s     = rx_pid_vld_r && (rxdata_eof_dv || (rxdata_acc_dv && !rx_eof_vld_r)) && rx_data_sft_s;
+// CRC is valid on the last cycle of CXL.cachemem flit
+assign rx_crc_valid_s = rxdata_eof_dv && rx_data_sft_s && (rx_stream_r == SID_CXL_CM);
+// Assert flit received on the last cycle of the flit if Stream ID is not reserved
+assign rx_flit_s      = rxdata_eof_dv && rx_data_sft_s && (rx_stream_r != SID_RSVD);
+// Request receiver to flush its pipeline when either uncorrectable PID error is detected
+// during PID extraction cycle or search_for_tokens is de-asserted during the flit cycle.
+// For CXL.io, this will truncate pending TLPs (if any) when asserted.
+assign rx_flush_s     = rx_flush_r || (rx_pid_vld_r && !rx_data_sft_s);
+
+always_comb begin
+    if (rx_pid_vld) begin
+        // Flit starts at the cycle PID is valid when at least first 16 bits of data is valid
+        rx_pid_vld_nxt   = 1'b1;
+        rx_pid_pos_nxt   = pid_pos[NW_LOG2-1:0];
+        rx_stream_nxt    = rx_stream_id;
+        rx_eof_vld_nxt   = rxdata_eof_dv && !rxdata_acc_dv;
+    end
+    else if (rxflit_acc_dv) begin
+        // Flit ends at the cycle the flit accumulation is complete
+        rx_pid_vld_nxt   = 1'b0;
+        rx_pid_pos_nxt   = {NW_LOG2{1'b0}};
+        rx_stream_nxt    = SID_RSVD;
+        rx_eof_vld_nxt   = 1'b0;
+    end
+    else begin
+        // Preserve PID position and Stream ID throughout the flit cycle
+        rx_pid_vld_nxt   = rx_pid_vld_r;
+        rx_pid_pos_nxt   = rx_pid_pos_r;
+        rx_stream_nxt    = rx_stream_r;
+        rx_eof_vld_nxt   = (rxdata_eof_dv && !rxdata_acc_dv) ? 1'b1 : rx_eof_vld_r;
+    end
+end
+
+// Align data on the Flit Finder output based on the PID position for the current flit
+// Account for an additional 16-bit CRC at the end of flit cycle (applicable to CXL.cachemem flits)
+always_comb begin
+    unique case(rx_pid_pos_r)
+              0 : begin {rx_crc_data_s, rx_data_s} = {rxdata_acc[0+: 1*32], r_rxdata_acc[DW-1:( 0*32)+16]}; rx_data_sft_s = &{sft_acc[0], r_sft_acc[NW-1: 0]}; end
+              1 : begin {rx_crc_data_s, rx_data_s} = {rxdata_acc[0+: 2*32], r_rxdata_acc[DW-1:( 1*32)+16]}; rx_data_sft_s = &{sft_acc[0], r_sft_acc[NW-1: 1]}; end
+              2 : begin {rx_crc_data_s, rx_data_s} = {rxdata_acc[0+: 3*32], r_rxdata_acc[DW-1:( 2*32)+16]}; rx_data_sft_s = &{sft_acc[0], r_sft_acc[NW-1: 2]}; end
+              3 : begin {rx_crc_data_s, rx_data_s} = {rxdata_acc[0+: 4*32], r_rxdata_acc[DW-1:( 3*32)+16]}; rx_data_sft_s = &{sft_acc[0], r_sft_acc[NW-1: 3]}; end
+              4 : begin {rx_crc_data_s, rx_data_s} = {rxdata_acc[0+: 5*32], r_rxdata_acc[DW-1:( 4*32)+16]}; rx_data_sft_s = &{sft_acc[0], r_sft_acc[NW-1: 4]}; end
+              5 : begin {rx_crc_data_s, rx_data_s} = {rxdata_acc[0+: 6*32], r_rxdata_acc[DW-1:( 5*32)+16]}; rx_data_sft_s = &{sft_acc[0], r_sft_acc[NW-1: 5]}; end
+              6 : begin {rx_crc_data_s, rx_data_s} = {rxdata_acc[0+: 7*32], r_rxdata_acc[DW-1:( 6*32)+16]}; rx_data_sft_s = &{sft_acc[0], r_sft_acc[NW-1: 6]}; end
+              7 : begin {rx_crc_data_s, rx_data_s} = {rxdata_acc[0+: 8*32], r_rxdata_acc[DW-1:( 7*32)+16]}; rx_data_sft_s = &{sft_acc[0], r_sft_acc[NW-1: 7]}; end
+              8 : begin {rx_crc_data_s, rx_data_s} = {rxdata_acc[0+: 9*32], r_rxdata_acc[DW-1:( 8*32)+16]}; rx_data_sft_s = &{sft_acc[0], r_sft_acc[NW-1: 8]}; end
+              9 : begin {rx_crc_data_s, rx_data_s} = {rxdata_acc[0+:10*32], r_rxdata_acc[DW-1:( 9*32)+16]}; rx_data_sft_s = &{sft_acc[0], r_sft_acc[NW-1: 9]}; end
+              10: begin {rx_crc_data_s, rx_data_s} = {rxdata_acc[0+:11*32], r_rxdata_acc[DW-1:(10*32)+16]}; rx_data_sft_s = &{sft_acc[0], r_sft_acc[NW-1:10]}; end
+              11: begin {rx_crc_data_s, rx_data_s} = {rxdata_acc[0+:12*32], r_rxdata_acc[DW-1:(11*32)+16]}; rx_data_sft_s = &{sft_acc[0], r_sft_acc[NW-1:11]}; end
+              12: begin {rx_crc_data_s, rx_data_s} = {rxdata_acc[0+:13*32], r_rxdata_acc[DW-1:(12*32)+16]}; rx_data_sft_s = &{sft_acc[0], r_sft_acc[NW-1:12]}; end
+              13: begin {rx_crc_data_s, rx_data_s} = {rxdata_acc[0+:14*32], r_rxdata_acc[DW-1:(13*32)+16]}; rx_data_sft_s = &{sft_acc[0], r_sft_acc[NW-1:13]}; end
+              14: begin {rx_crc_data_s, rx_data_s} = {rxdata_acc[0+:15*32], r_rxdata_acc[DW-1:(14*32)+16]}; rx_data_sft_s = &{sft_acc[0], r_sft_acc[NW-1:14]}; end
+              15: begin {rx_crc_data_s, rx_data_s} = {rxdata_acc[0+:16*32], r_rxdata_acc[DW-1:(15*32)+16]}; rx_data_sft_s = &{sft_acc[0], r_sft_acc[NW-1:15]}; end
+        default : begin {rx_crc_data_s, rx_data_s} = '0;                                                    rx_data_sft_s = 1'b0;                              end
+    endcase
+end
+
+always @(posedge core_clk or negedge core_rst_n) begin
+    if (!core_rst_n) begin
+        rx_pid_vld_r   <= #TP '0;
+        rx_pid_pos_r   <= #TP '0;
+        rx_eof_vld_r   <= #TP '0;
+        rx_stream_r    <= #TP SID_RSVD;
+        rx_flush_r     <= #TP '0;
+        rx_error_r     <= #TP '0;
+    // If search for tokens flag is de-asserted or PID error is detected then contain 
+    // current data on the interface to Link Layer
+    end else if (os_in_datastream || !sft_acc[0] || uncorr_pid_err || unexp_pid_err) begin
+        rx_pid_vld_r   <= #TP '0;
+        rx_pid_pos_r   <= #TP '0;
+        rx_eof_vld_r   <= #TP '0;
+        rx_stream_r    <= #TP SID_RSVD;
+        rx_flush_r     <= #TP !os_in_datastream;
+        rx_error_r     <= #TP uncorr_pid_err || unexp_pid_err || (rx_error_r && sft_acc[0]);
+    // If PID error is detected the contain further data on the interface to Link Layer
+    // until search for tokens flag is de-asserted on entry to the Recovery
+    end else if (!rx_error_r) begin
+        rx_pid_vld_r   <= #TP rx_pid_vld_nxt;
+        rx_pid_pos_r   <= #TP rx_pid_pos_nxt;
+        rx_eof_vld_r   <= #TP rx_eof_vld_nxt;
+        rx_stream_r    <= #TP rx_stream_nxt;
+        rx_flush_r     <= #TP 1'b0;
+        rx_error_r     <= #TP 1'b0;
+    end
+end
+// ----------------------------------------------------------------------------
+
+
+// ----------------------------------------------------------------------------
+// Extract the PID from datapath accumulated
+// ----------------------------------------------------------------------------
+assign raw_pid = {raw_pid_a, raw_pid_b}; // used only for debug purposes
+
+always_comb begin
+    unique case ({pid_pos[4], pid_pos[NW_LOG2-1:0]})
+        'd0     : {raw_pid_a, raw_pid_b} = rxdata_acc[32*0  +: 8*2];
+        'd1     : {raw_pid_a, raw_pid_b} = rxdata_acc[32*1  +: 8*2];
+        'd2     : {raw_pid_a, raw_pid_b} = rxdata_acc[32*2  +: 8*2];
+        'd3     : {raw_pid_a, raw_pid_b} = rxdata_acc[32*3  +: 8*2];
+        'd4     : {raw_pid_a, raw_pid_b} = rxdata_acc[32*4  +: 8*2];
+        'd5     : {raw_pid_a, raw_pid_b} = rxdata_acc[32*5  +: 8*2];
+        'd6     : {raw_pid_a, raw_pid_b} = rxdata_acc[32*6  +: 8*2];
+        'd7     : {raw_pid_a, raw_pid_b} = rxdata_acc[32*7  +: 8*2];
+        'd8     : {raw_pid_a, raw_pid_b} = rxdata_acc[32*8  +: 8*2];
+        'd9     : {raw_pid_a, raw_pid_b} = rxdata_acc[32*9  +: 8*2];
+        'd10    : {raw_pid_a, raw_pid_b} = rxdata_acc[32*10 +: 8*2];
+        'd11    : {raw_pid_a, raw_pid_b} = rxdata_acc[32*11 +: 8*2];
+        'd12    : {raw_pid_a, raw_pid_b} = rxdata_acc[32*12 +: 8*2];
+        'd13    : {raw_pid_a, raw_pid_b} = rxdata_acc[32*13 +: 8*2];
+        'd14    : {raw_pid_a, raw_pid_b} = rxdata_acc[32*14 +: 8*2];
+        'd15    : {raw_pid_a, raw_pid_b} = rxdata_acc[32*15 +: 8*2];
+        default : {raw_pid_a, raw_pid_b} = 0;
+    endcase
+end
+
+// Figure-out if the PID received is invalid
+assign invalid_pid_a = invalid_pid(raw_pid_a);
+assign invalid_pid_b = invalid_pid(raw_pid_b);
+
+function automatic invalid_pid (input [7:0] raw_pid);
+    begin
+        unique case (raw_pid)
+            CXL_PID_IO            : invalid_pid = 1'b0;
+            CXL_PID_IO_EDS        : invalid_pid = 1'b0;
+            CXL_PID_CACHE_MEM     : invalid_pid = 1'b0;
+            CXL_PID_CACHE_MEM_EDS : invalid_pid = 1'b0;
+            CXL_PID_ALMP          : invalid_pid = 1'b0;
+            CXL_PID_ALMP_EDS      : invalid_pid = 1'b0;
+            CXL_PID_NULL          : invalid_pid = 1'b0;
+            CXL_PID_NULL_EDS      : invalid_pid = 1'b0;
+            default               : invalid_pid = 1'b1;
+        endcase
+    end
+endfunction
+// ----------------------------------------------------------------------------
+
+
+// ----------------------------------------------------------------------------
+// Protocol ID detection
+// Correctable: groupA or groupB matches a valid encoding (but do not match each other).
+// Unexpected: valid encoding but unexpected based on negotiated CXL modes - NOT SUPPORTED.
+// Uncorrectable: Neither groupA nor groupB matches a valid encoding (or both valid but different)
+// ----------------------------------------------------------------------------
+logic  accept_pid_s; // PID will be available in the Current CX_NW accumulator
+logic  pid_valid_ena;// Enable PID extraction
+logic  eds_v_rcvd;   // Variable length NULL flit with implied EDS
+                     // The OS will be received on the next clock cycle
+logic  eds_f_rcvd;   // 68-Bytes Fixed length flit with implied EDS
+                     // The full flit must be received before the OS
+                     // The OS will be received 1 clock cycle after the next rxdata_acc_dv
+logic  accept_f_eds; // Accept fixed-length flits with iEDS only when the flit ends at the block boundary.
+
+assign accept_f_eds = (pid_pos == 15)                                           || // PIDs with implied EDS are always valid in position 15.
+                      (pid_pos == 7 )                 && (|smlh_link_mode[1:0]) || // x2, x1
+                      (pid_pos == 3 || pid_pos == 11) &&   smlh_link_mode[0];      // x1
+
+assign accept_pid_s = (pid_pos[4:NW_LOG2] == {1'b0});
+// PID is available in rxdata_acc. Indicates that PID is received and is available in rxdata_acc
+assign pid_valid_acc = rxdata_acc_dv && accept_pid_s;
+
+// Enable PID extraction when either full datapath is accumulated or when pid is less than 
+// accumulated data counter for variable lenght NLL flit with implied EDS detection only
+assign pid_valid_ena = pid_valid_acc || (rxdata_dv && (pid_pos[3:0] < rxdata_acc_cnt) && accept_pid_s);
+
+always_comb begin
+    eds_f_rcvd     = 1'b0;
+    eds_v_rcvd     = 1'b0;
+    corr_pid_err   = 1'b0;
+    uncorr_pid_err = 1'b0;
+    unexp_pid_err  = 1'b0;
+    rx_pid_vld     = 1'b0;
+    rx_stream_id   = SID_RSVD;
+
+    if (cxl_mode_enable && pid_valid_ena && search_for_tokens) begin
+        unique case(1'b1)
+            raw_pid_a==CXL_PID_IO            && raw_pid_b==CXL_PID_IO                            : if (pid_valid_acc) begin {rx_pid_vld, rx_stream_id} = {cxl_io_enable, SID_CXL_IO};                                               unexp_pid_err = !cxl_io_enable; end
+            raw_pid_a==CXL_PID_IO            && invalid_pid_b                                    : if (pid_valid_acc) begin {rx_pid_vld, rx_stream_id} = {cxl_io_enable, SID_CXL_IO};                 corr_pid_err = cxl_io_enable; unexp_pid_err = !cxl_io_enable; end
+            invalid_pid_a                    && raw_pid_b==CXL_PID_IO                            : if (pid_valid_acc) begin {rx_pid_vld, rx_stream_id} = {cxl_io_enable, SID_CXL_IO};                 corr_pid_err = cxl_io_enable; unexp_pid_err = !cxl_io_enable; end
+            raw_pid_a==CXL_PID_IO_EDS        && raw_pid_b==CXL_PID_IO_EDS        && accept_f_eds : if (pid_valid_acc) begin {rx_pid_vld, rx_stream_id} = {cxl_io_enable, SID_CXL_IO}; eds_f_rcvd = 1;                               unexp_pid_err = !cxl_io_enable; end
+            raw_pid_a==CXL_PID_IO_EDS        && invalid_pid_b                    && accept_f_eds : if (pid_valid_acc) begin {rx_pid_vld, rx_stream_id} = {cxl_io_enable, SID_CXL_IO}; eds_f_rcvd = 1; corr_pid_err = cxl_io_enable; unexp_pid_err = !cxl_io_enable; end
+            invalid_pid_a                    && raw_pid_b==CXL_PID_IO_EDS        && accept_f_eds : if (pid_valid_acc) begin {rx_pid_vld, rx_stream_id} = {cxl_io_enable, SID_CXL_IO}; eds_f_rcvd = 1; corr_pid_err = cxl_io_enable; unexp_pid_err = !cxl_io_enable; end
+
+            raw_pid_a==CXL_PID_CACHE_MEM     && raw_pid_b==CXL_PID_CACHE_MEM                     : if (pid_valid_acc) begin {rx_pid_vld, rx_stream_id} = {cxl_mc_enable, SID_CXL_CM};                                               unexp_pid_err = !cxl_mc_enable; end
+            raw_pid_a==CXL_PID_CACHE_MEM     && invalid_pid_b                                    : if (pid_valid_acc) begin {rx_pid_vld, rx_stream_id} = {cxl_mc_enable, SID_CXL_CM};                 corr_pid_err = cxl_mc_enable; unexp_pid_err = !cxl_mc_enable; end
+            invalid_pid_a                    && raw_pid_b==CXL_PID_CACHE_MEM                     : if (pid_valid_acc) begin {rx_pid_vld, rx_stream_id} = {cxl_mc_enable, SID_CXL_CM};                 corr_pid_err = cxl_mc_enable; unexp_pid_err = !cxl_mc_enable; end
+            raw_pid_a==CXL_PID_CACHE_MEM_EDS && raw_pid_b==CXL_PID_CACHE_MEM_EDS && accept_f_eds : if (pid_valid_acc) begin {rx_pid_vld, rx_stream_id} = {cxl_mc_enable, SID_CXL_CM}; eds_f_rcvd = 1;                               unexp_pid_err = !cxl_mc_enable; end
+            raw_pid_a==CXL_PID_CACHE_MEM_EDS && invalid_pid_b                    && accept_f_eds : if (pid_valid_acc) begin {rx_pid_vld, rx_stream_id} = {cxl_mc_enable, SID_CXL_CM}; eds_f_rcvd = 1; corr_pid_err = cxl_mc_enable; unexp_pid_err = !cxl_mc_enable; end
+            invalid_pid_a                    && raw_pid_b==CXL_PID_CACHE_MEM_EDS && accept_f_eds : if (pid_valid_acc) begin {rx_pid_vld, rx_stream_id} = {cxl_mc_enable, SID_CXL_CM}; eds_f_rcvd = 1; corr_pid_err = cxl_mc_enable; unexp_pid_err = !cxl_mc_enable; end
+
+            raw_pid_a==CXL_PID_ALMP          && raw_pid_b==CXL_PID_ALMP                          : if (pid_valid_acc) begin {rx_pid_vld, rx_stream_id} = {cxl_mode_enable, SID_ALMP};                                      end
+            raw_pid_a==CXL_PID_ALMP          && invalid_pid_b                                    : if (pid_valid_acc) begin {rx_pid_vld, rx_stream_id} = {cxl_mode_enable, SID_ALMP};                 corr_pid_err = 1'b1; end
+            invalid_pid_a                    && raw_pid_b==CXL_PID_ALMP                          : if (pid_valid_acc) begin {rx_pid_vld, rx_stream_id} = {cxl_mode_enable, SID_ALMP};                 corr_pid_err = 1'b1; end
+            raw_pid_a==CXL_PID_ALMP_EDS      && raw_pid_b==CXL_PID_ALMP_EDS      && accept_f_eds : if (pid_valid_acc) begin {rx_pid_vld, rx_stream_id} = {cxl_mode_enable, SID_ALMP}; eds_f_rcvd = 1;                      end
+            raw_pid_a==CXL_PID_ALMP_EDS      && invalid_pid_b                    && accept_f_eds : if (pid_valid_acc) begin {rx_pid_vld, rx_stream_id} = {cxl_mode_enable, SID_ALMP}; eds_f_rcvd = 1; corr_pid_err = 1'b1; end
+            invalid_pid_a                    && raw_pid_b==CXL_PID_ALMP_EDS      && accept_f_eds : if (pid_valid_acc) begin {rx_pid_vld, rx_stream_id} = {cxl_mode_enable, SID_ALMP}; eds_f_rcvd = 1; corr_pid_err = 1'b1; end
+
+            raw_pid_a==CXL_PID_NULL          && raw_pid_b==CXL_PID_NULL                          : if (pid_valid_acc) begin {rx_pid_vld, rx_stream_id} = {cxl_mode_enable, SID_RSVD};                                      end
+            raw_pid_a==CXL_PID_NULL          && invalid_pid_b                                    : if (pid_valid_acc) begin {rx_pid_vld, rx_stream_id} = {cxl_mode_enable, SID_RSVD};                 corr_pid_err = 1'b1; end
+            invalid_pid_a                    && raw_pid_b==CXL_PID_NULL                          : if (pid_valid_acc) begin {rx_pid_vld, rx_stream_id} = {cxl_mode_enable, SID_RSVD};                 corr_pid_err = 1'b1; end
+
+            raw_pid_a==CXL_PID_NULL_EDS      && raw_pid_b==CXL_PID_NULL_EDS                      && !cxl_sh_bypass :                    begin {rx_pid_vld, rx_stream_id} = {cxl_mode_enable, SID_RSVD}; eds_v_rcvd = 1;                      end
+            raw_pid_a==CXL_PID_NULL_EDS      && raw_pid_b==CXL_PID_NULL_EDS      && accept_f_eds &&  cxl_sh_bypass : if (pid_valid_acc) begin {rx_pid_vld, rx_stream_id} = {cxl_mode_enable, SID_RSVD}; eds_f_rcvd = 1;                      end
+
+            raw_pid_a==CXL_PID_NULL_EDS      && invalid_pid_b                                    && !cxl_sh_bypass :                    begin {rx_pid_vld, rx_stream_id} = {cxl_mode_enable, SID_RSVD}; eds_v_rcvd = 1; corr_pid_err = 1'b1; end
+            raw_pid_a==CXL_PID_NULL_EDS      && invalid_pid_b                    && accept_f_eds &&  cxl_sh_bypass : if (pid_valid_acc) begin {rx_pid_vld, rx_stream_id} = {cxl_mode_enable, SID_RSVD}; eds_f_rcvd = 1; corr_pid_err = 1'b1; end
+
+            invalid_pid_a                    && raw_pid_b==CXL_PID_NULL_EDS                      && !cxl_sh_bypass :                    begin {rx_pid_vld, rx_stream_id} = {cxl_mode_enable, SID_RSVD}; eds_v_rcvd = 1; corr_pid_err = 1'b1; end
+            invalid_pid_a                    && raw_pid_b==CXL_PID_NULL_EDS      && accept_f_eds &&  cxl_sh_bypass : if (pid_valid_acc) begin {rx_pid_vld, rx_stream_id} = {cxl_mode_enable, SID_RSVD}; eds_f_rcvd = 1; corr_pid_err = 1'b1; end
+
+            default                                                                              : begin uncorr_pid_err = 1'b1; end
+        endcase
+    end
+end
+
+always @(posedge core_clk or negedge core_rst_n) begin
+    if (!core_rst_n) begin
+        r_corr_pid_err       <= #TP '0;
+        r_uncorr_pid_err     <= #TP '0;
+        r_unexp_pid_err      <= #TP '0;
+    end else if (!sft_acc[0] || os_in_datastream) begin
+        r_corr_pid_err       <= #TP '0;
+        r_uncorr_pid_err     <= #TP '0;
+        r_unexp_pid_err      <= #TP '0;
+    end else if (pid_valid_ena) begin
+        r_corr_pid_err       <= #TP corr_pid_err;
+        r_uncorr_pid_err     <= #TP r_uncorr_pid_err || uncorr_pid_err;
+        r_unexp_pid_err      <= #TP r_unexp_pid_err  || unexp_pid_err ;
+    end
+end
+// ----------------------------------------------------------------------------
+
+
+// ----------------------------------------------------------------------------
+// Fixed length flit with implied EDS 
+// ----------------------------------------------------------------------------
+// eds_f_exp[0]: enabled means the beginning of a fixed length flit with iEDS was received.
+//               Because fixed flits are bigger than 512b, iEDS PID can be simply latched when the datapath is full.
+//               Note that a fixed lenght flit cannot finish on the same clock cycle.
+// eds_f_exp[1]: enabled means a fixed length flit with iEDS has ended (i.e flit_acc_dv) and OS is expected.
+//               The end of the flit is aligned with the block boundary and can happen:
+//                - in x1  with 4,8,12,16 DWs accumulated
+//                - in x2  with      8,16 DWs accumulated
+//                - others with        16 DWs accumulated
+logic [1:0] eds_f_exp;
+
+always @(posedge core_clk or negedge core_rst_n) begin
+    if (!core_rst_n) begin
+        eds_f_exp <= #TP 0;
+    end else if (eds_err || os_in_datastream) begin
+        eds_f_exp <= #TP 0;
+    end else begin
+        if (rx_pid_vld)      // Latch eds_f_rcvd in PID extraction cycle (start of flit)
+            eds_f_exp[0] <= #TP eds_f_rcvd;
+        if (rxdata_eof_dv)   // Full flit received, OS should follow in the next cycle
+            eds_f_exp[1] <= #TP eds_f_exp[0];
+    end
+end
+// ----------------------------------------------------------------------------
+
+// ----------------------------------------------------------------------------
+// Variable length flit with implied EDS 
+// ----------------------------------------------------------------------------
+// eds_v_exp[0]: enabled means the beginning of variable length NULL with iEDS flit was received.
+// eds_v_exp[1]: enabled means variable length NULL with iEDS has ended.
+//               A variable length flit ends at the block boundary (i.e. accept_eds_cycle)
+//               Note that it can start (NULL+iEDS PID) and end (accept_eds_cycle):
+//                - in the same clock cycle 
+//                - interleaved by one or more clock cycles 
+//                - within the same datapath
+//                - across multiple datapaths
+//                - partial / full datapath accumulated
+logic [1:0] eds_v_exp;
+
+always @(posedge core_clk or negedge core_rst_n) begin
+    if (!core_rst_n) begin
+        eds_v_exp <= #TP 0;
+    end else if (eds_err || os_in_datastream) begin
+        eds_v_exp <= #TP 0;
+    end else begin 
+        if (rxdata_dv) begin
+            if (accept_eds_cycle) begin
+                eds_v_exp[1] <= #TP eds_v_rcvd || eds_v_exp[0];
+            end else begin
+                eds_v_exp[0] <= #TP eds_v_rcvd || eds_v_exp[0];
+            end
+        end
+    end
+end
+// ----------------------------------------------------------------------------
+
+
+// ----------------------------------------------------------------------------
+// EDS Error
+// ----------------------------------------------------------------------------
+// The OS could be delayed by 1 or more cycles of rxdata_dv=0 because of two reasons:
+//  1. Sync Header compensation
+//  2. Empty Buffer mode
+// eds_?_exp[1] stay enabled until OS is received
+logic  eds_exp;
+assign eds_exp = eds_f_exp[1] || eds_v_exp[1];
+
+// OS was expected but not received
+logic  eds_err_os_exp_but_not_rcvd;
+assign eds_err_os_exp_but_not_rcvd = eds_exp && rxdata_dv && search_for_tokens;
+
+// OS was received but not expected
+logic  eds_err_os_rcvd_but_not_exp;
+assign eds_err_os_rcvd_but_not_exp = !eds_exp && os_in_datastream && search_for_tokens;
+
+assign eds_err = eds_err_os_exp_but_not_rcvd || eds_err_os_rcvd_but_not_exp;
+// ----------------------------------------------------------------------------
+
+
+// ----------------------------------------------------------------------------
+// Count continuous NULL flits received
+// ----------------------------------------------------------------------------
+logic [3:0] rcvd_null_cnt;
+
+always @(posedge core_clk or negedge core_rst_n) begin : rcvd_idle_cnt_seq_PROC
+    if( !core_rst_n ) begin
+        rcvd_null_cnt <= #TP '0;
+    end else if (rx_flush_s || rx_flit_s || r_uncorr_pid_err || r_unexp_pid_err) begin
+        // Reset NULL counter if flushing RX pipeline or any flit other than NULL flit is received or
+        // flit with either uncorrectable or unexpected PID is received
+        rcvd_null_cnt <= #TP '0;
+    end else if (rxdata_eof_dv && (rx_stream_r == SID_RSVD)) begin
+        // Increment received NULL counter when complete NULL flit is received
+        rcvd_null_cnt <= #TP {rcvd_null_cnt[2:0], 1'b1};
+    end
+end
+// ----------------------------------------------------------------------------
+
+
+
+// ----------------------------------------------------------------------------
+// Drive Outputs
+// ----------------------------------------------------------------------------
+stream_id_e           out_stream;
+wire                  out_valid;
+wire  [DW-1:0]        out_data;
+wire                  out_crc_valid;
+wire  [15:0]          out_crc_data;
+wire                  out_corr_pid_err;
+wire                  out_uncorr_pid_err;
+wire                  out_unexp_pid_err;
+wire                  out_eds_err;
+wire                  out_rx_flush;
+wire  [1:0]           out_rcvd_null;
+wire                  out_rcvd_flit;
+
+assign out_stream             = (cxl_mode_enable) ? rx_stream_r      : SID_PCIE;
+assign out_valid              = (cxl_mode_enable) ? rx_valid_s       : rxdata_dv;
+assign out_data               = (cxl_mode_enable) ? rx_data_s        : rxdata;
+assign out_crc_valid          = (cxl_mode_enable) ? rx_crc_valid_s   : 1'b0;
+assign out_crc_data           = (cxl_mode_enable) ? rx_crc_data_s    : 16'd0;
+assign out_corr_pid_err       = (cxl_mode_enable) ? r_corr_pid_err   : 1'b0;
+assign out_uncorr_pid_err     = (cxl_mode_enable) ? r_uncorr_pid_err : 1'b0;
+assign out_unexp_pid_err      = (cxl_mode_enable) ? r_unexp_pid_err  : 1'b0;
+assign out_eds_err            = (cxl_mode_enable) ? eds_err          : 1'b0;
+assign out_rx_flush           = (cxl_mode_enable) ? rx_flush_s       : 1'b0;
+assign out_rcvd_flit          = (cxl_mode_enable) ? rx_flit_s        : 1'b0;
+assign out_rcvd_null[1]       = (cxl_mode_enable) ? rcvd_null_cnt[0] : rcvd_idle[1];
+assign out_rcvd_null[0]       = (cxl_mode_enable) ? (&rcvd_null_cnt) : rcvd_idle[0];
+// ----------------------------------------------------------------------------
+
+
+// ----------------------------------------------------------------------------
+// Optional output register
+//
+// To be removed. If register stage is require it must be implemented on the LPIF
+// Interface, this will avoid any inconsistency between Physical Layer and Link 
+// Layer parameters enabling corresponding input and output register.
+// ----------------------------------------------------------------------------
+// Note data+io_dv followed by raw decoders in token_finder4 would meet timing without regout.
+// REGOUT_EN is set to 1 anyway to provide a registered output for CXL upper layers (i.e. ALMP and MEM/CACHE).
+
+parameter CTRL_WIDTH = 8  + // rplh_cxl_stream
+                       1  + // rplh_cxl_valid
+                       1  + // rplh_cxl_crc_valid
+                       1  + // rplh_cxl_corr_pid_err
+                       1  + // rplh_cxl_uncorr_pid_err
+                       1  + // rplh_cxl_unexp_pid_err
+                       1  + // rplh_cxl_eds_err
+                       1  + // rplh_cxl_rx_flush
+                       1  + // rplh_cxl_rcvd_flit
+                       2;   // rplh_cxl_rcvd_null
+
+delay_n
+
+#(REGOUT_EN, CTRL_WIDTH) u_delay_out_ctrl (
+    .clk   (core_clk),
+    .rst_n (core_rst_n),
+    .clear (1'b0),
+    .din   ({out_stream,
+             out_valid,
+             out_crc_valid,
+             out_corr_pid_err,
+             out_uncorr_pid_err,
+             out_unexp_pid_err,
+             out_eds_err,
+             out_rx_flush,
+             out_rcvd_flit,
+             out_rcvd_null}),
+    .dout  ({rplh_cxl_stream,
+             rplh_cxl_valid,
+             rplh_cxl_crc_valid,
+             rplh_cxl_corr_pid_err,
+             rplh_cxl_uncorr_pid_err,
+             rplh_cxl_unexp_pid_err,
+             rplh_cxl_eds_err,
+             rplh_cxl_rx_flush,
+             rplh_cxl_rcvd_flit,
+             rplh_cxl_rcvd_null})
+);
+
+delay_n_w_enable
+
+#(REGOUT_EN, DW) u_delay_w_enable_out_data (
+    .clk   (core_clk),
+    .rst_n (core_rst_n),
+    .clear (1'b0),
+    .en    (out_valid),
+    .din   ({out_data}),
+    .dout  ({rplh_cxl_data})
+);
+
+delay_n_w_enable
+
+#(REGOUT_EN, 16) u_delay_w_enable_out_crc (
+    .clk   (core_clk),
+    .rst_n (core_rst_n),
+    .clear (1'b0),
+    .en    (out_crc_valid),
+    .din   ({out_crc_data}),
+    .dout  ({rplh_cxl_crc_data})
+);
+// ----------------------------------------------------------------------------
+
+
+
+endmodule
+

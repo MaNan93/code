@@ -1,0 +1,31 @@
+[build-system]
+requires = ["setuptools>=39.2.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "sv-merge"
+version = "1.0.0"
+description = "Robust, Dependency-Aware SystemVerilog & Verilog Filelist Merger"
+readme = "README.md"
+authors = [{ name = "MaNan" }]
+license = "MIT"
+requires-python = ">=3.6"
+keywords = ["systemverilog", "verilog", "eda", "filelist", "merge", "topological-sort"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.6",
+    "Programming Language :: Python :: 3.7",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Operating System :: OS Independent",
+    "Topic :: Scientific/Engineering :: Electronic Design Automation (EDA)",
+]
+
+[project.scripts]
+sv-merge = "sv_merge.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/MaNan93/sv-merge"

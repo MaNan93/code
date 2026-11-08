@@ -4,6 +4,7 @@ import os
 import re
 from collections import defaultdict, deque
 from .colors import log_warn
+from .source import mask_comments, read_source
 
 
 class DependencyAnalyzer:
@@ -24,19 +25,20 @@ class DependencyAnalyzer:
             self.is_undef[fpath] = "undef" in fname
 
             if not os.path.isfile(fpath):
-                continue
+                raise ValueError("Source not found: " + fpath)
 
             try:
-                with open(fpath, "r", encoding="utf-8", errors="ignore") as fp:
-                    content = fp.read()
+                content = mask_comments(read_source(fpath))
 
                 # Find package declarations
                 for pkg in re.findall(r"^\s*package\s+(\w+)\s*;", content, re.M):
+                    if pkg in self.pkg_to_file and self.pkg_to_file[pkg] != fpath:
+                        raise ValueError("Duplicate package {}: {} and {}".format(pkg, self.pkg_to_file[pkg], fpath))
                     self.pkg_to_file[pkg] = fpath
                     self.file_pkgs[fpath].append(pkg)
 
                 # Find imported packages
-                for imp in re.findall(r"^\s*import\s+(\w+)::", content, re.M):
+                for imp in re.findall(r"\b(\w+)\s*::", content, re.M):
                     self.file_imports[fpath].add(imp)
 
                 # Find `include directives
@@ -56,7 +58,7 @@ class DependencyAnalyzer:
                     and not has_packages
                 )
             except Exception as e:
-                log_warn(f"Failed to inspect {fpath}: {e}")
+                raise ValueError("Failed to inspect {}: {}".format(fpath, e)) from e
 
     def topological_sort(self, top_file=None):
         """Returns the files sorted in DAG dependency order."""
@@ -101,17 +103,15 @@ class DependencyAnalyzer:
         while queue:
             curr = queue.popleft()
             sorted_pkgs.append(curr)
-            for dep in dependents[curr]:
+            for dep in sorted(dependents[curr], key=pkg_files.index):
                 in_degree[dep] -= 1
                 if in_degree[dep] == 0:
                     queue.append(dep)
 
         # If cycles were detected, append any remaining packages in original order
         if len(sorted_pkgs) < len(pkg_files):
-            log_warn("Cycle detected in package imports! Retaining flist order for cyclic nodes.")
-            for f in pkg_files:
-                if f not in sorted_pkgs:
-                    sorted_pkgs.append(f)
+            remaining = [f for f in pkg_files if f not in sorted_pkgs]
+            raise ValueError("Package dependency cycle involving: " + ", ".join(remaining))
 
         # 3. Assemble final ordered list
         ordered = headers_and_defs + sorted_pkgs + regular_files

@@ -4,6 +4,7 @@
 [`MaNan93/code`](https://github.com/MaNan93/code) 管理。
 
 - `getaxiinfo/`、`runall/`、`smics28_mem_gen/`、
+  [`sv-merge/`](sv-merge/README.md)（依赖感知的 SystemVerilog/Verilog flist 合并工具）、
   [`verible/verilog_extractor_project/`](verible/verilog_extractor_project/README.md)
   是普通子目录，不再各自建立 Git 仓库。
 - `dwc_bfm_gpt/`、`pcie_native_bfm/`、`postsim_analyzer/`、`fec/`、`ffe/`、

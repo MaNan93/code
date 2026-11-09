@@ -96,6 +96,10 @@ Examples:
                         help="Insert default_nettype wire boundaries (changes source semantics).")
     parser.add_argument("--line-directives", action="store_true",
                         help="Emit source locations using SystemVerilog `line directives.")
+    parser.add_argument("--strip-comments", "--no-comments",
+                        action="store_true",
+                        help="Remove // and /* */ comments from the output "
+                             "(line numbers are preserved; quoted strings are untouched).")
     return parser
 
 
@@ -165,6 +169,7 @@ def _main(argv=None):
         incdirs=flist_parser.incdirs,
         defines=flist_parser.defines,
         line_directives=args.line_directives,
+        strip_comments=args.strip_comments,
     )
     merger.run()
     return 0

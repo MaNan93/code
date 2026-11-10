@@ -66,11 +66,6 @@ Examples:
         help="Include directories (e.g. -I path1).",
     )
     parser.add_argument(
-        "--no-guard",
-        action="store_true",
-        help="Disable inserting `default_nettype wire between files.",
-    )
-    parser.add_argument(
         "--no-neutralize-includes", "--keep-includes",
         action="store_true",
         help="Keep original include directives; output requires external headers.",
@@ -92,8 +87,6 @@ Examples:
     )
     parser.add_argument("--sort-dependencies", action="store_true",
                         help="Opt in to package sorting (may change macro state).")
-    parser.add_argument("--guard", action="store_true",
-                        help="Insert default_nettype wire boundaries (changes source semantics).")
     parser.add_argument("--line-directives", action="store_true",
                         help="Emit source locations using SystemVerilog `line directives.")
     parser.add_argument("--strip-comments", "--no-comments",
@@ -162,7 +155,6 @@ def _main(argv=None):
     merger = Merger(
         ordered_files=ordered_files,
         output_path=args.output,
-        guard=args.guard and not args.no_guard,
         neutralize=not args.no_neutralize_includes,
         verbose=args.verbose,
         version=__version__,

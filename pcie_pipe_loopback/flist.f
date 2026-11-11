@@ -1,0 +1,7 @@
+pcie_pipe_clock_gate.sv
+pcie_pipe_pclk_switch.sv
+pcie_pipe_eq_lane.sv
+pcie_pipe_status_lane.sv
+pcie_pipe_lane.sv
+pcie_pipe_side.sv
+pcie_pipe_loopback.sv

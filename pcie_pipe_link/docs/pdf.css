@@ -1,0 +1,34 @@
+@page {
+  size: A4;
+  margin: 17mm 14mm 18mm;
+  @bottom-left { content: "©INNOSILICON ALL RIGHTS RESERVED"; font: 8pt "Times New Roman"; color: #000; }
+  @bottom-right { content: counter(page) " / " counter(pages); font: 8pt "Times New Roman"; color: #000; }
+}
+body { font-family: "Times New Roman", Times, serif; font-size: 10pt; line-height: 1.4; color: #000; }
+header#title-block-header { display: none; }
+h1 { color: #245da8; font-size: 24pt; margin: 0 0 16pt; }
+h2 { color: #245da8; font-size: 17pt; padding-bottom: 5pt; border-bottom: 1pt solid #bccbdf; break-before: page; }
+h2:first-of-type { break-before: auto; }
+h3 { color: #245da8; font-size: 13pt; margin: 16pt 0 7pt; }
+h4 { font-size: 11pt; margin: 14pt 0 6pt; }
+h1, h2, h3, h4 { break-after: avoid; }
+p { margin: 6pt 0; orphans: 3; widows: 3; }
+ul, ol { padding-left: 18pt; }
+li { margin: 3pt 0; }
+table { border-collapse: collapse; width: 100%; margin: 8pt 0 12pt; table-layout: fixed; font-size: 8.5pt; }
+thead { display: table-header-group; }
+th { background: #e5e5e5; color: #000; }
+th, td { padding: 5pt; border: .5pt solid #000; text-align: left; vertical-align: top; overflow-wrap: anywhere; }
+tr { break-inside: avoid; }
+table:has(th:nth-child(5)) th:nth-child(1) { width: 35%; }
+table:has(th:nth-child(5)) th:nth-child(2) { width: 8%; }
+table:has(th:nth-child(5)) th:nth-child(3) { width: 10%; }
+table:has(th:nth-child(5)) th:nth-child(4) { width: 11%; }
+table:has(th:nth-child(5)) th:nth-child(5) { width: 36%; }
+code { font-family: "Times New Roman", Times, serif; font-size: 1em; overflow-wrap: anywhere; }
+pre { padding: 8pt; background: #f3f6fa; border: .5pt solid #d6dfe9; font-size: 8.5pt; break-inside: avoid; white-space: pre-wrap; }
+img { display: block; max-width: 100%; max-height: 190mm; width: auto; height: auto; margin: 8pt auto; }
+.figure-block { break-inside: avoid; }
+.timing-section { break-inside: avoid; }
+.figure-block p:has(em) { text-align: center; font-size: 9pt; color: #52647c; }
+a { color: #245da8; text-decoration: none; }

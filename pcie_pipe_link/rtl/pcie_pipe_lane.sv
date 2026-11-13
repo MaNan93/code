@@ -6,6 +6,7 @@ module pcie_pipe_lane #(
     input logic phy_rst_n,
     input logic [2:0] mac_phy_rate,
     input logic shared_status_due,
+    output logic shared_ack,
     input logic data_enable,
     input logic mac_phy_txdetectrx_loopback,
     input logic mac_phy_rxstandby,
@@ -13,7 +14,7 @@ module pcie_pipe_lane #(
     input logic mac_phy_rxeqinprogress,
     input logic mac_phy_invalid_req,
     input logic mac_phy_getlocal_pset_coef,
-    input logic [4:0] mac_phy_local_pset_index,
+    input logic [5:0] mac_phy_local_pset_index,
     input logic mac_phy_dirchange,
     input logic [17:0] mac_phy_txdeemph,
     output logic phy_mac_rxelecidle,
@@ -41,7 +42,9 @@ module pcie_pipe_lane #(
     input logic [1:0] peer_mac_phy_txsyncheader
 );
     logic eq_due;
-    pcie_pipe_eq_lane #(.EQ_CYCLES(EQ_CYCLES)) u_eq (
+    pcie_pipe_eq_lane #(
+        .EQ_CYCLES(EQ_CYCLES)
+    ) u_eq (
         .pclk(pclk),
         .phy_rst_n(phy_rst_n),
         .mac_phy_rate(mac_phy_rate),
@@ -60,10 +63,13 @@ module pcie_pipe_lane #(
         .phy_mac_local_tx_pset_coef(phy_mac_local_tx_pset_coef),
         .phy_mac_local_tx_coef_valid(phy_mac_local_tx_coef_valid)
     );
-    pcie_pipe_status_lane #(.ACK_CYCLES(ACK_CYCLES)) u_status (
+    pcie_pipe_status_lane #(
+        .ACK_CYCLES(ACK_CYCLES)
+    ) u_status (
         .pclk(pclk),
         .phy_rst_n(phy_rst_n),
         .shared_status_due(shared_status_due),
+        .shared_ack(shared_ack),
         .eq_due(eq_due),
         .mac_phy_txdetectrx_loopback(mac_phy_txdetectrx_loopback),
         .phy_mac_phystatus(phy_mac_phystatus),

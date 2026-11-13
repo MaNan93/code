@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1226" height="535" viewBox="0 0 1226 535">
+<rect width="100%" height="100%" fill="white"/>
+<text x="24" y="41" font-family="Microsoft YaHei, sans-serif" font-size="23" fill="#245da8">Figure 3-3  Receiver EQ evaluation (EQ_CYCLES = 8, no competing response)</text>
+<text x="300" y="99" font-family="Microsoft YaHei, sans-serif" font-size="13" fill="#8291a3">C0</text>
+<polyline points="310,111 310,510" fill="none" stroke="#e4e9f0" stroke-width="1"/>
+<text x="382" y="99" font-family="Microsoft YaHei, sans-serif" font-size="13" fill="#8291a3">C1</text>
+<polyline points="392,111 392,510" fill="none" stroke="#e4e9f0" stroke-width="1"/>
+<text x="464" y="99" font-family="Microsoft YaHei, sans-serif" font-size="13" fill="#8291a3">C2</text>
+<polyline points="474,111 474,510" fill="none" stroke="#e4e9f0" stroke-width="1"/>
+<text x="546" y="99" font-family="Microsoft YaHei, sans-serif" font-size="13" fill="#8291a3">C3</text>
+<polyline points="556,111 556,510" fill="none" stroke="#e4e9f0" stroke-width="1"/>
+<text x="628" y="99" font-family="Microsoft YaHei, sans-serif" font-size="13" fill="#8291a3">C4</text>
+<polyline points="638,111 638,510" fill="none" stroke="#e4e9f0" stroke-width="1"/>
+<text x="710" y="99" font-family="Microsoft YaHei, sans-serif" font-size="13" fill="#8291a3">C5</text>
+<polyline points="720,111 720,510" fill="none" stroke="#e4e9f0" stroke-width="1"/>
+<text x="792" y="99" font-family="Microsoft YaHei, sans-serif" font-size="13" fill="#8291a3">C6</text>
+<polyline points="802,111 802,510" fill="none" stroke="#e4e9f0" stroke-width="1"/>
+<text x="874" y="99" font-family="Microsoft YaHei, sans-serif" font-size="13" fill="#8291a3">C7</text>
+<polyline points="884,111 884,510" fill="none" stroke="#e4e9f0" stroke-width="1"/>
+<text x="956" y="99" font-family="Microsoft YaHei, sans-serif" font-size="13" fill="#8291a3">C8</text>
+<polyline points="966,111 966,510" fill="none" stroke="#e4e9f0" stroke-width="1"/>
+<text x="1038" y="99" font-family="Microsoft YaHei, sans-serif" font-size="13" fill="#8291a3">C9</text>
+<polyline points="1048,111 1048,510" fill="none" stroke="#e4e9f0" stroke-width="1"/>
+<text x="1120" y="99" font-family="Microsoft YaHei, sans-serif" font-size="13" fill="#8291a3">C10</text>
+<polyline points="1130,111 1130,510" fill="none" stroke="#e4e9f0" stroke-width="1"/>
+<text x="20" y="137" font-family="Microsoft YaHei, sans-serif" font-size="15" fill="#233247">PCLK</text>
+<polyline points="274,147 310,147 310,119 351.0,119 351.0,147 392,147 392,119 433.0,119 433.0,147 474,147 474,119 515.0,119 515.0,147 556,147 556,119 597.0,119 597.0,147 638,147 638,119 679.0,119 679.0,147 720,147 720,119 761.0,119 761.0,147 802,147 802,119 843.0,119 843.0,147 884,147 884,119 925.0,119 925.0,147 966,147 966,119 1007.0,119 1007.0,147 1048,147 1048,119 1089.0,119 1089.0,147 1130,147 1130,119 1171.0,119 1171.0,147 1201,147" fill="none" stroke="#245da8" stroke-width="2"/>
+<text x="20" y="213" font-family="Microsoft YaHei, sans-serif" font-size="15" fill="#233247">mac_phy_rxeqeval</text>
+<polyline points="274,223 297.7,223 297.7,195 1201,195" fill="none" stroke="#245da8" stroke-width="2"/>
+<text x="20" y="289" font-family="Microsoft YaHei, sans-serif" font-size="15" fill="#233247">phy_mac_fomfeedback</text>
+<polyline points="281,271 963.1,271 970.1,285 963.1,299 281,299 274,285 281,271" fill="none" stroke="#245da8" stroke-width="2"/>
+<text x="287" y="287" font-family="Microsoft YaHei, sans-serif" font-size="13" fill="#245da8">x</text>
+<polyline points="977.1,271 1194,271 1201,285 1194,299 977.1,299 970.1,285 977.1,271" fill="none" stroke="#245da8" stroke-width="2"/>
+<text x="983.1" y="287" font-family="Microsoft YaHei, sans-serif" font-size="13" fill="#245da8">255</text>
+<text x="20" y="365" font-family="Microsoft YaHei, sans-serif" font-size="15" fill="#233247">phy_mac_dirfeedback</text>
+<polyline points="281,347 1194,347 1201,361 1194,375 281,375 274,361 281,347" fill="none" stroke="#245da8" stroke-width="2"/>
+<text x="287" y="363" font-family="Microsoft YaHei, sans-serif" font-size="13" fill="#245da8">0</text>
+<text x="20" y="441" font-family="Microsoft YaHei, sans-serif" font-size="15" fill="#233247">phy_mac_phystatus</text>
+<polyline points="274,451 1052.1,451 1052.1,423 1134.1,423 1134.1,451 1201,451" fill="none" stroke="#245da8" stroke-width="2"/>
+</svg>

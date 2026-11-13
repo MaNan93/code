@@ -6,8 +6,8 @@ module pcie_pipe_clock_gate #(
     input logic request,
     output logic gate_enable
 );
-    (* async_reg = "true" *) logic request_meta, request_sync;
-    // Synchronize the request on rising edges; hold the gate throughout HIGH.
+    logic request_meta, request_sync;
+    // Hold gate enable while the clock is high.
     always @(posedge clk or negedge phy_rst_n) begin
         if (!phy_rst_n) begin
             request_meta <= RESET_ENABLE;

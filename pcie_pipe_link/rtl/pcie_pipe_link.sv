@@ -1,8 +1,6 @@
-// Gen1..Gen4 synthesizable PIPE bypass. External ports are flat.
-// Synthesizable parallel PIPE bypass with independently switched side clocks.
-// DSP and USP prefixes identify the RP and EP connections; 32 data bits per lane.
-// Synthesizable PIPE service; five free-running clock inputs are required.
-module pcie_pipe_loopback #(
+// Gen1-Gen5 PIPE link, 32 bits per lane.
+// DSP: RP; USP: EP.
+module pcie_pipe_link #(
     parameter integer NL = 4,
     parameter integer ACK_CYCLES = 8,
     parameter integer EQ_CYCLES = 8
@@ -18,18 +16,20 @@ module pcie_pipe_loopback #(
     output logic [2:0] usp_active_rate,
     output logic dsp_clock_ready,
     output logic usp_clock_ready,
+    output logic dsp_phy_ref_clk_req_n,
+    output logic usp_phy_ref_clk_req_n,
     input logic [NL-1:0] dsp_mac_phy_rxeqeval,
     input logic [NL-1:0] dsp_mac_phy_rxeqinprogress,
     input logic [NL-1:0] dsp_mac_phy_invalid_req,
     input logic [NL-1:0] dsp_mac_phy_getlocal_pset_coef,
-    input logic [NL*5-1:0] dsp_mac_phy_local_pset_index,
+    input logic [NL*6-1:0] dsp_mac_phy_local_pset_index,
     input logic [NL-1:0] dsp_mac_phy_dirchange,
     input logic [NL*18-1:0] dsp_mac_phy_txdeemph,
     input logic [NL-1:0] usp_mac_phy_rxeqeval,
     input logic [NL-1:0] usp_mac_phy_rxeqinprogress,
     input logic [NL-1:0] usp_mac_phy_invalid_req,
     input logic [NL-1:0] usp_mac_phy_getlocal_pset_coef,
-    input logic [NL*5-1:0] usp_mac_phy_local_pset_index,
+    input logic [NL*6-1:0] usp_mac_phy_local_pset_index,
     input logic [NL-1:0] usp_mac_phy_dirchange,
     input logic [NL*18-1:0] usp_mac_phy_txdeemph,
     input logic  dsp_phy_rst_n,
@@ -52,8 +52,29 @@ module pcie_pipe_loopback #(
     input logic [NL-1:0] usp_mac_phy_txdetectrx_loopback,
     input logic [3:0] dsp_mac_phy_powerdown,
     input logic [3:0] usp_mac_phy_powerdown,
+    input logic dsp_mac_phy_asyncpowerchangeack,
+    input logic usp_mac_phy_asyncpowerchangeack,
     input logic [2:0] dsp_mac_phy_rate,
     input logic [2:0] usp_mac_phy_rate,
+    // Reserved inputs.
+    input logic [2:0] dsp_mac_phy_txmargin,
+    input logic [2:0] usp_mac_phy_txmargin,
+    input logic [2:0] dsp_mac_phy_pclk_rate,
+    input logic [2:0] usp_mac_phy_pclk_rate,
+    input logic [1:0] dsp_mac_phy_width,
+    input logic [1:0] usp_mac_phy_width,
+    input logic [NL-1:0] dsp_mac_phy_rxpolarity,
+    input logic [NL-1:0] usp_mac_phy_rxpolarity,
+    input logic [NL*8-1:0] dsp_mac_phy_messagebus,
+    input logic [NL*8-1:0] usp_mac_phy_messagebus,
+    input logic [NL-1:0] dsp_mac_phy_txcompliance,
+    input logic [NL-1:0] usp_mac_phy_txcompliance,
+    input logic [NL*6-1:0] dsp_mac_phy_lf,
+    input logic [NL*6-1:0] usp_mac_phy_lf,
+    input logic [NL*6-1:0] dsp_mac_phy_fs,
+    input logic [NL*6-1:0] usp_mac_phy_fs,
+    input logic [NL*3-1:0] dsp_mac_phy_rxpresethint,
+    input logic [NL*3-1:0] usp_mac_phy_rxpresethint,
     output logic [NL-1:0] dsp_phy_mac_rxelecidle,
     output logic [NL-1:0] usp_phy_mac_rxelecidle,
     output logic [NL-1:0] dsp_phy_mac_phystatus,
@@ -91,15 +112,20 @@ module pcie_pipe_loopback #(
     output logic [31:0] dsp_phy_mac_pipe_config_status,
     output logic [31:0] usp_phy_mac_pipe_config_status
 );
-    // No cross-side state: each side is reset by its controller's PHY reset.
-    // Data is valid only after both side clocks converge to the same physical source.
+    // Enable data when both sides align.
     logic clocks_aligned;
     assign clocks_aligned = dsp_phy_rst_n && usp_phy_rst_n &&
                             dsp_clock_ready && usp_clock_ready &&
+                            dsp_mac_phy_powerdown < 4'd4 &&
+                            usp_mac_phy_powerdown < 4'd4 &&
                             dsp_active_rate == usp_active_rate &&
                             dsp_mac_phy_rate == dsp_active_rate &&
                             usp_mac_phy_rate == usp_active_rate;
-    pcie_pipe_side #(.NL(NL), .ACK_CYCLES(ACK_CYCLES), .EQ_CYCLES(EQ_CYCLES)) u_dsp_side (
+    pcie_pipe_side #(
+        .NL(NL),
+        .ACK_CYCLES(ACK_CYCLES),
+        .EQ_CYCLES(EQ_CYCLES)
+    ) u_dsp_side (
         .pclk_62p5(pclk_62p5),
         .pclk_125(pclk_125),
         .pclk_250(pclk_250),
@@ -109,6 +135,7 @@ module pcie_pipe_loopback #(
         .pclk(dsp_pclk),
         .active_rate(dsp_active_rate),
         .clock_ready(dsp_clock_ready),
+        .phy_ref_clk_req_n(dsp_phy_ref_clk_req_n),
         .mac_phy_rxeqeval(dsp_mac_phy_rxeqeval),
         .mac_phy_rxeqinprogress(dsp_mac_phy_rxeqinprogress),
         .mac_phy_invalid_req(dsp_mac_phy_invalid_req),
@@ -126,6 +153,7 @@ module pcie_pipe_loopback #(
         .mac_phy_rxstandby(dsp_mac_phy_rxstandby),
         .mac_phy_txdetectrx_loopback(dsp_mac_phy_txdetectrx_loopback),
         .mac_phy_powerdown(dsp_mac_phy_powerdown),
+        .mac_phy_asyncpowerchangeack(dsp_mac_phy_asyncpowerchangeack),
         .mac_phy_rate(dsp_mac_phy_rate),
         .phy_mac_rxelecidle(dsp_phy_mac_rxelecidle),
         .phy_mac_phystatus(dsp_phy_mac_phystatus),
@@ -152,7 +180,11 @@ module pcie_pipe_loopback #(
         .peer_mac_phy_txstartblock(usp_mac_phy_txstartblock),
         .peer_mac_phy_txsyncheader(usp_mac_phy_txsyncheader)
     );
-    pcie_pipe_side #(.NL(NL), .ACK_CYCLES(ACK_CYCLES), .EQ_CYCLES(EQ_CYCLES)) u_usp_side (
+    pcie_pipe_side #(
+        .NL(NL),
+        .ACK_CYCLES(ACK_CYCLES),
+        .EQ_CYCLES(EQ_CYCLES)
+    ) u_usp_side (
         .pclk_62p5(pclk_62p5),
         .pclk_125(pclk_125),
         .pclk_250(pclk_250),
@@ -162,6 +194,7 @@ module pcie_pipe_loopback #(
         .pclk(usp_pclk),
         .active_rate(usp_active_rate),
         .clock_ready(usp_clock_ready),
+        .phy_ref_clk_req_n(usp_phy_ref_clk_req_n),
         .mac_phy_rxeqeval(usp_mac_phy_rxeqeval),
         .mac_phy_rxeqinprogress(usp_mac_phy_rxeqinprogress),
         .mac_phy_invalid_req(usp_mac_phy_invalid_req),
@@ -179,6 +212,7 @@ module pcie_pipe_loopback #(
         .mac_phy_rxstandby(usp_mac_phy_rxstandby),
         .mac_phy_txdetectrx_loopback(usp_mac_phy_txdetectrx_loopback),
         .mac_phy_powerdown(usp_mac_phy_powerdown),
+        .mac_phy_asyncpowerchangeack(usp_mac_phy_asyncpowerchangeack),
         .mac_phy_rate(usp_mac_phy_rate),
         .phy_mac_rxelecidle(usp_phy_mac_rxelecidle),
         .phy_mac_phystatus(usp_phy_mac_phystatus),

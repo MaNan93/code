@@ -1,0 +1,8 @@
+# Run from pcie_pipe_link/ with the build/synthesis/ directory present.
+# Generic Xilinx 7-series resource mapping; no device timing or placement checks.
+read_verilog -sv rtl/pcie_pipe_clock_gate.sv rtl/pcie_pipe_pclk_switch.sv rtl/pcie_pipe_eq_lane.sv rtl/pcie_pipe_status_lane.sv rtl/pcie_pipe_lane.sv rtl/pcie_pipe_side.sv rtl/pcie_pipe_link.sv
+hierarchy -check -top pcie_pipe_link
+synth_xilinx -family xc7 -top pcie_pipe_link
+check -assert
+stat
+write_json build/synthesis/pcie_pipe_link_xc7.json

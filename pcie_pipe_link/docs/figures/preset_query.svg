@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="652" height="535" viewBox="0 0 652 535">
+<rect width="100%" height="100%" fill="white"/>
+<text x="24" y="41" font-family="Microsoft YaHei, sans-serif" font-size="23" fill="#245da8">Figure 3-2  Preset-to-coefficient conversion</text>
+<text x="300" y="99" font-family="Microsoft YaHei, sans-serif" font-size="13" fill="#8291a3">C0</text>
+<polyline points="310,111 310,510" fill="none" stroke="#e4e9f0" stroke-width="1"/>
+<text x="382" y="99" font-family="Microsoft YaHei, sans-serif" font-size="13" fill="#8291a3">C1</text>
+<polyline points="392,111 392,510" fill="none" stroke="#e4e9f0" stroke-width="1"/>
+<text x="464" y="99" font-family="Microsoft YaHei, sans-serif" font-size="13" fill="#8291a3">C2</text>
+<polyline points="474,111 474,510" fill="none" stroke="#e4e9f0" stroke-width="1"/>
+<text x="546" y="99" font-family="Microsoft YaHei, sans-serif" font-size="13" fill="#8291a3">C3</text>
+<polyline points="556,111 556,510" fill="none" stroke="#e4e9f0" stroke-width="1"/>
+<text x="20" y="137" font-family="Microsoft YaHei, sans-serif" font-size="15" fill="#233247">PCLK</text>
+<polyline points="274,147 310,147 310,119 351.0,119 351.0,147 392,147 392,119 433.0,119 433.0,147 474,147 474,119 515.0,119 515.0,147 556,147 556,119 597.0,119 597.0,147 627,147" fill="none" stroke="#245da8" stroke-width="2"/>
+<text x="20" y="213" font-family="Microsoft YaHei, sans-serif" font-size="15" fill="#233247">mac_phy_getlocal_pset_coef</text>
+<polyline points="274,223 297.7,223 297.7,195 379.7,195 379.7,223 627,223" fill="none" stroke="#245da8" stroke-width="2"/>
+<text x="20" y="289" font-family="Microsoft YaHei, sans-serif" font-size="15" fill="#233247">local_pset_index / rate</text>
+<polyline points="281,271 620,271 627,285 620,299 281,299 274,285 281,271" fill="none" stroke="#245da8" stroke-width="2"/>
+<text x="287" y="287" font-family="Microsoft YaHei, sans-serif" font-size="13" fill="#245da8">valid index / rate</text>
+<text x="20" y="365" font-family="Microsoft YaHei, sans-serif" font-size="15" fill="#233247">phy_mac_local_tx_coef_valid</text>
+<polyline points="274,375 478.1,375 478.1,347 560.1,347 560.1,375 627,375" fill="none" stroke="#245da8" stroke-width="2"/>
+<text x="20" y="441" font-family="Microsoft YaHei, sans-serif" font-size="15" fill="#233247">phy_mac_local_tx_pset_coef</text>
+<polyline points="281,423 471.1,423 478.1,437 471.1,451 281,451 274,437 281,423" fill="none" stroke="#245da8" stroke-width="2"/>
+<text x="287" y="439" font-family="Microsoft YaHei, sans-serif" font-size="13" fill="#245da8">x</text>
+<polyline points="485.1,423 620,423 627,437 620,451 485.1,451 478.1,437 485.1,423" fill="none" stroke="#245da8" stroke-width="2"/>
+<text x="491.1" y="439" font-family="Microsoft YaHei, sans-serif" font-size="13" fill="#245da8">coeff</text>
+</svg>

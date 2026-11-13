@@ -8,7 +8,7 @@ module pcie_pipe_eq_lane #(
     input logic mac_phy_rxeqinprogress,
     input logic mac_phy_invalid_req,
     input logic mac_phy_getlocal_pset_coef,
-    input logic [4:0] mac_phy_local_pset_index,
+    input logic [5:0] mac_phy_local_pset_index,
     input logic mac_phy_dirchange,
     input logic [17:0] mac_phy_txdeemph,
     output logic [5:0] phy_mac_localfs,
@@ -19,9 +19,10 @@ module pcie_pipe_eq_lane #(
     output logic phy_mac_local_tx_coef_valid,
     output logic eq_due
 );
-    function automatic [17:0] preset_coeff(input [4:0] index, input [2:0] rate);
+    function automatic [17:0] preset_coeff(input [5:0] index, input [2:0] rate);
         integer preset, fs, lf, pre, post, main;
         begin
+            // Gen4/Gen5 presets P0-P10: indices 11-21.
             preset = (rate >= 3 && index != 31) ? index-11 : index;
             fs = (rate >= 3) ? 47 : 48;
             lf = (rate >= 3) ? 15 : 18;
@@ -48,13 +49,12 @@ module pcie_pipe_eq_lane #(
     logic eval_q, query_q, eval_busy;
     logic [COUNT_W-1:0] eval_count;
     logic [1:0] query_delay;
-    logic [4:0] query_index;
+    logic [5:0] query_index;
     logic [2:0] query_rate;
     assign phy_mac_localfs = mac_phy_rate >= 3 ? 6'd47 : 6'd48;
     assign phy_mac_locallf = mac_phy_rate >= 3 ? 6'd15 : 6'd18;
     assign phy_mac_dirfeedback = '0;
-    // RxEqInProgress, InvalidReq, DirChange and TxDeemph have no separate completion
-    // handshake in this parallel PIPE mode. Evaluation always returns an ideal-channel result.
+    // Fixed EQ feedback.
     always @(posedge pclk or negedge phy_rst_n) begin
         if (!phy_rst_n) begin
             eval_q <= 0;

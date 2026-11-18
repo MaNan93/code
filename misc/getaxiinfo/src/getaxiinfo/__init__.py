@@ -1,5 +1,7 @@
 """getaxiinfo package."""
 
-from .main import getaxiinfo_cli
+__version__ = "0.2.7"
 
-__all__ = ["getaxiinfo_cli"]
+from .main import get_pcie_capabilities, getaxiinfo, getaxiinfo_cli
+
+__all__ = ["get_pcie_capabilities", "getaxiinfo", "getaxiinfo_cli"]

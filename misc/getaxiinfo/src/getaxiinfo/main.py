@@ -1,552 +1,286 @@
 #!/usr/bin/env python3
-"""Extract selected SystemVerilog/Verilog `define macro values."""
+"""Extract DWC controller specifications from generated HDL constants."""
 
 import argparse
-import ast
-import operator
-import re
 import sys
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Optional, Set, Tuple
+from typing import Any, Dict, Iterable, List, Optional
 
-TARGET_MACROS: Tuple[str, ...] = (
-    "CC_SLV_NUM_OUTSTND_WR_REQ",
-    "CC_MAX_SLV_TAG",
-    "WR_CH_P_REQ_QUEUE_DP",
-    "CC_MAX_MSTR_TAGS_AXI",
-    "AXI_MSTR_CLK_FREQ",
-    "AXI_SLV_CLK_FREQ",
-    "DBI_SLV_CLK_FREQ",
-    "CC_MSTR_BUS_ID_WIDTH",
-    "CC_SLV_BUS_ID_WIDTH",
-    "CC_DBI_SLV_ID_WD",
-    "CC_MSTR_BUS_ADDR_WIDTH",
-    "SLAVE_BUS_ADDR_WIDTH",
-    "CC_DBI_SLV_BUS_ADDR_WIDTH",
-    "CC_MSTR_BUS_DATA_WIDTH",
-    "SLAVE_BUS_DATA_WIDTH",
-    "CC_DBI_SLV_BUS_DATA_WIDTH",
-    "CC_MSTR_BURST_LEN",
-    "CC_SLV_BURST_LEN",
-    "CC_DBI_BURST_LEN",
-    "CX_MAX_PCIE_SPEED",
-    "CX_NL",
+from . import __version__
+from .markdown import render_markdown
+from .macros import (
+    BOOLEAN_MACROS, CONTROLLER_ANCHORS, DEFINE_RE, TARGET_MACROS, MacroValues, parse_defines,
+    parse_numeric_value, resolve_target_macro_name,
 )
-
-DEFAULT_GLOBS: Tuple[str, ...] = (
-    "**/*.v",
-    "**/*.vh",
-    "**/*.sv",
-    "**/*.svh",
-    "**/*.h",
-    "**/*.inc",
-)
-
-DEFAULT_TARGET_FILE_PATTERN = "*cc_constants.svh"
-
-DEFINE_RE = re.compile(r"^\s*`define\s+([A-Za-z_][A-Za-z0-9_]*)\b(.*)$")
-
-PCIE_GEN_RATE_GBPS: Dict[int, float] = {
-    1: 2.5,
-    2: 5.0,
-    3: 8.0,
-    4: 16.0,
-    5: 32.0,
-    6: 64.0,
-    7: 128.0,
-}
+from .report import PCIE_GEN_RATE_GTPS, build_analysis, print_analysis
 
 
-def resolve_target_macro_name(name: str, target_set: Set[str]) -> Optional[str]:
-    """Resolve actual macro name to one target name.
-
-    Supports exact names and prefixed names like PREFIX_<TARGET>.
-    """
-    if name in target_set:
-        return name
-
-    for target in target_set:
-        if name.endswith("_" + target):
-            return target
-
-    return None
-
-
-_VERILOG_LITERAL_RE = re.compile(r"(?<![\w'])\d*'[sS]?([dDhHbBoO])([0-9a-fA-F_xXzZ?_]+)")
-_MACRO_REF_RE = re.compile(r"`([A-Za-z_][A-Za-z0-9_]*)")
-_BINARY_OPS = {
-    ast.Add: operator.add, ast.Sub: operator.sub, ast.Mult: operator.mul,
-    ast.FloorDiv: operator.floordiv, ast.Mod: operator.mod,
-    ast.LShift: operator.lshift, ast.RShift: operator.rshift,
-    ast.BitAnd: operator.and_, ast.BitOr: operator.or_, ast.BitXor: operator.xor,
-}
-_UNARY_OPS = {ast.UAdd: operator.pos, ast.USub: operator.neg, ast.Invert: operator.invert}
-
-
-def parse_numeric_value(
-    raw_value: Optional[str],
-    macros: Optional[Dict[str, str]] = None,
-    _stack: Optional[Set[str]] = None,
-) -> Optional[int]:
-    """Evaluate a constant integer expression without executing arbitrary Python code.
-
-    Supports macro references, Verilog integer literals and common arithmetic
-    operators. Undefined/cyclic macros and unsupported expressions return None.
-    """
-    if raw_value is None:
-        return None
-    expr = raw_value.strip()
-    if not expr:
-        return None
-
-    def _literal(match) -> str:
-        digits = match.group(2).replace("_", "")
-        if re.search(r"[xXzZ?]", digits):
-            raise ValueError("Unknown Verilog literal")
-        base = {"d": 10, "h": 16, "b": 2, "o": 8}[match.group(1).lower()]
-        return str(int(digits, base))
-
-    try:
-        expr = _VERILOG_LITERAL_RE.sub(_literal, expr)
-        expr = _MACRO_REF_RE.sub(lambda m: m.group(1), expr)
-        # Verilog integer division truncates toward zero.
-        expr = re.sub(r"(?<!/)/(?!/)", "//", expr)
-        tree = ast.parse(expr, mode="eval")
-        active = set() if _stack is None else _stack
-
-        def _eval(node: ast.AST) -> int:
-            if isinstance(node, ast.Num) and type(node.n) is int:
-                return node.n
-            if isinstance(node, ast.Name):
-                if macros is None or node.id not in macros or node.id in active:
-                    raise ValueError("Undefined or recursive macro")
-                value = parse_numeric_value(macros[node.id], macros, active | {node.id})
-                if value is None:
-                    raise ValueError("Unresolved macro")
-                return value
-            if isinstance(node, ast.UnaryOp) and type(node.op) in _UNARY_OPS:
-                return _UNARY_OPS[type(node.op)](_eval(node.operand))
-            if isinstance(node, ast.BinOp) and type(node.op) in _BINARY_OPS:
-                left, right = _eval(node.left), _eval(node.right)
-                if type(node.op) in (ast.LShift, ast.RShift) and not (0 <= right <= 4096):
-                    raise ValueError("Invalid shift")
-                if type(node.op) is ast.FloorDiv:
-                    if right == 0:
-                        raise ValueError("Division by zero")
-                    return (abs(left) // abs(right)) * (-1 if (left < 0) != (right < 0) else 1)
-                return _BINARY_OPS[type(node.op)](left, right)
-            raise ValueError("Unsupported expression")
-
-        return _eval(tree.body)
-    except (SyntaxError, ValueError, TypeError, OverflowError, ZeroDivisionError, RecursionError):
-        return None
-
-
-def build_analysis(ordered: Dict[str, Optional[str]]) -> Dict[str, Any]:
-    """Build interpreted interface information from extracted macro values."""
-    def _bandwidth_gbps(clk_key: str, data_key: str) -> Optional[float]:
-        clk = parse_numeric_value(ordered.get(clk_key))
-        data_width = parse_numeric_value(ordered.get(data_key))
-        if clk is None or data_width is None:
-            return None
-        return clk * data_width / 1000.0
-
-    mstr_read_os = parse_numeric_value(ordered.get("CC_MAX_MSTR_TAGS_AXI"))
-    slv_read_os = parse_numeric_value(ordered.get("CC_MAX_SLV_TAG"))
-
-    axi_mstr = {
-        "clk_freq": ordered.get("AXI_MSTR_CLK_FREQ"),
-        "clk_unit": "MHz",
-        "id_width": ordered.get("CC_MSTR_BUS_ID_WIDTH"),
-        "addr_width": ordered.get("CC_MSTR_BUS_ADDR_WIDTH"),
-        "data_width": ordered.get("CC_MSTR_BUS_DATA_WIDTH"),
-        "bandwidth_Gbps": _bandwidth_gbps("AXI_MSTR_CLK_FREQ", "CC_MSTR_BUS_DATA_WIDTH"),
-        "write_outstanding": None,  # Posted queue depth is not AXI write outstanding.
-        "posted_request_queue_depth": parse_numeric_value(ordered.get("WR_CH_P_REQ_QUEUE_DP")),
-        "read_outstanding": mstr_read_os,
-    }
-    axi_slv = {
-        "clk_freq": ordered.get("AXI_SLV_CLK_FREQ"),
-        "clk_unit": "MHz",
-        "id_width": ordered.get("CC_SLV_BUS_ID_WIDTH"),
-        "addr_width": ordered.get("SLAVE_BUS_ADDR_WIDTH"),
-        "data_width": ordered.get("SLAVE_BUS_DATA_WIDTH"),
-        "bandwidth_Gbps": _bandwidth_gbps("AXI_SLV_CLK_FREQ", "SLAVE_BUS_DATA_WIDTH"),
-        "write_outstanding": parse_numeric_value(ordered.get("CC_SLV_NUM_OUTSTND_WR_REQ")),
-        "read_outstanding": slv_read_os,
-    }
-    axi_dbi = {
-        "clk_freq": ordered.get("DBI_SLV_CLK_FREQ"),
-        "clk_unit": "MHz",
-        "id_width": ordered.get("CC_DBI_SLV_ID_WD"),
-        "addr_width": ordered.get("CC_DBI_SLV_BUS_ADDR_WIDTH"),
-        "data_width": ordered.get("CC_DBI_SLV_BUS_DATA_WIDTH"),
-        "bandwidth_Gbps": _bandwidth_gbps("DBI_SLV_CLK_FREQ", "CC_DBI_SLV_BUS_DATA_WIDTH"),
-        "write_outstanding": 0,
-        "read_outstanding": 0,
-    }
-
-    gen = parse_numeric_value(ordered.get("CX_MAX_PCIE_SPEED"))
-    link_width = parse_numeric_value(ordered.get("CX_NL"))
-    per_lane = PCIE_GEN_RATE_GBPS.get(gen) if gen is not None else None
-    total = (per_lane * link_width) if (per_lane is not None and link_width is not None) else None
-
-    pcie = {
-        "gen": gen,
-        "link_width": link_width,
-        "per_lane_gbps": per_lane,
-        "total_gbps": total,
-    }
-
-    return {
-        "axi_mstr": axi_mstr,
-        "axi_slv": axi_slv,
-        "axi_dbi": axi_dbi,
-        "pcie": pcie,
-    }
-
-
-def print_analysis(analysis: Dict[str, Any]) -> None:
-    """Print interpreted interface summary in plain text."""
-    axi_mstr = analysis["axi_mstr"]
-    axi_slv = analysis["axi_slv"]
-    axi_dbi = analysis["axi_dbi"]
-    pcie = analysis["pcie"]
-
-    def _fmt(val: Any) -> str:
-        return "N/A" if val is None else str(val)
-
-    headers = (
-        "IFACE",
-        "CLK(MHz)",
-        "ID_WD",
-        "ADDR_WD",
-        "DATA_WD",
-        "BW(Gbps)",
-        "WR-Outstanding",
-        "RD-Outstanding",
-    )
-    rows = [
-        (
-            "AXI_MSTR",
-            _fmt(axi_mstr["clk_freq"]),
-            _fmt(axi_mstr["id_width"]),
-            _fmt(axi_mstr["addr_width"]),
-            _fmt(axi_mstr["data_width"]),
-            _fmt(axi_mstr["bandwidth_Gbps"]),
-            _fmt(axi_mstr["write_outstanding"]),
-            _fmt(axi_mstr["read_outstanding"]),
-        ),
-        (
-            "AXI_SLV",
-            _fmt(axi_slv["clk_freq"]),
-            _fmt(axi_slv["id_width"]),
-            _fmt(axi_slv["addr_width"]),
-            _fmt(axi_slv["data_width"]),
-            _fmt(axi_slv["bandwidth_Gbps"]),
-            _fmt(axi_slv["write_outstanding"]),
-            _fmt(axi_slv["read_outstanding"]),
-        ),
-        (
-            "AXI_DBI",
-            _fmt(axi_dbi["clk_freq"]),
-            _fmt(axi_dbi["id_width"]),
-            _fmt(axi_dbi["addr_width"]),
-            _fmt(axi_dbi["data_width"]),
-            _fmt(axi_dbi["bandwidth_Gbps"]),
-            _fmt(axi_dbi["write_outstanding"]),
-            _fmt(axi_dbi["read_outstanding"]),
-        ),
-    ]
-
-    widths = [len(h) for h in headers]
-    for row in rows:
-        for idx, cell in enumerate(row):
-            widths[idx] = max(widths[idx], len(cell))
-
-    def _line(items: Tuple[str, ...]) -> str:
-        return " | ".join(item.ljust(widths[i]) for i, item in enumerate(items))
-
-    sep = "-+-".join("-" * w for w in widths)
-
-    print("\n[INTERFACE_SUMMARY]")
-    print(_line(headers))
-    print(sep)
-    for row in rows:
-        print(_line(row))
-
-    print(f"AXI_MSTR posted request queue depth: {_fmt(axi_mstr[\'posted_request_queue_depth\'])}")
-
-    gen = pcie["gen"]
-    link_width = pcie["link_width"]
-    per_lane = pcie["per_lane_gbps"]
-    total = pcie["total_gbps"]
-    print(
-        "PCIE    : "
-        f"gen={gen}, link_width={link_width}, per_lane_gbps={per_lane}, total_gbps={total}"
-    )
+DEFAULT_TARGET_FILE_PATTERN = "*pcie_ctl_cc_constants.svh*"
+DEFAULT_GLOBS = ("**/*.v", "**/*.vh", "**/*.sv", "**/*.svh", "**/*.h", "**/*.inc")
+# Retain the former import name; link rates are printed in GT/s in the summary.
+PCIE_GEN_RATE_GBPS = PCIE_GEN_RATE_GTPS
 
 
 def discover_files(paths: Iterable[Path], globs: Iterable[str]) -> List[Path]:
-    """Collect candidate files from files/directories passed by user."""
-    result: List[Path] = []
+    result = []
     seen = set()
-
     for path in paths:
-        if path.is_file():
-            resolved = path.resolve()
-            if resolved not in seen:
-                seen.add(resolved)
-                result.append(path)
-            continue
-
-        if path.is_dir():
-            for pattern in globs:
-                for f in path.glob(pattern):
-                    if f.is_file():
-                        resolved = f.resolve()
-                        if resolved not in seen:
-                            seen.add(resolved)
-                            result.append(f)
-
+        candidates = [path] if path.is_file() else (
+            f for pattern in globs for f in path.glob(pattern)
+        ) if path.is_dir() else []
+        for candidate in candidates:
+            if candidate.is_file() and candidate.resolve() not in seen:
+                seen.add(candidate.resolve())
+                result.append(candidate)
     return result
 
 
 def discover_target_files(paths: Iterable[Path], pattern: str) -> List[Path]:
-    """Find files whose basename matches pattern under input files/directories."""
-    result: List[Path] = []
-    seen = set()
-
-    for path in paths:
-        if path.is_file():
-            if path.match(pattern):
-                resolved = path.resolve()
-                if resolved not in seen:
-                    seen.add(resolved)
-                    result.append(path)
-            continue
-
-        if path.is_dir():
-            for f in path.rglob(pattern):
-                if f.is_file():
-                    resolved = f.resolve()
-                    if resolved not in seen:
-                        seen.add(resolved)
-                        result.append(f)
-
-    return result
+    return discover_files(paths, ("**/" + pattern,))
 
 
-def parse_defines(file_path: Path) -> Dict[str, Tuple[str, int, str]]:
-    """Parse `define lines in a single file and return name -> (value, line_no, line_text)."""
-    found: Dict[str, Tuple[str, int, str]] = {}
-
-    try:
-        text = file_path.read_text(encoding="utf-8", errors="ignore")
-    except OSError:
-        return found
-
-    lines = text.splitlines()
-    i = 0
-    while i < len(lines):
-        line = lines[i]
-        origin_line_no = i + 1
-        origin_line_text = line.rstrip("\n")
-        match = DEFINE_RE.match(line)
-        if not match:
-            i += 1
-            continue
-
-        name = match.group(1)
-        rest = match.group(2).rstrip()
-
-        # Merge line continuations ended by backslash.
-        while rest.endswith("\\") and i + 1 < len(lines):
-            rest = rest[:-1].rstrip() + " " + lines[i + 1].strip()
-            i += 1
-
-        # Function-like macros have no whitespace before their opening parenthesis.
-        if rest.startswith("("):
-            i += 1
-            continue
-
-        # Remove inline // comments for simpler output.
-        value = rest
-        if "//" in value:
-            value = value.split("//", 1)[0]
-        value = value.strip()
-
-        # Macro without explicit value is treated as 1.
-        found[name] = (value if value else "1", origin_line_no, origin_line_text)
-        i += 1
-
-    return found
+def discover_controller_files(paths: Iterable[Path]) -> List[Path]:
+    """Match a filename substring, only for immediate children of src/."""
+    return sorted(
+        (path for path in discover_target_files(paths, DEFAULT_TARGET_FILE_PATTERN)
+         if path.match(DEFAULT_TARGET_FILE_PATTERN) and path.parent.resolve().name == "src"),
+        key=str,
+    )
 
 
-def extract_target_macros(
-    files: Iterable[Path],
-) -> Tuple[Dict[str, str], Dict[str, str], Dict[str, int], Dict[str, str]]:
-    """Return macro values and debug information for requested macros."""
-    values: Dict[str, str] = {}
-    sources: Dict[str, str] = {}
-    source_lines: Dict[str, int] = {}
-    source_text: Dict[str, str] = {}
+def extract_target_macros(files):
+    """Extract fixed and per-PF macros, retaining referenced helper definitions."""
+    values = MacroValues()
+    sources, source_lines, source_text = {}, {}, {}
     target_set = set(TARGET_MACROS)
-
-    all_defines: Dict[str, str] = {}
-    file_defines = []
+    candidates = {}
+    flag_fallbacks = {}
     for file_path in files:
+        values.files.append(str(file_path))
         defines = parse_defines(file_path)
-        all_defines.update({name: item[0] for name, item in defines.items()})
-        file_defines.append((file_path, defines))
-
-    for file_path, defines in file_defines:
-        for macro, (value, line_no, line_text) in defines.items():
-            target_macro = resolve_target_macro_name(macro, target_set)
-            if target_macro is None:
-                continue
-
-            # Keep exact match if it already exists.
-            if target_macro in values and macro != target_macro:
-                continue
-
-            numeric = parse_numeric_value(value, all_defines, {macro})
-            values[target_macro] = str(numeric) if numeric is not None else value
-            sources[target_macro] = str(file_path)
-            source_lines[target_macro] = line_no
-            source_text[target_macro] = line_text
-
-    return values, sources, source_lines, source_text
-
-
-def build_arg_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(
-        description="Extract selected `define macro values from HDL files."
-    )
-    parser.add_argument(
-        "--file",
-        nargs="+",
-        default=None,
-        help=(
-            "Explicit files/directories to read. If omitted, auto-discover exactly one "
-            f"{DEFAULT_TARGET_FILE_PATTERN} under current directory."
-        ),
-    )
-    parser.add_argument(
-        "--debug",
-        action="store_true",
-        help="Show source file, line number and matched define line for each macro.",
-    )
-    return parser
-
-
-def _collect_macro_data(
-    file_inputs: Optional[Iterable[str]] = None,
-) -> Tuple[Dict[str, Optional[str]], Dict[str, str], Dict[str, int], Dict[str, str]]:
-    """Collect extracted macro data without printing."""
-    if file_inputs:
-        files = discover_target_files([Path(p) for p in file_inputs], "*")
-    else:
-        files = discover_target_files([Path(".")], DEFAULT_TARGET_FILE_PATTERN)
-        if len(files) > 1:
-            raise ValueError(
-                "Multiple matched files found. Use --file to specify exactly one input."
-            )
-
-    if not files:
-        if file_inputs:
-            raise FileNotFoundError(
-                "No input files found from --file. "
-                "Please check the provided file/directory path."
-            )
-        raise FileNotFoundError(
-            "No file matched {} in current directory.".format(DEFAULT_TARGET_FILE_PATTERN)
-        )
-
-    values, sources, source_lines, source_text = extract_target_macros(files)
-    ordered = {macro: values.get(macro) for macro in TARGET_MACROS}
+        anchor_prefixes = {
+            name[:-len(anchor)] for name in defines for anchor in CONTROLLER_ANCHORS
+            if name == anchor or name.endswith("_" + anchor)
+        }
+        named_prefixes = anchor_prefixes - {""}
+        if len(named_prefixes) > 1:
+            raise ValueError("Multiple controller macro prefixes found: {}. Select one controller input.".format(
+                ", ".join(sorted(named_prefixes))))
+        controller_prefix = (next(iter(named_prefixes)) if named_prefixes else
+                             "" if "" in anchor_prefixes else None)
+        for name, (raw, line, text) in defines.items():
+            values.definitions[name] = raw
+            canonical = resolve_target_macro_name(name, target_set, controller_prefix)
+            if canonical is not None:
+                candidates.setdefault(canonical, []).append((name, raw, str(file_path), line, text))
+            if name.endswith("_VALUE"):
+                flag = resolve_target_macro_name(name[:-6], target_set, controller_prefix)
+                if flag in BOOLEAN_MACROS:
+                    flag_fallbacks.setdefault(flag, []).append(
+                        (0, (name, raw, str(file_path), line, text), "Numeric *_VALUE configuration flag"))
+        for name, (raw, line, text) in getattr(defines, "disabled", {}).items():
+            flag = resolve_target_macro_name(name, target_set, controller_prefix)
+            if flag in BOOLEAN_MACROS:
+                flag_fallbacks.setdefault(flag, []).append(
+                    (1, (name, raw, str(file_path), line, text), "Commented-out configuration flag means Disabled"))
+    for flag, fallbacks in flag_fallbacks.items():
+        if flag not in candidates:
+            priority = min(item[0] for item in fallbacks)
+            selected = [item for item in fallbacks if item[0] == priority]
+            candidates[flag] = [item[1] for item in selected]
+            values.rules[flag] = selected[0][2]
+    for canonical, matches in candidates.items():
+        prefixed = [match for match in matches if match[0] != canonical]
+        exact = [match for match in matches if match[0] == canonical]
+        choices = prefixed or exact or matches
+        if len(choices) > 1:
+            details = ", ".join("{} ({}:{})".format(match[0], match[2], match[3]) for match in choices)
+            raise ValueError("Ambiguous macro {}: {}. Select one controller input.".format(canonical, details))
+        name, raw, source, line, text = choices[0]
+        values[canonical] = raw
+        values.actual_names[canonical] = name
+        sources[canonical], source_lines[canonical], source_text[canonical] = source, line, text
+    prefixes = {
+        (actual[:-6] if name in BOOLEAN_MACROS and actual.endswith("_VALUE") else actual)[:-len(name)]
+        for name, actual in values.actual_names.items() if actual != name
+    }
+    if len(prefixes) > 1:
+        raise ValueError("Multiple controller macro prefixes found: {}. Select one controller input.".format(
+            ", ".join(sorted(prefixes))))
+    ordered = MacroValues()
+    ordered.update((name, values.get(name)) for name in TARGET_MACROS)
+    ordered.update((name, values[name]) for name in sorted(values) if name not in target_set)
+    ordered.definitions, ordered.actual_names, ordered.files = values.definitions, values.actual_names, values.files
+    ordered.rules = values.rules
     return ordered, sources, source_lines, source_text
 
 
-def getaxiinfo(
-    file_inputs: Optional[Iterable[str]] = None,
-    debug: bool = False,
-) -> Dict[str, Optional[str]]:
-    """Extract TARGET_MACROS values for API callers.
+def find_companion_cap_file(controller_file: Path) -> Optional[Path]:
+    """Find companion cap_port_cfg.svh in include/ directories."""
+    parent = controller_file.parent
+    candidates = []
+    for inc_dir in (parent / "include", parent.parent / "include", parent.parent / "src" / "include", parent):
+        if inc_dir.is_dir():
+            for f in sorted(inc_dir.glob("*cap_port_cfg*.svh"), key=str):
+                candidates.append(f)
+    if candidates:
+        prefix = controller_file.stem.split("DWC_pcie_ctl")[0]
+        if prefix:
+            matching = [c for c in candidates if c.name.startswith(prefix)]
+            if matching:
+                return matching[0]
+        return candidates[0]
+    return None
 
-    Parameters:
-        file_inputs:
-            Explicit files/directories to read. If None, auto-discover exactly one
-            DEFAULT_TARGET_FILE_PATTERN file under current directory.
-        debug:
-            Kept for backward compatibility. API path does not print logs.
 
-    Returns:
-        Dict[str, Optional[str]]: Macro name to extracted value (or None if not found).
+def _collect_macro_data(file_inputs=None):
+    if isinstance(file_inputs, str):
+        file_inputs = [file_inputs]
+    if file_inputs:
+        files = []
+        for item in file_inputs:
+            path = Path(item)
+            if not path.exists():
+                raise FileNotFoundError("Input path does not exist: {}".format(path))
+            files.extend([path] if path.is_file() else discover_controller_files([path]))
+        files = sorted({path.resolve() for path in files}, key=str)
+    else:
+        files = discover_controller_files([Path(".")])
+    if not files:
+        raise FileNotFoundError(
+            "No file matched {} directly inside a src directory under the search root. "
+            "Use --file to specify an exact input file.".format(DEFAULT_TARGET_FILE_PATTERN))
+    target_files = []
+    if len(files) > 1:
+        constants_files = [f for f in files if "cap_port_cfg" not in f.name]
+        cap_files = [f for f in files if "cap_port_cfg" in f.name]
+        if len(constants_files) == 1 and len(cap_files) == 1:
+            target_files = [constants_files[0], cap_files[0]]
+        else:
+            raise ValueError("Multiple matched files found. Use --file to specify exactly one input.\n" +
+                             "\n".join("  - {}".format(path) for path in files))
+    else:
+        primary = files[0]
+        target_files = [primary]
+        if "cap_port_cfg" not in primary.name:
+            companion = find_companion_cap_file(primary)
+            if companion and companion.resolve() != primary.resolve():
+                target_files.append(companion)
+    return extract_target_macros(target_files)
+
+
+def getaxiinfo(file_inputs: Optional[Iterable[str]] = None, debug: bool = False) -> Dict[str, Optional[str]]:
+    """Return raw target macro values, including per-PF values; never print logs.
+
+    Discover one matching constants file directly inside src/, or read an explicit
+    file. Missing fixed targets retain None. debug is accepted for API compatibility.
     """
-    ordered, _sources, _source_lines, _source_text = _collect_macro_data(file_inputs)
-    _ = debug  # Keep signature stable for existing callers.
+    ordered, _, _, _ = _collect_macro_data(file_inputs)
     return ordered
 
 
-def _print_cli_output(
-    ordered: Dict[str, Optional[str]],
-    sources: Dict[str, str],
-    source_lines: Dict[str, int],
-    source_text: Dict[str, str],
-    debug: bool,
-) -> int:
-    """Print CLI logs and summary from extracted macro data."""
-    missing = [m for m, v in ordered.items() if v is None]
+def get_pcie_capabilities(file_inputs: Optional[Iterable[str]] = None) -> List[Dict[str, Any]]:
+    """Return parsed PCIe capability details (Standard & Extended) as structured dictionaries."""
+    ordered, _, _, _ = _collect_macro_data(file_inputs)
     analysis = build_analysis(ordered)
+    cap_section = next((sec for sec in analysis["sections"] if sec[0] == "CAPABILITIES"), None)
+    if not cap_section or not cap_section[3]:
+        return []
+    result = []
+    for row in cap_section[3]:
+        scope, cap_type, base_str, next_str, cap_id_str, name, desc, size_str = row
+        base_int = int(base_str, 16) if base_str.startswith("0x") else None
+        next_int = int(next_str, 16) if next_str.startswith("0x") else None
+        cap_id_int = int(cap_id_str, 16) if cap_id_str.startswith("0x") else None
+        result.append({
+            "scope": scope,
+            "type": cap_type,
+            "base_address": base_int,
+            "base_address_hex": base_str,
+            "next_offset": next_int,
+            "next_offset_hex": next_str,
+            "cap_id": cap_id_int,
+            "cap_id_hex": cap_id_str,
+            "name": name,
+            "description": desc,
+            "size": size_str,
+        })
+    return result
 
-    for macro in TARGET_MACROS:
-        value = ordered[macro]
-        if value is None:
-            print(f"{macro} = <NOT_FOUND>")
-            continue
 
-        if debug:
-            src = sources.get(macro, "unknown")
-            line_no = source_lines.get(macro)
-            line_text = source_text.get(macro, "")
-            print(f"{macro} = {value}    # {src}:{line_no}")
-            print(f"  line: {line_text}")
-        else:
-            print(f"{macro} = {value}")
+def _macro_details(analysis, ordered, sources, source_lines, source_text):
+    details = []
+    names = sorted(set(analysis["used"]) | {name for name, value in ordered.items() if value is not None})
+    for name in names:
+        raw = ordered.get(name)
+        resolved = analysis["resolved"].get(name)
+        actual = getattr(ordered, "actual_names", {}).get(name, name)
+        details.append({
+            "name": "{}{}".format(name, " ({})".format(actual) if actual != name else ""),
+            "raw": raw if raw is not None else "<NOT_FOUND>",
+            "resolved": resolved if resolved is not None else "Unknown / not evaluated",
+            "rule": getattr(ordered, "rules", {}).get(name, ""),
+            "source": "{}:{}".format(sources[name], source_lines[name]) if name in sources else "",
+            "line": source_text.get(name, ""),
+        })
+    return details
 
+
+def _print_cli_output(ordered, sources, source_lines, source_text, debug, analysis=None):
+    if analysis is None:
+        analysis = build_analysis(ordered)
+    if debug:
+        print("[SOURCE]")
+        files = getattr(ordered, "files", sorted(set(sources.values())))
+        for path in files:
+            print("File: " + str(Path(path).resolve()))
+        print()
     print_analysis(analysis)
-    if missing:
-        print("Missing macros: " + ", ".join(missing))
-
+    if debug:
+        print("\n[MACRO_DETAILS]")
+        for item in _macro_details(analysis, ordered, sources, source_lines, source_text):
+            print(item["name"])
+            print("  Raw     : {}".format(item["raw"]))
+            print("  Resolved: {}".format(item["resolved"]))
+            if item["rule"]:
+                print("  Rule    : " + item["rule"])
+            if item["source"]:
+                print("  Source  : " + item["source"])
+                print("  Line    : " + item["line"])
+        for label, name, rule, result in analysis["trace"]:
+            print("{} = {}\n  Macro: {}\n  Rule : {}".format(label, result, name, rule))
     return 0
 
 
-def getaxiinfo_cli(argv: Optional[List[str]] = None) -> int:
-    """CLI entry: parse command line arguments and call getaxiinfo API."""
-    parser = build_arg_parser()
-    args = parser.parse_args(argv)
-    try:
-        ordered, sources, source_lines, source_text = _collect_macro_data(args.file)
-    except ValueError as exc:
-        print(str(exc), file=sys.stderr)
-        if not args.file:
-            for f in discover_target_files([Path(".")], DEFAULT_TARGET_FILE_PATTERN):
-                print("  - {}".format(f), file=sys.stderr)
-        return 1
-    except FileNotFoundError as exc:
-        print(str(exc), file=sys.stderr)
-        if not args.file:
-            print("Use --file to specify an exact input file.", file=sys.stderr)
-        return 1
+def build_arg_parser():
+    parser = argparse.ArgumentParser(description="Summarize DWC PCIe, AXI DMA/Slave/CFG, embedded DMA, Function and BAR specifications.")
+    parser.add_argument("--version", action="version", version="%(prog)s " + __version__)
+    parser.add_argument("--file", nargs="+", help=(
+        "Read one explicit file, or find one *pcie_ctl_cc_constants.svh* directly "
+        "inside src/ below the supplied directory. Default: search the current directory."))
+    parser.add_argument("--debug", action="store_true", help="Show [SOURCE] and [MACRO_DETAILS] with raw values and line numbers.")
+    parser.add_argument("-o", "--output", type=Path, metavar="REPORT.md",
+                        help="Also write a UTF-8 Markdown report; --debug includes sources and macro details.")
+    return parser
 
-    return _print_cli_output(
-        ordered=ordered,
-        sources=sources,
-        source_lines=source_lines,
-        source_text=source_text,
-        debug=args.debug,
-    )
+
+def getaxiinfo_cli(argv: Optional[List[str]] = None) -> int:
+    args = build_arg_parser().parse_args(argv)
+    try:
+        ordered, sources, lines, text = _collect_macro_data(args.file)
+        analysis = build_analysis(ordered)
+        if args.output is not None:
+            files = getattr(ordered, "files", sorted(set(sources.values())))
+            if any(args.output.resolve() == Path(path).resolve() for path in files):
+                raise ValueError("Output report must not overwrite the input constants file.")
+            details = _macro_details(analysis, ordered, sources, lines, text) if args.debug else ()
+            report = render_markdown(analysis, files=files, macro_details=details, debug=args.debug)
+            args.output.parent.mkdir(parents=True, exist_ok=True)
+            args.output.write_text(report, encoding="utf-8")
+        return _print_cli_output(ordered, sources, lines, text, args.debug, analysis=analysis)
+    except (OSError, UnicodeError, ValueError) as exc:
+        print(str(exc), file=sys.stderr)
+        return 1
 
 
 if __name__ == "__main__":

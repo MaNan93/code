@@ -1,2 +1,0 @@
-recursive-include tests *.py *.svh
-include CHANGELOG.md

@@ -1,0 +1,495 @@
+" ============================================================
+"  vimrc.vim  —  gvim / vim 配置（Rocky Linux 8.10 离线/性能优化版）
+" 位置: 放在任意位置，在 ~/.vimrc 里 source 它（或直接改名为 ~/.vimrc）
+" 配套插件与工具:
+"   - ~/.vim/pack/plugins/start/automatic-verilog          (AutoInst / AutoWire 等自动例化/信号定义)
+"   - ~/.vim/plugin/verible_format.vim                      (F5    格式化 SV/Verilog)
+"   - ~/.vim/plugin/comment.vim                             (F3/F4 行注释/取消注释)
+"   - ~/.vim/plugin/copy_path.vim                           (F9    复制当前文件绝对路径)
+"   - ~/.vim/pack/plugins/start/verilog_systemverilog.vim   (SV 语法/缩进/跳转)
+"   - ~/.vim/pack/plugins/start/vim-fugitive                (Git   版本对比与 blame)
+"
+" 目录:
+"    1. 基础 / 编码          8. 键位
+"    2. 外观（显示 / 换行     9. 工程
+"       / 配色 / 状态栏）    10. 文件类型
+"    3. 编辑                11. GUI
+"    4. 搜索                12. 杂项
+"    5. 补全 / 命令行        13. 离线插件配套设置 (vim-fugitive)
+"    6. 窗口与缓冲区        14. automatic-verilog 插件专属配置与增强
+"    7. 文件与备份
+" ============================================================
+
+
+" ============================================================
+" 1. 基础 / 编码
+" ============================================================
+set nocompatible
+syntax on
+filetype plugin indent on
+
+" 强制使用传统正则引擎，避免复杂 SystemVerilog 语法高亮回溯卡顿
+set regexpengine=1
+
+set encoding=utf-8
+scriptencoding utf-8
+set fileencoding=utf-8
+set fileencodings=ucs-bom,utf-8,gb18030,gbk,big5,latin1
+set fileformats=unix,dos
+" 仅 GUI 下把 ambiguous 宽度字符当双宽（终端里取决于终端自身设置，别强行指定）
+if has('gui_running')
+  set ambiwidth=double
+endif
+
+
+" ============================================================
+" 2. 外观
+" ============================================================
+
+" ---------- 显示 ----------
+set number
+set norelativenumber
+" 关闭全行光标背景重绘，避免 GTK/X11 下大文件滚动掉帧
+set nocursorline
+set scrolloff=5
+set sidescrolloff=8
+set showmatch
+set matchtime=2
+set laststatus=2
+set showtabline=2
+set signcolumn=yes
+set display=lastline
+set ruler
+set showcmd
+
+" 不可见字符（<leader>l 开关）
+set listchars=tab:>\ ,trail:.,extends:>,precedes:<,nbsp:+
+set nolist
+
+" 关掉提示音 / 闪屏
+set noerrorbells
+set visualbell
+set t_vb=
+if exists('+belloff') | set belloff=all | endif
+
+" ---------- 自动换行（软换行） ----------
+" 超过窗口宽度的行在显示上折到下一行，文件内容不变
+" 如需真正插入换行符，取消下一行注释并按需调整列数：
+" set textwidth=100
+set wrap
+set linebreak                 " 在空格/标点处断行，不把单词劈开
+set showbreak=>\              " 续行开头标记
+if exists('+breakindent')
+  set breakindent             " 续行保持与原行相同的缩进
+endif
+
+" ---------- 配色 ----------
+set background=dark
+colorscheme desert
+" 仅在终端声明支持真彩色时才开 termguicolors，避免 tmux/老终端花屏
+if !has('gui_running') && has('termguicolors')
+      \ && ($COLORTERM ==# 'truecolor' || $COLORTERM ==# '24bit')
+  silent! set termguicolors
+endif
+
+" ColorColumn 默认是 LightRed（就是那条红线），改成低调灰
+function! s:HiTweaks() abort
+  highlight clear SignColumn
+  highlight CursorLineNr term=bold cterm=bold gui=bold
+  highlight ColorColumn ctermbg=238 guibg=#2f2f2f
+endfunction
+augroup user_hl
+  autocmd!
+  autocmd ColorScheme * call s:HiTweaks()
+augroup END
+" 启动时也要立刻生效，不能只在 :colorscheme 之后
+call s:HiTweaks()
+
+" ---------- 状态栏 ----------
+function! Statusline() abort
+  let l:names = {'n':'NORMAL','i':'INSERT','v':'VISUAL','V':'V-LINE',
+        \ "\<C-v>":'V-BLOCK','R':'REPLACE','c':'COMMAND','t':'TERM'}
+  let l:mode = get(l:names, mode(), mode())
+  let l:ft   = &filetype !=# '' ? &filetype : 'noft'
+  let l:enc  = &fileencoding !=# '' ? &fileencoding : &encoding
+  " %m / %r 已经负责 [+] 和 [RO]，这里不要再拼一遍
+  return printf(' %s | %%f%%m%%r | %s | %s/%s | %%3l:%%-3c %%3p%%%% ',
+        \ l:mode, l:ft, &fileformat, l:enc)
+endfunction
+set statusline=%!Statusline()
+
+
+" ============================================================
+" 3. 编辑
+" ============================================================
+set backspace=indent,eol,start
+set whichwrap+=<,>,h,l
+set autoindent
+set nosmartindent             " 交给 filetype indent 插件接管缩进，避免 SV/Verilog 告警及 # 注释错位
+set expandtab
+set tabstop=4
+set shiftwidth=4
+set softtabstop=4
+set shiftround
+set nojoinspaces
+set nrformats-=octal          " Ctrl-A/X 不把 007 当八进制
+set foldmethod=indent
+set foldlevel=99
+set foldcolumn=0
+
+
+" ============================================================
+" 4. 搜索
+" ============================================================
+set incsearch
+set hlsearch
+set ignorecase
+set smartcase
+set wrapscan
+
+
+" ============================================================
+" 5. 补全 / 命令行
+" ============================================================
+set wildmenu
+set wildmode=longest:full,full
+set wildignore=*.o,*.a,*.so,*.pyc,*.class
+set wildignore+=*.fsdb,*.vpd,*.vcd,*.shm,*.ddc,*.svf,*.sdf
+set wildignore+=*/simv.daidir/*,*/csrc/*,*/INCA_libs/*
+set completeopt=menuone,noinsert,noselect
+set pumheight=12
+
+
+" ============================================================
+" 6. 窗口与缓冲区
+" ============================================================
+set splitright
+set splitbelow
+" 开启 hidden：允许在有未保存改动时切换 buffer（配合 fugitive diff；退出时仍会 confirm 提示）
+set hidden
+set equalalways
+set winminheight=0
+
+
+" ============================================================
+" 7. 文件与备份
+" ============================================================
+set nobackup
+set nowritebackup
+set swapfile
+set updatetime=300
+set autoread
+set confirm
+
+if has('persistent_undo')
+  set undofile
+  set undolevels=2000
+endif
+
+" 集中存放 swap / undo / backup，别污染工程目录
+let s:cfgdir = expand('~/.vim')
+for s:d in ['swap', 'undo', 'backup']
+  if !isdirectory(s:cfgdir . '/' . s:d)
+    call mkdir(s:cfgdir . '/' . s:d, 'p')
+  endif
+endfor
+execute 'set directory^=' . fnameescape(s:cfgdir . '/swap//')
+execute 'set backupdir^=' . fnameescape(s:cfgdir . '/backup//')
+if has('persistent_undo')
+  execute 'set undodir^=' . fnameescape(s:cfgdir . '/undo//')
+  " 清理 30 天未改动的 undo 文件，避免目录无限增长
+  for s:f in glob(s:cfgdir . '/undo/*', 0, 1)
+    if getftime(s:f) < localtime() - 30 * 86400
+      call delete(s:f)
+    endif
+  endfor
+endif
+unlet s:d s:cfgdir
+if exists('s:f') | unlet s:f | endif
+
+" 外部修改文件后自动感知（终端里 autoread 不会自己触发）
+augroup user_autoread
+  autocmd!
+  autocmd FocusGained,BufEnter * silent! checktime
+augroup END
+
+" 打开文件时回到上次光标位置
+augroup user_lastpos
+  autocmd!
+  autocmd BufReadPost *
+        \ if line("'\"") > 1 && line("'\"") <= line('$') |
+        \   execute 'normal! g`"' |
+        \ endif
+augroup END
+
+
+" ============================================================
+" 8. 键位
+" ============================================================
+let mapleader = ' '
+let maplocalleader = '\'
+
+set timeoutlen=600
+set ttimeout
+set ttimeoutlen=20
+
+" 软换行下按屏幕行移动（带计数时仍按实际行）
+nnoremap <expr> j v:count == 0 ? 'gj' : 'j'
+nnoremap <expr> k v:count == 0 ? 'gk' : 'k'
+xnoremap <expr> j v:count == 0 ? 'gj' : 'j'
+xnoremap <expr> k v:count == 0 ? 'gk' : 'k'
+
+" 保存 / 退出 / 取消高亮
+nnoremap <silent> <leader>w :write<CR>
+nnoremap <silent> <leader>q :quit<CR>
+nnoremap <silent> <leader>h :nohlsearch<CR>
+nnoremap <silent> <leader>Q :qa!<CR>
+
+" 显示开关
+nnoremap <silent> <leader>n :set number!<CR>
+nnoremap <silent> <leader>l :set list!<CR>
+nnoremap <silent> <leader>z :set wrap!<CR>
+
+" 窗口跳转 / 分屏
+nnoremap <C-h> <C-w>h
+nnoremap <C-j> <C-w>j
+nnoremap <C-k> <C-w>k
+nnoremap <C-l> <C-w>l
+nnoremap <silent> <leader>sv :vsplit<CR>
+nnoremap <silent> <leader>sh :split<CR>
+
+" 缓冲区切换
+nnoremap <silent> <leader>bn :bnext<CR>
+nnoremap <silent> <leader>bp :bprevious<CR>
+nnoremap <silent> <leader>bd :bdelete<CR>
+
+" quickfix 跳转
+nnoremap <silent> <leader>cn :cnext<CR>zz
+nnoremap <silent> <leader>cp :cprevious<CR>zz
+nnoremap <silent> <leader>co :copen<CR>
+nnoremap <silent> <leader>cc :cclose<CR>
+
+" F2：开关左侧 netrw 目录树
+nnoremap <silent> <F2> :Lexplore 30<CR>
+
+" F12：终端里粘贴大段代码时用（GUI 下不需要）
+set pastetoggle=<F12>
+
+" 终端窗口
+nnoremap <silent> <leader>t :terminal ++curwin<CR>
+
+
+" ============================================================
+" 9. 工程
+" ============================================================
+" 仅搜索当前文件目录与工作目录，去掉递归 ** 防止大型 NFS 工程卡死
+set path=.,
+
+" grep：<leader>g 搜光标下单词，<leader>G 交互输入
+if executable('rg')
+  let &grepprg = 'rg --vimgrep --no-heading --smart-case --glob "!*.{log,fsdb,vcd,vpd,shm}"'
+  set grepformat=%f:%l:%c:%m
+  nnoremap <leader>g :grep! <C-R>=expand('<cword>')<CR><CR>:copen<CR>
+else
+  set grepprg=grep\ -rnI\ --exclude-dir=.git\ --exclude=*.log\ --exclude=*.fsdb\ --exclude=*.vcd
+  set grepformat=%f:%l:%m
+  nnoremap <leader>g :grep! -w <C-R>=expand('<cword>')<CR> .<CR>:copen<CR>
+endif
+nnoremap <leader>G :grep! <C-R>=input('grep: ')<CR><CR>:copen<CR>
+
+" cscope（工程根目录有 cscope.out 时自动加载）
+if has('cscope') && filereadable('cscope.out')
+  set cscopetag cscopeverbose
+  silent! cs add cscope.out
+endif
+
+
+" ============================================================
+" 10. 文件类型
+" ============================================================
+runtime macros/matchit.vim
+" 关闭重型正则语法折叠，改用轻量的 indent 缩进折叠保证大文件流畅
+" let g:verilog_syntax_fold_lst = 'block,module,class,function,task'
+
+function! s:sv_setup() abort
+  setlocal tabstop=4 shiftwidth=4 softtabstop=4 expandtab
+  setlocal commentstring=//\ %s
+  setlocal iskeyword+=$
+  setlocal foldmethod=indent
+  setlocal foldlevel=99
+  " 跳转快捷键：gd 跳到子模块定义，gp 跳到端口声明
+  nnoremap <buffer> <silent> gd :VerilogFollowInstance<CR>
+  nnoremap <buffer> <silent> gp :VerilogFollowPort<CR>
+endfunction
+
+augroup user_ft
+  autocmd!
+  autocmd BufRead,BufNewFile *.sv,*.svh,*.svi if empty(&l:filetype) | setfiletype systemverilog | endif
+  autocmd BufRead,BufNewFile *.v,*.vh        if empty(&l:filetype) | setfiletype verilog | endif
+  autocmd FileType systemverilog,verilog,verilog_systemverilog call s:sv_setup()
+  autocmd FileType tcl setlocal tabstop=4 shiftwidth=4 softtabstop=4 expandtab
+  " 仅 markdown 开拼写检查（text 常是日志/笔记，会满屏红线）
+  autocmd FileType markdown setlocal spell spelllang=en,cjk
+  " 在注释行按 o / O 不自动续写注释前缀
+  autocmd FileType * setlocal formatoptions-=o
+augroup END
+
+
+" ============================================================
+" 11. GUI
+" ============================================================
+" 窗口位置和大小只在 GUI 下设置，避免在 ssh/tmux 终端里和终端抢大小
+if has('gui_running')
+  winpos 442 63
+  set columns=203
+  set lines=47
+endif
+
+set linespace=0
+set guioptions+=m
+set guioptions+=T
+set guioptions+=a
+" 开启右侧滚动条，且垂直分屏时为左侧分屏显示独立垂直滚动条
+set guioptions+=r
+set guioptions+=L
+
+silent! set guifont=DejaVu\ Sans\ Mono\ 13
+if &guifont ==# ''
+  silent! set guifont=Monospace\ 13
+endif
+silent! set guifontwide=Noto\ Sans\ CJK\ SC\ 13
+
+" Ctrl+滚轮实时改字号（不落盘，重启回到 13，GTK 格式 "Name 12"）
+function! s:BumpFont(font, delta) abort
+  if a:font =~# '\s\d\+$'
+    let l:n = str2nr(matchstr(a:font, '\d\+$'))
+    let l:n = max([6, min([40, l:n + a:delta])])
+    return substitute(a:font, '\d\+$', l:n, '')
+  endif
+  return a:font
+endfunction
+
+function! s:FontSize(delta) abort
+  let l:main = s:BumpFont(&guifont, a:delta)
+  if l:main ==# &guifont
+    return
+  endif
+  let &guifont = l:main
+  if &guifontwide !=# ''
+    let &guifontwide = s:BumpFont(&guifontwide, a:delta)
+  endif
+endfunction
+
+if has('gui_running')
+  nnoremap <silent> <C-ScrollWheelUp>   :call <SID>FontSize(1)<CR>
+  nnoremap <silent> <C-ScrollWheelDown> :call <SID>FontSize(-1)<CR>
+
+  " GVim 菜单栏增强：为 &Verilog 菜单追加 RtlTree 和一键全自动化
+  anoremenu 9998.05 &Verilog.-Sep0-                             :
+  anoremenu 9998.08 &Verilog.RtlTree<TAB>:RtlTree               :RtlTree<CR>
+  anoremenu 9998.50 &Verilog.AutoAll.AutoVerilogAll<TAB><S-F1>  :call g:ToggleAutoVerilogAll()<CR>
+  anoremenu 9998.51 &Verilog.AutoAll.KillAutoVerilogAll         :call <SID>KillAllVerilog()<CR>
+endif
+
+
+" ============================================================
+" 12. 杂项
+" ============================================================
+set mouse=a
+silent! set shortmess+=c
+set report=0
+set history=500
+set viminfo='100,<100,s20,h
+
+if has('clipboard')
+  set clipboard=unnamedplus
+endif
+
+
+" ============================================================
+" 13. 离线插件配套设置 (vim-fugitive)
+" ============================================================
+" vim-fugitive：常用 Git 快捷命令
+nnoremap <silent> <leader>gs :Git<CR>
+nnoremap <silent> <leader>gd :Gvdiffsplit<CR>
+nnoremap <silent> <leader>gb :Git blame<CR>
+
+
+" ============================================================
+" 14. automatic-verilog 插件专属配置与增强 (MaNan93/automatic-verilog)
+" ============================================================
+" 代码段与文件头信息设置 (<Leader>hd 生成)
+let g:atv_snippet_author       = 'MaNan'            " 作者名
+let g:atv_snippet_email        = '1607702@qq.com'   " 邮箱
+let g:atv_snippet_project      = 'IC_Design'        " 工程名
+let g:atv_snippet_company      = ''                 " 公司/单位名
+let g:atv_snippet_device       = ''                 " 目标器件名
+let g:atv_snippet_website      = ''                 " 个人/团队网站
+let g:atv_snippet_att_en       = 0                  " 新建 .v 文件是否自动载入模板（0:关闭）
+
+" 自动例化 AutoInst 格式配置 (<S-F3>)
+let g:atv_autoinst_st_pos      = 4                  " 例化端口起始缩进列
+let g:atv_autoinst_name_pos    = 32                 " 例化端口名称对齐列
+let g:atv_autoinst_sym_pos     = 64                 " 例化连线信号对齐列
+let g:atv_autoinst_io_dir      = 1                  " 在端口末尾生成方向注释（//input、//output 等）
+let g:atv_autoinst_keep_chg    = 1                  " 重新例化时保留已手动修改的连线
+let g:atv_autoinst_inst_new    = 1                  " 标记新增端口（//INST_NEW）
+let g:atv_autoinst_inst_del    = 1                  " 标记已删除端口（//INST_DEL）
+let g:atv_autoinst_incl_width  = 0                  " 连线处是否带位宽（0:仅信号名，1:带 [x:0]）
+
+" 自动参数 AutoPara 格式配置 (<S-F4>, <S-F5>)
+let g:atv_autopara_st_pos      = 4                  " 参数定义起始缩进列
+let g:atv_autopara_name_pos    = 32                 " 参数名对齐列
+let g:atv_autopara_sym_pos     = 64                 " 参数值对齐列
+let g:atv_autopara_keep_chg    = 1                  " 保留已手动修改的参数值
+
+" 自动信号定义 AutoDef / AutoWire / AutoReg (<S-F6>, <S-F7>, <S-F8>)
+let g:atv_autodef_st_pos       = 4                  " 信号定义起始缩进列
+let g:atv_autodef_name_pos     = 32                 " 信号名对齐列
+let g:atv_autodef_sym_pos      = 64                 " 分号与注释对齐列
+let g:atv_autodef_reg_rmv_io   = 1                  " 过滤顶层 IO 端口，避免重复声明 reg
+let g:atv_autodef_wire_rmv_io  = 1                  " 过滤顶层 IO 端口，避免重复声明 wire
+let g:atv_autodef_logic        = 0                  " 是否优先使用 SystemVerilog logic（0:wire/reg，1:logic）
+
+" 自动端口列表 AutoArg (<S-F2>)
+let g:atv_autoarg_st_pos       = 4                  " 端口列表起始缩进列
+let g:atv_autoarg_sym_pos      = 32                 " 端口名对齐列
+let g:atv_autoarg_mode         = 1                  " 模式 1: 按 input/output/inout 结构化格式化
+
+" 时序图 TimeWave 绘制参数 (<Leader>clk, <Leader>sig 等)
+let g:atv_timewave_sig_offset  = 13                 " 信号名与波形间隔
+let g:atv_timewave_clk_period  = 8                  " 时钟周期宽度字符数
+let g:atv_timewave_clk_num     = 16                 " 默认生成的时钟周期数
+let g:atv_timewave_cq_trans    = 1                  " 信号相对时钟沿的延迟字符数
+
+" 跨目录例化 CrossDir 配置
+let g:atv_crossdir_mode        = 0                  " 0:库目录注释模式，1:filelist 模式，2:tags 模式
+
+" 便捷命令行指令封装
+command! -nargs=? AutoInst      call g:AutoInst(<f-args> == '' ? 0 : <f-args>)
+command! -nargs=? AutoPara      call g:AutoPara(<f-args> == '' ? 0 : <f-args>)
+command! -nargs=? AutoParaValue call g:AutoParaValue(<f-args> == '' ? 0 : <f-args>)
+command! AutoReg               call g:AutoReg()
+command! AutoWire              call g:AutoWire()
+command! AutoDef               call g:AutoDef()
+command! AutoArg               call g:AutoArg()
+command! AutoAll               call g:ToggleAutoVerilogAll()
+command! KillAll               call <SID>KillAllVerilog()
+
+command! -nargs=? KillAutoInst call g:KillAutoInst(<f-args> == '' ? 0 : <f-args>)
+command! -nargs=? KillAutoPara call g:KillAutoPara(<f-args> == '' ? 0 : <f-args>)
+command! KillAutoReg           call g:KillAutoReg()
+command! KillAutoWire          call g:KillAutoWire()
+command! KillAutoDef           call g:KillAutoDef()
+command! KillAutoArg           call g:KillAutoArg()
+
+function! s:KillAllVerilog() abort
+  call g:KillAutoInst(1)
+  call g:KillAutoPara(1)
+  call g:KillAutoParaValue(1)
+  call g:KillAutoArg()
+  call g:KillAutoDef()
+  call g:KillAutoReg()
+  call g:KillAutoWire()
+endfunction
+" ============================================================

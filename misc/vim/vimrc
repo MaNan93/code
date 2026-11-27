@@ -2,7 +2,6 @@
 "  vimrc.vim  —  gvim / vim 配置（Rocky Linux 8.10 离线/性能优化版）
 " 位置: 放在任意位置，在 ~/.vimrc 里 source 它（或直接改名为 ~/.vimrc）
 " 配套插件与工具:
-"   - ~/.vim/pack/plugins/start/automatic-verilog          (AutoInst / AutoWire 等自动例化/信号定义)
 "   - ~/.vim/plugin/verible_format.vim                      (F5    格式化 SV/Verilog)
 "   - ~/.vim/plugin/comment.vim                             (F3/F4 行注释/取消注释)
 "   - ~/.vim/plugin/copy_path.vim                           (F9    复制当前文件绝对路径)
@@ -12,11 +11,11 @@
 " 目录:
 "    1. 基础 / 编码          8. 键位
 "    2. 外观（显示 / 换行     9. 工程
-"       / 配色 / 状态栏）    10. 文件类型
+"       / 配色 / 状态栏）    10. 文件类型 & 超大文件保护
 "    3. 编辑                11. GUI
 "    4. 搜索                12. 杂项
-"    5. 补全 / 命令行        13. 离线插件配套设置 (vim-fugitive)
-"    6. 窗口与缓冲区        14. automatic-verilog 插件专属配置与增强
+"    5. 补全 / 命令行        13. 离线插件配套设置
+"    6. 窗口与缓冲区
 "    7. 文件与备份
 " ============================================================
 
@@ -78,7 +77,7 @@ if exists('+belloff') | set belloff=all | endif
 " set textwidth=100
 set wrap
 set linebreak                 " 在空格/标点处断行，不把单词劈开
-set showbreak=>\              " 续行开头标记
+set showbreak=                " 去掉续行开头的 > 标记
 if exists('+breakindent')
   set breakindent             " 续行保持与原行相同的缩进
 endif
@@ -92,11 +91,17 @@ if !has('gui_running') && has('termguicolors')
   silent! set termguicolors
 endif
 
-" ColorColumn 默认是 LightRed（就是那条红线），改成低调灰
+" ColorColumn 默认是 LightRed（就是那条红线），改成低调灰；同时应用 GitHub Dark 风格 Diff 配色
 function! s:HiTweaks() abort
   highlight clear SignColumn
   highlight CursorLineNr term=bold cterm=bold gui=bold
   highlight ColorColumn ctermbg=238 guibg=#2f2f2f
+
+  " GitHub Dark 风格 Diff 配色（保留原始代码语法前景色）
+  highlight DiffAdd    ctermfg=NONE ctermbg=22  guifg=NONE guibg=#1b3826
+  highlight DiffDelete ctermfg=242  ctermbg=52  guifg=#6e4042 guibg=#3c1e20
+  highlight DiffChange ctermfg=NONE ctermbg=235 guifg=NONE guibg=#1f2937
+  highlight DiffText   ctermfg=NONE ctermbg=29  guifg=NONE guibg=#236e3b gui=bold
 endfunction
 augroup user_hl
   autocmd!
@@ -105,6 +110,9 @@ augroup END
 " 启动时也要立刻生效，不能只在 :colorscheme 之后
 call s:HiTweaks()
 
+" GitHub 风格左右对照布局与精确差异算法
+set diffopt=filler,vertical,internal,algorithm:patience,indent-heuristic
+
 " ---------- 状态栏 ----------
 function! Statusline() abort
   let l:names = {'n':'NORMAL','i':'INSERT','v':'VISUAL','V':'V-LINE',
@@ -112,9 +120,10 @@ function! Statusline() abort
   let l:mode = get(l:names, mode(), mode())
   let l:ft   = &filetype !=# '' ? &filetype : 'noft'
   let l:enc  = &fileencoding !=# '' ? &fileencoding : &encoding
+  let l:fast = get(b:, 'is_large_file', 0) ? '[FAST] ' : ''
   " %m / %r 已经负责 [+] 和 [RO]，这里不要再拼一遍
-  return printf(' %s | %%f%%m%%r | %s | %s/%s | %%3l:%%-3c %%3p%%%% ',
-        \ l:mode, l:ft, &fileformat, l:enc)
+  return printf(' %s | %s%%f%%m%%r | %s | %s/%s | %%3l:%%-3c %%3p%%%% ',
+        \ l:mode, l:fast, l:ft, &fileformat, l:enc)
 endfunction
 set statusline=%!Statusline()
 
@@ -305,11 +314,17 @@ endif
 
 
 " ============================================================
-" 10. 文件类型
+" 10. 文件类型 & 超大文件极速保护
 " ============================================================
 runtime macros/matchit.vim
 " 关闭重型正则语法折叠，改用轻量的 indent 缩进折叠保证大文件流畅
 " let g:verilog_syntax_fold_lst = 'block,module,class,function,task'
+
+" 超大文件阈值：1MB（约 2~3 万行以上自动切换为无上下文轻量级高亮与极速模式）
+let g:LargeFile = 1024 * 1024 * 1
+
+" SV/Verilog 通用关键字成对跳转规则（大小文件通用，按 % 匹配）
+let s:sv_match_words = '\<begin\>:\<end\>,\<module\>:\<endmodule\>,\<macromodule\>:\<endmodule\>,\<case[xz]\?\>:\<endcase\>,\<generate\>:\<endgenerate\>,\<function\>:\<endfunction\>,\<task\>:\<endtask\>,\<class\>:\<endclass\>,\<interface\>:\<endinterface\>,\<package\>:\<endpackage\>,\<fork\>:\<join\%(_any\|_none\)\?\>,`ifdef:`elsif:`else:`endif'
 
 function! s:sv_setup() abort
   setlocal tabstop=4 shiftwidth=4 softtabstop=4 expandtab
@@ -317,16 +332,48 @@ function! s:sv_setup() abort
   setlocal iskeyword+=$
   setlocal foldmethod=indent
   setlocal foldlevel=99
+  setlocal synmaxcol=500
+  " 提高常规大型 RTL 文件的语法向上同步扫描行数，防止底部 endmodule 高亮丢失
+  syntax sync minlines=1500
+  " 兜底关键字成对匹配（防止 filetype=systemverilog 时缺少 b:match_words）
+  if !exists('b:match_words')
+    let b:match_ignorecase = 0
+    let b:match_words = s:sv_match_words
+  endif
   " 跳转快捷键：gd 跳到子模块定义，gp 跳到端口声明
   nnoremap <buffer> <silent> gd :VerilogFollowInstance<CR>
   nnoremap <buffer> <silent> gp :VerilogFollowPort<CR>
 endfunction
 
+augroup LargeFileMode
+  autocmd!
+  autocmd BufReadPre *
+        \ let b:fsize = getfsize(expand('<afile>')) |
+        \ if b:fsize > g:LargeFile || b:fsize == -2 |
+        \   let b:is_large_file = 1 |
+        \   setlocal noswapfile bufhidden=unload undolevels=-1 |
+        \   setlocal foldmethod=manual nofoldenable |
+        \   setlocal synmaxcol=200 |
+        \   setlocal nocursorline nocursorcolumn |
+        \ endif
+  autocmd BufReadPost *
+        \ if get(b:, 'is_large_file', 0) |
+        \   syntax clear |
+        \   syntax keyword svFastKw module endmodule input output inout wire reg logic bit int integer parameter localparam genvar generate endgenerate assign always always_ff always_comb always_latch initial begin end case endcase if else for |
+        \   syntax match svFastComment "//.*$" |
+        \   highlight link svFastKw Statement |
+        \   highlight link svFastComment Comment |
+        \   let b:match_ignorecase = 0 |
+        \   let b:match_words = s:sv_match_words |
+        \ endif
+augroup END
+
 augroup user_ft
   autocmd!
   autocmd BufRead,BufNewFile *.sv,*.svh,*.svi if empty(&l:filetype) | setfiletype systemverilog | endif
   autocmd BufRead,BufNewFile *.v,*.vh        if empty(&l:filetype) | setfiletype verilog | endif
-  autocmd FileType systemverilog,verilog,verilog_systemverilog call s:sv_setup()
+  autocmd FileType systemverilog,verilog,verilog_systemverilog
+        \ if !get(b:, 'is_large_file', 0) | call s:sv_setup() | endif
   autocmd FileType tcl setlocal tabstop=4 shiftwidth=4 softtabstop=4 expandtab
   " 仅 markdown 开拼写检查（text 常是日志/笔记，会满屏红线）
   autocmd FileType markdown setlocal spell spelllang=en,cjk
@@ -383,12 +430,6 @@ endfunction
 if has('gui_running')
   nnoremap <silent> <C-ScrollWheelUp>   :call <SID>FontSize(1)<CR>
   nnoremap <silent> <C-ScrollWheelDown> :call <SID>FontSize(-1)<CR>
-
-  " GVim 菜单栏增强：为 &Verilog 菜单追加 RtlTree 和一键全自动化
-  anoremenu 9998.05 &Verilog.-Sep0-                             :
-  anoremenu 9998.08 &Verilog.RtlTree<TAB>:RtlTree               :RtlTree<CR>
-  anoremenu 9998.50 &Verilog.AutoAll.AutoVerilogAll<TAB><S-F1>  :call g:ToggleAutoVerilogAll()<CR>
-  anoremenu 9998.51 &Verilog.AutoAll.KillAutoVerilogAll         :call <SID>KillAllVerilog()<CR>
 endif
 
 
@@ -413,83 +454,4 @@ endif
 nnoremap <silent> <leader>gs :Git<CR>
 nnoremap <silent> <leader>gd :Gvdiffsplit<CR>
 nnoremap <silent> <leader>gb :Git blame<CR>
-
-
-" ============================================================
-" 14. automatic-verilog 插件专属配置与增强 (MaNan93/automatic-verilog)
-" ============================================================
-" 代码段与文件头信息设置 (<Leader>hd 生成)
-let g:atv_snippet_author       = 'MaNan'            " 作者名
-let g:atv_snippet_email        = '1607702@qq.com'   " 邮箱
-let g:atv_snippet_project      = 'IC_Design'        " 工程名
-let g:atv_snippet_company      = ''                 " 公司/单位名
-let g:atv_snippet_device       = ''                 " 目标器件名
-let g:atv_snippet_website      = ''                 " 个人/团队网站
-let g:atv_snippet_att_en       = 0                  " 新建 .v 文件是否自动载入模板（0:关闭）
-
-" 自动例化 AutoInst 格式配置 (<S-F3>)
-let g:atv_autoinst_st_pos      = 4                  " 例化端口起始缩进列
-let g:atv_autoinst_name_pos    = 32                 " 例化端口名称对齐列
-let g:atv_autoinst_sym_pos     = 64                 " 例化连线信号对齐列
-let g:atv_autoinst_io_dir      = 1                  " 在端口末尾生成方向注释（//input、//output 等）
-let g:atv_autoinst_keep_chg    = 1                  " 重新例化时保留已手动修改的连线
-let g:atv_autoinst_inst_new    = 1                  " 标记新增端口（//INST_NEW）
-let g:atv_autoinst_inst_del    = 1                  " 标记已删除端口（//INST_DEL）
-let g:atv_autoinst_incl_width  = 0                  " 连线处是否带位宽（0:仅信号名，1:带 [x:0]）
-
-" 自动参数 AutoPara 格式配置 (<S-F4>, <S-F5>)
-let g:atv_autopara_st_pos      = 4                  " 参数定义起始缩进列
-let g:atv_autopara_name_pos    = 32                 " 参数名对齐列
-let g:atv_autopara_sym_pos     = 64                 " 参数值对齐列
-let g:atv_autopara_keep_chg    = 1                  " 保留已手动修改的参数值
-
-" 自动信号定义 AutoDef / AutoWire / AutoReg (<S-F6>, <S-F7>, <S-F8>)
-let g:atv_autodef_st_pos       = 4                  " 信号定义起始缩进列
-let g:atv_autodef_name_pos     = 32                 " 信号名对齐列
-let g:atv_autodef_sym_pos      = 64                 " 分号与注释对齐列
-let g:atv_autodef_reg_rmv_io   = 1                  " 过滤顶层 IO 端口，避免重复声明 reg
-let g:atv_autodef_wire_rmv_io  = 1                  " 过滤顶层 IO 端口，避免重复声明 wire
-let g:atv_autodef_logic        = 0                  " 是否优先使用 SystemVerilog logic（0:wire/reg，1:logic）
-
-" 自动端口列表 AutoArg (<S-F2>)
-let g:atv_autoarg_st_pos       = 4                  " 端口列表起始缩进列
-let g:atv_autoarg_sym_pos      = 32                 " 端口名对齐列
-let g:atv_autoarg_mode         = 1                  " 模式 1: 按 input/output/inout 结构化格式化
-
-" 时序图 TimeWave 绘制参数 (<Leader>clk, <Leader>sig 等)
-let g:atv_timewave_sig_offset  = 13                 " 信号名与波形间隔
-let g:atv_timewave_clk_period  = 8                  " 时钟周期宽度字符数
-let g:atv_timewave_clk_num     = 16                 " 默认生成的时钟周期数
-let g:atv_timewave_cq_trans    = 1                  " 信号相对时钟沿的延迟字符数
-
-" 跨目录例化 CrossDir 配置
-let g:atv_crossdir_mode        = 0                  " 0:库目录注释模式，1:filelist 模式，2:tags 模式
-
-" 便捷命令行指令封装
-command! -nargs=? AutoInst      call g:AutoInst(<f-args> == '' ? 0 : <f-args>)
-command! -nargs=? AutoPara      call g:AutoPara(<f-args> == '' ? 0 : <f-args>)
-command! -nargs=? AutoParaValue call g:AutoParaValue(<f-args> == '' ? 0 : <f-args>)
-command! AutoReg               call g:AutoReg()
-command! AutoWire              call g:AutoWire()
-command! AutoDef               call g:AutoDef()
-command! AutoArg               call g:AutoArg()
-command! AutoAll               call g:ToggleAutoVerilogAll()
-command! KillAll               call <SID>KillAllVerilog()
-
-command! -nargs=? KillAutoInst call g:KillAutoInst(<f-args> == '' ? 0 : <f-args>)
-command! -nargs=? KillAutoPara call g:KillAutoPara(<f-args> == '' ? 0 : <f-args>)
-command! KillAutoReg           call g:KillAutoReg()
-command! KillAutoWire          call g:KillAutoWire()
-command! KillAutoDef           call g:KillAutoDef()
-command! KillAutoArg           call g:KillAutoArg()
-
-function! s:KillAllVerilog() abort
-  call g:KillAutoInst(1)
-  call g:KillAutoPara(1)
-  call g:KillAutoParaValue(1)
-  call g:KillAutoArg()
-  call g:KillAutoDef()
-  call g:KillAutoReg()
-  call g:KillAutoWire()
-endfunction
 " ============================================================

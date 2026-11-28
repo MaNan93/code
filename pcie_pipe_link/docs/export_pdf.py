@@ -33,8 +33,8 @@ def main():
 <g stroke="#245da8" stroke-width="2" marker-start="url(#arrow)" marker-end="url(#arrow)">
 <path d="M291,80 H354"/><path d="M646,80 H709"/>
 </g>
-<g fill="#233247" font-family="Arial,sans-serif" font-size="23" text-anchor="middle">
-<text x="145" y="88">huixi_g4x4(dsp)</text><text x="500" y="88">pcie_pipe_link</text><text x="855" y="88">huixi_g4x4(usp)</text>
+<g fill="#233247" font-family="Arial,sans-serif" font-size="22" text-anchor="middle">
+<text x="145" y="88">DSP Controllers</text><text x="500" y="88">pcie_pipe_link</text><text x="855" y="88">USP Controllers</text>
 </g></svg>''', encoding='utf-8')
     source = (BASE / 'DESIGN.md').read_text(encoding='utf-8')
     source = re.sub(r'```mermaid\n.*?```',
@@ -51,7 +51,7 @@ def main():
     body = html.read_text(encoding='utf-8')
     body = re.sub(r'(<p><img\b.*?</p>\s*<p><em>Figure.*?</em></p>)',
                   r'<div class="figure-block">\1</div>', body, flags=re.S)
-    body = re.sub(r'(<h4 id="[^"]*(?:preset-to-coefficient-conversion-timing|receiver-equalization-evaluation-timing)".*?)(?=<h4|</body>)',
+    body = re.sub(r'(<h4 id="[^"]*(?:preset-to-coefficient-conversion-timing|receiver-equalization-evaluation-timing|pipe-5\.1\/6\.0-messagebus)".*?)(?=<h4|</body>)',
                   r'<div class="timing-section">\1</div>', body, flags=re.S)
     html.write_text(body, encoding='utf-8')
     pdf = BASE / args.output
@@ -121,7 +121,7 @@ def main():
             (build / 'extracted-text.txt').write_text(text, encoding='utf-8')
             assert all(t.strip() for t in texts), 'Blank PDF page'
             assert not re.search(r'[\u4e00-\u9fff]', text), 'Untranslated text'
-            assert '3.3.3 Receiver Equalization Evaluation Timing' in ' '.join(text.split())
+            assert '3.3.3 PIPE 5.1/6.0 MessageBus' in ' '.join(text.split())
             print(f'Validated {pages} PDF pages; previews generated')
         pdf.write_bytes(pdf_bytes)
         ws.close()

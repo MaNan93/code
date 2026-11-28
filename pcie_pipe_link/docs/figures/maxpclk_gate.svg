@@ -1,0 +1,34 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1144" height="535" viewBox="0 0 1144 535">
+<rect width="100%" height="100%" fill="white"/>
+<text x="24" y="41" font-family="Microsoft YaHei, sans-serif" font-size="23" fill="#245da8">Figure 3-2  Dynamic MAXPCLK gating handshake (per-lane)</text>
+<text x="300" y="99" font-family="Microsoft YaHei, sans-serif" font-size="13" fill="#8291a3">T0</text>
+<polyline points="310,111 310,510" fill="none" stroke="#e4e9f0" stroke-width="1"/>
+<text x="382" y="99" font-family="Microsoft YaHei, sans-serif" font-size="13" fill="#8291a3">T1</text>
+<polyline points="392,111 392,510" fill="none" stroke="#e4e9f0" stroke-width="1"/>
+<text x="464" y="99" font-family="Microsoft YaHei, sans-serif" font-size="13" fill="#8291a3">T2</text>
+<polyline points="474,111 474,510" fill="none" stroke="#e4e9f0" stroke-width="1"/>
+<text x="546" y="99" font-family="Microsoft YaHei, sans-serif" font-size="13" fill="#8291a3">T3</text>
+<polyline points="556,111 556,510" fill="none" stroke="#e4e9f0" stroke-width="1"/>
+<text x="628" y="99" font-family="Microsoft YaHei, sans-serif" font-size="13" fill="#8291a3">T4</text>
+<polyline points="638,111 638,510" fill="none" stroke="#e4e9f0" stroke-width="1"/>
+<text x="710" y="99" font-family="Microsoft YaHei, sans-serif" font-size="13" fill="#8291a3">T5</text>
+<polyline points="720,111 720,510" fill="none" stroke="#e4e9f0" stroke-width="1"/>
+<text x="792" y="99" font-family="Microsoft YaHei, sans-serif" font-size="13" fill="#8291a3">T6</text>
+<polyline points="802,111 802,510" fill="none" stroke="#e4e9f0" stroke-width="1"/>
+<text x="874" y="99" font-family="Microsoft YaHei, sans-serif" font-size="13" fill="#8291a3">T7</text>
+<polyline points="884,111 884,510" fill="none" stroke="#e4e9f0" stroke-width="1"/>
+<text x="956" y="99" font-family="Microsoft YaHei, sans-serif" font-size="13" fill="#8291a3">T8</text>
+<polyline points="966,111 966,510" fill="none" stroke="#e4e9f0" stroke-width="1"/>
+<text x="1038" y="99" font-family="Microsoft YaHei, sans-serif" font-size="13" fill="#8291a3">T9</text>
+<polyline points="1048,111 1048,510" fill="none" stroke="#e4e9f0" stroke-width="1"/>
+<text x="20" y="137" font-family="Microsoft YaHei, sans-serif" font-size="15" fill="#233247">PCLK</text>
+<polyline points="274,147 310.0,147 310.0,119 330.5,119 330.5,147 351.0,147 351.0,119 371.5,119 371.5,147 392.0,147 392.0,119 412.5,119 412.5,147 433.0,147 433.0,119 453.5,119 453.5,147 474.0,147 474.0,119 494.5,119 494.5,147 515.0,147 515.0,119 535.5,119 535.5,147 822.5,147 822.5,119 843.0,119 843.0,147 863.5,147 863.5,119 884.0,119 884.0,147 904.5,147 904.5,119 925.0,119 925.0,147 945.5,147 945.5,119 966.0,119 966.0,147 986.5,147 986.5,119 1007.0,119 1007.0,147 1027.5,147 1027.5,119 1048.0,119 1048.0,147 1119,147" fill="none" stroke="#245da8" stroke-width="2"/>
+<text x="20" y="213" font-family="Microsoft YaHei, sans-serif" font-size="15" fill="#233247">mac_phy_maxpclkreq_n[i]</text>
+<polyline points="274,223 392,223 392,195 761.0,195 761.0,223 1119,223" fill="none" stroke="#245da8" stroke-width="2"/>
+<text x="20" y="289" font-family="Microsoft YaHei, sans-serif" font-size="15" fill="#233247">clock_ready[i]</text>
+<polyline points="274,299 273.92,299 273.92,271 453.5,271 453.5,299 843.0,299 843.0,271 1119,271" fill="none" stroke="#245da8" stroke-width="2"/>
+<text x="20" y="365" font-family="Microsoft YaHei, sans-serif" font-size="15" fill="#233247">phy_mac_maxpclkack_n[i]</text>
+<polyline points="274,375 556,375 556,347 802.0,347 802.0,375 1119,375" fill="none" stroke="#245da8" stroke-width="2"/>
+<text x="20" y="441" font-family="Microsoft YaHei, sans-serif" font-size="15" fill="#233247">phy_ref_clk_req_n[i]</text>
+<polyline points="274,451 556,451 556,423 802.0,423 802.0,451 1119,451" fill="none" stroke="#245da8" stroke-width="2"/>
+</svg>

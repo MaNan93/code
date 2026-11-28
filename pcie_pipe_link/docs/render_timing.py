@@ -91,26 +91,40 @@ for i in range(6):
     rate_clock += [(i * 0.5, 1), (i * 0.5 + 0.25, 0)]
 for i in range(39):
     rate_clock += [(5 + i * 0.125, 1), (5.0625 + i * 0.125, 0)]
-render('rate_switch', 'Figure 3-1  Gen1 to Gen3 rate change (62.5 MHz to 250 MHz)', [f'T{i}' for i in range(10)], [
-    ('side_mac_phy_rate', 'bus', [(-0.44, 'Gen1 (0)'), (1, 'Gen3 (2)')]),
-    ('side_clock_ready', 'bit', [(-0.44, 1), (2, 0), (6, 1)]),
-    ('side_active_rate', 'bus', [(-0.44, 'Gen1 (0)'), (6, 'Gen3 (2)')]),
-    ('side_phy_mac_phystatus', 'bit', [(7, 1), (7.125, 0)]),
-    ('RxValid / RxDataValid', 'bit', [(-0.44, 1), (1, 0), (6.5, 1)]),
-    ('RxElecIdle', 'bit', [(1, 1), (6.5, 0)]),
+render('rate_switch', 'Figure 3-1  Per-lane Gen1 to Gen3 rate change (62.5 MHz to 250 MHz)', [f'T{i}' for i in range(10)], [
+    ('mac_phy_rate[i]', 'bus', [(-0.44, 'Gen1 (0)'), (1, 'Gen3 (2)')]),
+    ('clock_ready[i]', 'bit', [(-0.44, 1), (2, 0), (5.8, 1)]),
+    ('active_rate[i]', 'bus', [(-0.44, 'Gen1 (0)'), (5.8, 'Gen3 (2)')]),
+    ('clocks_aligned[i]', 'bit', [(-0.44, 1), (2, 0), (6.4, 1)]),
+    ('phy_mac_phystatus[i]', 'bit', [(7, 1), (7.125, 0)]),
+    ('phy_mac_rxvalid[i]', 'bit', [(-0.44, 1), (2, 0), (6.75, 1)]),
+    ('phy_mac_rxelecidle[i]', 'bit', [(2, 1), (6.75, 0)]),
 ], clock=rate_clock)
 
-render('preset_query', 'Figure 3-2  Preset-to-coefficient conversion', ['C0', 'C1', 'C2', 'C3'], [
-    ('mac_phy_getlocal_pset_coef', 'bit', [(-0.15, 1), (0.85, 0)]),
-    ('local_pset_index / rate', 'bus', [(-0.44, 'valid index / rate')]),
-    ('phy_mac_local_tx_coef_valid', 'bit', [(2.05, 1), (3.05, 0)]),
-    ('phy_mac_local_tx_pset_coef', 'bus', [(-0.44, 'x'), (2.05, 'coeff')]),
+gate_clock = []
+for i in range(6):
+    gate_clock += [(i * 0.5, 1), (i * 0.5 + 0.25, 0)]
+for i in range(6):
+    gate_clock += [(6.25 + i * 0.5, 1), (6.5 + i * 0.5, 0)]
+render('maxpclk_gate', 'Figure 3-2  Dynamic MAXPCLK gating handshake (per-lane)', [f'T{i}' for i in range(10)], [
+    ('mac_phy_maxpclkreq_n[i]', 'bit', [(1, 1), (5.5, 0)]),
+    ('clock_ready[i]', 'bit', [(-0.44, 1), (1.75, 0), (6.5, 1)]),
+    ('phy_mac_maxpclkack_n[i]', 'bit', [(3, 1), (6.0, 0)]),
+    ('phy_ref_clk_req_n[i]', 'bit', [(3, 1), (6.0, 0)]),
+], clock=gate_clock)
+
+render('preset_query', 'Figure 3-3  Preset-to-coefficient conversion', ['C0', 'C1', 'C2', 'C3'], [
+    ('mac_phy_getlocal_pset_coef[i]', 'bit', [(-0.15, 1), (0.85, 0)]),
+    ('local_pset_index[i] / FS_VALUE', 'bus', [(-0.44, 'valid preset / FS=47')]),
+    ('phy_mac_local_tx_coef_valid[i]', 'bit', [(1.05, 1), (2.05, 0)]),
+    ('phy_mac_local_tx_pset_coef[i]', 'bus', [(-0.44, 'x'), (1.05, '{C+1, C0, C-1}')]),
 ])
-render('eq_complete', 'Figure 3-3  Receiver EQ evaluation (EQ_CYCLES = 8, no competing response)',
+render('eq_complete', 'Figure 3-4  Receiver EQ evaluation (EQ_CYCLES = 8)',
        [f'C{i}' for i in range(11)], [
-    ('mac_phy_rxeqeval', 'bit', [(-0.15, 1)]),
-    ('phy_mac_fomfeedback', 'bus', [(-0.44, 'x'), (8.05, '255')]),
-    ('phy_mac_dirfeedback', 'bus', [(-0.44, '0')]),
-    ('phy_mac_phystatus', 'bit', [(9.05, 1), (10.05, 0)]),
+    ('mac_phy_rxeqinprogress[i]', 'bit', [(-0.35, 1)]),
+    ('mac_phy_rxeqeval[i]', 'bit', [(-0.15, 1)]),
+    ('phy_mac_fomfeedback[i]', 'bus', [(-0.44, '0x00'), (8.05, '0x20 / 0x38')]),
+    ('phy_mac_dirfeedback[i]', 'bus', [(-0.44, '0x000')]),
+    ('phy_mac_phystatus[i]', 'bit', [(8.05, 1), (9.05, 0)]),
 ])
-print('Rendered 3 SVG + 3 PNG timing figures')
+print('Rendered 4 SVG + 4 PNG timing figures')
